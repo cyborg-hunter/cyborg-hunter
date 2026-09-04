@@ -35,6 +35,8 @@
 // trial in the middle of the timeline. We:
 //   - drop survey-multi-choice unconditionally (ALWAYS_FILTERED)
 //   - filter bot-incompatible trials when ?bot-mode=1 (BOT_INCOMPATIBLE_TRIALS)
+//   - filter the microphone trial when ?demo=replay (REPLAY_DEMO_FILTERED)
+//   (all three sets, and the filter itself, live in ./trial-filter.js)
 //   - splice the upstream demographics survey-text to the END, just before
 //     exit-fullscreen, so it's the last data-collection step
 //   - insert two custom grafted trials (describe-card, recording) between the
@@ -52,30 +54,16 @@ import {
   getScenarioFromUrl,
   getGuardConfigFromUrl,
   getBotModeFromUrl,
+  isReplayDemo,
 } from './run-meta.js';
+import { filterTrials } from './trial-filter.js';
 
 const runId = getOrMakeRunId();
 const scenario = getScenarioFromUrl();
+// `?demo=replay` resolves guards to 'none' inside getGuardConfigFromUrl().
 const guards = getGuardConfigFromUrl(); // 'none' | 'friction' | 'full'
 const botMode = getBotModeFromUrl();
-
-// Trials filtered for ALL audiences (humans + bots). The multi-choice trial
-// was deemed low-value and bloated the timeline; removed in the 2026-05-14
-// redesign.
-const ALWAYS_FILTERED = new Set(['survey-multi-choice']);
-
-// Browser Use can't complete these trial types (no clickable affordances —
-// canvas drawing, sketchpad strokes, drag-and-drop, custom MediaRecorder).
-// When ?bot-mode=1 is set, strip them so bot sweeps actually reach the end
-// of the timeline. The custom recording trial (info.name
-// 'bench-recording-trial') flows through the same mechanism as the upstream
-// trials — single source of truth.
-const BOT_INCOMPATIBLE_TRIALS = new Set([
-  'canvas-keyboard-response',
-  'sketchpad',
-  'free-sort',
-  'bench-recording-trial',
-]);
+const replayDemo = isReplayDemo();
 
 // Compose the extensions array per the guards URL param.
 // jsPsychCyborgHunter is always included — that's the whole point of the bench.
@@ -161,13 +149,9 @@ const demographicsTrial = replayTrials[demographicsIndex];
 const exitFsTrial = replayTrials[exitFsIndex];
 
 // Filter the pre-demographics block: always drop ALWAYS_FILTERED; conditionally
-// drop bot-incompatible trials when bot-mode is active.
-const baseFiltered = trialsBeforeDemographics.filter(
-  t => !ALWAYS_FILTERED.has(t?.type?.info?.name)
-);
-const filteredReplayTrials = botMode
-  ? baseFiltered.filter(t => !BOT_INCOMPATIBLE_TRIALS.has(t?.type?.info?.name))
-  : baseFiltered;
+// drop bot-incompatible trials when bot-mode is active and the microphone trial
+// when the replay demo is active.
+const filteredReplayTrials = filterTrials(trialsBeforeDemographics, { botMode, replayDemo });
 
 if (botMode) {
   const removedCount = replayTrials.length - filteredReplayTrials.length - 2; // -2 for demographics + exit-fs spliced out separately
@@ -175,15 +159,14 @@ if (botMode) {
 }
 
 // Custom grafted trials. The recording trial's plugin info.name
-// ('bench-recording-trial') is in BOT_INCOMPATIBLE_TRIALS, so the same filter
-// mechanism applies — single source of truth.
+// ('bench-recording-trial') is in BOT_INCOMPATIBLE_TRIALS and in
+// REPLAY_DEMO_FILTERED, so the same filter mechanism applies — single source
+// of truth.
 const customTrials = [
   buildDescribeCardTrial({ cardImage: 'assets/card-1.png' }),
   buildRecordingTrial({ cardImage: 'assets/card-2.png' }),
 ];
-const filteredCustoms = botMode
-  ? customTrials.filter(t => !BOT_INCOMPATIBLE_TRIALS.has(t?.type?.info?.name))
-  : customTrials;
+const filteredCustoms = filterTrials(customTrials, { botMode, replayDemo });
 
 timeline.push(
   ...filteredReplayTrials,

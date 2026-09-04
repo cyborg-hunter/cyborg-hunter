@@ -40,7 +40,9 @@ export function getOrMakeRunId(search = defaultSearch()) {
   const fromUrl = params.get('runId');
   if (fromUrl) return fromUrl;
   const scenario = params.get('scenario') || 'unspecified';
-  const guardConfig = params.get('guards') || 'full';
+  // Via the resolver, so `?demo=replay` (which forces guards off) is reflected
+  // in the ID rather than the raw param the run didn't honour.
+  const guardConfig = getGuardConfigFromUrl(search);
   // ISO timestamp with `:` and `.` replaced — both are problematic in
   // filenames on at least one mainstream OS, and the resulting string is
   // still trivially sortable lexicographically.
@@ -60,12 +62,37 @@ export function getScenarioFromUrl(search = defaultSearch()) {
 }
 
 /**
+ * Read the `demo` URL param. Returns `true` ONLY when the value is exactly
+ * `'replay'`.
+ *
+ * Why this exists: `?demo=replay` is the one-URL preset for the session-replay
+ * demo we hand to jsPsych. It means "no guards, no Roundtable, no microphone
+ * trial" — the upstream replay-test timeline recorded by cyborg-hunter and
+ * nothing else. Each of those three effects is applied by the module that owns
+ * it (guards here, Roundtable in index.html, the mic trial in trial-filter.js),
+ * so this stays a single boolean read.
+ *
+ * @param {string} [search]
+ * @returns {boolean}
+ */
+export function isReplayDemo(search = defaultSearch()) {
+  const params = new URLSearchParams(search);
+  return params.get('demo') === 'replay';
+}
+
+/**
  * Read the `guards` URL param, defaulting to `'full'`.
+ *
+ * `?demo=replay` forces `'none'`: the replay demo shows the recorder, not the
+ * deterrence layers. Resolving it here rather than at the call sites keeps the
+ * synthesized runId (which embeds the guard config) honest about what actually
+ * ran.
  *
  * @param {string} [search]
  * @returns {string}
  */
 export function getGuardConfigFromUrl(search = defaultSearch()) {
+  if (isReplayDemo(search)) return 'none';
   const params = new URLSearchParams(search);
   return params.get('guards') || 'full';
 }

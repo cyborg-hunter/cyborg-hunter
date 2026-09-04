@@ -51,23 +51,44 @@
     bench/config.local.js (template at bench/config.example.js). The same runId
     that timeline.js uses for CH's participantId is passed to RT as data-user-id
     and embedded in data-tags so the two tools' outputs can be joined per-run.
+
+    Roundtable is OPTIONAL: the import is dynamic so a fresh clone with no
+    config.local.js still boots (a static `import` would abort this module and
+    take the whole page down). `?demo=replay` skips it even when the config
+    exists — the replay demo is CH-only by definition.
   -->
   <script type="module">
-    import { ROUNDTABLE_SITE_KEY } from '../config.local.js';
-    import { getOrMakeRunId, getScenarioFromUrl, getGuardConfigFromUrl }
+    import { getOrMakeRunId, getScenarioFromUrl, getGuardConfigFromUrl, isReplayDemo }
       from './run-meta.js';
     const runId = getOrMakeRunId();
     const scenario = getScenarioFromUrl();
     const guards = getGuardConfigFromUrl();
-    const s = document.createElement('script');
-    s.src = 'https://cdn.roundtable.ai/v1/rt.js';
-    s.dataset.siteKey = ROUNDTABLE_SITE_KEY;
-    s.dataset.userId = runId;
-    s.dataset.tags = `scenario:${scenario},guards:${guards},runId:${runId}`;
-    document.head.appendChild(s);
-    // Surface RT load failure to the console for debug. RT itself is silent.
-    s.onerror = (e) => console.error('[bench] Roundtable rt.js failed to load:', e);
-    s.onload  = () => console.log('[bench] Roundtable rt.js loaded; runId =', runId);
+
+    let siteKey = null;
+    if (isReplayDemo()) {
+      console.info('[bench] demo=replay — Roundtable is off (CH-only replay demo).');
+    } else {
+      try {
+        ({ ROUNDTABLE_SITE_KEY: siteKey } = await import('../config.local.js'));
+      } catch {
+        console.info(
+          '[bench] no bench/config.local.js — Roundtable is off; ' +
+          'copy bench/config.example.js to enable the comparison.'
+        );
+      }
+    }
+
+    if (siteKey) {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.roundtable.ai/v1/rt.js';
+      s.dataset.siteKey = siteKey;
+      s.dataset.userId = runId;
+      s.dataset.tags = `scenario:${scenario},guards:${guards},runId:${runId}`;
+      document.head.appendChild(s);
+      // Surface RT load failure to the console for debug. RT itself is silent.
+      s.onerror = (e) => console.error('[bench] Roundtable rt.js failed to load:', e);
+      s.onload  = () => console.log('[bench] Roundtable rt.js loaded; runId =', runId);
+    }
   </script>
 
   <script type="module" src="./timeline.js"></script>

@@ -11,6 +11,7 @@ import {
   getScenarioFromUrl,
   getGuardConfigFromUrl,
   getBotModeFromUrl,
+  isReplayDemo,
 } from '../run-meta.js';
 
 describe('getOrMakeRunId', () => {
@@ -83,6 +84,43 @@ describe('getGuardConfigFromUrl', () => {
     assert.equal(getGuardConfigFromUrl('?guards=none'), 'none');
     assert.equal(getGuardConfigFromUrl('?guards=friction'), 'friction');
     assert.equal(getGuardConfigFromUrl('?guards=full'), 'full');
+  });
+
+  it("demo=replay forces 'none', overriding an explicit guards param", () => {
+    assert.equal(getGuardConfigFromUrl('?demo=replay'), 'none');
+    assert.equal(getGuardConfigFromUrl('?demo=replay&guards=full'), 'none');
+    assert.equal(getGuardConfigFromUrl('?guards=friction&demo=replay'), 'none');
+  });
+});
+
+describe('isReplayDemo', () => {
+  it('returns false when no demo param exists', () => {
+    assert.equal(isReplayDemo(''), false);
+    assert.equal(isReplayDemo('?scenario=demo&guards=full'), false);
+  });
+
+  it("returns true only when demo=replay", () => {
+    assert.equal(isReplayDemo('?demo=replay'), true);
+    assert.equal(isReplayDemo('?scenario=x&demo=replay&bot-mode=1'), true);
+  });
+
+  it('returns false for any other value', () => {
+    // Strictly `===` 'replay', matching getBotModeFromUrl's discipline: a
+    // typo must not silently mutate the timeline.
+    assert.equal(isReplayDemo('?demo=1'), false);
+    assert.equal(isReplayDemo('?demo=true'), false);
+    assert.equal(isReplayDemo('?demo='), false);
+    assert.equal(isReplayDemo('?demo=Replay'), false);
+  });
+});
+
+describe('getOrMakeRunId under demo=replay', () => {
+  it('embeds the resolved guard config, not the raw param', () => {
+    const id = getOrMakeRunId('?scenario=demo&guards=full&demo=replay');
+    assert.ok(
+      id.startsWith('demo--none--'),
+      `expected "demo--none--..." prefix, got: ${id}`
+    );
   });
 });
 
