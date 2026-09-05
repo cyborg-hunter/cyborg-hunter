@@ -1,5 +1,7 @@
 # Playing SessionRecording v2: a migration guide for v1 players
 
+> **Provenance note.** This document was drafted by an AI coding agent (Claude, working in the cyborg-hunter repository on 2026-09-03) from the code, tests and fixtures it cites, and has not yet been rewritten by a human author. Facts were machine-checked against the repository where a fixture or test is named; the prose style is the agent's. Treat it as an accurate but unedited technical summary until this note is removed.
+
 A player written for jsPsych's `schema_version: 1` (the `record_session` line) is correct for every recording jsPsych's own recorder produces. SessionRecording v2 (`docs/session-recording-v2.md`) generalizes that format so that other recorders can produce it too, and a v1 player meeting its first v2 file from another producer runs into three things it never had to handle. Each one below was found by playing a real capture, not by reading the spec; each has a fixture that pins it and a patch that closes it. The patches are in the `sessionrecording-v2` branch of the jspsych/replay fork.
 
 The three deltas are small in code and large in effect: without them a v2 file from a non-jsPsych recorder plays as zero-length segments, then as a blank stage with a wandering cursor, then unstyled with every cursor position off its target.
