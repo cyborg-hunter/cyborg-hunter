@@ -3,7 +3,10 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.8.0] — 2026-09-17
+
+The session-replay recorder now writes SessionRecording v2 (`schema_version: 2`), the
+format developed jointly with jsPsych; v1 recordings are converted on ingest.
 
 ### Added
 - Replay recordings are self-contained for cross-origin stylesheets: the
@@ -46,6 +49,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   block the second automatic download (the CSV after the replay, or vice
   versa); use Firefox/Safari or allow automatic downloads for localhost.
   Remote (`datapipe`) saves are unaffected.
+- README and integration guide now describe the shipped SessionRecording v2
+  recorder, the v1 converter and the joint spec; the repo layout and the
+  documentation index list `tools/convert/`, `bench/`, `demo/`, the v2 spec,
+  the migration guide and `known-issues.md`.
 
 ## [0.7.5] — 2026-08-05
 

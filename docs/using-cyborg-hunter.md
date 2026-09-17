@@ -204,14 +204,15 @@ The library exports `window.CyborgHunter` for forward use; `window.IntegrityMoni
 exposes `window.CyborgHunterReplay` (standalone use) and
 `window.jsPsychCyborgHunterReplay` (jsPsych extension) from one file, and it
 does not require the CH monitor — but merges CH's session report into the
-recording when one is available. The wire format is CH's `SessionRecording
-v1`, modeled on the format of jsPsych's in-development replay (PR #3661)
-but not yet field-compatible with it; CH-only data (scoring, guard
-violations, sidebar events) lives under a `ch_extensions` namespace. A
-unified v2 format that round-trips between the two tools is being developed
-jointly with jsPsych. Until it lands, each tool's player renders only its
-own recordings; #3661-shaped files still attach to the CH report for
-bookkeeping.
+recording when one is available. The wire format is `SessionRecording v2`
+(`schema_version: 2`), specified in `docs/session-recording-v2.md` and
+developed jointly with jsPsych; CH-only data (scoring, guard violations,
+sidebar events) lives under `extensions["cyborg-hunter"]`. The recorder,
+the CLI ingest and the report viewer all speak v2. Recordings from other v2
+producers attach to the report as they are, and jsPsych `schema_version: 1`
+recordings (the record_session branch, PR #3661) are converted on the way in
+by `tools/convert/jspsych-v1-to-v2.mjs`; see `docs/v2-player-migration.md`.
+Releases before 0.8.0 recorded the earlier v1 shape.
 
 ### jsPsych wiring
 
@@ -237,7 +238,7 @@ const jsPsych = initJsPsych({
 ```
 
 Replay finalizes **last** so it can fold CH's finalized session report into
-`ch_extensions`. Add the extension to your timeline trials the same way as
+`extensions["cyborg-hunter"]`. Add the extension to your timeline trials the same way as
 the others. After `finalize()` the jsPsych data carries an
 `integrityReplayMeta` column ({schema_version, tier, bytes, saved_to,
 capture_failures, capture_stopped}) — enough to tell from the CSV alone

@@ -32,7 +32,7 @@ function deepCopy(obj) {
 }
 
 // src/shared/constants.js
-var VERSION = "0.7.5";
+var VERSION = "0.8.0";
 var DEFAULT_THRESHOLDS = {
   pasteMinChars: 0,
   // record ALL pastes (was 20; now 0 by default)

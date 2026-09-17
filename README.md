@@ -27,6 +27,8 @@ Reproduce the table and page yourself: run `cyborg-hunter report` in `examples/s
 - `src/core/` — signal-collection library (the monitor)
 - `src/jspsych/` — jsPsych extension adapters (one per concern)
 - `src/cli/` + `bin/` — CLI that turns saved data into the triage report
+- `tools/convert/` — `jspsych-v1-to-v2.mjs`, converts jsPsych `schema_version: 1` recordings to SessionRecording v2 (ships in the npm package)
+- `bench/` — CH vs competitor benchmark harness on a vendored jsPsych timeline; `demo/` — the interactive tour
 - `tests/`, `docs/` — tests, package docs
 - `examples/synthetic-pilot/` — synthetic three-participant dataset for trying the CLI (see [docs/worked-example.md](docs/worked-example.md))
 
@@ -51,7 +53,7 @@ Browser (experiment page) — load via unpkg or copy `dist/*.js` into your proje
 <script src="https://unpkg.com/cyborg-hunter/dist/cyborg-hunter-replay.js"></script>
 ```
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.7.5/dist/...`.
+For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.8.0/dist/...`.
 
 ## Plug into a jsPsych experiment
 
@@ -97,10 +99,15 @@ Output: `summary.csv` (per-participant columns), `triage.md` (ranked list), `eve
 
 The optional replay recorder captures what the participant did and (at the
 `dom` tier) what the page looked like, so a flagged session can be reviewed
-visually instead of adjudicated from counts alone. Recordings use CH's
-`SessionRecording v1` wire format (modeled on the format of jsPsych's
-in-development replay feature) with a `ch_extensions` block; a unified v2
-format is being developed jointly with jsPsych.
+visually instead of adjudicated from counts alone. Recordings use the
+`SessionRecording v2` wire format (`schema_version: 2`), specified in
+[docs/session-recording-v2.md](docs/session-recording-v2.md) and developed
+jointly with jsPsych; CH-only data (scoring, guard violations, sidebar
+events) lives under `extensions["cyborg-hunter"]`. The recorder, the CLI
+ingest and the report viewer all speak v2; the CLI also reads v2 files from
+other producers and converts jsPsych `schema_version: 1` recordings on the
+way in ([docs/v2-player-migration.md](docs/v2-player-migration.md)).
+Releases before 0.8.0 recorded the earlier v1 shape.
 
 ```javascript
 // jsPsych: one more extension (declare anywhere; finalize LAST)
@@ -133,7 +140,10 @@ recordings made before this guarantee existed replay under a reduced-
 guarantees banner. Password fields are always redacted; see
 [docs/using-cyborg-hunter.md](docs/using-cyborg-hunter.md) for the privacy
 model, data-volume guidance, delivery semantics, and the alignment
-guarantee in full.
+guarantee in full. Testing locally with `autoSave.mode: 'download'`:
+Chromium-based browsers block the second automatic download (the CSV after
+the replay, or vice versa), so use Firefox or Safari, or allow automatic
+downloads for localhost; `datapipe` saves are unaffected.
 
 ## What it detects
 
@@ -149,7 +159,7 @@ guarantee in full.
 | Foreign input | typing landing outside experiment container | Soft (weighted) |
 | Idle gaps | input inactivity | Diagnostic (collected, not scored) |
 | AI-extension content scripts | DOM scan for known extension selectors | Diagnostic (collected, not scored) |
-| Mouse trajectories | 20Hz polling + path-efficiency metrics | Diagnostic |
+| Mouse trajectories | 20Hz polling + path-efficiency metrics; the raw track ships in every trial report unless `collectForPostHoc.rawMouseTrack` is `false` | Diagnostic |
 | Window/screen geometry | polled + resize-event capture, with zoom inference | Diagnostic |
 
 Three presets: `permissive` / `standard` (default) / `strict`. Per-signal thresholds: [docs/signals-reference.md](docs/signals-reference.md).
@@ -175,6 +185,9 @@ The optional **guard** extensions add: fullscreen / sidebar / focus enforcement 
 - [docs/signals-reference.md](docs/signals-reference.md) — every signal with thresholds per preset
 - [docs/configuration.md](docs/configuration.md) — config file fields and CLI flags
 - [docs/cli-reference.md](docs/cli-reference.md) — commands and output structure
+- [docs/session-recording-v2.md](docs/session-recording-v2.md) — the SessionRecording v2 wire format (joint with jsPsych)
+- [docs/v2-player-migration.md](docs/v2-player-migration.md) — moving a v1 player or recording to v2
+- [docs/known-issues.md](docs/known-issues.md) — open limitations and workarounds
 
 ## Reporting issues
 
@@ -191,7 +204,7 @@ Run the test suite with `npm test`. Before publishing, run `scripts/check-public
   author  = {Konuk, Can and Btesh, Victor and Nunez, Jose Luis},
   title   = {cyborg-hunter: detecting AI-tool use in browser-based behavioral experiments},
   year    = {2026},
-  version = {0.7.5},
+  version = {0.8.0},
   url     = {https://github.com/cyborg-hunter/cyborg-hunter},
   license = {MIT}
 }

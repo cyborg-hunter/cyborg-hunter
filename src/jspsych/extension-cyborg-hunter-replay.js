@@ -35,7 +35,7 @@ import { buildReplayMeta } from '../replay/persistence.js';
 class CyborgHunterReplayExtension {
   static info = {
     name: 'cyborg-hunter-replay',
-    version: '0.7.5',
+    version: '0.8.0',
     data: {}   // per-trial return is {}; session meta goes via addProperties
   };
 
