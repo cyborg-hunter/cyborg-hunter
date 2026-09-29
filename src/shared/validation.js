@@ -95,7 +95,7 @@ function safeStr(v) {
  * Finds the closest matching key using Levenshtein distance.
  * Returns null if no key is within edit distance 3 (too different to suggest).
  */
-function findClosestKey(input, keys) {
+export function findClosestKey(input, keys) {
   let best = null;
   let bestDist = Infinity;
   for (const key of keys) {
