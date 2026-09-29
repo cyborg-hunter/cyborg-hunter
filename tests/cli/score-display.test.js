@@ -119,7 +119,22 @@ describe('triage.md, summary.csv and the trajectories header', () => {
     assert.match(md, /\| 1 \| P1 \| clean \| 2 \|/);
   });
 
-  it('triage.md and summary.csv format fractional scores', async () => {
+  it('summary.csv carries exactly the score the ranking used, however small the difference', async () => {
+    const config = { outputDir, scoreWeights: { synthetic: 1, foreignInput: 1e-15, paste: 0, copy: 0, sidebar: 0, tabaway: 0 } };
+    const summaries = [
+      summary('HIGHER', { totalSyntheticInsertions: 1, totalForeignInputEvents: 1 }),
+      summary('LOWER', { totalSyntheticInsertions: 1 }),
+    ];
+    const triage = rankTriage(summaries, noEdges(2), config);
+    assert.deepEqual(triage.map(t => t.participantId), ['HIGHER', 'LOWER']);
+    await renderSummaryCSV(summaries, triage, config);
+    const rows = readFileSync(join(outputDir, 'summary.csv'), 'utf8').trim().split('\n').slice(1);
+    const scores = Object.fromEntries(rows.map(r => [r.split(',')[0], r.split(',')[2]]));
+    assert.ok(Number(scores.HIGHER) > Number(scores.LOWER), JSON.stringify(scores));
+    assert.equal(Number(scores.HIGHER), triage[0].score);
+  });
+
+  it('triage.md shows one decimal; summary.csv keeps the raw value', async () => {
     const config = { outputDir, scoreWeights: { synthetic: 0.1 } };
     const summaries = [summary('P1', { totalSyntheticInsertions: 3 })];
     const triage = rankTriage(summaries, noEdges(1), config);
@@ -127,7 +142,7 @@ describe('triage.md, summary.csv and the trajectories header', () => {
     assert.match(readFileSync(join(outputDir, 'triage.md'), 'utf8'), /\| 1 \| P1 \| clean \| 0.3 \|/);
     await renderSummaryCSV(summaries, triage, config);
     const row = readFileSync(join(outputDir, 'summary.csv'), 'utf8').split('\n')[1];
-    assert.equal(row.split(',')[2], '0.3');
+    assert.equal(Number(row.split(',')[2]), triage[0].score);
   });
 
   it('the trajectories PNG header formats the score and keeps its "?" fallback', () => {

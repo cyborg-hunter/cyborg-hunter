@@ -139,8 +139,11 @@ Notes:
   whole file, which also holds `isDefault`) can be pasted in as `scoreWeights`
   to reproduce that report's scoring.
   Fields other than `weight` and `max` in the object form are warned about.
-- Fractional weights are allowed; scores are then shown to one decimal in the
-  report and `summary.csv`, while ranking uses the exact values.
+- Fractional weights are allowed. Scores are then shown to one decimal in the
+  HTML report and `triage.md`, while `summary.csv` carries the exact score the
+  ranking used. With fractional weights that value can show floating-point
+  digits (for example `0.30000000000000004`); round it in your analysis if
+  needed.
 - Every report writes the weights it used to `score-weights.json`, and the HTML
   top bar names any weights that differ from the defaults. `triage.md` states
   the applied formula.

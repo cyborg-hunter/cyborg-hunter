@@ -4,13 +4,14 @@
 
 import { writeFileSync } from 'fs';
 import { join } from 'path';
-import { formatScore } from '../analyzers/score-weights.js';
 
 // CSV columns in output order. Each entry: [header, accessor function].
 const COLUMNS = [
   ['participantId', (s, t) => s.participantId],
   ['trialCount', (s, t) => s.trialCount],
-  ['triageScore', (s, t) => formatScore(t.score)],
+  // The exact score rankTriage sorted on (not the one-decimal display form),
+  // so the analysis file never disagrees with the ranking.
+  ['triageScore', (s, t) => t.score],
   ['hardTriggered', (s, t) => t.hardTriggered ? 'YES' : 'no'],
   ['triageReason', (s, t) => t.reason],
   ['totalPasteEvents', (s, t) => s.totalPasteEvents],
