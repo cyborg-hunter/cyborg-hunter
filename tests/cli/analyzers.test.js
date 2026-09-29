@@ -417,3 +417,50 @@ describe('decomposeScore with configurable weights', () => {
     assert.equal(terms.length, 3);
   });
 });
+
+describe('rankTriage with config.scoreWeights', () => {
+  const clean = (id, extra = {}) => ({
+    participantId: id, hardTriggered: false, totalSoftScore: 0, authoritativeSoftScore: null,
+    totalPasteEvents: 0, totalCopyEvents: 0, sidebarEventCount: 0,
+    tabAwayLongCount: 0, tabAwayMediumCount: 0, totalSyntheticInsertions: 0, ...extra,
+  });
+  const noEdges = n => Array.from({ length: n }, () => ({ edgeExits: [] }));
+
+  it('applies a configured weight and keeps the term list on the row', () => {
+    const ranked = rankTriage([clean('P1', { totalSyntheticInsertions: 4 })], noEdges(1),
+      { scoreWeights: { synthetic: 1 } });
+    assert.equal(ranked[0].score, 4);
+    assert.deepEqual(ranked[0].terms.find(([k]) => k === 'synthetic'), ['synthetic', 4]);
+  });
+
+  it('all-zero weights give score 0 and an empty term list instead of throwing', () => {
+    const ranked = rankTriage([clean('P1', { totalPasteEvents: 3 })], noEdges(1),
+      { scoreWeights: { paste: 0, copy: 0, sidebar: 0, tabaway: 0 } });
+    assert.equal(ranked[0].score, 0);
+    assert.deepEqual(ranked[0].terms, []);
+  });
+
+  it('weights reorder participants within a tier but never change the tier', () => {
+    const ranked = rankTriage(
+      [clean('P-NONE'), clean('P-SYN', { totalSyntheticInsertions: 2 })], noEdges(2),
+      { scoreWeights: { synthetic: 1 } });
+    assert.deepEqual(ranked.map(t => t.participantId), ['P-SYN', 'P-NONE']);
+    for (const t of ranked) {
+      assert.equal(t.softFlagged, false, t.participantId);
+      assert.equal(t.hardTriggered, false, t.participantId);
+    }
+  });
+
+  it('with integer weights the terms sum exactly to the score', () => {
+    const ranked = rankTriage(
+      [clean('P1', { totalPasteEvents: 1, tabAwayLongCount: 2, totalSyntheticInsertions: 3 })], noEdges(1),
+      { scoreWeights: { synthetic: 2 } });
+    assert.equal(ranked[0].terms.reduce((a, [, n]) => a + n, 0), ranked[0].score);
+    assert.equal(ranked[0].score, 5 + 2 + 6);
+  });
+
+  it('every row carries terms under default weights too', () => {
+    const ranked = rankTriage([clean('P1', { totalCopyEvents: 1 })], noEdges(1), {});
+    assert.deepEqual(ranked[0].terms, [['paste', 0], ['copy', 5], ['sidebar', 0], ['tabaway', 0]]);
+  });
+});

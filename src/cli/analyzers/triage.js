@@ -15,19 +15,26 @@
 // disclosure are surfaced in the reason and detail panes but do not contribute
 // to the score.
 
-import { SCORE_SIGNALS, DEFAULT_RESOLVED_WEIGHTS } from './score-weights.js';
+import { SCORE_SIGNALS, DEFAULT_RESOLVED_WEIGHTS, resolveScoreWeights } from './score-weights.js';
 
 export function rankTriage(summaries, edgeExits, config) {
+  // Resolved once per run. Warnings are not printed here: config.js
+  // (cliConfigWarnings) is the single place they reach the console.
+  const { weights } = resolveScoreWeights(config?.scoreWeights);
   const triageList = summaries.map((s, i) => {
     const ee = edgeExits[i];
     const totalEdgeExits = ee.edgeExits.reduce((sum, t) => sum + t.edgeExitCount, 0);
 
-    const score = computeTriageScore(s, totalEdgeExits);
+    const terms = decomposeScore(s, totalEdgeExits, s.hardTriggered, weights);
+    const score = sumTerms(terms);
     const reason = generateTriageReason(s, totalEdgeExits);
 
     return {
       participantId: s.participantId,
       score,
+      // The applied [signal, contribution] pairs; renderers draw these so the
+      // breakdown always matches the score that was ranked on.
+      terms,
       reason,
       hardTriggered: s.hardTriggered,
       // Threshold precedence: an explicit analyst-side CLI override
@@ -59,7 +66,8 @@ export function rankTriage(summaries, edgeExits, config) {
 }
 
 // Decomposes the composite triage score into [label, contribution] pairs.
-// Used by both computeTriageScore (sums them) and the HTML renderer (displays them
+// Used by both rankTriage (sums them, and keeps them on the row as `terms`) and the
+// HTML renderer (displays them
 // with bars). Keeping the formula here means the score breakdown in the report can
 // never silently disagree with the ranked score it explains.
 //
@@ -90,14 +98,13 @@ export function decomposeScore(summary, edgeExitCount, hardTriggered, weights = 
   return terms;
 }
 
-// computeTriageScore stays an internal helper. It sums the decomposition in
-// order, starting from the first term rather than a defensive 0, as the
-// pre-refactor inline version did. With every weight set to 0 the list is
-// empty and the score is 0. (Since 0.9.0 every term is multiplied by its
-// weight, so malformed string counts are coerced to numbers rather than
-// string-concatenated as they could be for the unmultiplied 0.8.0 tab-away term.)
-function computeTriageScore(summary, edgeExitCount, weights) {
-  const terms = decomposeScore(summary, edgeExitCount, summary.hardTriggered, weights);
+// sumTerms stays an internal helper. It sums the decomposition in order,
+// starting from the first term rather than a defensive 0, as the pre-refactor
+// inline version did. With every weight set to 0 the list is empty and the
+// score is 0. (Since 0.9.0 every term is multiplied by its weight, so malformed
+// string counts are coerced to numbers rather than string-concatenated as they
+// could be for the unmultiplied 0.8.0 tab-away term.)
+function sumTerms(terms) {
   let score = terms.length ? terms[0][1] : 0;
   for (let i = 1; i < terms.length; i++) score += terms[i][1];
   return score;
