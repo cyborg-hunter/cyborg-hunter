@@ -112,6 +112,8 @@ export async function run(args) {
   const { renderExtensions } = await import('./renderers/extensions.js');
 
   await renderSummaryCSV(summaries, triage, config);
+  const { renderScoreWeights } = await import('./renderers/score-weights.js');
+  renderScoreWeights(config);
   await renderTriage(triage, config);
   await renderEventLog(participants, config);
   await renderExtensions(participants, config);
