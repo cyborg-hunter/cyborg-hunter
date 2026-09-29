@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { computeParticipantSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExitForTrial } from '../../src/cli/analyzers/edge-exit.js';
-import { generateTriageReason, rankTriage } from '../../src/cli/analyzers/triage.js';
+import { decomposeScore, generateTriageReason, rankTriage } from '../../src/cli/analyzers/triage.js';
+import { resolveScoreWeights } from '../../src/cli/analyzers/score-weights.js';
 
 describe('summary', () => {
   it('aggregates paste events across trials', () => {
@@ -380,5 +381,39 @@ describe('triage', () => {
     assert.equal(ranked[1].participantId, 'P-SOFT', 'soft tier second');
     assert.equal(ranked[2].participantId, 'P-CLEAN', 'clean tier last');
     assert.ok(ranked[0].score < ranked[1].score, 'hard outranks soft even with a lower score');
+  });
+});
+
+describe('decomposeScore with configurable weights', () => {
+  // SYN-HARD-03's shape from examples/synthetic-pilot: sidebar contributes 0.
+  const hardShape = {
+    participantId: 'SYN-HARD-03', hardTriggered: true,
+    totalPasteEvents: 2, totalCopyEvents: 1, sidebarEventCount: 0,
+    tabAwayLongCount: 3, tabAwayMediumCount: 0, tabAwayFlickerCount: 2,
+    totalSyntheticInsertions: 0,
+  };
+
+  it('pin: with no weights it returns the 0.8.0 terms, keeping a zero contribution', () => {
+    assert.deepEqual(decomposeScore(hardShape, 0, true),
+      [['paste', 10], ['copy', 5], ['sidebar', 0], ['tabaway', 3]]);
+  });
+
+  it('a configured signal is appended after the four default terms', () => {
+    const { weights } = resolveScoreWeights({ synthetic: 1 });
+    assert.deepEqual(decomposeScore({ ...hardShape, totalSyntheticInsertions: 3 }, 0, true, weights),
+      [['paste', 10], ['copy', 5], ['sidebar', 0], ['tabaway', 3], ['synthetic', 3]]);
+  });
+
+  it('max caps the count before weighting', () => {
+    const { weights } = resolveScoreWeights({ synthetic: { weight: 2, max: 2 } });
+    const terms = decomposeScore({ ...hardShape, totalSyntheticInsertions: 5 }, 0, true, weights);
+    assert.deepEqual(terms.at(-1), ['synthetic', 4]);
+  });
+
+  it('a zero weight removes the term', () => {
+    const { weights } = resolveScoreWeights({ paste: 0 });
+    const terms = decomposeScore(hardShape, 0, true, weights);
+    assert.equal(terms.find(([k]) => k === 'paste'), undefined);
+    assert.equal(terms.length, 3);
   });
 });

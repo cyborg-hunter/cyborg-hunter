@@ -5,12 +5,17 @@
 //
 // Ranking has two parts (see rankTriage + decomposeScore below):
 //   - tier:  hard-triggered → soft-flagged → clean (primary sort key)
-//   - score: 5×paste + 5×copy + 3×sidebar-open + 1×tab-away (within a tier),
-//            where a "tab-away" is one longer than the participant's tab-away
-//            threshold (3s by default, 5s for the strict preset)
-// Other signals (AI extensions, keyboard shortcuts, layout/zoom, edge-exits,
-// synthetic insertions, foreign inputs, honeypot disclosure) are surfaced in the
-// reason and detail panes but do NOT contribute to the score.
+//   - score: by default 5×paste + 5×copy + 3×sidebar-open + 1×tab-away (within
+//            a tier), where a "tab-away" is one longer than the participant's
+//            tab-away threshold (3s by default, 5s for the strict preset).
+//            config.scoreWeights can reweight these and switch on any other
+//            signal (see score-weights.js); the tier never depends on it.
+// Signals with weight 0 (by default: AI extensions, keyboard shortcuts,
+// layout/zoom, edge-exits, synthetic insertions, foreign inputs) and honeypot
+// disclosure are surfaced in the reason and detail panes but do not contribute
+// to the score.
+
+import { SCORE_SIGNALS, DEFAULT_RESOLVED_WEIGHTS } from './score-weights.js';
 
 export function rankTriage(summaries, edgeExits, config) {
   const triageList = summaries.map((s, i) => {
@@ -40,8 +45,8 @@ export function rankTriage(summaries, edgeExits, config) {
   // Sort tier-first (hard, then soft, then clean), and by score descending
   // within a tier. A hard-triggered participant (paste/drop over its count
   // threshold) is categorically more actionable than a high soft-signal count,
-  // so they must lead the "start here" triage.md even though the four-term
-  // score (paste/copy/sidebar/tab-away) no longer includes a hard-trigger term.
+  // so they must lead the "start here" triage.md even though the score (by
+  // default paste/copy/sidebar/tab-away) includes no hard-trigger term.
   // This matches the HTML index's "Tier" sort (hard:0, soft:1, clean:2; score
   // desc within tier).
   const tierRank = (t) => (t.hardTriggered ? 0 : t.softFlagged ? 1 : 2);
@@ -58,42 +63,42 @@ export function rankTriage(summaries, edgeExits, config) {
 // with bars). Keeping the formula here means the score breakdown in the report can
 // never silently disagree with the ranked score it explains.
 //
-// Scoring policy (fixed 2026-06-01): only four signals contribute to the
-// score —
+// Each signal in SCORE_SIGNALS (score-weights.js) contributes
+// min(count, max) × weight; signals whose weight is 0 are left out of the list
+// (a weighted signal with a count of 0 stays in, as `[key, 0]`). The DEFAULT
+// weights are the 2026-06-01 policy, so without config.scoreWeights the result
+// is the 0.8.0 four-term list:
 //   5 × paste events
 //   5 × copy events
 //   3 × sidebar events (open cycles)
 //   1 × tab-aways longer than the participant's tab-away threshold (3s default,
 //       5s strict) — excludes at-or-below-cutoff flickers, which are mostly noise
 //       from brief URL-bar focus / window edge clicks
-// Hard-trigger, AI extensions, layout shifts, zoom changes, keyboard shortcuts,
-// edge exits, synthetic insertions, and foreign inputs no longer affect the
-// *score*. They are NOT hidden from review: every event list still renders in
-// the per-participant detail panes, and hard-triggered participants are still
-// surfaced via the hard/soft/clean tier (which is independent of this score).
-// edgeExitCount and hardTriggered remain in the signature for the renderer's
-// call site but are unused under this policy.
-export function decomposeScore(summary, edgeExitCount, hardTriggered) {
-  const sidebarCount = summary.sidebarEventCount ?? (summary.sidebarDetected ? 1 : 0);
-  const tabAwayMeaningful =
-    (summary.tabAwayLongCount || 0) + (summary.tabAwayMediumCount || 0);
-  return [
-    ['paste',    (summary.totalPasteEvents || 0) * 5],
-    ['copy',     (summary.totalCopyEvents  || 0) * 5],
-    ['sidebar',  sidebarCount * 3],
-    ['tabaway',  tabAwayMeaningful],
-  ];
+// Every other signal (AI extensions, layout shifts, zoom, keyboard shortcuts,
+// edge exits, synthetic insertions, foreign inputs, …) defaults to 0 and can be
+// weighted through config.scoreWeights. Nothing here affects the hard/soft/clean
+// tier, and unweighted signals still render in the per-participant detail panes.
+// hardTriggered stays in the signature for the renderer's call site; it is unused.
+export function decomposeScore(summary, edgeExitCount, hardTriggered, weights = DEFAULT_RESOLVED_WEIGHTS) {
+  const terms = [];
+  for (const sig of SCORE_SIGNALS) {
+    const { weight, max } = weights[sig.key];
+    if (weight === 0) continue;
+    const count = sig.count(summary, edgeExitCount);
+    terms.push([sig.key, (max == null ? count : Math.min(count, max)) * weight]);
+  }
+  return terms;
 }
 
-// computeTriageScore stays an internal helper. It accumulates the decomposition
-// in the original iteration order, starting from the soft base directly (NOT
-// from a defensive 0) — same `let score = base; score += hardTerm; score +=
-// edgeTerm; …` behaviour as the pre-refactor inline version. For malformed data
-// where `base` is a non-number (e.g. an object), every subsequent `+=` becomes
-// a string concat — exactly as it did before this refactor.
-function computeTriageScore(summary, edgeExitCount) {
-  const terms = decomposeScore(summary, edgeExitCount, summary.hardTriggered);
-  let score = terms[0][1];
+// computeTriageScore stays an internal helper. It sums the decomposition in
+// order, starting from the first term rather than a defensive 0, as the
+// pre-refactor inline version did. With every weight set to 0 the list is
+// empty and the score is 0. (Since 0.9.0 every term is multiplied by its
+// weight, so malformed string counts are coerced to numbers rather than
+// string-concatenated as they could be for the unmultiplied 0.8.0 tab-away term.)
+function computeTriageScore(summary, edgeExitCount, weights) {
+  const terms = decomposeScore(summary, edgeExitCount, summary.hardTriggered, weights);
+  let score = terms.length ? terms[0][1] : 0;
   for (let i = 1; i < terms.length; i++) score += terms[i][1];
   return score;
 }
@@ -141,7 +146,7 @@ export function generateTriageReason(summary, edgeExitCount = 0) {
   if (summary.totalSyntheticInsertions > 0) parts.push(`${summary.totalSyntheticInsertions} synthetic insertions`);
   if (summary.totalForeignInputEvents > 0) parts.push(`${summary.totalForeignInputEvents} foreign inputs`);
   // Guard-honeypot self-disclosure — a strong corroborating signal, surfaced in
-  // the reason though it does not feed the four-term score.
+  // the reason though it does not feed the score (it has no scoreWeights key).
   if (summary.honeypotAiUse) parts.push('self-reported AI use (honeypot)');
   if (parts.length === 0) parts.push('clean');
   return parts.join('; ');
