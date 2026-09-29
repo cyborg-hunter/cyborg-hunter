@@ -62,7 +62,7 @@ export function resolveScoreWeights(user) {
     warnings.push(`scoreWeights must be an object of signal weights (got ${show(user)}); using the default weights.`);
   } else if (user != null) {
     for (const [key, value] of Object.entries(user)) {
-      if (key === 'devTools') {
+      if (key.toLowerCase() === 'devtools') {
         warnings.push('scoreWeights.devTools is ignored: the DevTools count is always 0. DevTools hotkeys are counted under "kbShortcuts".');
         continue;
       }
@@ -75,17 +75,25 @@ export function resolveScoreWeights(user) {
       const def = DEFAULT_SCORE_WEIGHTS[key];
       const obj = isPlainObject(value) ? value : null;
       const hasWeight = obj ? obj.weight !== undefined : true;
+      // `max: null` means "no cap" — the shape score-weights.json writes — so a
+      // copy of that file used as scoreWeights resolves without warnings.
+      const hasMax = !!obj && obj.max != null;
       const w = obj ? obj.weight : value;
 
-      if (obj && !hasWeight && obj.max !== undefined) {
-        warnings.push(`scoreWeights.${key} has a max but no weight; the default weight ${def} applies.`);
+      if (obj) {
+        const extra = Object.keys(obj).filter(k => k !== 'weight' && k !== 'max');
+        if (extra.length) warnings.push(`scoreWeights.${key}: unknown field${extra.length > 1 ? 's' : ''} ${extra.map(k => `"${k}"`).join(', ')} ignored; only "weight" and "max" are read.`);
+      }
+      if (obj && !hasWeight) {
+        if (hasMax) warnings.push(`scoreWeights.${key} has a max but no weight; the default weight ${def} applies.`);
+        else if (!('max' in obj)) warnings.push(`scoreWeights.${key}: the weight must be a finite number ≥ 0 (got ${show(obj)}); using the default ${def}.`);
       } else if (!validWeight(w)) {
-        warnings.push(`scoreWeights.${key}: the weight must be a finite number ≥ 0 (got ${show(obj ? (hasWeight ? w : obj) : value)}); using the default ${def}.`);
+        warnings.push(`scoreWeights.${key}: the weight must be a finite number ≥ 0 (got ${show(obj ? w : value)}); using the default ${def}.`);
       } else {
         slot.weight = w;
       }
 
-      if (obj && obj.max !== undefined) {
+      if (hasMax) {
         if (validMax(obj.max)) slot.max = obj.max;
         else warnings.push(`scoreWeights.${key}.max must be a whole number ≥ 0 (got ${show(obj.max)}); no cap is applied.`);
       }
@@ -99,8 +107,15 @@ export function resolveScoreWeights(user) {
     warnings.push('scoreWeights: every weight is 0, so every report score will be 0.');
   }
 
-  const isDefault = KEYS.every(k => weights[k].weight === DEFAULT_SCORE_WEIGHTS[k] && weights[k].max === null);
+  const isDefault = KEYS.every(k => !differsFromDefault(weights, k));
   return { weights, isDefault, warnings };
+}
+
+// A cap on a zero-weight signal changes nothing, so it does not make the
+// weights custom.
+function differsFromDefault(weights, k) {
+  const { weight, max } = weights[k];
+  return weight !== DEFAULT_SCORE_WEIGHTS[k] || (max != null && weight !== 0);
 }
 
 export const DEFAULT_RESOLVED_WEIGHTS = resolveScoreWeights(null).weights;
@@ -117,7 +132,7 @@ export function formulaText(weights, times = '×') {
 // "copy 5 max 3, synthetic 1": only the keys that differ from the defaults,
 // in table order. Empty string when nothing differs.
 export function customWeightsText(weights) {
-  return KEYS.filter(k => weights[k].weight !== DEFAULT_SCORE_WEIGHTS[k] || weights[k].max != null)
+  return KEYS.filter(k => differsFromDefault(weights, k))
     .map(k => `${k} ${weights[k].weight}${weights[k].max != null ? ` max ${weights[k].max}` : ''}`)
     .join(', ');
 }

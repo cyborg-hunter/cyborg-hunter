@@ -132,9 +132,15 @@ Notes:
 - Keys are case-sensitive. An unknown key (for example `Synthetic` or `synthetc`)
   is ignored with a "did you mean" warning. `devTools` is ignored with a warning
   because that count is always 0; DevTools hotkeys are counted under `kbShortcuts`.
-- Weights must be finite numbers ≥ 0, and `max` a whole number ≥ 0. Invalid
-  values are warned about and fall back to the default for that key. Fractional
-  weights are allowed; scores are then shown to one decimal.
+- Weights must be finite numbers ≥ 0. An invalid weight is warned about and the
+  key keeps its default weight. `max` must be a whole number ≥ 0; an invalid
+  `max` is warned about and dropped, keeping the weight. `"max": null` means no
+  cap, so the `weights` object from a report's `score-weights.json` (not the
+  whole file, which also holds `isDefault`) can be pasted in as `scoreWeights`
+  to reproduce that report's scoring.
+  Fields other than `weight` and `max` in the object form are warned about.
+- Fractional weights are allowed; scores are then shown to one decimal in the
+  report and `summary.csv`, while ranking uses the exact values.
 - Every report writes the weights it used to `score-weights.json`, and the HTML
   top bar names any weights that differ from the defaults. `triage.md` states
   the applied formula.

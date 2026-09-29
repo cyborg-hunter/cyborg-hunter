@@ -475,6 +475,7 @@ cyborg-hunter-report/
 ├── triage.md               # ranked list with one-line "why flagged" per participant
 ├── event-log.csv           # chronological copy/paste/drop/tab-away events
 ├── extensions.csv          # AI-extension + sidebar detections, one row per participant × detection
+├── score-weights.json      # the triage-score weights this report used
 └── images/
     ├── trajectories_<participantId>.png      # per-trial mouse paths
     ├── session_timeline_<participantId>.png  # session-wide tab-away / sidebar / guard timeline

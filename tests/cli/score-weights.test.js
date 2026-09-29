@@ -4,7 +4,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
-  SCORE_SIGNALS, DEFAULT_SCORE_WEIGHTS, resolveScoreWeights, formatScore,
+  SCORE_SIGNALS, DEFAULT_SCORE_WEIGHTS, resolveScoreWeights, formatScore, formulaText, customWeightsText,
 } from '../../src/cli/analyzers/score-weights.js';
 
 const weightOf = (res, key) => res.weights[key].weight;
@@ -85,6 +85,47 @@ describe('score-weights: user values', () => {
     assert.equal(res.warnings.length, 1);
     assert.match(res.warnings[0], /copy/);
     assert.deepEqual(res.weights.copy, { weight: 5, max: 2 });
+  });
+});
+
+describe('score-weights: review fixes', () => {
+  it('the "weights" object of score-weights.json round-trips as scoreWeights, silently', () => {
+    const res = resolveScoreWeights(resolveScoreWeights(null).weights);
+    assert.deepEqual(res.warnings, []);
+    assert.equal(res.isDefault, true);
+    const custom = resolveScoreWeights({ synthetic: 2, copy: { weight: 5, max: 3 } }).weights;
+    const again = resolveScoreWeights(JSON.parse(JSON.stringify(custom)));
+    assert.deepEqual(again.warnings, []);
+    assert.deepEqual(again.weights, custom);
+  });
+
+  it('max: null means no cap and does not warn', () => {
+    assert.deepEqual(resolveScoreWeights({ copy: { weight: 5, max: null } }).warnings, []);
+    assert.deepEqual(resolveScoreWeights({ copy: { max: null } }).warnings, []);
+  });
+
+  it('devTools is recognised whatever its case', () => {
+    const res = resolveScoreWeights({ devtools: 1 });
+    assert.equal(res.warnings.length, 1);
+    assert.match(res.warnings[0], /kbShortcuts/);
+  });
+
+  it('unknown fields inside the object form warn (a typo like "cap" must not silently do nothing)', () => {
+    const res = resolveScoreWeights({ synthetic: { weight: 1, cap: 3 } });
+    assert.equal(res.warnings.length, 1);
+    assert.match(res.warnings[0], /cap/);
+    assert.deepEqual(res.weights.synthetic, { weight: 1, max: null });
+  });
+
+  it('a cap on a zero-weight signal changes nothing, so it is still default', () => {
+    const res = resolveScoreWeights({ synthetic: { weight: 0, max: 3 } });
+    assert.equal(res.isDefault, true);
+    assert.equal(customWeightsText(res.weights), '');
+  });
+
+  it('formulaText includes caps', () => {
+    const { weights } = resolveScoreWeights({ paste: 0, copy: 0, sidebar: 0, tabaway: 0, synthetic: { weight: 0.5, max: 2 } });
+    assert.equal(formulaText(weights), '0.5×synthetic (max 2)');
   });
 });
 
