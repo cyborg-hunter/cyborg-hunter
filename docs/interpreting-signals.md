@@ -9,7 +9,7 @@ Cyborg-hunter computes **two unrelated numbers**, and conflating them is the mos
 | | Library soft score | CLI triage score |
 |---|---|---|
 | Computed | in the participant's browser, during the study | on your machine, at report time |
-| Formula | weighted sum of soft events (copy, tab-away, fast typing, sidebar, DevTools, foreign input), with per-trial caps | `5×paste + 5×copy + 3×sidebar + 1×tab-away` (tab-aways longer than the participant's cutoff) |
+| Formula | weighted sum of soft events (copy, tab-away, fast typing, sidebar, DevTools, foreign input), with per-trial caps | by default `5×paste + 5×copy + 3×sidebar + 1×tab-away` (tab-aways longer than the participant's cutoff); adjustable with `scoreWeights` in the CLI config |
 | Compared against | the preset's `softScoreThreshold` (6 for `standard`) | nothing; it only orders rows |
 | Purpose | screening verdict: is this participant soft-flagged? | review ordering within a tier |
 | Where you see it | `authoritative_soft_score` in `summary.csv` | the `Score` column in `triage.md` |

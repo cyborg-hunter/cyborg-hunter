@@ -3,6 +3,25 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+- Report-score weights are configurable: `scoreWeights` in
+  `cyborg-hunter.config.json` reweights the triage score's terms, gives a
+  weight to any of 16 signals (e.g. `{"synthetic": 1}` for one point per
+  synthetic insertion), and can cap a signal's count per participant with
+  `{"weight": n, "max": m}`. Entries merge per key onto the defaults, which
+  reproduce the 0.8.0 score exactly. The hard/soft/clean tier is unaffected.
+- Every report writes `score-weights.json` with the weights its score used;
+  the HTML top bar and `triage.md` state custom weights when they are set.
+
+### Changed
+- The CLI now warns when a config contains the browser library's
+  `scoring.soft` / `scoring.hard` rules, which the report never read, and
+  points to `scoreWeights`. Invalid or unknown `scoreWeights` entries warn
+  (with a "did you mean") and fall back to the defaults.
+- The HTML score breakdown draws the terms the ranking actually used.
+
 ## [0.8.0] — 2026-09-17
 
 The session-replay recorder now writes SessionRecording v2 (`schema_version: 2`), the

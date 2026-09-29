@@ -16,7 +16,7 @@ The bundled three-participant synthetic dataset (`examples/synthetic-pilot/` —
 | 2 | SYN-SOFT-02 | soft | 21 | 3 copy events; 1 tab-away ≥10s; 2 tab-aways 3–10s; 1 sidebar event |
 | 3 | SYN-CLEAN-01 | clean | 0 | 1 flicker ≤3s; 1 layout shifts |
 
-Ranking is **tier-first** (hard-triggered lead, then soft, then clean), score-descending within a tier — rank 1 outranks rank 2 despite the lower score, because hard evidence beats any accumulation of soft evidence. The score is `5×paste + 5×copy + 3×sidebar + 1×tab-away` (counting tab-aways longer than the participant's tab-away threshold — 3s by default, 5s for the strict preset); synthetic insertions and fast typing are surfaced in the reason but do not drive the score. See [docs/cli-reference.md → Triage scoring](docs/cli-reference.md#triage-scoring). The HTML report for the same dataset:
+Ranking is **tier-first** (hard-triggered lead, then soft, then clean), score-descending within a tier — rank 1 outranks rank 2 despite the lower score, because hard evidence beats any accumulation of soft evidence. By default the score is `5×paste + 5×copy + 3×sidebar + 1×tab-away` (counting tab-aways longer than the participant's tab-away threshold — 3s by default, 5s for the strict preset); synthetic insertions and fast typing are surfaced in the reason but do not drive the score unless you weight them with `scoreWeights` in the config. See [docs/cli-reference.md → Triage scoring](docs/cli-reference.md#triage-scoring). The HTML report for the same dataset:
 
 ![HTML report: tier-sorted participant list on the left; per-signal counts, score breakdown, paste evidence, and typing profile for the hard-flagged participant.](docs/assets/report-example.png)
 

@@ -24,10 +24,10 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 > `filePattern`, `participantIdField`, `integrityField`, `sessionIntegrityPath`,
 > `phaseScope`, `trajectoryDisplayOrder`, `outputDir`,
 > `typingSpeedThreshold_cps`, `thresholds.tabAwayDurationMs` (the tab-away
-> display/soft-bin cutoff), and `scoring.softScoreThreshold` (an optional analyst
+> display/soft-bin cutoff), `scoring.softScoreThreshold` (an optional analyst
 > override for the soft-flag cutoff — by default the CLI uses each participant's
-> own saved threshold), plus `platformIdField`/`showPlatformId` for the HTML
-> detail header. The remaining fields below — `trialIdField`, `trialOrderField`,
+> own saved threshold), and `scoreWeights` (the triage-score weights, since
+> 0.9.0), plus `platformIdField`/`showPlatformId` for the HTML detail header. The remaining fields below — `trialIdField`, `trialOrderField`,
 > `trialsPerParticipant`, `conditionField`, `groupField`,
 > `tabAwayMinDuration_ms`, `idleGapThreshold_ms`, `suspiciouslyFastRT_ms`,
 > `trajectoryGrid`, `trajectoryTrialLabel`, `trajectoryResponseField`,
@@ -74,11 +74,72 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `scoring` | object | `null` | Custom scoring config (overrides preset) |
+| `scoring` | object | `null` | The CLI reads only `scoring.softScoreThreshold`. The browser library's `scoring.soft` / `scoring.hard` rules have no effect on the report; since 0.9.0 the CLI warns when it sees them and points to `scoreWeights` |
+| `scoreWeights` | object | `null` | Weights for the report's triage score, merged per key onto the defaults (added 0.9.0). See [Report-score weights](#report-score-weights-scoreweights) |
 | `signals` | object | `null` | Per-signal enable/disable (overrides preset) |
 | `phaseScope` | object | `null` | `{"include": [...]}` and/or `{"exclude": [...]}` — restrict which trial phases feed the summary/triage scores (added 0.6.1) |
 
 See [`signals-reference.md`](signals-reference.md) for preset values and the full signal toggle list.
+
+### Report-score weights (`scoreWeights`)
+
+The report ranks participants within a tier by a triage score (see
+[cli-reference.md → Triage scoring](cli-reference.md#triage-scoring)). By default
+it is `5×paste + 5×copy + 3×sidebar + 1×tab-away`. `scoreWeights` changes that
+formula. Write only the signals you want to change; every other signal keeps its
+default. For example, to count one point per synthetic insertion:
+
+```json
+{ "scoreWeights": { "synthetic": 1 } }
+```
+
+Each entry is either a number (the weight) or `{ "weight": n, "max": m }`, where
+`max` caps the signal's count per participant before it is weighted:
+
+```json
+{ "scoreWeights": { "copy": { "weight": 5, "max": 3 }, "paste": 0 } }
+```
+
+Setting a weight to `0` removes that term. **The hard/soft/clean tier is not
+affected**: weights change the score and the order within a tier, never which
+tier a participant is in (the tier comes from the browser library's screening
+and `scoring.softScoreThreshold`).
+
+| Key | Counts | Default weight |
+|---|---|---|
+| `paste` | paste events | 5 |
+| `copy` | copy events | 5 |
+| `sidebar` | sidebar events (open cycles) | 3 |
+| `tabaway` | tab-aways longer than the participant's threshold (medium + long) | 1 |
+| `tabawayLong` | tab-aways ≥ 10 s | 0 |
+| `tabawayMedium` | tab-aways between the threshold and 10 s | 0 |
+| `flicker` | tab-aways at or below the threshold | 0 |
+| `drop` | drag-and-drop events | 0 |
+| `fastTyping` | trials typed faster than the preset's cps threshold | 0 |
+| `synthetic` | synthetic insertions (text without preceding keystrokes) | 0 |
+| `foreignInput` | keystrokes outside the response field | 0 |
+| `aiExtensions` | AI extensions detected | 0 |
+| `kbShortcuts` | DevTools hotkeys | 0 |
+| `viewportShifts` | viewport-width changes | 0 |
+| `zoom` | browser zoom changes | 0 |
+| `edgeExits` | mouse edge-exit patterns | 0 |
+
+Notes:
+
+- `tabaway` already counts the medium and long bins. To weight them separately,
+  set `"tabaway": 0` and use `tabawayLong` / `tabawayMedium`; weighting both
+  double counts, and the CLI warns.
+- Keys are case-sensitive. An unknown key (for example `Synthetic` or `synthetc`)
+  is ignored with a "did you mean" warning. `devTools` is ignored with a warning
+  because that count is always 0; DevTools hotkeys are counted under `kbShortcuts`.
+- Weights must be finite numbers ≥ 0, and `max` a whole number ≥ 0. Invalid
+  values are warned about and fall back to the default for that key. Fractional
+  weights are allowed; scores are then shown to one decimal.
+- Every report writes the weights it used to `score-weights.json`, and the HTML
+  top bar names any weights that differ from the defaults. `triage.md` states
+  the applied formula.
+- The signal legend and tile hints in the HTML report ("not scored") describe
+  the default weights.
 
 ### Phase scoping (`phaseScope`)
 

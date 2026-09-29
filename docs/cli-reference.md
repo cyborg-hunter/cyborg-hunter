@@ -76,6 +76,7 @@ cyborg-hunter-report/
 ├── triage.md            # ranked markdown table with a one-line "why flagged"
 ├── event-log.csv        # chronological events (copy/paste/drop/synthetic/tabAway)
 ├── extensions.csv       # AI-extension + sidebar detections, one row per participant × detection
+├── score-weights.json   # the triage-score weights this report used (defaults or scoreWeights)
 └── images/              # canvas-rendered visuals (skipped if canvas missing)
     ├── trajectories_<participantId>.png      # per-trial mouse paths
     ├── session_timeline_<participantId>.png  # session-wide tab-away / sidebar / guard timeline
@@ -153,6 +154,15 @@ note is shown in the reason but no longer contributes to the score — see
 because of its score.) Designed to be readable as plain text or pasted into a
 Slack/Notion review.
 
+### `score-weights.json`
+
+The weights the triage score was computed with, written by every run:
+`{ "isDefault": true|false, "weights": { "<signal>": { "weight": n, "max": m|null } } }`.
+`isDefault` is `false` when `scoreWeights` in the config changed anything; the
+HTML top bar then also names the changed weights. Use it to check that two
+reports' scores are comparable. Config warnings are printed to the console,
+not written here.
+
 ### `event-log.csv`
 
 Every clipboard, drop, synthetic-insertion, and tab-away event in chronological order:
@@ -174,29 +184,38 @@ If `canvas` is unavailable (Cairo not installed), images are skipped with platfo
 
 ## Triage scoring
 
-The triage **score** is a deliberately small, transparent sum of four signals
-(policy fixed 2026-06-01). It is *not* the library's soft score — it is a
-ranking heuristic computed by the CLI in `src/cli/analyzers/triage.js`:
+The triage **score** is a deliberately small, transparent weighted sum. It is
+*not* the library's soft score — it is a ranking heuristic computed by the CLI in
+`src/cli/analyzers/triage.js`. By default (policy fixed 2026-06-01) it sums four
+signals:
 
-| Component | Contribution |
+| Component | Default contribution |
 |---|---|
 | Paste events | `× 5` |
 | Copy events | `× 5` |
 | Sidebar events (open cycles) | `× 3` (uncapped) |
 | Tab-aways longer than the participant's tab-away threshold (medium + long bins; 3s by default, 5s for strict) | `× 1` |
 
-No other signal affects the score. Hard-trigger status, AI-extension detections,
-keyboard shortcuts, layout shifts, zoom changes, edge-exit patterns, synthetic
-insertions, and foreign inputs are all still surfaced — in the per-participant
-detail panes and the one-line triage reason — but they **do not** change the
-number. (Earlier versions added a `+100` hard-trigger term and several other
-bonuses; those were removed.)
+Under the default weights no other signal affects the score. Hard-trigger
+status, AI-extension detections, keyboard shortcuts, layout shifts, zoom
+changes, edge-exit patterns, synthetic insertions, and foreign inputs are all
+still surfaced — in the per-participant detail panes and the one-line triage
+reason — but they do not change the number. (Earlier versions added a `+100`
+hard-trigger term and several other bonuses; those were removed.)
+
+**Changing the weights.** Since 0.9.0, `scoreWeights` in the config file can
+reweight any of these terms, give a weight to any of the other signals (for
+example one point per synthetic insertion), and cap a signal's count. See
+[configuration.md → Report-score weights](configuration.md#report-score-weights-scoreweights).
+The weights used are recorded in `score-weights.json`, and `triage.md` states the
+applied formula. Custom weights change the score and the order *within* a tier
+only; the hard/soft/clean tier never depends on them.
 
 **Hard-triggered participants are surfaced by ordering, not by the score.** The
 ranked list (both `triage.md` and the HTML index's default "Tier" sort) sorts
 tier-first — hard-triggered, then soft-flagged, then clean — and by score within
 each tier. So a hard-triggered participant always appears above soft-only ones
-even when its four-term score is lower.
+even when its score is lower.
 
 - **Soft-flag threshold:** a participant is soft-flagged when
   `(authoritative soft score from getSessionReport() ?? summed per-trial soft
