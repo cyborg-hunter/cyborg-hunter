@@ -107,6 +107,10 @@ export function decomposeScore(summary, edgeExitCount, hardTriggered, weights = 
 function sumTerms(terms) {
   let score = terms.length ? terms[0][1] : 0;
   for (let i = 1; i < terms.length; i++) score += terms[i][1];
+  // Deliberately unrounded: ordering uses the exact sum, so no configured
+  // contribution, however small, can be erased. Binary noise from fractional
+  // weights (0.1 × 3 = 0.30000000000000004) is removed only where scores are
+  // displayed, by formatScore (score-weights.js).
   return score;
 }
 

@@ -21,6 +21,7 @@
 
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';
+import { resolveScoreWeights, customWeightsText, formatScore } from '../analyzers/score-weights.js';
 import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
 import { inlineSafeJson, inlineSafeSrc } from '../../shared/inline-safe.js';
@@ -459,7 +460,7 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
 <body data-filter="all">
   <header class="topbar">
     <h1>Cyborg Hunter Report</h1>
-    <span class="meta">${triage.length} participants &middot; v${VERSION}</span>
+    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}</span>
     <button class="legend-btn" type="button" aria-haspopup="dialog" aria-controls="legend-modal">Legend &#9432;</button>
   </header>
   <div class="layout">
@@ -846,7 +847,8 @@ function tierOf(t) {
 //              drop, long tab-aways, AI extensions detected).
 //   warn     — soft-score-contributing signals that compound with others.
 //   muted    — diagnostic signals that are noise alone but corroborate.
-// Tone classes track scoring weights; if computeTriageScore changes, audit this.
+// Tone classes track the DEFAULT score weights (score-weights.js); custom
+// config.scoreWeights do not retone the tiles. If the defaults change, audit this.
 // `aiExtensionsCount` and `edgeExitCount` are derived (not on summary directly);
 // renderSignalGrid handles that mapping.
 const SIGNALS = [
@@ -960,7 +962,7 @@ function renderCohortRow(t) {
     <div class="cohort-row-top">
       <span class="tier-dot" data-tier="${tier}"></span>
       <span class="mono pid" title="${esc(pid)}">${esc(pid)}</span>
-      <span class="mono score">${score}</span>
+      <span class="mono score">${formatScore(score)}</span>
     </div>
     <div class="cohort-row-bot">
       <span class="reason-excerpt">${esc(reason)}</span>
@@ -1034,7 +1036,7 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
   return `<section class="participant" id="p-${sanitized}"${defaultVisible ? '' : ' hidden'}>
     ${renderDetailHeader(t, tier, participant, config)}
     ${renderSignalGrid(s, t)}
-    ${renderScoreBreakdown(t)}
+    ${renderScoreBreakdown(t, config)}
     ${renderReasonQuote(t)}
     ${renderSessionBlock(s, participant)}
     ${renderPasteEvidence(participant)}
@@ -1238,7 +1240,7 @@ function renderDetailHeader(t, tier, participant, config) {
     <div class="detail-header-top">
       <span class="mono pid-full">${esc(t.participantId)}</span>
       <span class="tier-pill" data-tier="${tier}">${tierLabel}</span>
-      <span class="mono score-big">${t.score}</span>
+      <span class="mono score-big">${formatScore(t.score)}</span>
     </div>
     <div class="detail-header-sub">
       ${s.trialCount ?? 0} trials · ${cps} cps · ${offTask} off-task
@@ -1247,9 +1249,12 @@ function renderDetailHeader(t, tier, participant, config) {
 }
 
 // Horizontal score breakdown — only non-zero contributions, ending in Total:N.
-// Sourced from decomposeScore so the displayed terms always sum to t.score.
-function renderScoreBreakdown(t) {
-  const terms = decomposeScore(t.summary || {}, t.edgeExitCount, t.hardTriggered)
+// Draws the terms rankTriage actually summed (t.terms). Rows built elsewhere
+// without terms (hand-built callers) are decomposed here with the CONFIGURED
+// weights, so the bars never disagree with a custom-weights header.
+function renderScoreBreakdown(t, config) {
+  const terms = (t.terms ?? decomposeScore(t.summary || {}, t.edgeExitCount, t.hardTriggered,
+    resolveScoreWeights(config?.scoreWeights).weights))
     .filter(([, n]) => n > 0);
 
   const total = t.score;
@@ -1259,15 +1264,22 @@ function renderScoreBreakdown(t) {
   const termHtml = terms.map(([label, n]) =>
     `<span class="score-term">
        <span class="label">${label}</span>
-       <span class="mono contrib">+${n}</span>
+       <span class="mono contrib">+${formatScore(n)}</span>
        <span class="bar" style="width:${barFor(n)}px"></span>
      </span>`
   ).join('');
 
   return `<div class="score-breakdown">
     ${termHtml}
-    <span class="score-total mono">Total: ${total}</span>
+    <span class="score-total mono">Total: ${formatScore(total)}</span>
   </div>`;
+}
+
+// Top-bar note, present only when config.scoreWeights changes the score from
+// the defaults: " · custom score weights: copy 5 max 3, synthetic 1".
+function scoreWeightsNote(config) {
+  const { weights, isDefault } = resolveScoreWeights(config?.scoreWeights);
+  return isDefault ? '' : ` &middot; custom score weights: ${esc(customWeightsText(weights))}`;
 }
 
 // Format milliseconds as "Xs" / "Xm Ys".

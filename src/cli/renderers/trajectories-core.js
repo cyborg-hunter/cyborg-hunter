@@ -26,6 +26,7 @@
 //   - Title with trial ID, RT, mouse count, tab-away count + total duration
 
 import { ruleChronologicalCompare } from '../extract-core.js';
+import { formatScore } from '../analyzers/score-weights.js';
 
 // Panel dimensions (pixels).
 const PANEL_W = 400;
@@ -121,7 +122,7 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   ctx.fillRect(0, 0, canvasW, canvasH);
 
   // Header
-  const headerText = `${p.participantId} — Score: ${triageEntry?.score ?? '?'} — ${triageEntry?.reason ?? ''}`;
+  const headerText = `${p.participantId} — Score: ${formatScore(triageEntry?.score ?? '?')} — ${triageEntry?.reason ?? ''}`;
   ctx.fillStyle = COLORS.headerText;
   ctx.font = 'bold 16px sans-serif';
   ctx.fillText(headerText, PANEL_PAD, 30);

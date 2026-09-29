@@ -459,6 +459,21 @@ describe('rankTriage with config.scoreWeights', () => {
     assert.equal(ranked[0].score, 5 + 2 + 6);
   });
 
+  it('the score is never rounded: a tiny contribution still decides the order', () => {
+    const ranked = rankTriage(
+      [clean('PASTE', { totalPasteEvents: 1 }), clean('PASTE+COPY', { totalPasteEvents: 1, totalCopyEvents: 1 })], noEdges(2),
+      { scoreWeights: { paste: 1, copy: 1e-12, sidebar: 0, tabaway: 0 } });
+    assert.deepEqual(ranked.map(t => t.participantId), ['PASTE+COPY', 'PASTE']);
+    assert.ok(ranked[0].score > ranked[1].score);
+  });
+
+  it('tiny weights still separate participants', () => {
+    const ranked = rankTriage(
+      [clean('ONE', { totalSyntheticInsertions: 1 }), clean('TWO', { totalSyntheticInsertions: 2 })], noEdges(2),
+      { scoreWeights: { synthetic: 1e-10, paste: 0, copy: 0, sidebar: 0, tabaway: 0 } });
+    assert.deepEqual(ranked.map(t => [t.participantId, t.score]), [['TWO', 2e-10], ['ONE', 1e-10]]);
+  });
+
   it('every row carries terms under default weights too', () => {
     const ranked = rankTriage([clean('P1', { totalCopyEvents: 1 })], noEdges(1), {});
     assert.deepEqual(ranked[0].terms, [['paste', 0], ['copy', 5], ['sidebar', 0], ['tabaway', 0]]);

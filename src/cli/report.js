@@ -12,6 +12,7 @@ import { ingest } from './ingest.js';
 import { computeSummary } from './analyzers/summary.js';
 import { detectEdgeExits } from './analyzers/edge-exit.js';
 import { rankTriage } from './analyzers/triage.js';
+import { resolveScoreWeights, formulaText } from './analyzers/score-weights.js';
 import { applyPhaseScope, describePhaseScope, findUnmatchedPhaseScopePhases } from './analyzers/phase-scope.js';
 import { VERSION } from '../shared/constants.js';
 import { checkForUpdate, formatUpdateNotice, formatCollectedVersionNotice } from './update-check.js';
@@ -86,14 +87,18 @@ export async function run(args) {
   // "flagged": the tier counts below come from the LIBRARY's two-tier
   // screening (hard count thresholds / soft score vs its threshold), while
   // triage.md is ORDERED by the CLI's separate composite triage score
-  // (5×paste + 5×copy + 3×sidebar + 1×tab-away) within each tier. Label both
-  // explicitly so the console summary can't be read as "top N of triage.md".
+  // (by default 5×paste + 5×copy + 3×sidebar + 1×tab-away; config.scoreWeights
+  // can change it) within each tier. Label both explicitly so the console
+  // summary can't be read as "top N of triage.md".
+  const scoreWeights = resolveScoreWeights(config.scoreWeights);
   console.log(`\nAnalyzing...`);
   console.log(`  Hard-flagged (hard signal crossed its count threshold): ${flaggedHard}`);
   console.log(`  Soft-flagged (library soft score >= its threshold):     ${flaggedSoft}`);
   console.log(`  Clean:                                                  ${clean}`);
   console.log(`  Triage.md orders tier-first (hard > soft > clean), then by the CLI`);
-  console.log(`  triage score (5xpaste + 5xcopy + 3xsidebar + 1xtab-away) within a tier.`);
+  console.log(scoreWeights.isDefault
+    ? `  triage score (5xpaste + 5xcopy + 3xsidebar + 1xtab-away) within a tier.`
+    : `  triage score (${formulaText(scoreWeights.weights, 'x')}, from scoreWeights) within a tier.`);
 
   // 4. Render outputs
   console.log(`\nRendering...`);

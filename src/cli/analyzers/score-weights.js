@@ -105,6 +105,23 @@ export function resolveScoreWeights(user) {
 
 export const DEFAULT_RESOLVED_WEIGHTS = resolveScoreWeights(null).weights;
 
+// "5×copy + 3×sidebar + 1×synthetic (max 3)": the weighted signals, in table
+// order, for prose that states the formula (triage.md, the console summary).
+// Callers keep their own verbatim wording for the default weights.
+export function formulaText(weights, times = '×') {
+  return KEYS.filter(k => weights[k].weight !== 0)
+    .map(k => `${weights[k].weight}${times}${k}${weights[k].max != null ? ` (max ${weights[k].max})` : ''}`)
+    .join(' + ') || '0';
+}
+
+// "copy 5 max 3, synthetic 1": only the keys that differ from the defaults,
+// in table order. Empty string when nothing differs.
+export function customWeightsText(weights) {
+  return KEYS.filter(k => weights[k].weight !== DEFAULT_SCORE_WEIGHTS[k] || weights[k].max != null)
+    .map(k => `${k} ${weights[k].weight}${weights[k].max != null ? ` max ${weights[k].max}` : ''}`)
+    .join(', ');
+}
+
 // The one formatter for displayed scores. Integers (every score under integer
 // weights, i.e. all default output) pass through unchanged, type included;
 // fractional scores print to one decimal; non-numbers pass through.

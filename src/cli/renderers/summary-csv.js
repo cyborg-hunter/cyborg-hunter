@@ -4,12 +4,13 @@
 
 import { writeFileSync } from 'fs';
 import { join } from 'path';
+import { formatScore } from '../analyzers/score-weights.js';
 
 // CSV columns in output order. Each entry: [header, accessor function].
 const COLUMNS = [
   ['participantId', (s, t) => s.participantId],
   ['trialCount', (s, t) => s.trialCount],
-  ['triageScore', (s, t) => t.score],
+  ['triageScore', (s, t) => formatScore(t.score)],
   ['hardTriggered', (s, t) => t.hardTriggered ? 'YES' : 'no'],
   ['triageReason', (s, t) => t.reason],
   ['totalPasteEvents', (s, t) => s.totalPasteEvents],
