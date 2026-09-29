@@ -10,6 +10,7 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
 import { DEFAULT_CLI_CONFIG } from '../shared/schema.js';
 import { validateConfig } from '../shared/validation.js';
+import { resolveScoreWeights } from './analyzers/score-weights.js';
 
 export function loadConfig(cliArgs) {
   // Parse CLI flags into a simple key-value object
@@ -67,6 +68,20 @@ export function cliConfigWarnings(config) {
       `soft-flagged. Set it to a number.`
     );
   }
+  // The browser library's scoring rules look like they belong here too, but
+  // the CLI reads only scoring.softScoreThreshold; the report score's weights
+  // live in scoreWeights. Say so rather than ignore them silently.
+  const scoring = config?.scoring;
+  if (scoring && typeof scoring === 'object' && (scoring.soft != null || scoring.hard != null)) {
+    warnings.push(
+      'scoring.soft / scoring.hard configure the browser library, not the report; ' +
+      'the CLI ignores them (only scoring.softScoreThreshold is read). To weight ' +
+      'signals in the report score, use "scoreWeights".'
+    );
+  }
+  // This is the single place scoreWeights warnings reach the console
+  // (rankTriage resolves the same weights silently).
+  warnings.push(...resolveScoreWeights(config?.scoreWeights).warnings);
   return warnings;
 }
 
