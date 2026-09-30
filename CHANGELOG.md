@@ -3,7 +3,11 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.9.0] — 2026-09-29
+
+The report's triage-score weights are configurable from the CLI config. Default
+output is unchanged; the browser library is unchanged apart from recognising
+`scoreWeights` as a known config key.
 
 ### Added
 - Report-score weights are configurable: `scoreWeights` in

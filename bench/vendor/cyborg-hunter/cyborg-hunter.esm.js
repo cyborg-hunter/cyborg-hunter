@@ -32,7 +32,7 @@ function deepCopy(obj) {
 }
 
 // src/shared/constants.js
-var VERSION = "0.8.0";
+var VERSION = "0.9.0";
 var DEFAULT_THRESHOLDS = {
   pasteMinChars: 0,
   // record ALL pastes (was 20; now 0 by default)
@@ -234,6 +234,8 @@ var DEFAULT_CLI_CONFIG = {
   dataDir: "./data",
   replayDir: null,
   // replay artifacts dir; defaults to dataDir
+  scoreWeights: null,
+  // report-score weights, merged per key onto the defaults (cli/analyzers/score-weights.js)
   filePattern: "*.json",
   participantIdField: "participantId",
   trialIdField: "trialId",
