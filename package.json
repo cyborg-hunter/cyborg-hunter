@@ -41,6 +41,7 @@
     "bin/",
     "src/",
     "tools/convert/jspsych-v1-to-v2.mjs",
+    "tools/convert/convert-core.mjs",
     "README.md",
     "CHANGELOG.md",
     "CITATION.cff"
