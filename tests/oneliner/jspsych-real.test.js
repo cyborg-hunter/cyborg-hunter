@@ -325,6 +325,10 @@ describe('ch.js on real jsPsych: lazy replay', () => {
     assert.equal(recording.schema_version, 2);
     assert.equal(recording.participant_id, 'P1');
     assert.deepStrictEqual(recording.segments.map((s) => s.label).filter(Boolean), ['trial-0', 'trial-1']);
+    const ch = recording.extensions['cyborg-hunter'];
+    assert.equal(ch.preset, 'standard', 'the session report rides along (the monitor is already destroyed by then)');
+    assert.ok(ch.scoring, 'scoring from the session report');
+    assert.equal(recording.host.name, 'jspsych');
     assert.equal(jsPsych.extensions['cyborg-hunter-replay'].inner.api, null, 'the recorder was destroyed');
     assert.deepStrictEqual(errors, []);
   });
@@ -357,9 +361,11 @@ describe('ch.js on real jsPsych: lazy replay', () => {
     };
     bootCh({}, { replay: { tier: 'trace', autoSave: { mode: 'datapipe', experimentId: 'ABC123' } } });
     let recording = null;
-    const jsPsych = win.initJsPsych({ on_finish: () => { order.push('on_finish'); recording = win.CyborgHunter.replay(); } });
+    let finishArg = null;
+    const jsPsych = win.initJsPsych({ on_finish: (data) => { finishArg = data; order.push('on_finish'); recording = win.CyborgHunter.replay(); } });
     await runTimeline(jsPsych, [{ type: Timer }]);
     assert.deepStrictEqual(order, ['initialize:datapipe', 'finalize', 'on_finish']);
+    assert.ok(finishArg && typeof finishArg.values === 'function', 'the researcher\'s on_finish still gets jsPsych\'s data');
     assert.deepStrictEqual(recording, { schema_version: 2 }, 'replay() returns what finalize saved');
     assert.deepStrictEqual(warns, []);
   });
