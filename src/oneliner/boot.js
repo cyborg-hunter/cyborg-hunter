@@ -8,7 +8,10 @@
 //      from this moment on ('span-0'), so a paste before the first host
 //      trial is still recorded;
 //   5. host: 'jspsych' when initJsPsych is already defined, else 'vanilla'
-//      (the host adapters install their hooks into ctx.handlers);
+//      (the host adapters install their hooks into ctx.handlers). On the
+//      jsPsych host, initJsPsych is wrapped (adapters/jspsych.js); on both,
+//      a placement check reports a ch.js tag above jspsych.js or below the
+//      experiment code;
 //   6. guards, vanilla host only (honeypot on by default, friction
 //      observe-only when enabled). On the jsPsych host the injected guard
 //      extensions own them: their initialize() runs GuardHoneypot.init and
@@ -38,6 +41,7 @@ import { resolveParticipantId, randomParticipantId, DEFAULT_PARAMS } from './par
 import { startGuards } from './guards.js';
 import { buildPublicApi } from './api.js';
 import { MESSAGES } from './errors.js';
+import { installJsPsychAdapter, watchHostPlacement } from './adapters/jspsych.js';
 
 export function boot(opts) {
   var win = opts.win;
@@ -87,6 +91,8 @@ export function boot(opts) {
       api: null
     };
     ctx.api = buildPublicApi(ctx);
+    var adapter = host === 'jspsych' ? installJsPsychAdapter({ win: win, ctx: ctx }) : null;
+    watchHostPlacement({ win: win, doc: win.document, ctx: ctx, adapter: adapter });
     win.CyborgHunter = ctx.api;
     win.__cyborgHunterLoaded = 'ch.js';
     return ctx;

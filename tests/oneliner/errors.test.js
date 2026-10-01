@@ -50,6 +50,21 @@ const CASES = {
     fix: 'open an issue with this message and your <script> tag',
     link: DOCS + 'known-issues.md#one-line-setup'
   },
+  hookFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  instrumentFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  sessionEndFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
   guardFailed: {
     args: ['honeypot', 'boom'],
     fix: 'open an issue with this message and your <script> tag',

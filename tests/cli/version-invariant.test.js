@@ -22,6 +22,7 @@ it('both jsPsych extension info.version fields match package.json', async () => 
   const files = [
     '../../src/jspsych/extension-cyborg-hunter.js',
     '../../src/jspsych/extension-cyborg-hunter-replay.js',
+    '../../src/oneliner/adapters/jspsych-extension.js',
   ];
   for (const f of files) {
     const src = readFileSync(new URL(f, import.meta.url), 'utf8');

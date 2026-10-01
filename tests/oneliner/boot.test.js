@@ -108,6 +108,16 @@ describe('boot', () => {
     assert.strictEqual(ctx.host, 'jspsych');
   });
 
+  it('jsPsych host: boot wraps initJsPsych and the original still runs', () => {
+    let called = 0;
+    win.initJsPsych = function () { called++; return { data: { addProperties() {} }, run() {} }; };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.initJsPsych({});
+    assert.strictEqual(called, 1);
+    assert.strictEqual(ctx.jspsych.invoked, true);
+    assert.deepStrictEqual(errors, []);
+  });
+
   it('a script that is null (no document.currentScript) boots with defaults', () => {
     ctx = boot({ script: null, win });
     assert.ok(ctx);
@@ -331,4 +341,56 @@ describe('guard cores on a second load', () => {
       }
     });
   }
+});
+
+// Where ch.js sits relative to jspsych.js and the experiment code decides
+// whether initJsPsych can be wrapped. jsPsych 7.3.1 sets the <html jspsych>
+// attribute only once run() is past prepareDom (which waits for window load,
+// :2885-2888) and loadExtensions (:2693-2696), so "initJsPsych ran without
+// us" is detected when that attribute appears, not at DOMContentLoaded.
+describe('host diagnosis', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 10));
+  function loading() {
+    Object.defineProperty(win.document, 'readyState', { value: 'loading', configurable: true });
+  }
+
+  it('not hookable: jsPsych starts running but initJsPsych never went through ch.js', async () => {
+    const original = function () {};
+    win.initJsPsych = original;
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.notHookable()]);
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(win.initJsPsych, original, 'the wrapper is removed');
+  });
+
+  it('no error when initJsPsych went through ch.js before jsPsych started', async () => {
+    win.initJsPsych = function () { return { data: { addProperties() {} }, run() {} }; };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.initJsPsych({});
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(ctx.host, 'jspsych');
+  });
+
+  it('loaded above jspsych.js: initJsPsych appears before DOMContentLoaded', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'vanilla');
+    win.initJsPsych = function () {};
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.loadedAboveJsPsych()]);
+    assert.strictEqual(ctx.host, 'vanilla');
+  });
+
+  it('a page without jsPsych stays quiet', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, []);
+  });
 });

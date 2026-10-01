@@ -71,6 +71,17 @@ export const MESSAGES = {
   bootFailed: function (msg) {
     return formatError('Cyborg Hunter did not start', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
   },
+  // The jsPsych host: wrapping initJsPsych, walking the timeline at run(),
+  // and the end-of-session hook. jsPsych keeps running after each of them.
+  hookFailed: function (msg) {
+    return formatError('Cyborg Hunter could not hook initJsPsych', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
+  instrumentFailed: function (msg) {
+    return formatError('Cyborg Hunter could not instrument the timeline', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
+  sessionEndFailed: function (msg) {
+    return formatError('Cyborg Hunter could not write the end-of-session data', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
   guardFailed: function (guard, msg) {
     return formatError('The ' + guard + ' guard is not running', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
   }

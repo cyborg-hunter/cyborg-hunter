@@ -1,0 +1,174 @@
+// OneLinerExtension: the jsPsych extension ch.js injects into every trial.
+// on_load rotates the segmenter into the host trial; on_finish cuts a segment
+// and returns it (plus per-row running totals) so jsPsych merges it into the
+// trial's own row (jspsych.js 7.3.1 :2772, :2814-2823). A fake segmenter
+// stands in for the real one (segmenter.test.js covers that contract).
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert';
+import { OneLinerExtension } from '../../src/oneliner/adapters/jspsych-extension.js';
+
+function segment(i) {
+  return {
+    segmentIndex: i, source: 'host', trialId: 't' + i, deltas: {},
+    counters: { pasteCount: 2, copyCount: 1, dropCount: 0 },
+    score: { softScore: 3.5, anyHardTriggered: true }
+  };
+}
+
+function makeCtx(over) {
+  const calls = [];
+  const segmenter = {
+    rotate: (o) => { calls.push(['rotate', o]); return null; },
+    cut: (o) => { calls.push(['cut', o]); return { segment: segment(4), trialReport: { trialId: 't4', pasteEvents: [] } }; }
+  };
+  return { calls, ctx: Object.assign({ monitor: { id: 'm' }, segmenter, jspsych: { segmentsWritten: 0 } }, over || {}) };
+}
+
+const fakeJsPsych = (idx) => ({ getProgress: () => ({ current_trial_global: idx }) });
+
+let errs, origError;
+beforeEach(() => { errs = []; origError = console.error; console.error = (m) => errs.push(String(m)); });
+afterEach(() => { console.error = origError; OneLinerExtension.ctx = null; });
+
+describe('OneLinerExtension: jsPsych hooks', () => {
+  // jsPsych 7 calls these four unconditionally on every trial listing the
+  // extension (on_start: jspsych.js :3027-3030); a missing one crashes the
+  // next trial.
+  for (const hook of ['initialize', 'on_start', 'on_load', 'on_finish']) {
+    it(`exposes ${hook} as an instance method`, () => {
+      assert.equal(typeof new OneLinerExtension({})[hook], 'function');
+    });
+  }
+
+  it("keeps the 'cyborg-hunter' name and declares integrity + integritySegment", () => {
+    assert.equal(OneLinerExtension.info.name, 'cyborg-hunter');
+    assert.ok(OneLinerExtension.info.data.integrity);
+    assert.ok(OneLinerExtension.info.data.integritySegment);
+  });
+
+  // The replay extension finds the monitor through
+  // jsPsych.extensions['cyborg-hunter'].monitor.
+  it('exposes the boot monitor as .monitor', () => {
+    const { ctx } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    assert.strictEqual(new OneLinerExtension({}).monitor, ctx.monitor);
+  });
+
+  it('initialize and on_start do nothing and never throw', () => {
+    const ext = new OneLinerExtension({});
+    assert.doesNotThrow(() => ext.initialize({}));
+    assert.doesNotThrow(() => ext.on_start(undefined));
+  });
+});
+
+describe('OneLinerExtension: on_load', () => {
+  it('rotates into the host trial with trialId, phase and decoyAnswer:false passed through', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    new OneLinerExtension(fakeJsPsych(3)).on_load({ trialId: 'q1', phase: 'test', decoyAnswer: false });
+    const [name, o] = calls[0];
+    assert.equal(name, 'rotate');
+    assert.equal(o.trialId, 'q1');
+    assert.equal(o.phase, 'test');
+    assert.strictEqual(o.decoyAnswer, false, 'an explicit false opt-out must reach the core as false');
+  });
+
+  it('names an unnamed trial trial-<global index>; missing params become null', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    new OneLinerExtension(fakeJsPsych(7)).on_load(undefined);
+    const o = calls[0][1];
+    assert.equal(o.trialId, 'trial-7');
+    assert.strictEqual(o.phase, null);
+    assert.strictEqual(o.decoyAnswer, null);
+    assert.strictEqual(o.experimentContainer, null);
+  });
+
+  it('never throws when the segmenter throws', () => {
+    const { ctx } = makeCtx();
+    ctx.segmenter.rotate = () => { throw new Error('boom'); };
+    OneLinerExtension.ctx = ctx;
+    assert.doesNotThrow(() => new OneLinerExtension(fakeJsPsych(0)).on_load({}));
+  });
+});
+
+describe('OneLinerExtension: on_finish', () => {
+  it('returns integrity, integritySegment and the five per-row running totals', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(4));
+    ext.on_load({ trialId: 't4' });
+    const out = ext.on_finish({});
+    assert.deepStrictEqual(calls[1], ['cut', { source: 'host', nextTrialId: 'gap-4' }]);
+    assert.equal(out.integrity.trialId, 't4');
+    assert.equal(typeof out.integrity.trialStart_perfNow, 'number');
+    assert.equal(out.integritySegment.segmentIndex, 4);
+    assert.strictEqual(out.integrityPasteCount, 2);
+    assert.strictEqual(out.integrityCopyCount, 1);
+    assert.strictEqual(out.integrityDropCount, 0);
+    assert.strictEqual(out.integritySoftScore, 3.5);
+    assert.strictEqual(out.integrityAnyHardTriggered, true);
+    assert.ok(!('cyborgHunterError' in out));
+    assert.equal(ctx.jspsych.segmentsWritten, 1);
+  });
+
+  it('a trial whose plugin skipped on_load does not inherit the previous trial anchor', () => {
+    const { ctx } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(4));
+    ext.on_load({});
+    ext.on_finish({});
+    assert.strictEqual(ext.on_finish({}).integrity.trialStart_perfNow, null);
+  });
+
+  it('a segment cut with a failed reopen is still returned, with the error marker', () => {
+    const { ctx } = makeCtx();
+    ctx.segmenter.cut = () => ({ segment: segment(2), trialReport: { trialId: 't2' }, error: 'reopen failed' });
+    OneLinerExtension.ctx = ctx;
+    const out = new OneLinerExtension(fakeJsPsych(2)).on_finish({});
+    assert.equal(out.integritySegment.segmentIndex, 2);
+    assert.equal(out.cyborgHunterError, 'reopen failed');
+  });
+
+  it('a segmenter error returns { cyborgHunterError } and never throws', () => {
+    const { ctx } = makeCtx();
+    ctx.segmenter.cut = () => ({ error: 'segment write failed' });
+    OneLinerExtension.ctx = ctx;
+    const out = new OneLinerExtension(fakeJsPsych(1)).on_finish({});
+    assert.deepStrictEqual(out, { cyborgHunterError: 'segment write failed' });
+  });
+
+  it('a throwing segmenter returns { cyborgHunterError } and never throws', () => {
+    const { ctx } = makeCtx();
+    ctx.segmenter.cut = () => { throw new Error('kaput'); };
+    OneLinerExtension.ctx = ctx;
+    let out;
+    assert.doesNotThrow(() => { out = new OneLinerExtension(fakeJsPsych(1)).on_finish({}); });
+    assert.equal(out.cyborgHunterError, 'kaput');
+  });
+
+  it('a rotate error at on_load is carried onto the row', () => {
+    const { ctx } = makeCtx();
+    ctx.segmenter.rotate = () => ({ error: 'rotation failed' });
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(1));
+    ext.on_load({});
+    const out = ext.on_finish({});
+    assert.equal(out.integritySegment.segmentIndex, 4);
+    assert.equal(out.cyborgHunterError, 'rotation failed');
+  });
+
+  it('without a context (ch.js did not boot) returns {}', () => {
+    assert.deepStrictEqual(new OneLinerExtension(fakeJsPsych(0)).on_finish({}), {});
+  });
+
+  it('records its own duration when the debug counters exist', () => {
+    const { ctx } = makeCtx();
+    const samples = [];
+    ctx.debug = { stats: () => ({ segmentWriteMs: samples }) };
+    OneLinerExtension.ctx = ctx;
+    new OneLinerExtension(fakeJsPsych(0)).on_finish({});
+    assert.equal(samples.length, 1);
+    assert.ok(samples[0] >= 0);
+  });
+});
