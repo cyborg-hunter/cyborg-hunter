@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: honeypot and friction</title>
+  <!-- Fixture for tests/e2e/oneliner/jspsych.spec.js. data-guards turns
+       friction on next to the default honeypot. With ?entry=1 the timeline
+       starts with CyborgHunter.frictionEntryTrial() (friction enforces from
+       there); without it, friction only observes.
+         [entry (button), with ?entry=1]                           1 row
+         task (button)                                              1 row
+         end (button)                                               1 row -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-preset="standard" data-participant-id="E2E-JS-5" data-guards="honeypot,friction" data-debug></script>
+  <script>
+    var jsPsych = initJsPsych({
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+    var timeline = [];
+    if (new URLSearchParams(location.search).get('entry') === '1') timeline.push(CyborgHunter.frictionEntryTrial());
+    timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: '<p>Task</p>', choices: ['Continue'], data: { name: 'task' } });
+    timeline.push({ type: jsPsychHtmlButtonResponse, stimulus: '<p>End</p>', choices: ['Finish'], data: { name: 'end' } });
+    jsPsych.run(timeline);
+  </script>
+</body>
+</html>

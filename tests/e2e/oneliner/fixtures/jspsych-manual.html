@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: manual mode with ch.js alone</title>
+  <!-- Fixture for tests/e2e/oneliner/jspsych.spec.js. A manual-mode
+       experiment (the researcher's own cyborg-hunter extension in
+       initJsPsych, the per-trial loop, finalize() before saving) with ch.js
+       in place of cyborg-hunter.min.js. ch.js sees the extension, injects
+       nothing and lets the researcher's extension create the monitor.
+         one (button), q (survey-text), three (button)              3 rows -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-survey-text.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-preset="standard" data-participant-id="E2E-MANUAL-1"></script>
+  <script src="/dist/extension-cyborg-hunter.js"></script>
+  <script>
+    var subject = { id: 'E2E-MANUAL-1' };
+    var jsPsych = initJsPsych({
+      extensions: [{ type: jsPsychCyborgHunter, params: { participantId: subject.id, preset: 'standard' } }],
+      on_finish: function () {
+        jsPsych.extensions['cyborg-hunter'].finalize();
+        window.__csv = jsPsych.data.get().csv();
+      }
+    });
+    jsPsych.data.addProperties({ participantId: subject.id });
+
+    var timeline = [
+      { type: jsPsychHtmlButtonResponse, stimulus: '<p>One</p>', choices: ['One'], data: { name: 'one' } },
+      { type: jsPsychSurveyText, questions: [{ prompt: 'Manual question', name: 'q' }], data: { name: 'q' } },
+      { type: jsPsychHtmlButtonResponse, stimulus: '<p>Three</p>', choices: ['Three'], data: { name: 'three' } }
+    ];
+    timeline.forEach(function (t) {
+      t.extensions = (t.extensions || []).concat([{ type: jsPsychCyborgHunter }]);
+    });
+    jsPsych.run(timeline);
+  </script>
+</body>
+</html>

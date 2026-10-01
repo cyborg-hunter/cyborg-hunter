@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: researcher-named trials after synchronous trials</title>
+  <!-- Fixture for tests/e2e/oneliner/jspsych.spec.js. A researcher names a
+       trial with a per-trial cyborg-hunter entry
+       ({ type: jsPsychCyborgHunter, params: { trialId, phase } }), the
+       documented per-trial parameters. Each named trial follows a
+       call-function trial, which finishes inside its own trial() call:
+         start (button)                                            1 row
+         call-function, then named-by-researcher (button)          2 rows
+         call-function with post_trial_gap 20, then
+           named-after-gap (button)                                2 rows
+       Five rows. -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-call-function.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-preset="standard" data-participant-id="E2E-JS-3"></script>
+  <script>
+    var jsPsych = initJsPsych({
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+
+    var start = { type: jsPsychHtmlButtonResponse, stimulus: '<p>Start</p>', choices: ['Start'], data: { name: 'start' } };
+    var cf1 = { type: jsPsychCallFunction, func: function () { return 'cf1'; }, data: { name: 'cf1' } };
+    var named1 = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: '<p>Named trial</p>',
+      choices: ['Named'],
+      extensions: [{ type: jsPsychCyborgHunter, params: { trialId: 'named-by-researcher', phase: 'test' } }],
+      data: { name: 'named1' }
+    };
+    var cf2 = { type: jsPsychCallFunction, func: function () { return 'cf2'; }, post_trial_gap: 20, data: { name: 'cf2' } };
+    var named2 = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: '<p>Named after a gap</p>',
+      choices: ['Named again'],
+      extensions: [{ type: jsPsychCyborgHunter, params: { trialId: 'named-after-gap', phase: 'test' } }],
+      data: { name: 'named2' }
+    };
+    window.__trials = { named1: named1, named2: named2 };
+    jsPsych.run([start, cf1, named1, cf2, named2]);
+  </script>
+</body>
+</html>

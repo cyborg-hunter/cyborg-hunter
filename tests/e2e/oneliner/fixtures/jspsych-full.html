@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: full jsPsych timeline</title>
+  <!-- Fixture for tests/e2e/oneliner/jspsych.spec.js. Five unique trial
+       objects, 65 rows:
+         instructions (button)                                   1 row
+         nested node > block: 1 keyboard trial x 20 timeline
+           variables x 3 repetitions                            60 rows
+         conditional node (returns true) > q-cond (survey-text)   1 row
+         loop node (true once, then false) > loop-trial (button)  2 rows
+         q-final (survey-text)                                    1 row
+       The experiment's own save is jsPsych.data.get().csv(), kept on
+       window.__csv instead of downloaded. -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-keyboard-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-survey-text.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-preset="standard" data-participant-id="E2E-JS-1" data-debug></script>
+  <script>
+    var jsPsych = initJsPsych({
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+
+    var instructions = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: '<p>Instructions</p>',
+      choices: ['Start'],
+      data: { name: 'instructions' }
+    };
+
+    var stimuli = [];
+    for (var i = 0; i < 20; i++) stimuli.push({ s: '<p>stimulus ' + i + '</p>' });
+    var block = {
+      timeline: [{
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: jsPsych.timelineVariable('s'),
+        choices: 'NO_KEYS',
+        trial_duration: 30,
+        data: { name: 'kb' }
+      }],
+      timeline_variables: stimuli,
+      repetitions: 3
+    };
+    var nested = { timeline: [block] };
+
+    var conditional = {
+      timeline: [{
+        type: jsPsychSurveyText,
+        questions: [{ prompt: 'Conditional question', name: 'q_cond' }],
+        data: { name: 'q-cond' }
+      }],
+      conditional_function: function () { return true; }
+    };
+
+    var loopCalls = 0;
+    var loop = {
+      timeline: [{
+        type: jsPsychHtmlButtonResponse,
+        stimulus: '<p>Loop trial</p>',
+        choices: ['Next'],
+        data: { name: 'loop-trial' }
+      }],
+      loop_function: function () { loopCalls += 1; return loopCalls < 2; }
+    };
+
+    var qFinal = {
+      type: jsPsychSurveyText,
+      questions: [{ prompt: 'Final question', name: 'q_final' }],
+      data: { name: 'q-final' }
+    };
+
+    jsPsych.run([instructions, nested, conditional, loop, qFinal]);
+  </script>
+</body>
+</html>

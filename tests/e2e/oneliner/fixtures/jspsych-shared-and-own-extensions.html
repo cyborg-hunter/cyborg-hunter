@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: shared trial object and a trial's own extensions</title>
+  <!-- Fixture for tests/e2e/oneliner/jspsych.spec.js. Three unique trial
+       objects, four rows:
+         shared (button), the same object pushed twice             2 rows
+         tracked (button) with its own mouse-tracking extension    1 row
+         after (button)                                            1 row
+       initJsPsych lists the mouse-tracking extension itself. -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/extension-mouse-tracking.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-preset="standard" data-participant-id="E2E-JS-2" data-debug></script>
+  <script>
+    var jsPsych = initJsPsych({
+      extensions: [{ type: jsPsychExtensionMouseTracking }],
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+
+    var shared = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: '<p>Shared trial</p>',
+      choices: ['Shared'],
+      data: { name: 'shared' }
+    };
+    var tracked = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: '<p id="tracked-target">Mouse-tracked trial</p>',
+      choices: ['Tracked'],
+      extensions: [{ type: jsPsychExtensionMouseTracking, params: { targets: ['#tracked-target'] } }],
+      data: { name: 'tracked' }
+    };
+    var after = {
+      type: jsPsychHtmlButtonResponse,
+      stimulus: '<p>Last trial</p>',
+      choices: ['Finish'],
+      data: { name: 'after' }
+    };
+    // The trial objects, for the spec to inspect after the walk.
+    window.__trials = { shared: shared, tracked: tracked, after: after };
+
+    var timeline = [];
+    timeline.push(shared);
+    timeline.push(shared);
+    timeline.push(tracked);
+    timeline.push(after);
+    jsPsych.run(timeline);
+  </script>
+</body>
+</html>

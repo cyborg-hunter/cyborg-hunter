@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: DataPipe-style save trial</title>
+  <!-- Fixture for tests/e2e/oneliner/jspsych.spec.js. The experiment saves
+       with a save-as-a-trial plugin, as DataPipe's jsPsychPipe does: the save
+       trial's data_string runs when that trial starts, before its own row
+       and before initJsPsych's on_finish. FakePipe keeps the string on
+       window.__pipeSaved instead of uploading it.
+         start (button)                                             1 row
+         three timed keyboard trials (separate objects)             3 rows
+         q (survey-text)                                            1 row
+         save (FakePipe), last                                      1 row
+       Five rows exist when the save trial starts; six at the end. -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-keyboard-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-survey-text.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-preset="standard" data-participant-id="E2E-JS-4"></script>
+  <script>
+    class FakePipe {
+      static info = {
+        name: 'fake-pipe',
+        parameters: { data_string: { type: jsPsychModule.ParameterType.FUNCTION } }
+      };
+      constructor(jsPsych) { this.jsPsych = jsPsych; }
+      trial(display, trial) {
+        window.__pipeSaved = trial.data_string();
+        this.jsPsych.finishTrial({});
+      }
+    }
+
+    var jsPsych = initJsPsych({
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+
+    var timeline = [{ type: jsPsychHtmlButtonResponse, stimulus: '<p>Start</p>', choices: ['Start'], data: { name: 'start' } }];
+    for (var i = 0; i < 3; i++) {
+      timeline.push({ type: jsPsychHtmlKeyboardResponse, stimulus: '<p>' + i + '</p>', choices: 'NO_KEYS', trial_duration: 30, data: { name: 'kb' } });
+    }
+    timeline.push({ type: jsPsychSurveyText, questions: [{ prompt: 'Question', name: 'q' }], data: { name: 'q' } });
+    timeline.push({ type: FakePipe, data_string: function () { return jsPsych.data.get().csv(); }, data: { name: 'save' } });
+    jsPsych.run(timeline);
+  </script>
+</body>
+</html>
