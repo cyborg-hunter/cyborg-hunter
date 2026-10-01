@@ -1118,11 +1118,18 @@ export function exitFullscreenFnOf(doc) {
     };
 
     Object.freeze(api);
-    Object.defineProperty(global, 'GuardFriction', {
-        value: api,
-        writable: false,
-        configurable: false,
-    });
+    // A second copy of this file (a leftover <script> tag after ch.js, which
+    // bundles it) keeps the first definition instead of throwing
+    // "Cannot redefine property".
+    if (!global.GuardFriction) {
+        Object.defineProperty(global, 'GuardFriction', {
+            value: api,
+            writable: false,
+            configurable: false,
+        });
+    } else {
+        console.error('[cyborg-hunter] Not redefining GuardFriction: extension-guard-friction.js was loaded after a bundle that already contains it. Fix: remove the second <script> tag (ch.js already contains the friction guard). https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/advanced-integration.md#double-load');
+    }
 })(window);
 // ----- jsPsych extension adapter -----
 // Wraps the GuardFriction core (above) in the jsPsych extension

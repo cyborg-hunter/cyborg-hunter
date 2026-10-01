@@ -15,6 +15,7 @@
 
 import esbuild from 'esbuild';
 import { readFileSync } from 'fs';
+import { MESSAGES } from './src/oneliner/errors.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -22,7 +23,9 @@ async function build() {
   // Browser IIFE — self-contained, exposes window.CyborgHunter.
   // Do NOT manually assign window.CyborgHunter in src/core/index.js;
   // esbuild's globalName handles the global. The footer adds the
-  // backward-compat IntegrityMonitor alias.
+  // backward-compat IntegrityMonitor alias and the double-load sentinel
+  // shared with dist/ch.js (window.__cyborgHunterLoaded): if ch.js already
+  // ran, it logs the catalogue's double-load error (src/oneliner/errors.js).
   await esbuild.build({
     entryPoints: ['src/core/index.js'],
     bundle: true,
@@ -32,7 +35,9 @@ async function build() {
     outfile: 'dist/cyborg-hunter.min.js',
     platform: 'browser',
     banner: { js: `// cyborg-hunter v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` },
-    footer: { js: 'if(typeof window!=="undefined")window.IntegrityMonitor=CyborgHunter;' }
+    footer: { js: 'if(typeof window!=="undefined"){if(window.__cyborgHunterLoaded){console.error(' +
+      JSON.stringify(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')) +
+      ')}else{window.__cyborgHunterLoaded="cyborg-hunter.min.js"}window.IntegrityMonitor=CyborgHunter;}' }
   });
 
   // ESM module

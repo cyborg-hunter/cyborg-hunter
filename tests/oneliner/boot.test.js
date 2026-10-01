@@ -1,0 +1,305 @@
+// boot() is everything dist/ch.js does at load: the double-load sentinel,
+// config, participant id, a monitor kept inside a trial, guards, host
+// detection and the window.CyborgHunter namespace. It never throws into the
+// page. Real monitor under happy-dom; bootstrap mirrors segmenter.test.js
+// (core signal modules read window/document, so modules load after globals).
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert';
+import { Window } from 'happy-dom';
+import { MESSAGES } from '../../src/oneliner/errors.js';
+import { VERSION } from '../../src/shared/constants.js';
+
+class StubResizeObserver {
+  constructor(cb) { this.cb = cb; }
+  observe() {}
+  disconnect() {}
+}
+
+let win, boot, startGuards, buildPublicApi, errors, warns, origError, origWarn, origInfo, ctx;
+
+beforeEach(async () => {
+  win = new Window({ url: 'https://lab.example/study.html' });
+  global.window = win;
+  global.document = win.document;
+  global.Node = win.Node;
+  global.MutationObserver = win.MutationObserver;
+  global.ResizeObserver = StubResizeObserver;
+  ({ boot } = await import('../../src/oneliner/boot.js'));
+  ({ startGuards } = await import('../../src/oneliner/guards.js'));
+  ({ buildPublicApi } = await import('../../src/oneliner/api.js'));
+  errors = []; warns = [];
+  origError = console.error; origWarn = console.warn; origInfo = console.info;
+  console.error = (m) => errors.push(String(m));
+  console.warn = (m) => warns.push(String(m));
+  console.info = () => {};
+  ctx = null;
+});
+
+afterEach(() => {
+  console.error = origError; console.warn = origWarn; console.info = origInfo;
+  if (ctx && ctx.monitor) { try { ctx.monitor.destroy(); } catch { /* already destroyed */ } }
+  win.close();
+  delete global.window;
+  delete global.document;
+  delete global.Node;
+  delete global.MutationObserver;
+  delete global.ResizeObserver;
+});
+
+const script = (dataset) => ({ dataset: dataset || {}, src: 'https://cdn/x/ch.js' });
+
+function paste(text) {
+  const ta = win.document.createElement('textarea');
+  win.document.body.appendChild(ta);
+  ta.focus();
+  const ev = new win.Event('paste', { bubbles: true });
+  Object.defineProperty(ev, 'clipboardData', { value: { getData: () => text } });
+  ta.dispatchEvent(ev);
+}
+
+describe('boot', () => {
+  it('creates a monitor inside a trial, sets the sentinel and the namespace', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.ok(ctx);
+    assert.deepStrictEqual(ctx.segmenter.state(), { open: true, segmentIndex: 0, currentTrialId: 'span-0' });
+    assert.strictEqual(win.__cyborgHunterLoaded, 'ch.js');
+    assert.strictEqual(win.CyborgHunter.VERSION, VERSION);
+    assert.ok(Object.isFrozen(win.CyborgHunter));
+    assert.strictEqual(ctx.api, win.CyborgHunter);
+    assert.strictEqual(ctx.participantId, 'P1');
+    assert.strictEqual(ctx.scriptSrc, 'https://cdn/x/ch.js');
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(ctx.monitor.getSessionReport().config.participantId, 'P1');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('the boot span records a paste before any host trial exists', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    paste('pasted text');
+    assert.strictEqual(ctx.monitor.getSessionReport().pasteCount, 1);
+  });
+
+  it('passes the preset and CyborgHunterConfig init() keys to the monitor; the tag wins', () => {
+    win.CyborgHunterConfig = { preset: 'permissive', participantId: 'C1', thresholds: { typingSpeedCps: 99 } };
+    ctx = boot({ script: script({ preset: 'strict', guards: 'none' }), win });
+    const cfg = ctx.monitor.getSessionReport().config;
+    assert.strictEqual(cfg.preset, 'strict');
+    assert.strictEqual(cfg.thresholds.typingSpeedCps, 99);
+    assert.strictEqual(ctx.participantId, 'C1');
+  });
+
+  it('reads the participant id from a URL parameter in the injected list', () => {
+    win.location.href = 'https://lab.example/study.html?workerId=W9';
+    ctx = boot({ script: script({ participantId: 'A1', guards: 'none' }), win, participantParams: ['workerId'] });
+    assert.strictEqual(ctx.participantId, 'W9');
+    assert.strictEqual(ctx.participantIdSource, 'url:workerId');
+  });
+
+  it('a random id is used, and warned about, when no id is found', () => {
+    ctx = boot({ script: script({ guards: 'none' }), win });
+    assert.match(ctx.participantId, /^ch-[0-9a-f]{12}$/);
+    assert.strictEqual(ctx.participantIdSource, 'random');
+    assert.ok(warns.includes(MESSAGES.randomId(ctx.participantId)), warns.join('\n'));
+  });
+
+  it('selects the jsPsych host when initJsPsych is already defined', () => {
+    win.initJsPsych = function () {};
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'jspsych');
+  });
+
+  it('a script that is null (no document.currentScript) boots with defaults', () => {
+    ctx = boot({ script: null, win });
+    assert.ok(ctx);
+    assert.strictEqual(ctx.scriptSrc, null);
+    assert.strictEqual(ctx.segmenter.state().open, true);
+  });
+
+  it('double load: refuses to start a second monitor and leaves the namespace alone', () => {
+    const existing = { from: 'min.js' };
+    win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';
+    win.CyborgHunter = existing;
+    let created = 0;
+    const r = boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => { created++; return {}; } });
+    assert.strictEqual(r, null);
+    assert.deepStrictEqual(errors, [MESSAGES.doubleLoad('cyborg-hunter.min.js', 'ch.js')]);
+    assert.strictEqual(win.CyborgHunter, existing);
+    assert.strictEqual(win.__cyborgHunterLoaded, 'cyborg-hunter.min.js');
+    assert.strictEqual(created, 0);
+  });
+
+  it('a failure inside boot is logged as bootFailed and never thrown to the page', () => {
+    let r;
+    assert.doesNotThrow(() => {
+      r = boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => { throw new Error('kaboom'); } });
+    });
+    assert.strictEqual(r, null);
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('kaboom')]);
+    assert.strictEqual(win.CyborgHunter, undefined);
+    assert.strictEqual(win.__cyborgHunterLoaded, undefined);
+  });
+
+  it('a failure after the monitor exists destroys it (no orphan listeners)', () => {
+    let destroyed = 0;
+    const fakeMonitor = {
+      startSession() { throw new Error('no session'); },
+      destroy() { destroyed++; }
+    };
+    const r = boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => fakeMonitor });
+    assert.strictEqual(r, null);
+    assert.strictEqual(destroyed, 1);
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('no session')]);
+  });
+
+  it('CyborgHunter.init() after boot logs manualInitOnOneLiner and the monitor stays open', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    const ret = win.CyborgHunter.init({ participantId: 'X' });
+    assert.strictEqual(ret, win.CyborgHunter);
+    assert.deepStrictEqual(errors, [MESSAGES.manualInitOnOneLiner()]);
+    assert.strictEqual(ctx.segmenter.state().open, true);
+    paste('still recorded');
+    assert.strictEqual(ctx.monitor.getSessionReport().pasteCount, 1);
+    assert.strictEqual(ctx.monitor.getSessionReport().config.participantId, 'P1');
+  });
+
+  it('starts the honeypot guard by default', () => {
+    const calls = [];
+    win.GuardHoneypot = { init: (o) => calls.push(o) };
+    ctx = boot({ script: script({ participantId: 'P1' }), win });
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].jsPsych, null);
+  });
+});
+
+describe('public namespace', () => {
+  function fakeCtx() {
+    const marks = [];
+    return {
+      marks,
+      ctx: { handlers: { mark: (id) => { marks.push(id); return 'marked'; } }, win: {} }
+    };
+  }
+
+  it('exposes the documented members, frozen', () => {
+    const api = buildPublicApi(fakeCtx().ctx);
+    for (const k of ['VERSION', 'mark', 'startTrial', 'endTrial', 'data', 'replay', 'startFriction',
+      'frictionEntryTrial', 'init', 'preventTextSelection', 'addHoneypot', 'setAltText']) {
+      assert.ok(k in api, k);
+    }
+    assert.strictEqual(api.VERSION, VERSION);
+    assert.ok(Object.isFrozen(api));
+  });
+
+  it('startTrial(opts) ≡ mark(opts.trialId); endTrial() ≡ mark()', () => {
+    const f = fakeCtx();
+    const api = buildPublicApi(f.ctx);
+    assert.strictEqual(api.startTrial({ trialId: 'q1' }), 'marked');
+    api.startTrial();
+    api.endTrial();
+    api.mark('q2');
+    assert.deepStrictEqual(f.marks, ['q1', undefined, undefined, 'q2']);
+  });
+
+  it('host calls are no-ops until a host adapter wires them', () => {
+    const api = buildPublicApi({ handlers: {}, win: {} });
+    assert.strictEqual(api.mark('q1'), undefined);
+    assert.strictEqual(api.data(), undefined);
+    assert.strictEqual(api.replay(), undefined);
+    assert.strictEqual(api.startFriction(), undefined);
+  });
+
+  it('frictionEntryTrial delegates to GuardFriction.createEntryTrial', () => {
+    const trial = { type: 'x' };
+    const api = buildPublicApi({ handlers: {}, win: { GuardFriction: { createEntryTrial: (o) => (o.msg === 'hi' ? trial : null) } } });
+    assert.strictEqual(api.frictionEntryTrial({ msg: 'hi' }), trial);
+  });
+});
+
+describe('guards', () => {
+  function fakes() {
+    const log = [];
+    const friction = {
+      start: (o) => { log.push(['friction.start', o]); return 'TOKEN'; },
+      onViolation: () => () => {}
+    };
+    const honeypot = { init: (o) => log.push(['honeypot.init', o]) };
+    return { log, friction, honeypot };
+  }
+
+  it('honeypot on, friction off by default: honeypot init at once with the friction core', () => {
+    const f = fakes();
+    const w = { GuardHoneypot: f.honeypot, GuardFriction: f.friction };
+    startGuards({ win: w, doc: { body: {} }, guards: { honeypot: true, friction: false }, debug: false });
+    assert.deepStrictEqual(f.log, [['honeypot.init', { jsPsych: null, friction: f.friction, debug: false }]]);
+  });
+
+  it('friction observe-only starts in a microtask (after the honeypot subscribed) and stashes its token', async () => {
+    const f = fakes();
+    const w = { GuardHoneypot: f.honeypot, GuardFriction: f.friction };
+    startGuards({ win: w, doc: { body: {} }, guards: { honeypot: true, friction: true }, debug: true });
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init']);
+    await Promise.resolve();
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init', 'friction.start']);
+    assert.deepStrictEqual(f.log[1][1], { jsPsych: null, observeOnly: true, debug: true });
+    assert.strictEqual(w._guardFrictionToken, 'TOKEN');
+    assert.ok(!Object.keys(w).includes('_guardFrictionToken'), 'token slot is non-enumerable');
+  });
+
+  it('without a body yet, both guards wait for DOMContentLoaded, honeypot first', async () => {
+    const f = fakes();
+    const listeners = {};
+    const doc = { body: null, addEventListener: (t, fn) => { listeners[t] = fn; } };
+    const w = { GuardHoneypot: f.honeypot, GuardFriction: f.friction };
+    startGuards({ win: w, doc, guards: { honeypot: true, friction: true }, debug: false });
+    await Promise.resolve();
+    assert.deepStrictEqual(f.log, []);
+    listeners.DOMContentLoaded();
+    await Promise.resolve();
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init', 'friction.start']);
+  });
+
+  it("guards 'none' starts nothing; missing guard cores are skipped", async () => {
+    const f = fakes();
+    startGuards({ win: { GuardHoneypot: f.honeypot, GuardFriction: f.friction }, doc: { body: {} }, guards: { honeypot: false, friction: false } });
+    await Promise.resolve();
+    assert.deepStrictEqual(f.log, []);
+    assert.doesNotThrow(() => startGuards({ win: {}, doc: { body: {} }, guards: { honeypot: true, friction: true } }));
+    await Promise.resolve();
+  });
+
+  it('a guard that throws is reported loudly and does not stop the other', async () => {
+    const f = fakes();
+    const w = { GuardHoneypot: { init: () => { throw new Error('hp broke'); } }, GuardFriction: f.friction };
+    startGuards({ win: w, doc: { body: {} }, guards: { honeypot: true, friction: true } });
+    await Promise.resolve();
+    assert.deepStrictEqual(errors, [MESSAGES.guardFailed('honeypot', 'hp broke')]);
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['friction.start']);
+  });
+});
+
+// A leftover extension-guard-*.js tag after ch.js (which bundles both guard
+// cores) used to throw "Cannot redefine property". Each core now keeps the
+// first definition and logs one loud error instead. The query string makes
+// Node evaluate the module a second time, like a second <script> tag.
+describe('guard cores on a second load', () => {
+  for (const [file, name] of [['extension-guard-honeypot.js', 'GuardHoneypot'], ['extension-guard-friction.js', 'GuardFriction']]) {
+    it(name + ': keeps the first definition and logs a catalogue error', async () => {
+      global.Document = win.Document;
+      global.requestAnimationFrame = win.requestAnimationFrame.bind(win);
+      try {
+        const base = '../../src/jspsych/' + file;
+        await import(base + '?load=first-' + name);
+        const first = win[name];
+        assert.ok(first);
+        await assert.doesNotReject(import(base + '?load=second-' + name));
+        assert.strictEqual(win[name], first);
+        assert.strictEqual(errors.length, 1);
+        assert.match(errors[0], new RegExp('^\\[cyborg-hunter\\] Not redefining ' + name + ': ' + file.replace(/\./g, '\\.') +
+          ' was loaded after a bundle that already contains it\\. Fix: remove the second <script> tag .+\\. https://.+advanced-integration\\.md#double-load$'));
+      } finally {
+        delete global.Document;
+        delete global.requestAnimationFrame;
+      }
+    });
+  }
+});
