@@ -82,6 +82,16 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
     ? "try { history.replaceState(null, '', `#p-${sanitized}`); } catch (e) { /* opaque-origin iframe: hash sync unavailable */ }"
     : "history.replaceState(null, '', `#p-${sanitized}`);";
 
+  // The analyze page shows replays in a host OUTSIDE this report (its CSP forbids
+  // the fetch a nested viewer would need), so the report tells its parent which
+  // participant was selected. The report runs sandboxed at an opaque origin:
+  // '*' is the only target it can name, and the message carries nothing but an
+  // id the parent already knows. Absent => the emission is unchanged
+  // (the line carries its own newline so the default has no blank line).
+  const selectionPostLine = opts.selectionPostMessage
+    ? "\n        try { window.parent.postMessage({ type: 'cyborg-hunter:select', participantId: pid }, '*'); } catch (e) { /* no parent */ }"
+    : '';
+
   // Cohort counts for filter chips and totals footer. The triage array is
   // already sorted tier-first (hard → soft → clean, score-desc within tier) by
   // triage.js — we don't re-sort here; the default "Tier" sort matches it.
@@ -615,7 +625,7 @@ ${fontFaceCss}    :root {
         // stays consistent with the visible pane.
         if (!opts.skipHash) {
           ${hashSyncLine}
-        }
+        }${selectionPostLine}
       }
 
       // --- Overlay open/close helpers (Task 11) ---

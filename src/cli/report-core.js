@@ -188,7 +188,7 @@ export async function renderInPageHtml(built, participants, config, deps) {
     };
   }
   return renderIndexHtml(built.summaries, built.triage, participants, config, built.visualsRendered, {
-    imageSources, replayShownExternally: true,
+    imageSources, replayShownExternally: true, selectionPostMessage: true,
     replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss,
   });
 }

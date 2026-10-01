@@ -90,6 +90,7 @@ describe('renderInPageHtml', () => {
     assert.ok(!html.includes('class="image-block replay-block"'), 'replay is shown outside the report');
     assert.ok(!html.includes('data-replay-src'));
     assert.ok(html.includes('@font-face{}'));
+    assert.ok(html.includes('cyborg-hunter:select'));
     assert.ok(!html.includes('images/trajectories_'), 'no file paths in the in-page report');
   });
 });

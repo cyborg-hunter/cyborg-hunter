@@ -304,6 +304,7 @@
     if (mount._chReplayInit) return;   // double-click guard
     mount._chReplayInit = true;
     var initialExternalCss = !!(opts && opts.externalCss);
+    var noExternalCss = !!(opts && opts.noExternalCss);
     mount.textContent = '';
 
     var segments = model.segments || [];
@@ -602,6 +603,12 @@
       var fetchedNote = el('span', 'replay-note',
         omittedSheets + ' external stylesheet(s) are fetched from their origins (network requests leave this machine).');
       header.appendChild(fetchedNote);
+    } else if (omittedSheets > 0 && noExternalCss) {
+      // The host forbids network access, so no fetch is offered; say why the
+      // sheet is missing and what would supply it.
+      header.appendChild(el('span', 'replay-note',
+        omittedSheets + ' external stylesheet(s) cannot be fetched under this page\u2019s no-network policy. ' +
+        'Drop the experiment\u2019s CSS and image files with the data, or use the CLI, to play this replay styled.'));
     } else if (omittedSheets > 0) {
       var cssNote = el('span', 'replay-note',
         omittedSheets + ' external stylesheet(s) were not loaded. Layout may differ. ');
