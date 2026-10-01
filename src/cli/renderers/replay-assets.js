@@ -18,14 +18,16 @@ import { sanitizeId as sanitize } from '../../shared/constants.js';
 import { buildViewerModel } from '../../replay/viewer-model.js';
 import { inlineSafeJson } from '../../shared/inline-safe.js';
 
-// Load-bearing re-export: renderReplayAssets (below) calls buildViewerModel
+// Load-bearing re-export: buildReplayAssets (below) calls buildViewerModel
 // in-file, and tests/cli/replay-render.test.js + tests/replay/alignment-viewer-model.test.js
 // import it from here.
 export { buildViewerModel };
 
 /**
- * Writes replay/<sanitizedPid>.replay.js for every participant with an
- * attached recording. Returns { count, totalBytes, skipped } so report.js can
+ * Builds replay/<sanitizedPid>.replay.js for every participant with an
+ * attached recording and hands each to `sink(path, bytes)` (bytes are the
+ * script's UTF-8; no fs or Buffer here, so the browser page runs it too).
+ * Returns { count, totalBytes, skipped } so the report can
  * print an honest size line (replay assets dominate report size at dom tier)
  * and an honest line about what did not make it.
  *
@@ -53,10 +55,12 @@ export { buildViewerModel };
  * branch — the report's existing state for "attached but not viewable".
  * Repeated calls now return the same list (both classes are recognised from
  * the stamp), which retires the non-idempotence noted at T5 Task 10 review
- * M-5. One caller today (`report.js:149`), which renders the index from the
- * same array.
+ * M-5. One caller today (`report-core.js`, through renderReplayAssets below
+ * for the CLI), which renders the index from the same array.
+ *
+ * `assetMap` is accepted for styled replays (cli/asset-match.js); null today.
  */
-export function renderReplayAssets(participants, outputDir) {
+export function buildReplayAssets(participants, { sink, assetMap = null }) {
   let count = 0;
   let totalBytes = 0;
   const skipped = [];
@@ -68,12 +72,6 @@ export function renderReplayAssets(participants, outputDir) {
   }
   const withReplay = participants.filter((p) => p.replay && p.replay.recording);
   if (withReplay.length === 0) return { count, totalBytes, skipped };
-
-  // Created on the first successful write, not up front: a cohort whose
-  // every artifact is unloadable would otherwise ship an empty replay/ dir
-  // beside a report that says there is nothing to load.
-  const replayDir = join(outputDir, 'replay');
-  let dirMade = false;
 
   // Sanitization is lossy ('a/b' and 'a_b' both map to a_b) — dedupe with a
   // stable numeric suffix so a later write can never overwrite an earlier
@@ -111,11 +109,23 @@ export function renderReplayAssets(participants, outputDir) {
       name = base + '~' + n + '.replay.js';
     }
     usedNames.add(name.toLowerCase());
-    if (!dirMade) { mkdirSync(replayDir, { recursive: true }); dirMade = true; }
-    writeFileSync(join(replayDir, name), src);
+    const bytes = new TextEncoder().encode(src);
+    sink('replay/' + name, bytes);
     p.replay.assetPath = 'replay/' + name;
     count++;
-    totalBytes += Buffer.byteLength(src);
+    totalBytes += bytes.byteLength;
   }
   return { count, totalBytes, skipped };
+}
+
+// The CLI's form: writes the assets under <outputDir>/replay/.
+export function renderReplayAssets(participants, outputDir) {
+  // Created on the first successful write, not up front: a cohort whose
+  // every artifact is unloadable would otherwise ship an empty replay/ dir
+  // beside a report that says there is nothing to load.
+  let dirMade = false;
+  return buildReplayAssets(participants, { sink: (path, bytes) => {
+    if (!dirMade) { mkdirSync(join(outputDir, 'replay'), { recursive: true }); dirMade = true; }
+    writeFileSync(join(outputDir, path), bytes);
+  } });
 }

@@ -7,7 +7,9 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { countSidebarOpenings } from '../analyzers/summary.js';
 
-export async function renderExtensions(participants, config) {
+// The file's text and its row count, with no fs access (report-core.js sinks
+// it; renderExtensions below writes it).
+export function buildExtensionsCsv(participants) {
   const header = 'participantId,detectionType,name,details';
   const rows = [];
 
@@ -37,10 +39,14 @@ export async function renderExtensions(participants, config) {
     }
   }
 
-  const csv = [header, ...rows].join('\n') + '\n';
+  return { csv: [header, ...rows].join('\n') + '\n', rows: rows.length };
+}
+
+export async function renderExtensions(participants, config) {
+  const { csv, rows } = buildExtensionsCsv(participants);
   const outPath = join(config.outputDir, 'extensions.csv');
   writeFileSync(outPath, csv);
-  console.log(`  extensions.csv — ${rows.length} detections`);
+  console.log(`  extensions.csv — ${rows} detections`);
 }
 
 function escapeCSV(val) {

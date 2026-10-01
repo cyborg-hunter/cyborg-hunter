@@ -8,9 +8,15 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { resolveScoreWeights } from '../analyzers/score-weights.js';
 
-export function renderScoreWeights(config) {
+// The file's text, with no fs access (report-core.js sinks it), plus whether
+// the weights are the defaults (the console line says which).
+export function buildScoreWeightsJson(config) {
   const { weights, isDefault } = resolveScoreWeights(config?.scoreWeights);
-  writeFileSync(join(config.outputDir, 'score-weights.json'),
-    JSON.stringify({ isDefault, weights }, null, 2) + '\n');
+  return { text: JSON.stringify({ isDefault, weights }, null, 2) + '\n', isDefault };
+}
+
+export function renderScoreWeights(config) {
+  const { text, isDefault } = buildScoreWeightsJson(config);
+  writeFileSync(join(config.outputDir, 'score-weights.json'), text);
   console.log(`  score-weights.json — ${isDefault ? 'default' : 'custom'} weights`);
 }

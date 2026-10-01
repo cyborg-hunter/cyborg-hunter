@@ -6,7 +6,9 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { resolveScoreWeights, formulaText, formatScore } from '../analyzers/score-weights.js';
 
-export async function renderTriage(triage, config) {
+// The file's text, with no fs access (report-core.js sinks it; renderTriage
+// below writes it).
+export function buildTriageMd(triage, config) {
   // Default weights keep the 0.8.0 sentence verbatim; custom ones state the
   // formula that was actually applied (config.scoreWeights).
   const { weights, isDefault } = resolveScoreWeights(config?.scoreWeights);
@@ -36,7 +38,11 @@ export async function renderTriage(triage, config) {
   });
 
   lines.push('');
+  return lines.join('\n');
+}
+
+export async function renderTriage(triage, config) {
   const outPath = join(config.outputDir, 'triage.md');
-  writeFileSync(outPath, lines.join('\n'));
+  writeFileSync(outPath, buildTriageMd(triage, config));
   console.log(`  triage.md — ranked list`);
 }

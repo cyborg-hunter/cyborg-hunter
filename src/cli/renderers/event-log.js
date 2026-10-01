@@ -5,7 +5,9 @@
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
-export async function renderEventLog(participants, config) {
+// The file's text and its row count, with no fs access (report-core.js sinks
+// it; renderEventLog below writes it).
+export function buildEventLogCsv(participants) {
   // duration_ms column is populated for tab-aways (which have intrinsic
   // duration); empty for instantaneous events (copy, paste, drop, synthetic).
   const header = 'participantId,trialId,eventType,timestamp,duration_ms,text';
@@ -46,10 +48,14 @@ export async function renderEventLog(participants, config) {
     for (const e of pEvents) rows.push(e.row);
   }
 
-  const csv = [header, ...rows].join('\n') + '\n';
+  return { csv: [header, ...rows].join('\n') + '\n', rows: rows.length };
+}
+
+export async function renderEventLog(participants, config) {
+  const { csv, rows } = buildEventLogCsv(participants);
   const outPath = join(config.outputDir, 'event-log.csv');
   writeFileSync(outPath, csv);
-  console.log(`  event-log.csv — ${rows.length} events`);
+  console.log(`  event-log.csv — ${rows} events`);
 }
 
 function formatRow(pid, trialId, type, timestamp, duration, text) {

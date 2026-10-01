@@ -9,11 +9,7 @@
 import { join } from 'path';
 import { loadConfig } from './config.js';
 import { ingest } from './ingest.js';
-import { computeSummary } from './analyzers/summary.js';
-import { detectEdgeExits } from './analyzers/edge-exit.js';
-import { rankTriage } from './analyzers/triage.js';
-import { resolveScoreWeights, formulaText } from './analyzers/score-weights.js';
-import { applyPhaseScope, describePhaseScope, findUnmatchedPhaseScopePhases } from './analyzers/phase-scope.js';
+import { buildReport } from './report-core.js';
 import { VERSION } from '../shared/constants.js';
 import { checkForUpdate, formatUpdateNotice, formatCollectedVersionNotice } from './update-check.js';
 
@@ -58,69 +54,23 @@ export async function run(args) {
     participants.map(p => p.libraryVersion), VERSION);
   if (collectedNotice) console.log(collectedNotice);
 
-  // 3. Analyze — compute summaries, detect edge exits, rank by triage priority.
-  // config.phaseScope (0.6.1) filters which trials feed the analyzers so
-  // scores can honor pre-registered phase scoping; renderers below still get
-  // the FULL participants, so the visual evidence is never hidden.
-  const scoredParticipants = applyPhaseScope(participants, config.phaseScope);
-  if (scoredParticipants !== participants) {
-    console.log(`\nPhase scope active (${describePhaseScope(config.phaseScope)}):`);
-    console.log(`  scores count per-trial signals inside the scope only; ambient session`);
-    console.log(`  signals (sidebar, shortcuts, viewport shifts, zoom) stay session-wide.`);
-    // A configured phase name that matches no trial is almost always a typo. For
-    // an `include`, it silently filters every trial and reports the cohort clean.
-    const unmatched = findUnmatchedPhaseScopePhases(participants, config.phaseScope);
-    if (unmatched.length > 0) {
-      console.warn(`[cyborg-hunter] phaseScope names match NO trial in the data: ` +
-        `${unmatched.join(', ')} — likely a typo; scored trials may be wrongly emptied.`);
-    }
-  }
-  const summaries = computeSummary(scoredParticipants, config);
-  const edgeExits = detectEdgeExits(scoredParticipants, config);
-  const triage = rankTriage(summaries, edgeExits, config);
-
-  const flaggedHard = triage.filter(t => t.hardTriggered).length;
-  const flaggedSoft = triage.filter(t => !t.hardTriggered && t.softFlagged).length;
-  const clean = triage.length - flaggedHard - flaggedSoft;
-
-  // Two DIFFERENT numbers live in this report and used to share the word
-  // "flagged": the tier counts below come from the LIBRARY's two-tier
-  // screening (hard count thresholds / soft score vs its threshold), while
-  // triage.md is ORDERED by the CLI's separate composite triage score
-  // (by default 5×paste + 5×copy + 3×sidebar + 1×tab-away; config.scoreWeights
-  // can change it) within each tier. Label both explicitly so the console
-  // summary can't be read as "top N of triage.md".
-  const scoreWeights = resolveScoreWeights(config.scoreWeights);
-  console.log(`\nAnalyzing...`);
-  console.log(`  Hard-flagged (hard signal crossed its count threshold): ${flaggedHard}`);
-  console.log(`  Soft-flagged (library soft score >= its threshold):     ${flaggedSoft}`);
-  console.log(`  Clean:                                                  ${clean}`);
-  console.log(`  Triage.md orders tier-first (hard > soft > clean), then by the CLI`);
-  console.log(scoreWeights.isDefault
-    ? `  triage score (5xpaste + 5xcopy + 3xsidebar + 1xtab-away) within a tier.`
-    : `  triage score (${formulaText(scoreWeights.weights, 'x')}, from scoreWeights) within a tier.`);
-
-  // 4. Render outputs
-  console.log(`\nRendering...`);
-  const { mkdirSync } = await import('fs');
+  // 3+4. Analyze and render, through the pure core (report-core.js) with a
+  // disk sink. The console lines are the core's; the shell only prints them.
+  const { mkdirSync, writeFileSync } = await import('fs');
+  const { dirname } = await import('path');
   mkdirSync(config.outputDir, { recursive: true });
-
-  // Text-based renderers (always available, no native dependencies)
-  const { renderSummaryCSV } = await import('./renderers/summary-csv.js');
-  const { renderTriage } = await import('./renderers/triage-md.js');
-  const { renderEventLog } = await import('./renderers/event-log.js');
-  const { renderExtensions } = await import('./renderers/extensions.js');
-
-  await renderSummaryCSV(summaries, triage, config);
-  const { renderScoreWeights } = await import('./renderers/score-weights.js');
-  renderScoreWeights(config);
-  await renderTriage(triage, config);
-  await renderEventLog(participants, config);
-  await renderExtensions(participants, config);
+  // replay/ is created by its first write (dirname below), so a cohort whose
+  // every artifact is unloadable still gets no replay/ directory.
+  const sink = (path, data) => {
+    const full = join(config.outputDir, path);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, data);
+  };
 
   // Visual renderers require node-canvas (optional dependency).
   // If canvas is unavailable, skip with a helpful install message.
-  let visualsRendered = false;
+  let createCanvas = null;
+  let encodePng = null;
   if (!config.noVisuals) {
     let canvas;
     try {
@@ -133,40 +83,21 @@ export async function run(args) {
       console.log(`  Then run: npm install canvas`);
       console.log(`  Continuing without visuals.\n`);
     }
-
     if (canvas) {
-      const { renderTrajectories } = await import('./renderers/trajectories.js');
-      const { renderSessionTimelines } = await import('./renderers/session-timeline.js');
-      const { renderTypingProfiles } = await import('./renderers/typing-profile.js');
-
-      // Create images/ subdirectory for visual outputs
+      createCanvas = canvas.createCanvas;
+      encodePng = async (c) => new Uint8Array(c.toBuffer('image/png'));
+      // Created up front, as before: images/ exists whenever node-canvas
+      // loaded, even if no participant produced a plot.
       mkdirSync(join(config.outputDir, 'images'), { recursive: true });
-
-      await renderTrajectories(participants, triage, config);
-      await renderSessionTimelines(participants, config);
-      await renderTypingProfiles(participants, config);
-      visualsRendered = true;
     }
   }
 
-  // Replay assets — per-participant JSONP models under replay/, lazy-loaded
-  // by the HTML report. Size is printed because dom-tier models dominate
-  // the report's disk footprint.
-  const { renderReplayAssets } = await import('./renderers/replay-assets.js');
-  const replayAssets = renderReplayAssets(participants, config.outputDir);
-  if (replayAssets.count > 0) {
-    console.log(`  replay/ — ${replayAssets.count} session replays (${(replayAssets.totalBytes / 1024 / 1024).toFixed(1)} MB)`);
-  }
-  // A skipped artifact is already visible in the report (the participant's
-  // replay section says why), but an analyst watching the CLI must not have
-  // to open the HTML to learn a recording did not make it.
-  for (const s of replayAssets.skipped) {
-    console.log(`  replay/ — skipped ${s.participantId}: ${s.reason}`);
-  }
-
-  // HTML index page — references images/ folder (not base64-embedded)
-  const { renderHtmlIndex } = await import('./renderers/html-index.js');
-  await renderHtmlIndex(summaries, triage, participants, config, visualsRendered);
+  const { readReplayClientSrc } = await import('./renderers/replay-client-source.js');
+  const { buildFontFaceCss } = await import('./renderers/report-fonts.js');
+  await buildReport(participants, config, {
+    sink, log: console.log, warn: console.warn, createCanvas, encodePng,
+    replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss(), assetMap: null,
+  });
 
   console.log(`\nReport written to ${config.outputDir}/`);
   console.log(`  Open ${config.outputDir}/index.html to review`);

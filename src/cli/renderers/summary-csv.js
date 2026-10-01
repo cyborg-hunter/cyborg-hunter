@@ -51,7 +51,9 @@ const COLUMNS = [
   ['honeypot_ai_report', (s, t) => s.honeypotAiReport || ''],
 ];
 
-export async function renderSummaryCSV(summaries, triage, config) {
+// The file's text, with no fs access (report-core.js sinks it; the wrapper
+// below writes it).
+export function buildSummaryCsv(summaries, triage) {
   // Build a lookup from participantId → triage entry
   const triageMap = new Map(triage.map(t => [t.participantId, t]));
 
@@ -61,9 +63,12 @@ export async function renderSummaryCSV(summaries, triage, config) {
     return COLUMNS.map(c => escapeCSV(c[1](s, t))).join(',');
   });
 
-  const csv = [header, ...rows].join('\n') + '\n';
+  return [header, ...rows].join('\n') + '\n';
+}
+
+export async function renderSummaryCSV(summaries, triage, config) {
   const outPath = join(config.outputDir, 'summary.csv');
-  writeFileSync(outPath, csv);
+  writeFileSync(outPath, buildSummaryCsv(summaries, triage));
   console.log(`  summary.csv — ${summaries.length} participants`);
 }
 
