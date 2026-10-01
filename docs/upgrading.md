@@ -1,15 +1,62 @@
-# Release notes — cyborg-hunter 0.6.1
+# Upgrading cyborg-hunter
 
-*0.6.1 is not the current release; for the current line (0.7.x, the session-replay feature) see [release-notes-0.7.0.md](release-notes-0.7.0.md).*
+What each release changes in **collected data**, **configuration** and
+**reports**: read the section for every version you cross before re-running
+the CLI on data collected with an older version. The complete change list is
+in [CHANGELOG.md](../CHANGELOG.md).
 
-*Released 2026-07-06. The complete change list is in [CHANGELOG.md](../CHANGELOG.md). This page summarizes what changes in **collected data**, **configuration**, and **reports**.*
+## 0.7.0 (and the 0.6.2 patch) — from 0.6.1
 
-## TL;DR
+### TL;DR
+
+- **From 0.6.1:** the headline feature — session replay — is entirely opt-in; nothing changes for studies that don't load the recorder. The CLI upgrade is worth taking regardless: several crash-on-malformed-payload paths now warn and continue, and four new misconfiguration warnings catch silent setup errors.
+- **Re-running the report on existing data can shift some verdicts.** Three corrections change what the CLI reads out of already-collected data: cut events now count toward the hard-copy screenout, edge-exit analysis works again on modern payloads (it had been silently finding nothing due to a mismatched time base), and Shape-3 (top-level array) payloads keep their outer trial fields. A participant's tier can change where those signals were load-bearing; the 0.7.0 numbers are the corrected ones.
+
+### Session replay (the 0.7.0 feature)
+
+An optional recorder (`dist/cyborg-hunter-replay.js`) captures pointer, keys, clipboard, scroll, touch, and viewport events — and, at the `dom` tier, DOM snapshots plus mutations — so a flagged session can be reviewed visually instead of adjudicated from counts alone. Recordings use jsPsych's `SessionRecording v1` wire format with a `ch_extensions` namespace.
+
+What ships around it:
+
+- **A per-participant replay viewer in the CLI report** (scrub bar, cursor trail, event markers). `dom`-tier recordings reconstruct the page in a sandboxed iframe.
+- **Autosave and CLI ingest of replay artifacts**, with ownership verification and reload-collision handling. Malformed artifacts are skipped with a warning; they no longer abort the report.
+- **Guard-honeypot and guard-friction events appear in the replay stream**, so deterrence violations can be watched in context.
+- **A per-trial camera model** keeps cursor and DOM aligned; on `dom`-tier recordings the cursor is verified per interaction, and any click that can't be confirmed draws an explicit uncertain marker instead of a wrong one. Recordings made before this guarantee existed replay under a clearly-labeled reduced-alignment banner.
+- **Privacy defaults:** password inputs are redacted unconditionally; clipboard events record lengths only, never content. Field-level redaction is controlled by `redactSelector`; the full privacy model is in [using-cyborg-hunter.md](using-cyborg-hunter.md).
+
+Integration is one more extension (jsPsych) or one `attach()` call (standalone); see the [README](../README.md#session-replay) for the wiring and [known-issues.md](known-issues.md) for the feature's documented limitations.
+
+### What changes on re-run over existing data (0.6.2 + 0.7.0)
+
+- **Cut events count toward the hard-copy screenout.** They were recorded but never incremented the session copy count, under-flagging participants who cut rather than copy.
+- **Edge-exit analysis works on modern payloads again.** A mismatched time base had it silently finding nothing; reports may now show edge-exit events that were absent before.
+- **Shape-3 (top-level array) payloads keep their outer trial fields** and get tab-away normalization.
+- **`findGuardViolations()` scans all trials** instead of locking onto the first (latent for the shipped producer, live for merged or per-trial producers).
+- **Robustness:** a payload with both `trials` and `responses` keeps its integrity trials; a non-array signal field is coerced with a warning instead of crashing; a numeric `trialId`/`ruleId` no longer crashes the trajectory renderer.
+
+### What changes for newly collected data
+
+- **The `drop` listener is no longer gated on the `paste` signal flag** — drag-and-drop events are captured even when paste monitoring is configured off.
+- **Idle-gap and element-trace timers are trial-scoped** instead of leaking per session.
+- **Fullscreen detection is prefix-aware** (0.6.2), removing false guard violations on Safari <16.4 and some iOS WebViews.
+- **Honeypot re-initialization starts clean** (0.6.2) — a prior run's violations/state are no longer inherited, and the `decoyAnswer: false` per-trial opt-out is honored.
+
+### New warnings (0.6.2)
+
+The CLI now warns on an unresolved `participantIdField`, duplicate participant IDs, an unmatched `phaseScope` phase name, and a non-numeric `scoring.softScoreThreshold`. Misconfigured scoring overrides (e.g. a nested typo) warn instead of silently disabling a rule.
+
+### Known limitations
+
+The replay feature's deliberate limitations (non-body capture roots, ID-less input resolution, and others) are documented in [known-issues.md](known-issues.md).
+
+## 0.6.1 — from 0.6.0
+
+### TL;DR
 
 - **From 0.6.0:** drop-in. Re-running `cyborg-hunter report` on already-collected data produces the same scores and triage ordering as 0.6.0. A golden regression suite freezes the full ingest → summary → triage pipeline output across the upgrade. 0.6.1 adds better session timelines for newly collected data, several new config knobs, and a fix for one silent-misconfiguration bug.
 - **From 0.5.x:** read [Upgrading from 0.5.x](#upgrading-from-05x). Triage scores and ordering on existing data will shift, because 0.6.0 fixed over- and under-counting. Newly collected data no longer saves raw per-keystroke timings by default.
 
-## What changes for newly collected data (0.6.0 → 0.6.1)
+### What changes for newly collected data (0.6.0 → 0.6.1)
 
 These changes affect the browser library, so they apply to sessions recorded with 0.6.1. The CLI reads previously collected data exactly as before.
 
@@ -21,7 +68,7 @@ These changes affect the browser library, so they apply to sessions recorded wit
 
 **Viewport-shift logging is debounced.** One resize gesture now logs one event carrying the net old→new change (250 ms quiet period, `viewportShiftDebounceMs`), instead of 5+ per-frame events per drag. Expect lower raw viewport-shift counts in newly collected data.
 
-## New CLI config knobs (all optional)
+### New CLI config knobs (all optional)
 
 | Knob | What it does |
 |---|---|
@@ -32,15 +79,19 @@ These changes affect the browser library, so they apply to sessions recorded wit
 | `showPlatformId` / `platformIdField` | Off by default. When on, renders the platform (Prolific/MTurk) ID as a secondary line in the HTML participant detail header. Off by default because reports circulate more freely than raw data, and the platform ID is what re-identifies a participant. |
 | `--config-file` | Accepted as an alias of `--config`. |
 
-## What changes in the report output
+### What changes in the report output
 
 - **Trajectory panels are tinted by phase** (peach gallery, purple typing/post-gallery-query, blue classification, grey end-requery), matching the session-timeline strip. A third legend line documents the mapping.
 - **`triage.md` has an explicit Tier column** (`HARD` / `soft` / `clean`, the library's screening verdict) replacing the boolean Hard column. Its header now states that Score is the CLI's ranking heuristic, a different number from the library soft score. The two are untangled in [interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers).
 - **The session-timeline lane "Layout shifts" is renamed "Viewport shifts"** (legend and HTML labels likewise). The `layout_shift_count` CSV column and the "N layout shifts" triage-reason wording are unchanged so downstream parsers keep working; both read `viewportWidthShifts` and fall back to the legacy key.
 
-## Bug fix worth knowing about
+### Bug fix worth knowing about
 
 **`sessionIntegrityPath` no longer accepts a wrong-shaped object.** Before 0.6.1, pointing `sessionIntegrityPath` at a near-miss path (e.g. `"metadata"` instead of `"metadata.integritySession"`) accepted the wrong object, zeroed every downstream session signal (tab-aways, hard/soft score, and the rest), and suppressed the "No session-level integrity data" warning. A HARD-triage participant could render as clean with no indication anything was wrong. 0.6.1 checks the resolved value for at least one recognizable session-report key (`tabAwaySums`, `hardScore`, `softScore`, `anyHardTriggered`, `trialsCompleted`) before accepting it; otherwise the built-in conventions run, with the warning intact. Configs that already used this knob with a correct path on 0.6.0 see no change.
+
+### Version stamps in the data
+
+The library stamps `cyborgHunterVersion` into every participant's data, so version mixing within a study is visible directly in the data (the CLI does not warn about it automatically). Mixing 0.6.0 and 0.6.1 participants in one report is safe; 0.6.1-only fields stay empty for the older sessions.
 
 ## Upgrading from 0.5.x
 
@@ -67,6 +118,3 @@ A study triaged on 0.5.x and re-run on 0.6.1 will see participants move. The 0.6
 |---|---|---|
 | `layoutShifts` session-report key | `viewportWidthShifts` (both currently written, identical content) | next major version |
 
-## Version stamps in the data
-
-The library stamps `cyborgHunterVersion` into every participant's data, so version mixing within a study is visible directly in the data (the CLI does not warn about it automatically). Mixing 0.6.0 and 0.6.1 participants in one report is safe; 0.6.1-only fields stay empty for the older sessions.

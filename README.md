@@ -181,8 +181,7 @@ The optional **guard** extensions add: fullscreen / sidebar / focus enforcement 
 - [docs/quickstart.md](docs/quickstart.md) — zero to triage report
 - [docs/worked-example.md](docs/worked-example.md) — full pipeline run on the bundled synthetic dataset, outputs interpreted
 - [docs/interpreting-signals.md](docs/interpreting-signals.md) — scores vs tiers, viewport shifts, phase scoping: the common misreadings
-- [docs/release-notes-0.7.0.md](docs/release-notes-0.7.0.md) — what 0.7.0 (and 0.6.2) change in data, config, and reports
-- [docs/release-notes-0.6.1.md](docs/release-notes-0.6.1.md) — the 0.6.1 release notes
+- [docs/upgrading.md](docs/upgrading.md) — what each release changes in collected data, configuration and reports; read before re-running old data
 - [docs/using-cyborg-hunter.md](docs/using-cyborg-hunter.md) — full integration guide
 - [docs/signals-reference.md](docs/signals-reference.md) — every signal with thresholds per preset
 - [docs/configuration.md](docs/configuration.md) — config file fields and CLI flags
