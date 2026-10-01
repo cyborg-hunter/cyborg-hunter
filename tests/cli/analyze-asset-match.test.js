@@ -195,6 +195,27 @@ describe('references inside a supplied stylesheet', () => {
     // The import left as a URL moves to the top: an @import after a rule is ignored.
     assert.strictEqual(model.stylesheets[0].css, '@import url("https://exp.example.org/study/css/l.css") layer(base);\n@media screen{.t{}}\n\n.a{color:red}');
   });
+  it('leaves @import and url() inside CSS comments inert and untouched', async () => {
+    const files = [
+      { path: 'css/style.css', read: async () => bytes('/* @import "x.css"; url(y.png) */\n@import "base.css";\n.a{}') },
+      { path: 'css/base.css', read: async () => bytes('.b{}') },
+      { path: 'css/x.css', read: async () => bytes('.x{}') },
+      { path: 'css/y.png', read: async () => PNG },
+    ];
+    const { assetMap, report } = await buildAssetMap([hrefOnly()], files);
+    assert.deepStrictEqual(report.matched.map((m) => m.path), ['css/style.css', 'css/base.css']);
+    const model = applyAssetMap(buildViewerModel(hrefOnly()), assetMap);
+    assert.strictEqual(model.stylesheets[0].css, '/* @import "x.css"; url(y.png) */\n.b{}\n.a{}');
+  });
+  it('an import left as a URL at the very end, with no semicolon, does not swallow the rule after it when moved up', async () => {
+    const files = [
+      { path: 'css/style.css', read: async () => bytes('@import "sub.css"; .a{} @import url(https://x.org/y.css)') },
+      { path: 'css/sub.css', read: async () => bytes('.s{}') },
+    ];
+    const { assetMap } = await buildAssetMap([hrefOnly()], files);
+    const model = applyAssetMap(buildViewerModel(hrefOnly()), assetMap);
+    assert.strictEqual(model.stylesheets[0].css, '@import url(https://x.org/y.css);\n.s{} .a{} ');
+  });
   it('drops a byte-order mark from a supplied sheet', async () => {
     const { assetMap } = await buildAssetMap([hrefOnly()], [{ path: 'style.css', read: async () => bytes('﻿body{margin:0}') }]);
     const model = applyAssetMap(buildViewerModel(hrefOnly()), assetMap);
@@ -220,6 +241,12 @@ describe('matching rules', () => {
     const url = 'https://h/study/node_modules/jspsych/css/jspsych.css';
     const r = matchAssets([url], ['node_modules/jspsych/css/jspsych.css', 'jspsych/css/jspsych.css']);
     assert.strictEqual(r.matched.get(url), 'node_modules/jspsych/css/jspsych.css');
+  });
+  it('a file whose whole path is a suffix of the URL beats a longer path with the same tail', () => {
+    const a = 'https://h/study/img/a.png';
+    assert.strictEqual(matchAssets([a], ['img/a.png', 'lib/img/a.png']).matched.get(a), 'img/a.png');
+    const b = 'https://h/a.png';
+    assert.strictEqual(matchAssets([b], ['a.png', 'x/a.png']).matched.get(b), 'a.png');
   });
   it('a dropped folder named differently from the URL path still matches on the shared tail', () => {
     const url = 'https://h/study/css/style.css';

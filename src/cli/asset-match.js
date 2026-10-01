@@ -34,14 +34,17 @@ const SRC_ATTRS = { src: true, poster: true };
 // Only these elements' src/poster are images or media; an iframe's src is a
 // page, which the viewer never loads.
 const SRC_TAGS = { img: true, source: true, video: true, audio: true };
-// One pass over CSS text finds both kinds of reference. Groups: 2 or 4 =
+// One pass over CSS text finds both kinds of reference, and steps over
+// comments (matched first, with no groups, and always left as they are, so an
+// @import or url() inside one stays inert). Groups: 2 or 4 =
 // an @import's URL (url(...) or string form), 5 = its condition (media list,
 // layer(), supports()); 7 = a url(...) reference.
-const CSS_REF = /@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])([^'"]+)\3)([^;{}]*)(?:;|$)|url\(\s*(['"]?)([^'")]+)\6\s*\)/g;
+const CSS_REF = /\/\*[\s\S]*?(?:\*\/|$)|@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])([^'"]+)\3)([^;{}]*)(?:;|$)|url\(\s*(['"]?)([^'")]+)\6\s*\)/g;
 // A layer()/supports() import cannot be spliced as a plain @media block; it is
 // left as an absolute @import and not counted.
 const CONDITIONAL_IMPORT = /\b(layer|supports)\b/i;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const isComment = (m) => m[0].startsWith('/*');
 
 // The default decoder drops a leading byte-order mark, which in a <style>
 // would otherwise become part of the first selector.
@@ -76,6 +79,7 @@ const cssUrl = (u) => 'url("' + u.replace(/[\\"\n\r\f]/g, (c) => '\\' + c.charCo
 function cssRefs(css, href) {
   const imports = [], urls = [];
   for (const m of String(css).matchAll(CSS_REF)) {
+    if (isComment(m)) continue;
     const isImport = m[7] === undefined;
     const ref = resolveRef(isImport ? (m[2] !== undefined ? m[2] : m[4]) : m[7], href);
     if (!ref) continue;
@@ -161,8 +165,8 @@ export function collectAssetUrls(recording) { return collect(recording, null); }
 const normalizePath = (p) => String(p).replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/^\/+/, '');
 
 // How many trailing path segments a supplied path shares with the URL's path
-// ('/study/css/a.css' and 'exp/css/a.css' share 2). The best score wins; a
-// tie at the best is ambiguous; 0 (not even the filename) is no candidate.
+// ('/study/css/a.css' and 'exp/css/a.css' share 2). 0 (not even the
+// filename) is no candidate.
 function sharedTail(urlSegs, path) {
   const p = path.split('/');
   let n = 0;
@@ -175,10 +179,16 @@ export function matchAssets(urls, droppedPaths) {
   const matched = new Map(), missing = [], ambiguous = [];
   for (const url of urls) {
     const segs = pathOf(url).split('/').filter(Boolean);
+    // Rank: a file whose WHOLE path is a suffix of the URL's path first
+    // ('img/a.png' over 'lib/img/a.png' for /study/img/a.png), then the
+    // longer shared tail ('node_modules/x/a.css' over 'x/a.css'). Only a tie
+    // at the top rank is ambiguous.
     let best = 0, cands = [];
     for (const p of dropped) {
       const n = sharedTail(segs, p);
-      if (n > best) { best = n; cands = [p]; } else if (n > 0 && n === best) cands.push(p);
+      if (n === 0) continue;
+      const rank = (n === p.split('/').length ? segs.length + 1 : 0) + n;
+      if (rank > best) { best = rank; cands = [p]; } else if (rank === best) cands.push(p);
     }
     if (cands.length === 1) matched.set(url, cands[0]);
     else if (cands.length > 1) ambiguous.push({ url, candidates: cands });
@@ -238,7 +248,7 @@ export function applyAssetMap(model, assetMap) {
   const rewriteCss = (css, href, nested) => {
     const text = String(css);
     const spliceable = (m) => {
-      if (nested || m[7] !== undefined || CONDITIONAL_IMPORT.test(m[5])) return null;
+      if (nested || isComment(m) || m[7] !== undefined || CONDITIONAL_IMPORT.test(m[5])) return null;
       const ref = resolveRef(m[2] !== undefined ? m[2] : m[4], href);
       return ref && supplied(assetMap, ref.url) ? ref.url : null;
     };
@@ -252,6 +262,7 @@ export function applyAssetMap(model, assetMap) {
     const hoist = [...text.matchAll(CSS_REF)].some((m) => spliceable(m) !== null);
     const hoisted = [];
     const out = text.replace(CSS_REF, (...m) => {
+      if (isComment(m)) return m[0];
       if (m[7] === undefined) {
         const url = spliceable(m);
         if (url) {
@@ -261,7 +272,9 @@ export function applyAssetMap(model, assetMap) {
         }
         const ref = resolveRef(m[2] !== undefined ? m[2] : m[4], href);
         const stmt = ref && ref.resolved ? '@import ' + cssUrl(ref.url) + m[5].replace(/\s+$/, '') + ';' : m[0];
-        if (hoist) { hoisted.push(stmt); return ''; }
+        // An import at the very end may lack its ';'; moved up, it would
+        // swallow the rule that now follows it.
+        if (hoist) { hoisted.push(/;$/.test(stmt) ? stmt : stmt.trimEnd() + ';'); return ''; }
         return stmt;
       }
       const ref = resolveRef(m[7], href);
