@@ -3,6 +3,52 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [0.9.2] — 2026-10-01
+
+A maintenance release: documentation for keeping replays on your own server,
+one small browser-global addition, and a hardening fix in the replay viewer. No
+change to scoring or data formats.
+
+### Added
+- SessionRecording v2 conformance package in the repository
+  (`packages/sessionrecording-conformance`, a workspace package; not published
+  to npm): the fixture corpus, the validator, a JSON Schema and TypeScript
+  types, run with `npm run test:package` (part of `npm test`). The validator
+  the CLI uses is a generated copy of the package's, checked for drift before
+  every test run.
+- Docs: saving the replay to your own server instead of DataPipe
+  (`autoSave.mode: 'none'`, `getRecording()`, a POST to your endpoint, and the
+  file name the CLI expects).
+- `CyborgHunterReplay.replayFilename` on the browser global, next to
+  `attach`. It was an ES-module export only, so script-tag users could not
+  produce the `<id>-replay-<epoch>.json` name the CLI matches on.
+- `scripts/check-public-hygiene.sh` can also check a commit message:
+  `GATE_COMMIT=<rev>`.
+
+### Changed
+- Research tooling (the benchmark harness and investigation probes) moved out
+  of this repository. No change to the published package.
+- The per-release notes for 0.6.1 and 0.7.0 are merged into
+  `docs/upgrading.md`.
+- The recorder options table in `docs/using-cyborg-hunter.md` is refreshed
+  (`participantId`, `clipboardContent`, `autoSave.experimentId`; clipboard
+  capture is length-only by default).
+
+### Fixed
+- Replay viewer: a replayed attribute event can no longer re-arm an iframe
+  placeholder's `src` or `srcdoc`. The viewer's Content Security Policy
+  already blocked the load; this is defence in depth.
+- Stale docs in `docs/using-cyborg-hunter.md`: the verify step names
+  `mouseTrack` (not `mouseEvents`); the replay meta pointer's size key is
+  `bytes_uncompressed`; the canvas tier no longer refers to v0.8; the
+  "no network calls" statement now covers the integrity monitor only, since
+  the optional replay recorder saves a separate artifact.
+
+### Notes
+- After pulling, run `npm install`: the tests resolve the workspace package.
+- Installing from a git URL runs the `prepack` script, which regenerates
+  `src/shared/schema-v2-validator.js` from the workspace package.
+
 ## [0.9.1] — 2026-10-01
 
 A visual redesign of the HTML triage report and the live demo. No change to

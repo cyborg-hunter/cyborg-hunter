@@ -55,7 +55,7 @@ Browser (experiment page) — load via unpkg or copy `dist/*.js` into your proje
 <script src="https://unpkg.com/cyborg-hunter/dist/cyborg-hunter-replay.js"></script>
 ```
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.9.1/dist/...`.
+For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.9.2/dist/...`.
 
 ## Plug into a jsPsych experiment
 
@@ -205,7 +205,7 @@ Run the test suite with `npm test`. Before publishing, run `scripts/check-public
   author  = {Konuk, Can and Btesh, Victor and Nunez, Jose Luis},
   title   = {cyborg-hunter: detecting AI-tool use in browser-based behavioral experiments},
   year    = {2026},
-  version = {0.9.1},
+  version = {0.9.2},
   url     = {https://github.com/cyborg-hunter/cyborg-hunter},
   license = {MIT}
 }
