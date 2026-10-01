@@ -1881,16 +1881,18 @@
           if (e.t >= playhead - 600) ripples.push(q);
         }
       }
-      // Cursor trail: fading polyline per segment
+      // Cursor trail: breadcrumb dots, one per sampled point (after a
+      // segment's first), fading with age. Gaps between dots show pointer
+      // speed; a severed segment simply has no dot bridging the break. Drawn
+      // FIRST, and never at radius 2, 5 or 7: the alignment battery reads the
+      // cursor glyph off the final arcs (r=5 confident, r=7 then r=2 uncertain).
       segs.forEach(function (line) {
         for (var s = 1; s < line.length; s++) {
           var age = (playhead - line[s].t) / 2500;
-          ctx.strokeStyle = 'rgba(211,47,47,' + (0.85 * (1 - age)).toFixed(3) + ')';
-          ctx.lineWidth = 2;
+          ctx.fillStyle = 'rgba(211,47,47,' + (0.85 * (1 - age)).toFixed(3) + ')';
           ctx.beginPath();
-          ctx.moveTo(line[s - 1].x, line[s - 1].y);
-          ctx.lineTo(line[s].x, line[s].y);
-          ctx.stroke();
+          ctx.arc(line[s].x, line[s].y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
         }
       });
       // Click ripples: expanding rings over 600ms
