@@ -297,8 +297,11 @@ export function installVanillaAdapter(opts) {
 
   // The work of a form submit: close the span, save the session, and put the
   // blob into a POST form's hidden input. `cutSpan` false keeps the span as it
-  // is (form.submit() called right after a submit event closed it).
+  // is (form.submit() called right after a submit event closed it). A dialog
+  // submit (method or formmethod "dialog") only closes its <dialog>: the page
+  // stays, so it is not a page load and the next pagehide must still cut.
   function carry(form, submitter, cutSpan) {
+    if (form && effectiveMethod(form, submitter) === 'dialog') return;
     if (cutSpan) cut('page');
     submitted = true;
     persist();

@@ -229,6 +229,33 @@ describe('vanilla host: forms and page loads', () => {
     assert.strictEqual(saved.trials[1].integrity.pasteEvents.length, 1);
   });
 
+  // A dialog form closes its <dialog> and the page stays: no page segment,
+  // and the real pagehide still cuts what came after it.
+  it('a method="dialog" form submit cuts nothing; pagehide keeps the data after it', () => {
+    const ctx = start();
+    paste('before');
+    submit(el('<form method="dialog"><button>OK</button></form>'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    assert.strictEqual(saved.trials.length, 1);
+    assert.strictEqual(saved.trials[0].integritySegment.source, 'page');
+    assert.strictEqual(saved.trials[0].integrity.pasteEvents.length, 2);
+  });
+
+  it('a submitter with formmethod="dialog" on a POST form cuts nothing and adds no hidden input', () => {
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"><button formmethod="dialog">Close</button></form>');
+    f.dispatchEvent(new win.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: f.querySelector('button') }));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+    assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 0);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[0].integrity.pasteEvents.length, 1);
+  });
+
   it('page loads: the next page restores the index, the earlier trials and the page count', () => {
     const ctx1 = start();
     paste('page one');
