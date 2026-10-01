@@ -74,6 +74,7 @@ describe('createDebug', () => {
 
   it('id sources and friction modes read from ctx', () => {
     function sum(extra) { return createDebug({ doc: win.document, ctx: jsCtx(Object.assign({ win: win }, extra)), log: log }).summary(); }
+    assert.match(sum({ participantIdSource: 'url:PROLIFIC_PID' }), /ID from PROLIFIC_PID ·/);
     assert.match(sum({ participantIdSource: 'attribute' }), /ID from data-participant-id/);
     assert.match(sum({ participantIdSource: 'config' }), /ID from CyborgHunterConfig/);
     assert.match(sum({ participantIdSource: 'random' }), /ID from random id \(not linkable\)/);

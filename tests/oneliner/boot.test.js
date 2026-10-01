@@ -121,6 +121,14 @@ describe('boot', () => {
     assert.strictEqual(ctx.participantIdSource, 'url:workerId');
   });
 
+  it('without an injected list, the default URL parameters are read', async () => {
+    const { DEFAULT_PARAMS } = await import('../../src/oneliner/participant-id.js');
+    win.location.href = 'https://lab.example/study.html?' + DEFAULT_PARAMS[0] + '=5f3a&workerId=W9';
+    ctx = boot({ script: script({ participantId: 'A1', guards: 'none' }), win });
+    assert.strictEqual(ctx.participantId, '5f3a');
+    assert.strictEqual(ctx.participantIdSource, 'url:' + DEFAULT_PARAMS[0]);
+  });
+
   it('a random id is used, and warned about, when no id is found', () => {
     ctx = boot({ script: script({ guards: 'none' }), win });
     assert.match(ctx.participantId, /^ch-[0-9a-f]{12}$/);

@@ -3,7 +3,7 @@
 // random id (which the boot warns about: the rows cannot be linked).
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { resolveParticipantId, randomParticipantId } from '../../src/oneliner/participant-id.js';
+import { resolveParticipantId, randomParticipantId, DEFAULT_PARAMS } from '../../src/oneliner/participant-id.js';
 
 const never = () => { throw new Error('random() must not be called'); };
 
@@ -69,6 +69,18 @@ describe('resolveParticipantId', () => {
     assert.deepStrictEqual(
       resolveParticipantId({ search: '?workerId=W9', attr: 'A1', random: never }),
       { id: 'A1', source: 'attribute' });
+  });
+});
+
+describe('DEFAULT_PARAMS', () => {
+  it('is the recruitment platforms\' URL parameters: Prolific, MTurk, then a generic name', () => {
+    assert.deepStrictEqual(DEFAULT_PARAMS, ['PROLIFIC_PID', 'workerId', 'participant']);
+  });
+
+  it('a Prolific study URL resolves to the Prolific id', () => {
+    assert.deepStrictEqual(
+      resolveParticipantId({ search: '?PROLIFIC_PID=5f3a', params: DEFAULT_PARAMS, random: never }),
+      { id: '5f3a', source: 'url:PROLIFIC_PID' });
   });
 });
 

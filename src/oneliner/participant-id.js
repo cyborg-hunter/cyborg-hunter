@@ -15,8 +15,9 @@
 //   source:  'url:<param>' | 'attribute' | 'config' | 'random'
 //            (boot.js adds 'session': a random id kept from an earlier page)
 
-// The URL parameter names boot.js reads by default, in order of precedence.
-export const DEFAULT_PARAMS = [];
+// The URL parameter names boot.js reads by default, in order of precedence:
+// Prolific's and MTurk's documented study-URL parameters, then a generic name.
+export const DEFAULT_PARAMS = ['PROLIFIC_PID', 'workerId', 'participant'];
 
 function clean(v) {
   if (v === null || v === undefined) return null;
