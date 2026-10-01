@@ -12,6 +12,6 @@ a fake:
   browser build (`jsPsychHtmlButtonResponse`) from the same release line;
   `GuardFriction.createEntryTrial()` uses it.
 
-Source: https://github.com/jspsych/jsPsych. License: MIT, copyright (c) 2014
+Source: https://github.com/jspsych/jsPsych. License: MIT (full text in LICENSE), copyright (c) 2014
 Joshua R. de Leeuw. These files are not shipped in the npm package (`files` in
 package.json does not include `tests/`).

@@ -56,6 +56,29 @@ describe('injectExtensions: dedupe rules (a) and (b)', () => {
     assert.equal(warns.length, 1);
   });
 
+  // OneLinerExtension tells a trial's own on_load from a late one by the
+  // params object jsPsych passes, so no two trials may share an entry.
+  it('each trial gets its own copy of an injected entry and of its params', () => {
+    const ent = { type: OneLinerExtension, params: { x: 1 } };
+    const a = { type: 'kb' }, b = { type: 'kb' }, c = { type: 'kb', extensions: [{ type: Mouse }] };
+    injectExtensions([a, b, c], [ent]);
+    const got = [a, b, c].map((t) => t.extensions[t.extensions.length - 1]);
+    for (const e of got) {
+      assert.notStrictEqual(e, ent);
+      assert.notStrictEqual(e.params, ent.params);
+      assert.deepStrictEqual(e, ent);
+    }
+    assert.notStrictEqual(got[0].params, got[1].params);
+    assert.notStrictEqual(got[1].params, got[2].params);
+  });
+
+  it('an extensions array shared by two trials gets one copy and no own-entry count', () => {
+    const list = [{ type: Mouse }];
+    const r = injectExtensions([{ type: 'kb', extensions: list }, { type: 'kb', extensions: list }], [CH]);
+    assert.deepStrictEqual(names(list), ['mouse-tracking', 'cyborg-hunter']);
+    assert.equal(r.skippedOwnEntry, 0);
+  });
+
   it('reports the friction entry trial', () => {
     assert.equal(injectExtensions([{ type: 'btn', data: { trial_type_label: 'guard_friction_entry' } }], [CH]).entryTrialFound, true);
     assert.equal(injectExtensions([{ type: 'btn' }], [CH]).entryTrialFound, false);

@@ -84,9 +84,25 @@ export function dedupeExtensions(list) {
 // no second one for that name; (b) an object reached twice (the same trial in
 // two places) is handled once; a non-array `extensions` is left alone with a
 // warning.
+//
+// Each trial gets its own shallow copy of an entry and of its params:
+// OneLinerExtension ties an on_load to its trial by the params object (see
+// jspsych-extension.js). jsPsych 7.3.1 already deep-copies a trial before
+// running it (TimelineNode.trial(), :2218-2222); the copy here does not rely
+// on that. The copies are remembered across calls, so a timeline run twice
+// does not count them as a researcher's own entry.
+var injectedCopies = new WeakSet();
+
 export function injectExtensions(timeline, entries, seen) {
   seen = seen || new WeakSet();
   var result = { trials: 0, skippedOwnEntry: 0, sharedObjects: 0, entryTrialFound: false };
+
+  function copyOf(entry) {
+    var c = Object.assign({}, entry);
+    if (entry.params && typeof entry.params === 'object') c.params = Object.assign({}, entry.params);
+    injectedCopies.add(c);
+    return c;
+  }
 
   function walkList(list, inherited) {
     if (!Array.isArray(list)) return;
@@ -116,11 +132,12 @@ export function injectExtensions(timeline, entries, seen) {
     var present = list.map(nameOf);
     // Counted only for a researcher's own entry, not one of ours already
     // pushed into an extensions array that several trials share.
-    if (list.some(function (e) { return e && isChType(e.type) && entries.indexOf(e) === -1; })) {
+    if (list.some(function (e) { return e && isChType(e.type) && !injectedCopies.has(e); })) {
       result.skippedOwnEntry += 1;
     }
     var missing = entries.filter(function (e) { return present.indexOf(nameOf(e)) === -1; });
     if (missing.length === 0) return;
+    missing = missing.map(copyOf);
     if (hasOwnList) Array.prototype.push.apply(node.extensions, missing);
     else node.extensions = list.concat(missing);
   }

@@ -66,8 +66,9 @@ describe('OneLinerExtension: on_load', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(3));
-    ext.on_start({});
-    ext.on_load({ trialId: 'q1', phase: 'test', decoyAnswer: false });
+    const p = { trialId: 'q1', phase: 'test', decoyAnswer: false };
+    ext.on_start(p);
+    ext.on_load(p);
     const [name, o] = calls[0];
     assert.equal(name, 'rotate');
     assert.equal(o.trialId, 'q1');
@@ -93,8 +94,9 @@ describe('OneLinerExtension: on_load', () => {
     ctx.segmenter.rotate = () => { throw new Error('boom'); };
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(0));
-    ext.on_start({});
-    assert.doesNotThrow(() => ext.on_load({}));
+    const p = {};
+    ext.on_start(p);
+    assert.doesNotThrow(() => ext.on_load(p));
   });
 
   // A synchronous plugin (call-function) finishes inside its own trial()
@@ -105,9 +107,10 @@ describe('OneLinerExtension: on_load', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(1));
-    ext.on_start({});
-    ext.on_finish({});
-    ext.on_load({});
+    const p = {};
+    ext.on_start(p);
+    ext.on_finish(p);
+    ext.on_load(p);
     assert.deepStrictEqual(calls.map((c) => c[0]), ['cut']);
   });
 
@@ -115,20 +118,42 @@ describe('OneLinerExtension: on_load', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(2));
-    ext.on_start({});                         // call-function
-    ext.on_finish({});                        // ... finishes inside trial()
-    ext.on_start({ trialId: 'T-named' });     // next trial starts synchronously
-    ext.on_load({ trialId: 'T-named' });
-    ext.on_load({});                          // call-function's late load callback
+    const cf = {}, next = { trialId: 'T-named' };
+    ext.on_start(cf);                         // call-function
+    ext.on_finish(cf);                        // ... finishes inside trial()
+    ext.on_start(next);                       // next trial starts synchronously
+    ext.on_load(next);
+    ext.on_load(cf);                          // call-function's late load callback
     assert.deepStrictEqual(calls.map((c) => c[0] + ':' + (c[1].trialId || c[1].nextTrialId)), ['cut:gap-2', 'rotate:T-named']);
+  });
+
+  // When the next trial's trial() returns a Promise (jsPsych 7 audio plugins),
+  // jsPsych leaves its load callback to the plugin, so the stale call arrives
+  // between the next trial's on_start and its own on_load. Each on_load is
+  // tied to its trial by the params object jsPsych passes (the same object to
+  // on_start and on_load of one trial, jspsych.js :3027-3054).
+  it('a stale on_load before a promise trial\'s own on_load neither rotates nor disarms it', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(2));
+    const cf = {}, next = { trialId: 'T-named', phase: 'pT', decoyAnswer: false };
+    ext.on_start(cf);
+    ext.on_finish(cf);
+    ext.on_start(next);
+    ext.on_load(cf);                          // call-function's late load callback
+    ext.on_load(next);                        // the plugin's own call, later
+    assert.deepStrictEqual(calls.map((c) => c[0] + ':' + (c[1].trialId || c[1].nextTrialId)), ['cut:gap-2', 'rotate:T-named']);
+    assert.strictEqual(calls[1][1].decoyAnswer, false);
+    assert.equal(calls[1][1].phase, 'pT');
   });
 
   it('after the session has ended, on_load does not touch the segmenter', () => {
     const { ctx, calls } = makeCtx({ jspsych: { finalized: true } });
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(0));
-    ext.on_start({});
-    ext.on_load({});
+    const p = {};
+    ext.on_start(p);
+    ext.on_load(p);
     assert.deepStrictEqual(calls, []);
   });
 });
@@ -138,8 +163,9 @@ describe('OneLinerExtension: on_finish', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(4));
-    ext.on_start({ trialId: 't4' });
-    ext.on_load({ trialId: 't4' });
+    const p = { trialId: 't4' };
+    ext.on_start(p);
+    ext.on_load(p);
     const out = ext.on_finish({});
     assert.deepStrictEqual(calls[1], ['cut', { source: 'host', nextTrialId: 'gap-4' }]);
     assert.equal(out.integrity.trialId, 't4');
@@ -158,9 +184,10 @@ describe('OneLinerExtension: on_finish', () => {
     const { ctx } = makeCtx();
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(4));
-    ext.on_start({});
-    ext.on_load({});
-    ext.on_finish({});
+    const p = {};
+    ext.on_start(p);
+    ext.on_load(p);
+    ext.on_finish(p);
     assert.strictEqual(ext.on_finish({}).integrity.trialStart_perfNow, null);
   });
 
@@ -195,9 +222,10 @@ describe('OneLinerExtension: on_finish', () => {
     ctx.segmenter.rotate = () => ({ error: 'rotation failed' });
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(1));
-    ext.on_start({});
-    ext.on_load({});
-    const out = ext.on_finish({});
+    const p = {};
+    ext.on_start(p);
+    ext.on_load(p);
+    const out = ext.on_finish(p);
     assert.equal(out.integritySegment.segmentIndex, 4);
     assert.equal(out.cyborgHunterError, 'rotation failed');
   });

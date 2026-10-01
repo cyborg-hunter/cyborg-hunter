@@ -149,6 +149,78 @@ describe('ch.js on real jsPsych: a synchronous trial before a named trial', () =
   });
 });
 
+// Like jsPsych 7's audio plugins (and custom plugins written the same way):
+// trial() returns a Promise, so jsPsych does not run the load callback itself
+// (jspsych.js :3099-3103); the plugin calls it later, once its stimulus is
+// ready. Each run records performance.now() into `beforeLoad` just before
+// that call (jsPsych copies array-valued trial parameters, so the list lives
+// here rather than on the trial).
+const beforeLoad = [];
+class PromiseLoad {
+  static info = { name: 'promise-load', parameters: {} };
+  constructor(jsPsych) { this.jsPsych = jsPsych; }
+  trial(el, trial, on_load) {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        el.innerHTML = '<p>audio</p>';
+        beforeLoad.push(performance.now());
+        on_load();
+        setTimeout(() => { this.jsPsych.finishTrial({}); resolve(); }, 5);
+      }, 2);
+    });
+  }
+}
+
+describe('ch.js on real jsPsych: a synchronous trial before a promise-returning trial', () => {
+  // With no gap, the call-function's late load callback runs after the next
+  // trial's on_start but, the next trial's trial() having returned a Promise,
+  // before that trial's own on_load. It must neither take that on_load's
+  // place nor make the real one count as late.
+  for (const [label, gap] of [['next trial starts synchronously', undefined], ['next trial starts after a post_trial_gap', 20]]) {
+    it(`the named trial keeps its trialId, phase and decoy opt-out (${label})`, async () => {
+      const ctx = bootCh({}, { decoyAnswers: true });
+      const rotated = [];
+      const rotate = ctx.segmenter.rotate;
+      ctx.segmenter.rotate = (o) => { rotated.push(o.trialId + '|' + o.phase); return rotate(o); };
+      const jsPsych = win.initJsPsych({});
+      const cf = callFunction();
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const rows = await runTimeline(jsPsych, [
+        { type: Timer, extensions: named({ trialId: 'A-named', phase: 'pA', decoyAnswer: false }) },
+        cf,
+        { type: PromiseLoad, extensions: named({ trialId: 'T-named', phase: 'pT', decoyAnswer: false }) }
+      ]);
+      assert.equal(rows.length, 3);
+      const t = rows[2];
+      assert.equal(t.integrity.trialId, 'T-named');
+      assert.equal(t.integrity.phase, 'pT');
+      assert.equal(t.integrity.decoy.level, 0, 'no decoy injected');
+      assert.equal(t.integrity.decoy.source, 'skipped');
+      assert.equal(t.integritySegment.trialId, 'T-named');
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.deepStrictEqual(rotated, ['A-named|pA', 'T-named|pT']);
+      assert.deepStrictEqual(errors, []);
+    });
+
+    it(`an injected-only (anonymous) promise trial anchors at its own on_load (${label})`, async () => {
+      bootCh();
+      const jsPsych = win.initJsPsych({});
+      const cf = callFunction();
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      beforeLoad.length = 0;
+      const rows = await runTimeline(jsPsych, [{ type: Timer }, cf, { type: PromiseLoad }]);
+      assert.equal(rows.length, 3);
+      assert.equal(beforeLoad.length, 1);
+      const t = rows[2];
+      assert.ok(!('cyborgHunterError' in t), JSON.stringify(t.cyborgHunterError));
+      assert.equal(typeof t.integrity.trialStart_perfNow, 'number');
+      assert.ok(t.integrity.trialStart_perfNow >= beforeLoad[0],
+        'anchor ' + t.integrity.trialStart_perfNow + ' precedes the plugin\'s on_load at ' + beforeLoad[0]);
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+});
+
 describe('ch.js on real jsPsych: manual mode with ch.js alone', () => {
   // The researcher kept extension-cyborg-hunter.js and its initJsPsych entry
   // but loads ch.js instead of cyborg-hunter.min.js: window.CyborgHunter is

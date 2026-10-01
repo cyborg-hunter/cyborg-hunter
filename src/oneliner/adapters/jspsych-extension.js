@@ -30,12 +30,19 @@
 //   - post_trial_gap / default_iti > 0 defer nextTrial: the stale on_load
 //     comes right after its own on_finish and would open a span for a trial
 //     that already ended.
+// A third order: when the next trial's trial() returns a Promise (jsPsych 7
+// audio plugins, custom plugins), jsPsych leaves its load callback to the
+// plugin (:3099-3103), so the stale on_load arrives after the next trial's
+// on_start but before that trial's own on_load.
 // An index check (current_trial_global) catches only the first order: in the
-// second the index has not moved yet. So on_start arms the load, on_load
-// consumes it, on_finish disarms it: an on_load counts only between its
-// trial's on_start and on_finish, which rejects the stale call in both orders.
-// (jsPsych calls the extension's on_start on every trial that lists it,
-// :3027-3030, so every real on_load is armed.)
+// second the index has not moved yet. So on_start arms the load and records
+// the params object jsPsych passed; on_load counts only while armed and only
+// with that same object; on_finish disarms. jsPsych hands one trial's
+// on_start and on_load the same object (extension.params of the same trial,
+// :3027-3030, :3046-3054), and the adapter gives every trial its own copy of
+// the injected entry, so the stale call is rejected in all three orders.
+// (jsPsych calls the extension's on_start on every trial that lists it, so
+// every real on_load is armed.)
 //
 // After the session has ended (the final hook ran, ctx.jspsych.finalized),
 // both hooks leave the segmenter alone: rows of a second jsPsych instance
@@ -65,6 +72,7 @@ export class OneLinerExtension {
     this._trialStart_perfNow = null;
     this._loadError = null;
     this._loadArmed = false;
+    this._armedParams = undefined;
   }
 
   get monitor() {
@@ -75,17 +83,19 @@ export class OneLinerExtension {
   initialize(_params) {}
 
   // jsPsych 7 calls on_start on every trial that lists the extension, before
-  // the plugin's trial(): arm this trial's on_load.
-  on_start(_params) {
+  // the plugin's trial(): arm this trial's on_load, for these params only.
+  on_start(params) {
     this._loadArmed = true;
+    this._armedParams = params;
   }
 
   on_load(params) {
     var ctx = OneLinerExtension.ctx;
     // A late on_load (see the header) is dropped before anything is reset:
     // the trial now open keeps its anchor and any rotate error.
-    if (!this._loadArmed) return;
+    if (!this._loadArmed || params !== this._armedParams) return;
     this._loadArmed = false;
+    this._armedParams = undefined;
     this._loadError = null;
     if (!ctx || (ctx.jspsych && ctx.jspsych.finalized)) return;
     try {
@@ -109,6 +119,7 @@ export class OneLinerExtension {
   on_finish(_params) {
     var ctx = OneLinerExtension.ctx;
     this._loadArmed = false;
+    this._armedParams = undefined;
     if (!ctx || (ctx.jspsych && ctx.jspsych.finalized)) return {};
     var t0 = performance.now();
     var out;
