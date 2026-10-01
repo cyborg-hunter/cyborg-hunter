@@ -214,4 +214,6 @@ A "Cite this repository" button is rendered from `CITATION.cff`.
 
 ## License
 
-MIT
+MIT. The HTML report embeds six typefaces from Google Fonts (Space Grotesk,
+Tomorrow, Sofia Sans, Sora, Recursive, Major Mono Display), each under the SIL
+Open Font License 1.1; their licences ship in `src/cli/renderers/fonts/`.
