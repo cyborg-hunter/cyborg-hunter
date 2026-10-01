@@ -14,12 +14,16 @@
 // window.CyborgHunter at runtime, so jsPsych users load both
 // cyborg-hunter.min.js AND extension-cyborg-hunter.js (keeps the
 // standalone core useful for non-jsPsych studies).
+//
+// BUILD_OUTDIR (default dist) writes the seven files to another directory;
+// tests/oneliner/build.test.js uses it to build without touching dist/.
 
 import esbuild from 'esbuild';
 import { readFileSync } from 'fs';
 import { MESSAGES } from './src/oneliner/errors.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+const OUT = process.env.BUILD_OUTDIR || 'dist';
 
 async function build() {
   // Browser IIFE — self-contained, exposes window.CyborgHunter.
@@ -42,7 +46,7 @@ async function build() {
     minify: true,
     format: 'iife',
     globalName: 'CyborgHunter',
-    outfile: 'dist/cyborg-hunter.min.js',
+    outfile: OUT + '/cyborg-hunter.min.js',
     platform: 'browser',
     banner: { js: `// cyborg-hunter v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter\n` +
       'var __cyborgHunterPrevNS=typeof window!=="undefined"&&window.__cyborgHunterLoaded==="ch.js"?window.CyborgHunter:void 0;' },
@@ -58,7 +62,7 @@ async function build() {
     entryPoints: ['src/core/index.js'],
     bundle: true,
     format: 'esm',
-    outfile: 'dist/cyborg-hunter.esm.js',
+    outfile: OUT + '/cyborg-hunter.esm.js',
     platform: 'browser'
   });
 
@@ -69,7 +73,7 @@ async function build() {
     bundle: true,
     minify: true,
     format: 'iife',
-    outfile: 'dist/extension-cyborg-hunter.js',
+    outfile: OUT + '/extension-cyborg-hunter.js',
     platform: 'browser'
   });
 
@@ -81,7 +85,7 @@ async function build() {
     bundle: true,
     minify: true,
     format: 'iife',
-    outfile: 'dist/extension-guard-friction.js',
+    outfile: OUT + '/extension-guard-friction.js',
     platform: 'browser'
   });
 
@@ -95,7 +99,7 @@ async function build() {
     bundle: true,
     minify: true,
     format: 'iife',
-    outfile: 'dist/extension-guard-honeypot.js',
+    outfile: OUT + '/extension-guard-honeypot.js',
     platform: 'browser'
   });
 
@@ -108,7 +112,7 @@ async function build() {
     bundle: true,
     minify: true,
     format: 'iife',
-    outfile: 'dist/cyborg-hunter-replay.js',
+    outfile: OUT + '/cyborg-hunter-replay.js',
     platform: 'browser',
     banner: { js: `// cyborg-hunter-replay v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
   });
@@ -119,11 +123,11 @@ async function build() {
   await esbuild.build({
     entryPoints: ['src/oneliner/entry.js'],
     bundle: true, minify: true, format: 'iife', platform: 'browser',
-    outfile: 'dist/ch.js',
+    outfile: OUT + '/ch.js',
     banner: { js: `// cyborg-hunter one-line setup v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
   });
 
-  console.log('Build complete: dist/');
+  console.log('Build complete: ' + OUT + '/');
 }
 
 build().catch((e) => { console.error(e); process.exit(1); });
