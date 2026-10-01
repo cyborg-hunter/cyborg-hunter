@@ -313,12 +313,36 @@ describe('boot', () => {
   it('CyborgHunter.init() after boot logs manualInitOnOneLiner and the monitor stays open', () => {
     ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
     const ret = win.CyborgHunter.init({ participantId: 'X' });
-    assert.strictEqual(ret, win.CyborgHunter);
+    assert.ok(ret !== win.CyborgHunter, 'a monitor-shaped stand-in, not the namespace');
     assert.deepStrictEqual(errors, [MESSAGES.manualInitOnOneLiner()]);
     assert.strictEqual(ctx.segmenter.state().open, true);
     paste('still recorded');
     assert.strictEqual(ctx.monitor.getSessionReport().pasteCount, 1);
     assert.strictEqual(ctx.monitor.getSessionReport().config.participantId, 'P1');
+  });
+
+  // Half-migrated standalone code: the core's documented monitor calls on
+  // what init() returned. None of them may throw, and none may drive ch.js's
+  // monitor (startTrial/endTrial are the monitor's, not the namespace's
+  // mark()); endTrial() returns a fresh object the caller may write to.
+  it('half-migrated standalone code on init()\'s return runs without throwing and leaves ch.js\'s segments alone', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    const before = ctx.segmenter.state();
+    const m = win.CyborgHunter.init({ participantId: 'X' });
+    m.startSession();
+    m.startTrial({ trialId: 'q1' });
+    const r = m.endTrial();
+    r.foo = 1;
+    assert.ok(m.endTrial() !== r, 'a fresh object per call');
+    assert.deepStrictEqual(m.getSessionReport(), {});
+    assert.deepStrictEqual(m.getSessionScore(), {});
+    assert.strictEqual(m.shouldScreenout(), false);
+    m.destroy();
+    assert.deepStrictEqual(ctx.segmenter.state(), before);
+    assert.strictEqual(typeof m.mark, 'function', 'the namespace members are still reachable');
+    assert.deepStrictEqual(errors, [MESSAGES.manualInitOnOneLiner()]);
+    paste('still recorded');
+    assert.strictEqual(ctx.monitor.getSessionReport().pasteCount, 1);
   });
 
   // Manual mode with ch.js alone (no cyborg-hunter.min.js after it): the
@@ -430,7 +454,18 @@ describe('public namespace', () => {
     const blob = api.data();
     assert.deepStrictEqual(blob.trials, []);
     assert.match(blob.cyborgHunterError, /did not start/);
-    assert.strictEqual(api.init({ participantId: 'X' }), api);
+    // init() hands out a monitor-shaped stand-in (half-migrated standalone code).
+    const m = api.init({ participantId: 'X' });
+    assert.ok(m !== api);
+    m.startSession();
+    m.startTrial({ trialId: 'q1' });
+    const r = m.endTrial();
+    r.foo = 1;
+    assert.ok(m.endTrial() !== r, 'a fresh object per call');
+    assert.deepStrictEqual(m.getSessionReport(), {});
+    assert.deepStrictEqual(m.getSessionScore(), {});
+    assert.strictEqual(m.shouldScreenout(), false);
+    m.destroy();
     // A timeline node jsPsych skips (conditional_function false): pushing it
     // into the timeline neither runs friction nor adds a row.
     const node = api.frictionEntryTrial();

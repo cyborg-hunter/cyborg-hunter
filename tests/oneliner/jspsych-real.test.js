@@ -320,6 +320,33 @@ describe('ch.js on real jsPsych: ch.js did not start, the experiment still runs'
     assert.deepStrictEqual(warns, [MESSAGES.notRunning()]);
   });
 
+  // A manual page (cyborg-hunter.min.js swapped for ch.js, the researcher's
+  // extension kept) whose ch.js failed: the extension's initialize() calls
+  // window.CyborgHunter.init() on the inert namespace and then the monitor's
+  // startSession(), on_finish its endTrial(), and finalize() its
+  // getSessionReport() and destroy(). The timeline must still run to its end.
+  it('boot fails on a manual page: the researcher\'s extension runs the timeline to completion', async () => {
+    const r = boot({ script: { dataset: { participantId: 'P1' } }, win, monitorFactory: () => { throw new Error('kaboom'); } });
+    assert.strictEqual(r, null);
+    let saved = null;
+    const jsPsych = win.initJsPsych({
+      extensions: [{ type: CyborgHunterExtension, params: {} }],
+      on_finish: () => {
+        jsPsych.extensions['cyborg-hunter'].finalize();
+        saved = jsPsych.data.get().values();
+      }
+    });
+    const rows = await runTimeline(jsPsych, [
+      { type: Timer, extensions: named({ trialId: 'm1' }) },
+      callFunction(),
+      { type: Timer, extensions: named({ trialId: 'm2' }) }
+    ]);
+    assert.equal(rows.length, 3, 'every trial ran');
+    assert.ok(saved, 'the researcher\'s save after finalize() ran');
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('kaboom')]);
+    assert.deepStrictEqual(warns, [MESSAGES.notRunning()]);
+  });
+
   it('a failure after the jsPsych wrap: the wrap is replaced by the inert one', async () => {
     Object.defineProperty(win, 'CyborgHunter', { configurable: true, get() { return undefined; }, set() { throw new Error('locked'); } });
     try {

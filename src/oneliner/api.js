@@ -16,8 +16,8 @@
 //                           null, with a warning, when replay is off or not
 //                           started yet (replay-loader.js)
 //   frictionEntryTrial(opts)   GuardFriction.createEntryTrial(opts)
-//   init(cfg)               logs manualInitOnOneLiner, returns the namespace;
-//                           in manual mode, the core init(cfg)
+//   init(cfg)               logs manualInitOnOneLiner, returns inertMonitor(api)
+//                           (below); in manual mode, the core init(cfg)
 //   preventTextSelection, addHoneypot, setAltText   (core static helpers)
 // }
 // buildInertApi() → the same members, inert (ch.js failed; see below).
@@ -34,6 +34,27 @@ import { preventTextSelection, addHoneypot, setAltText } from '../core/signals/d
 import { MESSAGES } from './errors.js';
 
 var VANILLA_ONLY = '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych trials are segmented automatically';
+
+// What init() returns when it must not start a second monitor: a copy of the
+// namespace with the core monitor's documented methods as no-ops, so
+// half-migrated standalone code (CyborgHunter.init(cfg).startSession(), …
+// .endTrial().foo = 1, a manual jsPsych extension on a failed ch.js) runs on
+// without throwing and without driving ch.js's monitor. startTrial/endTrial
+// shadow the namespace's mark() aliases on purpose. A plain copy, not
+// Object.create(api): the namespace is frozen, and assigning over an
+// inherited read-only property (startTrial, endTrial) throws. endTrial()
+// returns a fresh object each call (the manual extension writes to it).
+function inertMonitor(api) {
+  return Object.assign({}, api, {
+    startSession: function () {},
+    startTrial: function () {},
+    endTrial: function () { return {}; },
+    getSessionReport: function () { return {}; },
+    getSessionScore: function () { return {}; },
+    shouldScreenout: function () { return false; },
+    destroy: function () {}
+  });
+}
 
 export function buildPublicApi(ctx) {
   function handler(name) {
@@ -72,7 +93,7 @@ export function buildPublicApi(ctx) {
     init: function (cfg) {
       if (ctx.host === 'manual') return coreInit(cfg);
       console.error(MESSAGES.manualInitOnOneLiner());
-      return api;
+      return inertMonitor(api);
     },
     preventTextSelection: preventTextSelection,
     addHoneypot: addHoneypot,
@@ -89,7 +110,8 @@ export function buildPublicApi(ctx) {
 //   data()     { libraryVersion, trials: [], cyborgHunterError }, so a save
 //              of it still parses and says why it is empty
 //   replay()   null (as when replay is off)
-//   init()     the namespace itself (as the one-liner's init() outside manual mode)
+//   init()     inertMonitor(api) (as the one-liner's init() outside manual
+//              mode), so a manual extension or standalone code runs on
 //   frictionEntryTrial()   a timeline node jsPsych skips (conditional_function
 //              false): no row, and friction is not started with nothing to
 //              stop it at the end
@@ -120,7 +142,7 @@ export function buildInertApi() {
     frictionEntryTrial: noted(function () {
       return { timeline: [{ type: Skipped }], conditional_function: function () { return false; } };
     }),
-    init: noted(function () { return api; }),
+    init: noted(function () { return inertMonitor(api); }),
     preventTextSelection: preventTextSelection,
     addHoneypot: addHoneypot,
     setAltText: setAltText
