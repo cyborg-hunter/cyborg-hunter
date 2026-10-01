@@ -25,7 +25,8 @@ async function build() {
   // esbuild's globalName handles the global. The footer adds the
   // backward-compat IntegrityMonitor alias and the double-load sentinel
   // shared with dist/ch.js (window.__cyborgHunterLoaded): if ch.js already
-  // ran, it logs the catalogue's double-load error (src/oneliner/errors.js).
+  // ran, it logs the catalogue's double-load error; if another copy of this
+  // bundle set it, the neutral loaded-twice error (src/oneliner/errors.js).
   await esbuild.build({
     entryPoints: ['src/core/index.js'],
     bundle: true,
@@ -35,8 +36,10 @@ async function build() {
     outfile: 'dist/cyborg-hunter.min.js',
     platform: 'browser',
     banner: { js: `// cyborg-hunter v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` },
-    footer: { js: 'if(typeof window!=="undefined"){if(window.__cyborgHunterLoaded){console.error(' +
+    footer: { js: 'if(typeof window!=="undefined"){if(window.__cyborgHunterLoaded==="ch.js"){console.error(' +
       JSON.stringify(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')) +
+      ')}else if(window.__cyborgHunterLoaded){console.error(' +
+      JSON.stringify(MESSAGES.coreLoadedTwice()) +
       ')}else{window.__cyborgHunterLoaded="cyborg-hunter.min.js"}window.IntegrityMonitor=CyborgHunter;}' }
   });
 

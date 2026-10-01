@@ -954,6 +954,9 @@ export function exitFullscreenFnOf(doc) {
             active: state.active,
             in_violation: !!state.currentViolation,
             current_reason: state.currentViolation ? state.currentViolation.reason : null,
+            // true while violations are only logged (no curtain); the entry
+            // trial switches it off — enforcement starts at that mark.
+            observe_only: state.observeOnly,
         };
     }
 
@@ -981,7 +984,11 @@ export function exitFullscreenFnOf(doc) {
                 logDebug('entry_trial.on_finish', { diagnostics: getDiagnostics() });
                 requestFullscreen();
                 _setTimeout(() => {
-                    const token = start({ jsPsych: state.jsPsych });
+                    // observeOnly: false explicitly — start() keeps the prior
+                    // value when the option is absent, so a session started
+                    // observe-only (the one-liner's friction before its mark)
+                    // would otherwise never enforce from this mark on.
+                    const token = start({ jsPsych: state.jsPsych, observeOnly: false });
                     // Non-enumerable stash so the experiment's on_finish can
                     // pass the token to stop() without exposing it on a
                     // discoverable property name. configurable:true so the
@@ -1118,9 +1125,9 @@ export function exitFullscreenFnOf(doc) {
     };
 
     Object.freeze(api);
-    // A second copy of this file (a leftover <script> tag after ch.js, which
-    // bundles it) keeps the first definition instead of throwing
-    // "Cannot redefine property".
+    // A second copy of this core on the page (ch.js bundles it, so ch.js plus
+    // this file's own <script> tag, in either order) keeps the first
+    // definition instead of throwing "Cannot redefine property".
     if (!global.GuardFriction) {
         Object.defineProperty(global, 'GuardFriction', {
             value: api,
@@ -1128,7 +1135,7 @@ export function exitFullscreenFnOf(doc) {
             configurable: false,
         });
     } else {
-        console.error('[cyborg-hunter] Not redefining GuardFriction: extension-guard-friction.js was loaded after a bundle that already contains it. Fix: remove the second <script> tag (ch.js already contains the friction guard). https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/advanced-integration.md#double-load');
+        console.error('[cyborg-hunter] Not redefining GuardFriction: GuardFriction is already defined, so two scripts on this page include the friction guard. Fix: keep one of them (ch.js already contains the friction guard). https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/advanced-integration.md#double-load');
     }
 })(window);
 // ----- jsPsych extension adapter -----

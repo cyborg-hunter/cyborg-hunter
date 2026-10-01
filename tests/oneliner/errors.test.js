@@ -35,6 +35,16 @@ const CASES = {
     fix: 'remove the init()/startTrial()/endTrial() code, or switch to cyborg-hunter.min.js for manual mode',
     link: DOCS + 'advanced-integration.md#manual-mode'
   },
+  unknownPreset: {
+    args: ['stric'],
+    fix: 'use permissive, standard or strict',
+    link: DOCS + 'quickstart.md#configuration'
+  },
+  coreLoadedTwice: {
+    args: [],
+    fix: 'keep one <script> tag',
+    link: DOCS + 'advanced-integration.md#double-load'
+  },
   bootFailed: {
     args: ['boom'],
     fix: 'open an issue with this message and your <script> tag',
@@ -103,9 +113,24 @@ describe('loud errors in the existing bundles', () => {
     });
   }
 
-  it('build.js takes the min.js double-load message from the catalogue', () => {
+  it('build.js takes the min.js double-load messages from the catalogue', () => {
     const src = read('build.js');
     assert.match(src, /import \{ MESSAGES \} from '\.\/src\/oneliner\/errors\.js'/);
     assert.match(src, /MESSAGES\.doubleLoad\('ch\.js', 'cyborg-hunter\.min\.js'\)/);
+    assert.match(src, /MESSAGES\.coreLoadedTwice\(\)/);
+  });
+
+  // "loaded after ch.js" is only true when the sentinel is ch.js's own; a
+  // second copy of min.js gets the neutral loaded-twice message instead.
+  it('build.js: the min.js footer branches on which bundle set the sentinel', () => {
+    const src = read('build.js');
+    assert.match(src, /window\.__cyborgHunterLoaded==="ch\.js"\)\{console\.error\(' \+\s*JSON\.stringify\(MESSAGES\.doubleLoad\(/);
+    assert.match(src, /\}else if\(window\.__cyborgHunterLoaded\)\{console\.error\(' \+\s*JSON\.stringify\(MESSAGES\.coreLoadedTwice\(\)\)/);
+  });
+
+  it('the core-loaded-twice message does not claim a load order', () => {
+    const msg = MESSAGES.coreLoadedTwice();
+    assert.ok(msg.startsWith('[cyborg-hunter] cyborg-hunter.min.js is loaded twice: '), msg);
+    assert.ok(!msg.includes('after'), msg);
   });
 });

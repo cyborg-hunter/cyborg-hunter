@@ -162,6 +162,32 @@ describe('boot', () => {
     assert.strictEqual(ctx.monitor.getSessionReport().config.participantId, 'P1');
   });
 
+  // On the jsPsych host the injected guard extensions own the guards: their
+  // initialize() calls GuardHoneypot.init and friction's setJsPsych. Boot
+  // starting them too would init the honeypot twice (the second init resets
+  // its violation log) and leave friction observe-only past its entry trial.
+  it('jsPsych host: boot leaves both guards to the jsPsych extensions', async () => {
+    const calls = [];
+    win.initJsPsych = function () {};
+    win.GuardHoneypot = { init: () => calls.push('honeypot.init') };
+    win.GuardFriction = { start: () => { calls.push('friction.start'); return 'T'; }, onViolation: () => () => {} };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'honeypot,friction' }), win });
+    await Promise.resolve();
+    assert.strictEqual(ctx.host, 'jspsych');
+    assert.deepStrictEqual(calls, []);
+    assert.strictEqual(win._guardFrictionToken, undefined);
+  });
+
+  it('vanilla host: boot starts the honeypot and friction observe-only', async () => {
+    const calls = [];
+    win.GuardHoneypot = { init: (o) => calls.push(['honeypot.init', o.jsPsych]) };
+    win.GuardFriction = { start: (o) => { calls.push(['friction.start', o.observeOnly]); return 'T'; }, onViolation: () => () => {} };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'honeypot,friction' }), win });
+    await Promise.resolve();
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.deepStrictEqual(calls, [['honeypot.init', null], ['friction.start', true]]);
+  });
+
   it('starts the honeypot guard by default', () => {
     const calls = [];
     win.GuardHoneypot = { init: (o) => calls.push(o) };
@@ -277,8 +303,9 @@ describe('guards', () => {
   });
 });
 
-// A leftover extension-guard-*.js tag after ch.js (which bundles both guard
-// cores) used to throw "Cannot redefine property". Each core now keeps the
+// A second copy of a guard core (ch.js bundles both, so ch.js plus an
+// extension-guard-*.js tag, in either order) used to throw "Cannot redefine
+// property". Each core now keeps the
 // first definition and logs one loud error instead. The query string makes
 // Node evaluate the module a second time, like a second <script> tag.
 describe('guard cores on a second load', () => {
@@ -294,8 +321,10 @@ describe('guard cores on a second load', () => {
         await assert.doesNotReject(import(base + '?load=second-' + name));
         assert.strictEqual(win[name], first);
         assert.strictEqual(errors.length, 1);
-        assert.match(errors[0], new RegExp('^\\[cyborg-hunter\\] Not redefining ' + name + ': ' + file.replace(/\./g, '\\.') +
-          ' was loaded after a bundle that already contains it\\. Fix: remove the second <script> tag .+\\. https://.+advanced-integration\\.md#double-load$'));
+        // Order-neutral: ch.js may be the first or the second copy.
+        assert.match(errors[0], new RegExp('^\\[cyborg-hunter\\] Not redefining ' + name + ': ' + name +
+          ' is already defined, so two scripts on this page include the .+\\. Fix: keep one of them .+\\. https://.+advanced-integration\\.md#double-load$'));
+        assert.ok(!errors[0].includes('loaded after'), errors[0]);
       } finally {
         delete global.Document;
         delete global.requestAnimationFrame;

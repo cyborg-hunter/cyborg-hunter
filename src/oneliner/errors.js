@@ -28,6 +28,14 @@ export const MESSAGES = {
       'load only one of ch.js and cyborg-hunter.min.js (the one-liner already contains the monitor)',
       DOCS + 'advanced-integration.md#double-load');
   },
+  // min.js's own sentinel found by a second copy of min.js: nothing to say
+  // about ch.js, and no load order to claim.
+  coreLoadedTwice: function () {
+    return formatError('cyborg-hunter.min.js is loaded twice',
+      'two <script> tags on this page load the monitor bundle',
+      'keep one <script> tag',
+      DOCS + 'advanced-integration.md#double-load');
+  },
   notHookable: function () {
     return formatError('Not monitoring jsPsych trials', 'ch.js loaded after initJsPsych() ran',
       'move the ch.js <script> above your experiment code (and below jspsych.js)',
@@ -52,6 +60,13 @@ export const MESSAGES = {
       'ch.js already created the monitor at page load',
       'remove the init()/startTrial()/endTrial() code, or switch to cyborg-hunter.min.js for manual mode',
       DOCS + 'advanced-integration.md#manual-mode');
+  },
+  // console.warn, not error: the monitor still runs, on the standard preset.
+  unknownPreset: function (value) {
+    return formatError('Unknown preset "' + value + '"',
+      'data-preset / CyborgHunterConfig.preset must be permissive, standard or strict; using standard',
+      'use permissive, standard or strict',
+      DOCS + 'quickstart.md#configuration');
   },
   bootFailed: function (msg) {
     return formatError('Cyborg Hunter did not start', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');

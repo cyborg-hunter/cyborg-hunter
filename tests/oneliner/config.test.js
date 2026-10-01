@@ -4,6 +4,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { readConfig, DATA_KEYS } from '../../src/oneliner/config.js';
+import { MESSAGES } from '../../src/oneliner/errors.js';
 
 let warns, origWarn;
 beforeEach(() => { warns = []; origWarn = console.warn; console.warn = (m) => warns.push(String(m)); });
@@ -69,6 +70,17 @@ describe('readConfig', () => {
     assert.deepStrictEqual(readConfig({ dataset: { replay: 'dom' } }).replay, { tier: 'dom' });
     assert.deepStrictEqual(readConfig({ dataset: { replay: 'full' } }).replay, { tier: 'trace' });
     assert.ok(warns.some((w) => w.includes('full')), warns.join('\n'));
+  });
+
+  it("preset is case-insensitive: 'Strict' → strict, no warning", () => {
+    assert.strictEqual(readConfig({ dataset: { preset: 'Strict' } }).preset, 'strict');
+    assert.strictEqual(readConfig({ dataset: {}, globalConfig: { preset: ' PERMISSIVE ' } }).preset, 'permissive');
+    assert.deepStrictEqual(warns, []);
+  });
+
+  it("an unknown preset ('stric') warns in the catalogue format and falls back to standard", () => {
+    assert.strictEqual(readConfig({ dataset: { preset: 'stric' } }).preset, 'standard');
+    assert.deepStrictEqual(warns, [MESSAGES.unknownPreset('stric')]);
   });
 
   it('data-debug="false" turns debug off', () => {

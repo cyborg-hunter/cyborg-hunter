@@ -4,7 +4,10 @@
 // A tag attribute wins over the same key in CyborgHunterConfig.
 //
 // readConfig({ dataset, globalConfig }) → {
-//   preset,                                  'standard' unless set
+//   preset,                                  permissive | standard | strict,
+//                                            case-insensitive; 'standard' when
+//                                            unset; an unknown value warns
+//                                            (unknownPreset) and is 'standard'
 //   participantIdAttr,                       data-participant-id, or null
 //   guards: { honeypot, friction },          data-guards: comma list of
 //                                            honeypot | friction | none;
@@ -21,11 +24,14 @@
 // autoMonitor and excludeTrialTypes are dropped with a warning: the one-liner
 // monitors every trial.
 
+import { MESSAGES } from './errors.js';
+
 export const DATA_KEYS = ['preset', 'participantId', 'guards', 'replay', 'replaySrc', 'debug'];
 
 var ONE_LINER_KEYS = ['preset', 'guards', 'replay', 'replaySrc', 'debug'];
 var REMOVED_KEYS = ['autoMonitor', 'excludeTrialTypes'];
 var GUARD_NAMES = ['honeypot', 'friction'];
+var PRESETS = ['permissive', 'standard', 'strict'];
 
 function has(obj, key) {
   return !!obj && obj[key] !== undefined && obj[key] !== null;
@@ -50,6 +56,16 @@ function parseGuards(v) {
     out[name] = true;
   });
   return out;
+}
+
+// init() would reject an unknown preset outright (and boot would fail), so a
+// typo like "stric" or "Strict" must not reach it.
+function parsePreset(v) {
+  if (v === undefined || v === '') return 'standard';
+  var name = String(v).trim().toLowerCase();
+  if (PRESETS.indexOf(name) !== -1) return name;
+  console.warn(MESSAGES.unknownPreset(v));
+  return 'standard';
 }
 
 function parseReplay(v) {
@@ -87,7 +103,7 @@ export function readConfig(opts) {
   var replay = pick('replay');
   var debug = pick('debug');
   return {
-    preset: pick('preset') || 'standard',
+    preset: parsePreset(pick('preset')),
     participantIdAttr: has(dataset, 'participantId') ? dataset.participantId : null,
     guards: guards === undefined ? { honeypot: true, friction: false } : parseGuards(guards),
     replay: replay === undefined ? null : parseReplay(replay),

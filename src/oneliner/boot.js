@@ -7,9 +7,14 @@
 //   4. a monitor, its session started, kept inside a trial by the segmenter
 //      from this moment on ('span-0'), so a paste before the first host
 //      trial is still recorded;
-//   5. guards (honeypot on by default, friction observe-only when enabled);
-//   6. host: 'jspsych' when initJsPsych is already defined, else 'vanilla'
+//   5. host: 'jspsych' when initJsPsych is already defined, else 'vanilla'
 //      (the host adapters install their hooks into ctx.handlers);
+//   6. guards, vanilla host only (honeypot on by default, friction
+//      observe-only when enabled). On the jsPsych host the injected guard
+//      extensions own them: their initialize() runs GuardHoneypot.init and
+//      friction's setJsPsych / injectRefusalNotices, and the entry trial
+//      starts enforcement. Starting them here too would init the honeypot
+//      twice (the second init resets its violation log);
 //   7. window.CyborgHunter = the one-liner namespace, then the sentinel.
 //
 // boot({ script, win, monitorFactory?, participantParams? }) → ctx | null
@@ -63,7 +68,10 @@ export function boot(opts) {
     var started = segmenter.start({ trialId: 'span-0' });
     if (started && started.error) throw new Error('could not open the first trial: ' + started.error);
 
-    startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
+    var host = typeof win.initJsPsych === 'function' ? 'jspsych' : 'vanilla';
+    if (host === 'vanilla') {
+      startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
+    }
 
     var ctx = {
       config: config,
@@ -72,7 +80,7 @@ export function boot(opts) {
       monitor: monitor,
       differ: differ,
       segmenter: segmenter,
-      host: typeof win.initJsPsych === 'function' ? 'jspsych' : 'vanilla',
+      host: host,
       scriptSrc: (script && script.src) || null,
       handlers: {},
       win: win,
