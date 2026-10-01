@@ -92,7 +92,7 @@ export const MESSAGES = {
   frictionEntryWithoutFriction: function () {
     return formatError('Friction is only partly set up',
       'the timeline has friction\'s entry trial but data-guards does not enable friction',
-      'add friction to data-guards (for example data-guards="honeypot friction"), or remove the entry trial',
+      'add friction to data-guards (for example data-guards="honeypot,friction"), or remove the entry trial',
       DOCS + 'known-issues.md#one-line-setup');
   },
   // Vanilla host: a mark click, a form submit or pagehide. The page carries on;
@@ -106,7 +106,7 @@ export const MESSAGES = {
   frictionStartWithoutFriction: function () {
     return formatError('Friction is only partly set up',
       'friction was started (data-ch-friction-start or CyborgHunter.startFriction()) but data-guards does not enable friction',
-      'add friction to data-guards (for example data-guards="honeypot friction"), or remove the friction start',
+      'add friction to data-guards (for example data-guards="honeypot,friction"), or remove the friction start',
       DOCS + 'known-issues.md#one-line-setup');
   },
   // console.warn, once per page, vanilla host: the whole session is kept in

@@ -13,6 +13,7 @@
 //   params:  ordered URL parameter names; the caller supplies the list
 //   random:  () => string, called only when nothing else is found
 //   source:  'url:<param>' | 'attribute' | 'config' | 'random'
+//            (boot.js adds 'session': a random id kept from an earlier page)
 
 // The URL parameter names boot.js reads by default, in order of precedence.
 export const DEFAULT_PARAMS = [];

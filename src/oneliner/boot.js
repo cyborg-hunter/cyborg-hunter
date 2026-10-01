@@ -58,7 +58,9 @@ import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, watchHostPlacement } from './adapters/jspsych.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
 
-var PID_KEY = 'cyborg-hunter:oneliner:participantId';
+// Not under the session prefix (adapters/vanilla.js, cyborg-hunter:oneliner:
+// session:<id>), so no participant id can collide with it.
+var PID_KEY = 'cyborg-hunter:oneliner:pid';
 
 function sessionGet(win, key) {
   try { return win.sessionStorage.getItem(key); } catch (_) { return null; }
@@ -159,7 +161,10 @@ function startMonitoring(ctx) {
   if (started && started.error) throw new Error('could not open the first trial: ' + started.error);
 }
 
-// The deferred session start failed. The monitor is destroyed and the
+// The deferred session start failed. The segmenter is abandoned first (it
+// closes a span the failure left open while the monitor is still alive, and
+// latches, so a later cut() or finish() neither touches the destroyed
+// monitor nor replaces the marker below). The monitor is destroyed and the
 // failure logged once; ctx.bootError keeps the placement check from taking
 // the page for one ch.js could not hook. Then:
 //   vanilla  the adapter stays (cut() does nothing without an open span), so
@@ -173,6 +178,7 @@ function startMonitoring(ctx) {
 function failDeferred(ctx, adapter, e) {
   var msg = String((e && e.message) || e);
   ctx.bootError = msg;
+  try { ctx.segmenter.abandon(); } catch (_) { /* already failing */ }
   try { ctx.monitor.destroy(); } catch (_) { /* already failing */ }
   console.error(MESSAGES.bootFailed(msg));
   try {

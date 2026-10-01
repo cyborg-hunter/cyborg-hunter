@@ -72,7 +72,7 @@ const CASES = {
   },
   frictionEntryWithoutFriction: {
     args: [],
-    fix: 'add friction to data-guards (for example data-guards="honeypot friction"), or remove the entry trial',
+    fix: 'add friction to data-guards (for example data-guards="honeypot,friction"), or remove the entry trial',
     link: DOCS + 'known-issues.md#one-line-setup'
   },
   secondJsPsychInstance: {
@@ -87,7 +87,7 @@ const CASES = {
   },
   frictionStartWithoutFriction: {
     args: [],
-    fix: 'add friction to data-guards (for example data-guards="honeypot friction"), or remove the friction start',
+    fix: 'add friction to data-guards (for example data-guards="honeypot,friction"), or remove the friction start',
     link: DOCS + 'known-issues.md#one-line-setup'
   },
   storageNearlyFull: {

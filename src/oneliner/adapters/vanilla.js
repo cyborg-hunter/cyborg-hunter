@@ -6,8 +6,8 @@
 //               CyborgHunter.mark(id) / startTrial({ trialId }) / endTrial():
 //               the open span becomes a 'manual' segment, the next span is
 //               named id (or span-<index> without one);
-//   page loads  a <form> submit and pagehide: the open span becomes a 'page'
-//               segment.
+//   page loads  a <form> submit (event or form.submit()) and pagehide: the
+//               open span becomes a 'page' segment.
 // Each segment becomes one row of a Shape-1 blob, the shape the CLI already
 // reads (extract-core.js, Shape 1 + the 5th session convention):
 //   { participantId, libraryVersion, cyborgHunterOneLiner: { version, host, pageCount },
@@ -16,15 +16,18 @@
 //                integrityAnyHardTriggered, cyborgHunterError? }],
 //     ...honeypot session summary (when the honeypot is on) }
 // The blob reaches the researcher's data two ways: a hidden input named
-// cyborgHunterData in the form being submitted (not cyborgHunter: raw
+// cyborgHunterData in the POST form being submitted (not cyborgHunter: raw
 // .cyborgHunter is an older CLI convention expecting a session report), and
-// CyborgHunter.data(), which closes the current segment first.
+// CyborgHunter.data(), which closes the current segment first. A GET form
+// gets no input: the blob, often megabytes, would go into the URL; its page
+// still saves the session for the next page.
 //
 // Several pages. Every page load runs a new monitor whose performance.now()
 // starts at 0 again. The accumulated blob is kept in sessionStorage (per tab;
 // not the core's storage helpers, which are localStorage-first and would leak
 // into the next participant on a shared browser) under
-// cyborg-hunter:oneliner:<participantId>, so the next page continues the
+// cyborg-hunter:oneliner:session:<participantId> (boot.js keeps the id itself
+// under cyborg-hunter:oneliner:pid), so the next page continues the
 // segment index and the last page's form carries the whole session. Each
 // segment records its page origin (performance.timeOrigin); the CLI re-bases
 // later pages onto the first page's clock. The honeypot's violation log is
@@ -35,7 +38,9 @@
 // span, so pagehide only persists; without that the post would write an empty
 // extra segment. A submit the page cancels (validation) leaves the page
 // alive, so pagehide cuts again. form.requestSubmit() fires submit as a click
-// does; form.submit() fires no submit event, only formdata (see onFormData).
+// does; form.submit() fires no submit event, so HTMLFormElement.prototype
+// .submit is wrapped to do the same work just before the browser's submit
+// (see wrappedSubmit).
 //
 // A page shown again from the back/forward cache (pageshow with persisted)
 // keeps its monitor and this adapter's memory from before it was left; it
@@ -47,8 +52,8 @@
 // cyborgHunterError saying the earlier pages are only in their own saves.
 // Such notes travel on to every later page (record field `errors`).
 //
-// Listeners go on document and window, which exist while ch.js runs in
-// <head>; nothing here needs <body> before a click or a submit. The guards
+// Listeners go on document and window (and the submit() wrap on the form
+// prototype), which exist while ch.js runs in <head>; nothing here needs <body> before a click or a submit. The guards
 // (honeypot bait, friction) wait for DOMContentLoaded in guards.js.
 //
 // installVanillaAdapter({ win, ctx, clock?, warnChars? }) → {
@@ -64,7 +69,7 @@
 import { VERSION } from '../../shared/constants.js';
 import { MESSAGES } from '../errors.js';
 
-var KEY_PREFIX = 'cyborg-hunter:oneliner:';
+var KEY_PREFIX = 'cyborg-hunter:oneliner:session:';
 var WARN_CHARS = 4000000;
 var HIDDEN_INPUT = 'cyborgHunterData';
 var FULLSCREEN_SETTLE_MS = 100;   // the friction entry trial's own delay before start()
@@ -95,6 +100,7 @@ export function installVanillaAdapter(opts) {
   var restored = false;
   var submitted = false;        // this page's span was closed by a form submit
   var warnedSize = false;
+  var noticedGet = false;       // the GET-form console.info, once per page
   var notes = [];               // cyborgHunterError notes, this page's and earlier pages'
 
   function readState() {
@@ -273,55 +279,84 @@ export function installVanillaAdapter(opts) {
     }
   }
 
+  function effectiveMethod(form, submitter) {
+    return String((submitter && submitter.formMethod) || form.method || 'get').toLowerCase();
+  }
+
+  // The work of a form submit: close the span, save the session, and put the
+  // blob into a POST form's hidden input. `cutSpan` false keeps the span as it
+  // is (form.submit() called right after a submit event closed it).
+  function carry(form, submitter, cutSpan) {
+    if (cutSpan) cut('page');
+    submitted = true;
+    persist();
+    if (!form || typeof form.querySelector !== 'function') return;
+    var input = form.querySelector('input[name="' + HIDDEN_INPUT + '"]');
+    if (effectiveMethod(form, submitter) !== 'post') {
+      if (input) input.parentNode.removeChild(input);   // left by an earlier POST submit of this form
+      if (!noticedGet) {
+        noticedGet = true;
+        console.info('[cyborg-hunter] A GET form was submitted: its data does not get cyborgHunterData (it would go into the URL). The session is kept for the next page and CyborgHunter.data().');
+      }
+      return;
+    }
+    if (!input) {
+      input = doc.createElement('input');
+      input.type = 'hidden';
+      input.name = HIDDEN_INPUT;
+      form.appendChild(input);
+    }
+    input.value = JSON.stringify(blob());
+  }
+
   // Capture phase on document: runs before the page's own submit handlers,
   // so a FormData built there already holds the value.
   function onSubmit(ev) {
     try {
-      var form = ev.target;
-      cut('page');
-      submitted = true;
       // A cancelled submit (validation) keeps the page, so its next pagehide
       // must cut. Decided once the page's own handlers have run; a bubble
       // listener would miss a page that stops the event's propagation.
       win.setTimeout(function () { if (ev.defaultPrevented) submitted = false; }, 0);
-      persist();
-      if (!form || typeof form.querySelector !== 'function') return;
-      var input = form.querySelector('input[name="' + HIDDEN_INPUT + '"]');
-      if (!input) {
-        input = doc.createElement('input');
-        input.type = 'hidden';
-        input.name = HIDDEN_INPUT;
-        form.appendChild(input);
-      }
-      input.value = JSON.stringify(blob());
+      carry(ev.target, ev.submitter, true);
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
     }
   }
 
-  // form.submit() posts without a submit event; building its entry list
-  // fires formdata, so the blob goes along (with the segments cut so far:
-  // nothing is cut here, since new FormData(form) fires formdata too; the
-  // following pagehide cuts and saves this page's last span for the next
-  // page). After a submit event the hidden input is already in the list.
-  function onFormData(ev) {
-    try {
-      var fd = ev.formData;
-      if (fd && typeof fd.has === 'function' && !fd.has(HIDDEN_INPUT)) fd.set(HIDDEN_INPUT, JSON.stringify(blob()));
-    } catch (e) {
-      console.error(MESSAGES.vanillaEventFailed(message(e)));
+  // form.submit() fires no submit event. The wrap does the submit's work for
+  // that form just before the browser's submit() builds the entry list, so
+  // the post carries the blob with this page's open span. When a submit event
+  // has just closed the span (a page handler that calls form.submit()), it
+  // is not cut again. this, the arguments and the return value pass through,
+  // and the browser's submit() always runs. Not covered: submit() on a form
+  // in another frame (its own HTMLFormElement.prototype), or a reference to
+  // the original submit() the page took before ch.js ran. requestSubmit()
+  // and submit buttons do not go through submit(); they fire the event.
+  var formProto = win.HTMLFormElement && win.HTMLFormElement.prototype;
+  var nativeSubmit = formProto && typeof formProto.submit === 'function' ? formProto.submit : null;
+  var active = true;
+  function wrappedSubmit() {
+    if (active) {
+      try {
+        carry(this, null, !submitted);
+      } catch (e) {
+        console.error(MESSAGES.vanillaEventFailed(message(e)));
+      }
     }
+    return nativeSubmit.apply(this, arguments);
   }
 
   // Back/forward cache: see the header. Without a usable record (storage
-  // blocked) the page keeps what it had in memory.
+  // blocked) the page keeps what it had in memory; with a slim one, its
+  // trials (earlier pages' and its own) but the record's counters and notes.
   function onPageShow(ev) {
     if (!ev || !ev.persisted) return;
     try {
       submitted = false;
       var saved = readState();
       if (!usable(saved)) return;
-      trials = saved.trials.slice();
+      // A slim record (storage full) has no trials: keep the ones in memory.
+      if (!saved.storageError) trials = saved.trials.slice();
       adopt(saved);
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
@@ -340,7 +375,7 @@ export function installVanillaAdapter(opts) {
   restore();
   doc.addEventListener('click', onClick, true);
   doc.addEventListener('submit', onSubmit, true);
-  doc.addEventListener('formdata', onFormData, true);
+  if (nativeSubmit) formProto.submit = wrappedSubmit;
   win.addEventListener('pagehide', onPageHide);
   win.addEventListener('pageshow', onPageShow);
 
@@ -357,7 +392,8 @@ export function installVanillaAdapter(opts) {
     teardown: function () {
       doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('submit', onSubmit, true);
-      doc.removeEventListener('formdata', onFormData, true);
+      active = false;
+      if (nativeSubmit && formProto.submit === wrappedSubmit) formProto.submit = nativeSubmit;
       win.removeEventListener('pagehide', onPageHide);
       win.removeEventListener('pageshow', onPageShow);
       delete ctx.handlers.mark;
