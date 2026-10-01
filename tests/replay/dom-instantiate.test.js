@@ -337,7 +337,7 @@ describe('spec §12 player filters', () => {
 
   // The THIRD route to an iframe placeholder's `src`/`srcdoc`: a later
   // recorded `dom.attr`. Instantiation honours IFRAME_SKIP and `media_src`
-  // obeys it since fix round 1, but `applyAttr` went straight to
+  // obeys it as well, but `applyAttr` went straight to
   // `setFilteredAttr`, which never consulted the skip set, so a patch could
   // re-arm the placeholder. The viewer's `frame-src 'none'` CSP already
   // blocked the load; this is defence in depth, for the same reason as above.

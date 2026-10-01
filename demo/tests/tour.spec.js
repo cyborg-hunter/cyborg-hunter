@@ -50,7 +50,7 @@ const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
 // viewer has been v2-only since 0.8.0; the earlier hand-written v1-shaped
 // models (`trials`, `kind: 'keydown'`) mounted as "no segments".
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
-const V2_FIXTURES = resolve(__dirname, '..', '..', 'tests', 'replay', 'schema-v2', 'fixtures');
+const V2_FIXTURES = resolve(__dirname, '..', '..', 'packages', 'sessionrecording-conformance', 'fixtures');
 const viewerModelFromFixture = (name) =>
   buildViewerModel(JSON.parse(readFileSync(join(V2_FIXTURES, name + '.json'), 'utf8')));
 const ANSWER = 'Canberra';

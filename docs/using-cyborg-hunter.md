@@ -331,6 +331,7 @@ const rec = CyborgHunterReplay.attach({ participantId, tier: 'dom', autoSave: { 
 // … run the experiment …
 rec.stopSession('finished');
 const recording = rec.getRecording();
+// replayFilename needs 0.9.2+ (0.9.1 fallback in the note below)
 await fetch('https://your-lab-server.example/upload', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -343,13 +344,16 @@ await fetch('https://your-lab-server.example/upload', {
 await jsPsych.extensions['cyborg-hunter-replay'].finalize();
 const recording = jsPsych.extensions['cyborg-hunter-replay'].getLastRecording();
 if (recording) {
-  // POST it as above (getLastRecording() is undefined if finalize failed
+  // POST it as above (getLastRecording() is null if finalize failed
   // or the session never started)
 }
-// then, then redirect (e.g. to the Prolific completion URL) only after the upload resolves
+// then redirect (e.g. to the Prolific completion URL) only after the upload resolves
 ```
 
-- Name the file with `CyborgHunterReplay.replayFilename(recording)`
+- Name the file with `CyborgHunterReplay.replayFilename(recording)` (0.9.2+;
+  on 0.9.1 build the name as `` `${safeId}-replay-${Date.now()}.json` ``, where
+  `safeId` is the participant ID with `/[^a-zA-Z0-9_.-]/g` matches replaced by
+  `_`)
   (`<pid>-replay-<epoch>.json`). It sanitizes the participant ID the same
   way the CLI does, so the CLI can match the file to its participant by
   name; the epoch suffix keeps a reload from overwriting the earlier file.
