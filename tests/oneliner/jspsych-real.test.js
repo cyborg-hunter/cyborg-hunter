@@ -243,6 +243,39 @@ describe('ch.js on real jsPsych: a synchronous trial before a promise-returning 
   }
 });
 
+describe('ch.js on real jsPsych: per-trial params through window.jsPsychCyborgHunter (ch.js alone)', () => {
+  // The documented { type: jsPsychCyborgHunter, params } entry, with ch.js as
+  // the only Cyborg Hunter script: the global is ch.js's own class, so the
+  // entry names the trial and does not switch to manual mode, even when it is
+  // also listed in initJsPsych. (This file imports extension-cyborg-hunter.js,
+  // which sets the global; it is cleared for the boot and restored after.)
+  it('initJsPsych and trial entries of that type stay one-liner and keep their params', async () => {
+    const saved = win.jsPsychCyborgHunter;
+    delete win.jsPsychCyborgHunter;
+    try {
+      const ctx = bootCh();
+      assert.ok(win.jsPsychCyborgHunter === OneLinerExtension, 'ch.js exposed its class');
+      const jsPsych = win.initJsPsych({ extensions: [{ type: win.jsPsychCyborgHunter, params: {} }] });
+      assert.equal(ctx.host, 'jspsych', 'not manual mode');
+      const entry = () => [{ type: win.jsPsychCyborgHunter, params: { trialId: 'n1', phase: 'test' } }];
+      const t1 = { type: Timer, extensions: entry() };
+      const t2 = { type: Timer, extensions: [{ type: win.jsPsychCyborgHunter, params: { trialId: 'n2', phase: 'test' } }] };
+      const rows = await runTimeline(jsPsych, [t1, callFunction(), t2]);
+      for (const t of [t1, t2]) assert.equal(t.extensions.filter((e) => e.type.info.name === 'cyborg-hunter').length, 1);
+      assert.equal(rows.length, 3);
+      for (const [i, id] of [[0, 'n1'], [2, 'n2']]) {
+        assert.equal(rows[i].integrity.trialId, id);
+        assert.equal(rows[i].integrity.phase, 'test');
+        assert.equal(rows[i].integritySegment.trialId, id);
+      }
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.deepStrictEqual(errors, []);
+    } finally {
+      win.jsPsychCyborgHunter = saved;
+    }
+  });
+});
+
 describe('ch.js on real jsPsych: manual mode with ch.js alone', () => {
   // The researcher kept extension-cyborg-hunter.js and its initJsPsych entry
   // but loads ch.js instead of cyborg-hunter.min.js: window.CyborgHunter is

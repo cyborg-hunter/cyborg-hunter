@@ -25,7 +25,8 @@
 //   CyborgHunterConfig, or "random id (not linkable)".
 //
 // The badge never takes focus or clicks (pointer-events: none) and nothing
-// here throws into the host page.
+// here throws into the host page. update() and refresh() re-attach it when
+// the host has wiped it from the document (jsPsych's run() resets <body>).
 
 var BADGE_ID = 'ch-debug-badge';
 var BADGE_STYLE = 'position:fixed;left:8px;bottom:8px;z-index:2147483646;font:12px/1.4 system-ui;' +
@@ -88,8 +89,12 @@ export function createDebug(opts) {
       badge = doc.getElementById(BADGE_ID) || doc.createElement('div');
       badge.id = BADGE_ID;
       badge.setAttribute('style', BADGE_STYLE);
-      if (!badge.parentNode) doc.body.appendChild(badge);
     }
+    // jsPsych 7 sets display_element.innerHTML in run(), and display_element
+    // defaults to <body>, so the badge appended at boot is gone by the first
+    // trial. The same node goes back (getElementById no longer finds it, so a
+    // lookup would make a second one); under <html> if a page has no <body>.
+    if (!badge.isConnected) (doc.body || doc.documentElement).appendChild(badge);
     badge.textContent = text;
   }
 

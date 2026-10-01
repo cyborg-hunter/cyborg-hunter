@@ -182,6 +182,21 @@ describe('boot', () => {
     assert.strictEqual(ctx.segmenter.state().open, true);
   });
 
+  it('exposes the one-liner extension class as window.jsPsychCyborgHunter when no class is there yet', async () => {
+    const { OneLinerExtension } = await import('../../src/oneliner/adapters/jspsych-extension.js');
+    assert.strictEqual(win.jsPsychCyborgHunter, undefined);
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.ok(win.jsPsychCyborgHunter === OneLinerExtension, 'the one-liner class');
+  });
+
+  it('leaves window.jsPsychCyborgHunter alone when extension-cyborg-hunter.js already set it', () => {
+    class ManualCh { static info = { name: 'cyborg-hunter' }; }
+    win.jsPsychCyborgHunter = ManualCh;
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.ok(ctx);
+    assert.ok(win.jsPsychCyborgHunter === ManualCh, 'the manual class stays');
+  });
+
   it('double load: refuses to start a second monitor and leaves the namespace alone', () => {
     const existing = { from: 'min.js' };
     win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';

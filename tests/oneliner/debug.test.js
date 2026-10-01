@@ -106,6 +106,37 @@ describe('createDebug', () => {
     assert.doesNotThrow(() => d2.update());
   });
 
+  it('refresh() puts the badge back after the host wipes <body> (jsPsych prepareDom)', () => {
+    var ctx = jsCtx({ win: win });
+    var d = createDebug({ doc: win.document, ctx: ctx, log: log });
+    d.update();
+    // jsPsych 7 sets display_element.innerHTML, and display_element defaults to <body>.
+    win.document.body.innerHTML = '<div class="jspsych-content-wrapper"><div id="jspsych-content"></div></div>';
+    assert.ok(win.document.getElementById('ch-debug-badge') === null, 'wiped');
+    ctx.jspsych.segmentsWritten = 5;
+    d.refresh();
+    var b = win.document.getElementById('ch-debug-badge');
+    assert.ok(b, 'badge re-attached');
+    assert.strictEqual(win.document.querySelectorAll('#ch-debug-badge').length, 1);
+    assert.match(b.textContent, /5\/14 trials/);
+    assert.match(b.getAttribute('style'), /pointer-events:\s*none/);
+    assert.strictEqual(logs.length, 1, 'refresh() logs nothing');
+    // update() re-attaches too.
+    win.document.body.innerHTML = '';
+    d.update();
+    assert.ok(win.document.getElementById('ch-debug-badge'));
+  });
+
+  it('a detached badge goes under <html> when there is no <body>, and never throws', () => {
+    var d = createDebug({ doc: win.document, ctx: jsCtx({ win: win }), log: log });
+    d.update();
+    var b = win.document.getElementById('ch-debug-badge');
+    win.document.body.remove();
+    assert.doesNotThrow(() => d.refresh());
+    // ok(===), not strictEqual: a failing diff of two happy-dom nodes never finishes.
+    assert.ok(b.parentNode === win.document.documentElement, 'badge under <html>');
+  });
+
   it('remove() takes the badge away', () => {
     var d = createDebug({ doc: win.document, ctx: jsCtx({ win: win }), log: log });
     d.update();

@@ -34,7 +34,12 @@
 //      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla host (and
 //      on the not-hookable fallback) the standalone recorder, started after
 //      DOMContentLoaded. CyborgHunter.replay() is wired either way;
-//   9. window.CyborgHunter = the one-liner namespace, then the sentinel;
+//   9. window.CyborgHunter = the one-liner namespace; window.jsPsychCyborgHunter
+//      = OneLinerExtension unless a class is already there (the documented
+//      per-trial { type: jsPsychCyborgHunter, params } entry then works with
+//      ch.js alone; extension-cyborg-hunter.js loaded first keeps its own
+//      class, and loaded later replaces this one: manual mode either way when
+//      initJsPsych lists it); then the sentinel;
 //  10. data-debug only (debug.js): the badge and the console summary, shown
 //      once now and again when the jsPsych timeline is walked.
 //
@@ -65,6 +70,7 @@ import { startGuards } from './guards.js';
 import { buildPublicApi } from './api.js';
 import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, watchHostPlacement } from './adapters/jspsych.js';
+import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
 import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
@@ -166,6 +172,8 @@ export function boot(opts) {
       }
     });
     win.CyborgHunter = ctx.api;
+    // detectManualMode (adapters/jspsych.js) treats this class as the one-liner.
+    if (win.jsPsychCyborgHunter === undefined) win.jsPsychCyborgHunter = OneLinerExtension;
     win.__cyborgHunterLoaded = 'ch.js';
     // One console summary per page: vanilla logs once the DOM is parsed;
     // jsPsych logs from the wrapped run() (after the walk), so here it only
