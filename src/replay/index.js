@@ -181,7 +181,9 @@ export function attach(userConfig) {
 export { replayFilename, buildReplayMeta, serialize };
 
 // Browser global — same pattern as the guard extensions (explicit window
-// assignment; no esbuild globalName).
+// assignment; no esbuild globalName). replayFilename rides along so a
+// researcher saving the recording to their own server names it exactly as
+// the CLI expects (sanitized participant id), without an ES import.
 if (typeof window !== 'undefined') {
-  window.CyborgHunterReplay = { attach: attach };
+  window.CyborgHunterReplay = { attach: attach, replayFilename: replayFilename };
 }

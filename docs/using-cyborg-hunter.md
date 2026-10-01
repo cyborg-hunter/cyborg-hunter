@@ -142,7 +142,7 @@ Run the experiment locally (e.g. `python3 -m http.server 8080`), click through, 
 
 - Each trial row has columns `integrityPasteCount`, `integritySoftScore`, `cyborgHunterVersion`, etc.
 - The last row has columns `integritySession` (a JSON object with arrays of events) and `integrityScore`.
-- The `integrity` cell on each row contains a JSON object with `pasteEvents`, `mouseEvents`, `tabAwayEvents`, etc.
+- The `integrity` cell on each row contains a JSON object with `pasteEvents`, `mouseTrack`, `tabAwayEvents`, etc.
 
 If `integritySession` is missing on the last row, `finalize()` either wasn't called or ran too late (see the DataPipe note in section 3).
 
@@ -240,8 +240,8 @@ const jsPsych = initJsPsych({
 Replay finalizes **last** so it can fold CH's finalized session report into
 `extensions["cyborg-hunter"]`. Add the extension to your timeline trials the same way as
 the others. After `finalize()` the jsPsych data carries an
-`integrityReplayMeta` column ({schema_version, tier, bytes, saved_to,
-capture_failures, capture_stopped}) — enough to tell from the CSV alone
+`integrityReplayMeta` column ({schema_version, tier, bytes_uncompressed,
+saved_to, capture_failures, capture_stopped}) — enough to tell from the CSV alone
 whether an artifact exists and where it went.
 
 ### Standalone wiring
@@ -264,13 +264,16 @@ rec.destroy();
 
 | Option | Default | Meaning |
 |---|---|---|
-| `tier` | `'trace'` | `'trace'` events only; `'dom'` adds initial-DOM snapshots + a mutation log (visual replay). `'canvas'` is reserved for v0.8 and currently records at `dom` fidelity. |
+| `participantId` | `'unknown'` | Written to the recording's `participant_id` and used (sanitized) in the artifact filename; the CLI attaches the replay to the participant by it. Set it to the same ID your data file uses. |
+| `tier` | `'trace'` | `'trace'` events only; `'dom'` adds initial-DOM snapshots + a mutation log (visual replay). `'canvas'` is reserved for a future canvas tier and currently records at `dom` fidelity. |
 | `keys` | `'full'` | `'full'` records key identity; `'off'` records no key events. Password fields never record identity or content regardless. |
 | `mouseHz` | `30` | mousemove sampling ceiling. |
 | `redactSelector` | `[data-ch-redact]` | Matching inputs record value length only. `input[type=password]` is always redacted, not overridable. |
+| `clipboardContent` | `false` | Copy/cut/paste/drop events record text length only. `true` records the clipboard text and HTML instead (the jsPsych recorder's behaviour). Fields matching `redactSelector` and password inputs stay length-only either way. |
 | `keepBait` | `false` | Keep honeypot/decoy nodes in DOM captures (red-team analysis). |
 | `root` | `document.body` | Capture root for the DOM tier. |
-| `autoSave.mode` | `'none'` | `'datapipe'` (needs `experimentId`), `'download'` (participant's machine — piloting only), `'none'` (call `getRecording()` yourself; warns at startSession). |
+| `autoSave.mode` | `'none'` | `'datapipe'` (needs `experimentId`), `'download'` (participant's machine — piloting only), `'none'` (call `getRecording()` yourself; warns at startSession). See [Saving the replay to your own server](#saving-the-replay-to-your-own-server). |
+| `autoSave.experimentId` | — | Your DataPipe experiment ID. Required by `'datapipe'` mode; without it the save reports `saved_to: 'failed'`. |
 | `maxEventsPerTrial` | `50000` | Hard, per-trial cap on event count. Once a trial crosses it, that trial's capture stops (a `ch:capture_stopped` marker is written, no silent truncation); later trials in the same session record normally. Doesn't bound the size of the whole session. |
 | `maxCharsPerTrial` | `8000000` | Hard, per-trial cap measured in characters (JS string length), seeded by the trial's initial DOM snapshot. Same stop-and-mark behavior as `maxEventsPerTrial`, and the same per-trial scope; whichever cap is crossed first stops that trial. Set `null` to disable. |
 | `keyframeEvery` | `10` | DOM tier only. At most this many segments per full snapshot: one keyframe plus up to `keyframeEvery - 1` segments recorded as deltas against it. A fresh snapshot is also taken sooner whenever the mutations since the last one have grown to rival its size, so this setting is the fallback for a DOM that barely changes, and it bounds how far a viewer must replay forward to reach a given segment. `1` snapshots every segment (the jsPsych adapter forces this, since the display is wiped between trials). `null` leaves only the size trigger. Must be a number; anything else disables the fallback and warns. |
@@ -285,9 +288,11 @@ rec.destroy();
   collect responses from**; use `'off'` (or `redactSelector`) if your
   ethics protocol requires less. This mirrors the core library's
   GDPR-cautious stance (`keystrokeDynamics` off by default).
-- Clipboard events record lengths only. Paste/drop **content** capture
-  remains governed by CH-core's `collectForPostHoc.pasteDropContent`,
-  never by the replay stream.
+- Clipboard events record lengths only **by default**. Setting
+  `clipboardContent: true` makes the replay stream record the clipboard
+  text and HTML too (redacted fields and password inputs excepted).
+  CH-core's own paste/drop content capture is a separate switch,
+  `collectForPostHoc.pasteDropContent`.
 - Raw mouse coordinates (`mouseTrack`, the per-sample {x, y, t} trace the
   report's trajectory panels draw) are recorded **by default** by the core
   monitor. Adding CH to an experiment is the decision to collect behavioural
@@ -313,6 +318,55 @@ replay. `end_reason: 'aborted'` is for programmatic aborts (screenouts).
 Downloads folder — the CLI warns loudly when it sees that in a report.
 Reloads produce distinct artifacts (`<pid>-replay-<epoch>.json`); the CLI
 uses the latest and warns.
+
+#### Saving the replay to your own server
+
+DataPipe is optional. With `autoSave: { mode: 'none' }` (the default, in
+`attach()` or in the jsPsych extension's params) the recorder keeps the
+recording in memory and you send it wherever your lab stores data:
+
+```javascript
+// Standalone
+const rec = CyborgHunterReplay.attach({ participantId, tier: 'dom', autoSave: { mode: 'none' } });
+// … run the experiment …
+rec.stopSession('finished');
+const recording = rec.getRecording();
+await fetch('https://your-lab-server.example/upload', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ filename: CyborgHunterReplay.replayFilename(recording), data: recording })
+});
+```
+
+```javascript
+// jsPsych: in an async on_finish, after the other finalize() calls
+await jsPsych.extensions['cyborg-hunter-replay'].finalize();
+const recording = jsPsych.extensions['cyborg-hunter-replay'].getLastRecording();
+// POST it as above, then redirect (e.g. to the Prolific completion URL) only after the upload resolves
+```
+
+- Name the file with `CyborgHunterReplay.replayFilename(recording)`
+  (`<pid>-replay-<epoch>.json`). It sanitizes the participant ID the same
+  way the CLI does, so the CLI can match the file to its participant by
+  name; the epoch suffix keeps a reload from overwriting the earlier file.
+- If you run the CH monitor standalone, pass its report in so it lands in
+  the recording: `rec.getRecording({ chSessionReport: monitor.getSessionReport() })`.
+  The jsPsych `finalize()` does this for you.
+- `await` needs an `async` `on_finish`, as in the jsPsych wiring above.
+  A save trial's `data_string` cannot wait for it (jsPsych calls it
+  synchronously); if you save with a save-as-a-trial plugin, do the
+  finalize and upload in a `jsPsychCallFunction` trial with `async: true`
+  placed before the save trial. After `finalize()` the CSV's
+  `integrityReplayMeta.saved_to` reads `'none'`, which is correct here: the
+  recorder did not save the file, your upload did.
+- For large `dom`-tier recordings, the standalone handle's
+  `rec.getRecordingCompressed()` returns a gzip `Blob` (plain JSON if the
+  browser lacks `CompressionStream`; check `blob.type`). Upload it as the
+  request body and name it `replayFilename(recording) + '.gz'`; the CLI
+  reads `.json.gz`.
+- At `startSession` the recorder warns "autoSave.mode is \"none\" — the
+  recording will be lost unless you call getRecording() yourself." That is
+  expected with this setup.
 
 ### Viewing replays
 
