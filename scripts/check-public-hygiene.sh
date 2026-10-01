@@ -26,6 +26,11 @@
 # (.demo-site/), which contains generated files git grep can't see because
 # they're gitignored/untracked.
 #
+# GATE_COMMIT: when set to a revision, the message of that commit
+# (git log -1 --format=%B) is ALSO scanned, against the same patterns plus
+# an extra list of agent-run vocabulary that applies to the message only.
+# Unset, behaviour is unchanged.
+#
 # Runs from anywhere in the repo. Scans tracked files (git grep) plus,
 # optionally, $GATE_SCAN_DIR (plain grep).
 
@@ -102,6 +107,35 @@ for pat in "${patterns[@]}"; do
     fi
   fi
 done
+
+# --- Commit-message mode (opt-in): GATE_COMMIT=<rev> -------------------------
+# Scans the message of <rev> with the patterns above (same personal-host
+# allowlist) plus message-only agent-run vocabulary. Does not touch files.
+if [ -n "${GATE_COMMIT:-}" ]; then
+  if ! msg=$(git log -1 --format=%B "$GATE_COMMIT" 2>/dev/null); then
+    echo "FAIL: GATE_COMMIT=$GATE_COMMIT is not a valid revision." >&2
+    exit 1
+  fi
+  message_only_patterns=(
+    'overnight'
+    '\bT[0-9]\b'
+    '\bI[0-9]\b'
+    'fix round'
+    'ledger'
+    '\bSDD\b'
+  )
+  for pat in "${patterns[@]}" "${message_only_patterns[@]}"; do
+    if raw=$(printf '%s\n' "$msg" | grep -E "$pat" 2>/dev/null); then
+      hits=$(printf '%s\n' "$raw" | filter_hits "$pat")
+      if [ -n "$hits" ]; then
+        echo "BANNED TOKEN /$pat/ in commit message ($GATE_COMMIT):"
+        printf '%s\n' "$hits" | sed 's/^/  commit message: /'
+        echo
+        fail=1
+      fi
+    fi
+  done
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "FAIL: public-hygiene gate found banned tokens above." >&2
