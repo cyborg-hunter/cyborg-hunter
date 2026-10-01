@@ -155,7 +155,10 @@ export class OneLinerExtension {
     this._trialStart_perfNow = null;
     this._loadError = null;
     try {
+      // The timing covers ch.js's cut plus output assembly, not jsPsych's own
+      // merge of this output into the data row.
       if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
+      if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh();   // after the timing push
     } catch (_) { /* debug counters are optional */ }
     return out;
   }

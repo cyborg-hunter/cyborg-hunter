@@ -253,4 +253,13 @@ describe('OneLinerExtension: on_finish', () => {
     assert.equal(samples.length, 1);
     assert.ok(samples[0] >= 0);
   });
+
+  it('refreshes the debug badge after each written row, after the timing push', () => {
+    const { ctx } = makeCtx();
+    const order = [];
+    ctx.debug = { stats: () => ({ segmentWriteMs: { push() { order.push('timing'); } } }), refresh: () => order.push('refresh') };
+    OneLinerExtension.ctx = ctx;
+    new OneLinerExtension(fakeJsPsych(0)).on_finish({});
+    assert.deepStrictEqual(order, ['timing', 'refresh']);
+  });
 });

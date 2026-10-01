@@ -465,3 +465,78 @@ describe('host diagnosis', () => {
     assert.deepStrictEqual(errors, []);
   });
 });
+
+// data-debug: exactly one console summary per page, with the right count.
+describe('data-debug summary count', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 10));
+  const debugScript = () => script({ debug: '', participantId: 'P1', guards: 'none' });
+  const badge = () => win.document.getElementById('ch-debug-badge').textContent;
+  let infos;
+  beforeEach(() => { infos = []; console.info = (m) => infos.push(String(m)); });
+
+  it('jsPsych: one summary, logged after the walk, showing the planned count', () => {
+    let js;
+    win.initJsPsych = function () { js = { data: { addProperties() {} }, run() {} }; return js; };
+    ctx = boot({ script: debugScript(), win });
+    assert.strictEqual(infos.length, 0, 'nothing logged at boot on jsPsych');
+    win.initJsPsych({});
+    js.run([{ type: function () {} }, { type: function () {} }, { timeline: [{ type: function () {} }] }]);
+    assert.strictEqual(infos.length, 1);
+    assert.match(infos[0], /jsPsych detected · 3 trials instrumented/);
+  });
+
+  it('jsPsych: the badge shows written/planned and updates per row without new logs', () => {
+    let js;
+    win.initJsPsych = function () { js = { data: { addProperties() {} }, run() {} }; return js; };
+    ctx = boot({ script: debugScript(), win });
+    win.initJsPsych({});
+    js.run([{ type: function () {} }, { type: function () {} }]);
+    assert.match(badge(), /0\/2 trials/);
+    ctx.jspsych.segmentsWritten = 1;
+    ctx.debug.refresh();
+    assert.match(badge(), /1\/2 trials/);
+    ctx.jspsych.segmentsWritten = 2;
+    ctx.debug.refresh();
+    assert.match(badge(), /2\/2 trials/);
+    assert.strictEqual(infos.length, 1);
+  });
+
+  it('jsPsych: a failing timeline walk still logs the one summary', () => {
+    let js;
+    win.initJsPsych = function () { js = { data: { addProperties() {} }, run() {} }; return js; };
+    ctx = boot({ script: debugScript(), win });
+    win.initJsPsych({});
+    const bad = { get timeline() { throw new Error('boom'); } };
+    js.run([bad]);
+    assert.strictEqual(infos.filter((m) => m.startsWith('Cyborg Hunter active')).length, 1);
+  });
+
+  it('jsPsych manual mode: run() is not wrapped, so the hand-over logs the one summary', () => {
+    win.initJsPsych = function () { return { data: { addProperties() {} }, run() {} }; };
+    ctx = boot({ script: debugScript(), win });
+    class Manual {}
+    Manual.info = { name: 'cyborg-hunter' };
+    win.initJsPsych({ extensions: [{ type: Manual }] });
+    assert.strictEqual(infos.filter((m) => m.startsWith('Cyborg Hunter active')).length, 1);
+  });
+
+  it('vanilla with ch.js in <head>: the summary counts marks after DOMContentLoaded', () => {
+    Object.defineProperty(win.document, 'readyState', { value: 'loading', configurable: true });
+    ctx = boot({ script: debugScript(), win });
+    assert.strictEqual(infos.length, 0, 'not logged before the DOM is parsed');
+    win.document.body.innerHTML = '<button data-ch-trial="a"></button><button data-ch-trial="b"></button>';
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    assert.strictEqual(infos.length, 1);
+    assert.match(infos[0], /vanilla mode · 2 mark elements/);
+  });
+
+  it('not hookable fallback: one summary, from the vanilla path', async () => {
+    win.initJsPsych = function () {};
+    ctx = boot({ script: debugScript(), win });
+    assert.strictEqual(infos.length, 0);
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.strictEqual(infos.length, 1);
+    assert.match(infos[0], /vanilla mode/);
+  });
+});

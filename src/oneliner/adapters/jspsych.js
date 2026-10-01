@@ -184,6 +184,8 @@ function handOver(ctx) {
   try { ctx.segmenter.abandon(); } catch (_) { /* the hand-over continues */ }
   try { ctx.monitor.destroy(); } catch (_) { /* already destroyed */ }
   console.info('[cyborg-hunter] manual mode: initJsPsych lists a cyborg-hunter extension, so ch.js injects nothing; finalize() is still required.');
+  // run() is never wrapped in manual mode, so this is the page's one summary.
+  try { if (ctx.debug && ctx.debug.update) ctx.debug.update(); } catch (_) { /* a debug aid */ }
 }
 
 // The end of the session, from the chained on_finish of `jsPsych` (the
@@ -352,10 +354,11 @@ export function installJsPsychAdapter(opts) {
           // after this.
           if (frictionEntry) frictionEntry.params.observeOnly = !r.entryTrialFound;
           if (r.entryTrialFound && !frictionListed) console.warn(MESSAGES.frictionEntryWithoutFriction());
-          if (ctx.debug && ctx.debug.update) ctx.debug.update();
         } catch (e) {
           console.error(MESSAGES.instrumentFailed(message(e)));
         }
+        // The page's one summary, even when the walk failed (counts what it got).
+        try { if (ctx.debug && ctx.debug.update) ctx.debug.update(); } catch (_) { /* a debug aid */ }
         return origRun.apply(this, arguments);
       };
     } catch (e) {

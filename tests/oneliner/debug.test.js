@@ -13,7 +13,7 @@ function jsCtx(extra) {
     host: 'jspsych',
     participantIdSource: 'url:workerId',
     config: { debug: true, guards: { honeypot: true, friction: false } },
-    jspsych: { segmentsWritten: 14, entryTrialFound: false },
+    jspsych: { segmentsWritten: 3, instrumented: 14, entryTrialFound: false },
     win: null
   }, extra);
 }
@@ -32,7 +32,7 @@ describe('createDebug', () => {
     d.update();
     var b = win.document.getElementById('ch-debug-badge');
     assert.ok(b);
-    assert.strictEqual(b.textContent, d.summary());
+    assert.strictEqual(b.textContent, d.badgeText());
     assert.strictEqual(logs.length, 1);
     assert.strictEqual(logs[0], d.summary());
     d.update();
@@ -49,13 +49,15 @@ describe('createDebug', () => {
     assert.match(s, /z-index:\s*2147483646/);
   });
 
-  it('the badge reflects a changed count after update()', () => {
+  it('refresh() updates the badge to written/planned without logging', () => {
     var ctx = jsCtx({ win: win });
     var d = createDebug({ doc: win.document, ctx: ctx, log: log });
     d.update();
-    ctx.jspsych.segmentsWritten = 15;
-    d.update();
-    assert.match(win.document.getElementById('ch-debug-badge').textContent, /15 trials instrumented/);
+    assert.match(win.document.getElementById('ch-debug-badge').textContent, /3\/14 trials/);
+    ctx.jspsych.segmentsWritten = 4;
+    d.refresh();
+    assert.match(win.document.getElementById('ch-debug-badge').textContent, /4\/14 trials/);
+    assert.strictEqual(logs.length, 1);
   });
 
   it('id sources and friction modes read from ctx', () => {
@@ -66,7 +68,7 @@ describe('createDebug', () => {
     assert.match(sum({ participantIdSource: 'session' }), /ID from random id \(not linkable\)/);
     var g = (h, f) => ({ config: { guards: { honeypot: h, friction: f } } });
     assert.match(sum(g(false, true)), /honeypot off · friction observe$/);
-    assert.match(sum(Object.assign(g(true, true), { jspsych: { segmentsWritten: 1, entryTrialFound: true } })), /friction enforce$/);
+    assert.match(sum(Object.assign(g(true, true), { jspsych: { segmentsWritten: 1, instrumented: 1, entryTrialFound: true } })), /friction enforce$/);
   });
 
   it('vanilla summary counts [data-ch-trial] mark elements', () => {

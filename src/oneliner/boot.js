@@ -159,6 +159,7 @@ export function boot(opts) {
           startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
           if (!ctx.vanilla) ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });
           replay.startVanilla();
+          if (ctx.debug) ctx.debug.logWhenParsed();
         } catch (e) {
           console.error(MESSAGES.bootFailed(String((e && e.message) || e)));
         }
@@ -166,7 +167,12 @@ export function boot(opts) {
     });
     win.CyborgHunter = ctx.api;
     win.__cyborgHunterLoaded = 'ch.js';
-    if (ctx.debug) ctx.debug.update();
+    // One console summary per page: vanilla logs once the DOM is parsed;
+    // jsPsych logs from the wrapped run() (after the walk), so here it only
+    // shows the badge.
+    if (ctx.debug) {
+      if (host === 'jspsych') ctx.debug.refresh(); else ctx.debug.logWhenParsed();
+    }
     return ctx;
   } catch (e) {
     fail(ctx || { monitor: monitor }, e);

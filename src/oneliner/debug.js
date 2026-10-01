@@ -6,14 +6,19 @@
 // data-debug pays nothing (no badge, no counters, no timing calls).
 //
 // createDebug({ doc, ctx, log = console.info })
-//   → { update(), summary() → string, stats() → { segmentWriteMs }, remove() }
+//   → { update(), refresh(), logWhenParsed(), summary() → string, badgeText() → string,
+//        stats() → { segmentWriteMs }, remove() }
 //
 // summary():
 //   Cyborg Hunter active · <jsPsych detected | vanilla mode> ·
 //   <N trials instrumented | N mark elements> · ID from <source> ·
 //   honeypot <on|off> · friction <off|observe|enforce>
-//   N on jsPsych is the number of rows that got a segment so far
-//   (ctx.jspsych.segmentsWritten), not the number of trial objects.
+//   N on jsPsych is the PLANNED count: unique trial objects the timeline walk
+//   instrumented (ctx.jspsych.instrumented). On vanilla it is the number of
+//   [data-ch-trial] elements in the DOM.
+//   One summary is logged per page: update() logs, refresh() never does. The
+//   badge on jsPsych shows live progress, "written/planned trials"
+//   (ctx.jspsych.segmentsWritten / instrumented), and refresh() updates it.
 //   <source> is the URL parameter name that resolved, data-participant-id,
 //   CyborgHunterConfig, or "random id (not linkable)".
 //
@@ -44,7 +49,7 @@ export function createDebug(opts) {
   var badge = null;
   var waiting = false;
 
-  function summary() {
+  function parts(live) {
     var hostPart, countPart;
     if (ctx.host === 'vanilla') {
       var marks = doc.querySelectorAll ? doc.querySelectorAll('[data-ch-trial]').length : 0;
@@ -52,13 +57,18 @@ export function createDebug(opts) {
       countPart = marks + ' mark elements';
     } else {
       hostPart = 'jsPsych detected';
-      countPart = ((ctx.jspsych && ctx.jspsych.segmentsWritten) || 0) + ' trials instrumented';
+      var js = ctx.jspsych || {};
+      countPart = live
+        ? (js.segmentsWritten || 0) + '/' + (js.instrumented || 0) + ' trials'
+        : (js.instrumented || 0) + ' trials instrumented';
     }
     return ['Cyborg Hunter active', hostPart, countPart,
       'ID from ' + idSource(ctx.participantIdSource),
       'honeypot ' + (ctx.config.guards.honeypot ? 'on' : 'off'),
       'friction ' + frictionMode(ctx)].join(' · ');
   }
+  function summary() { return parts(false); }
+  function badgeText() { return parts(true); }
 
   function render(text) {
     if (!badge) {
@@ -67,7 +77,7 @@ export function createDebug(opts) {
           waiting = true;
           doc.addEventListener('DOMContentLoaded', function () {
             waiting = false;
-            try { render(summary()); } catch (_) { /* the badge is optional */ }
+            try { render(badgeText()); } catch (_) { /* the badge is optional */ }
           }, { once: true });
         }
         return;
@@ -82,12 +92,25 @@ export function createDebug(opts) {
 
   return {
     summary: summary,
+    badgeText: badgeText,
     stats: function () { return stats; },
     update: function () {
       try {
-        var text = summary();
-        render(text);
-        log(text);
+        render(badgeText());
+        log(summary());
+      } catch (_) { /* a debug aid never breaks the page */ }
+    },
+    // Badge only, no console line (a row was written).
+    refresh: function () {
+      try { render(badgeText()); } catch (_) { /* a debug aid never breaks the page */ }
+    },
+    // update() once the DOM is parsed, so vanilla mark elements are all there.
+    logWhenParsed: function () {
+      try {
+        var self = this;
+        if (doc.readyState === 'loading' && doc.addEventListener) {
+          doc.addEventListener('DOMContentLoaded', function () { self.update(); }, { once: true });
+        } else this.update();
       } catch (_) { /* a debug aid never breaks the page */ }
     },
     remove: function () {
