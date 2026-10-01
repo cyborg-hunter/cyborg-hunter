@@ -802,17 +802,17 @@ describe('replay ingest — jsPsych v1 by conversion (A3)', () => {
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
-  // The CLI imports the converter at run time, so the published package has to
-  // contain it. `files` is hand-maintained and `tools/` is not in it by
-  // default, which makes this exactly the drift class version-invariant.test.js
-  // exists for: green tests, broken tarball.
-  it('ships the converter ingest depends on inside the published package', () => {
+  // The CLI imports the converter core at run time (through ingest-core.js),
+  // so the published package has to contain it. `files` is hand-maintained
+  // and `tools/` is not in it by default, which makes this exactly the drift
+  // class version-invariant.test.js exists for: green tests, broken tarball.
+  it('ships the converter core ingest depends on inside the published package', () => {
     const pkg = JSON.parse(readFileSync(
       new URL('../../package.json', import.meta.url), 'utf8'));
     const src = readFileSync(
-      new URL('../../src/cli/ingest.js', import.meta.url), 'utf8');
+      new URL('../../src/cli/ingest-core.js', import.meta.url), 'utf8');
     const imported = src.match(/from\s+'(\.\.\/\.\.\/tools\/[^']+)'/);
-    assert.ok(imported, 'ingest.js is expected to import the converter from tools/');
+    assert.ok(imported, 'ingest-core.js is expected to import the converter from tools/');
     const path = imported[1].replace('../../', '');
     assert.ok(pkg.files.some(f => path === f || path.startsWith(f)),
       `package.json "files" must cover ${path}; got ${JSON.stringify(pkg.files)}`);
@@ -898,9 +898,9 @@ describe('A3 review fixes', () => {
       'the strict error must be surfaced: ' + JSON.stringify(warningTexts(warnings)));
   });
 
-  it('7: an exception the converter did not declare as a refusal is an internal failure, not blamed on the file', () => {
+  it('7: an exception the converter did not declare as a refusal is an internal failure, not blamed on the file', async () => {
     const boom = () => { throw new TypeError('cannot read properties of undefined'); };
-    const out = migrateArtifact({ schema_version: 1, trials: [] }, 'jspsych-v1', boom);
+    const out = await migrateArtifact({ schema_version: 1, trials: [] }, 'jspsych-v1', boom);
     assert.strictEqual(out.refusal, undefined, 'a TypeError is not a refusal');
     assert.ok(out.internal && /cannot read properties/.test(out.internal), JSON.stringify(out));
   });
