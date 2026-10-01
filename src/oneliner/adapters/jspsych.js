@@ -159,6 +159,40 @@ export function injectExtensions(timeline, entries, seen) {
   return result;
 }
 
+// Adds { type: OneLinerExtension, params: {} } to initJsPsych options whose
+// extensions list (an array, or absent) has no 'cyborg-hunter' entry. jsPsych
+// 7.3.1 calls this.extensions[name].on_start / on_load for every entry a
+// trial lists (:3027-3030, :3050-3053), so a researcher trial typed
+// jsPsychCyborgHunter needs an instance of that name registered, or it
+// throws. A non-array list is left for jsPsych to report. Never throws.
+function ensureChEntry(options) {
+  try {
+    var list = options.extensions;
+    if (list === undefined || list === null) list = [];
+    if (!Array.isArray(list)) return;
+    if (list.some(function (e) { return nameOf(e) === CH_NAME; })) return;
+    options.extensions = list.concat([{ type: OneLinerExtension, params: {} }]);
+  } catch (_) { /* jsPsych runs as it would without ch.js */ }
+}
+
+// What ch.js leaves on initJsPsych when it does not monitor: boot failed
+// (boot.js fail()), the deferred session start failed (failDeferred, after
+// restore()), or ch.js stood down after cyborg-hunter.min.js. Only
+// ensureChEntry: OneLinerExtension.ctx is never set from here, so the entry
+// is inert (no rotate, on_finish returns {}). Installed once, and only over a
+// function (a page without jsPsych has nothing to wrap).
+export function installInertWrapper(win) {
+  var orig = win.initJsPsych;
+  if (typeof orig !== 'function' || orig.__cyborgHunterInert) return;
+  var wrapped = function (options) {
+    options = options || {};
+    ensureChEntry(options);
+    return orig.apply(this, [options].concat(Array.prototype.slice.call(arguments, 1)));
+  };
+  wrapped.__cyborgHunterInert = true;
+  win.initJsPsych = wrapped;
+}
+
 // Manual mode (the researcher wires the cyborg-hunter extension themselves):
 // an initJsPsych entry named 'cyborg-hunter' whose class is not ours. Listing
 // OneLinerExtension itself is still the one-liner.
@@ -312,6 +346,9 @@ export function installJsPsychAdapter(opts) {
       }
     } catch (e) {
       console.error(MESSAGES.hookFailed(message(e)));
+      // The inert entry the researcher's jsPsychCyborgHunter trials need
+      // (OneLinerExtension.ctx is not wired on this path).
+      ensureChEntry(options);
       return orig(options);
     }
     if (manual) return orig(options);

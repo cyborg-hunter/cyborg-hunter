@@ -15,7 +15,7 @@ class StubResizeObserver {
   disconnect() {}
 }
 
-let win, boot, startGuards, buildPublicApi, errors, warns, origError, origWarn, origInfo, ctx;
+let win, boot, startGuards, buildPublicApi, buildInertApi, OneLinerExtension, errors, warns, origError, origWarn, origInfo, ctx;
 
 beforeEach(async () => {
   win = new Window({ url: 'https://lab.example/study.html' });
@@ -26,7 +26,8 @@ beforeEach(async () => {
   global.ResizeObserver = StubResizeObserver;
   ({ boot } = await import('../../src/oneliner/boot.js'));
   ({ startGuards } = await import('../../src/oneliner/guards.js'));
-  ({ buildPublicApi } = await import('../../src/oneliner/api.js'));
+  ({ buildPublicApi, buildInertApi } = await import('../../src/oneliner/api.js'));
+  ({ OneLinerExtension } = await import('../../src/oneliner/adapters/jspsych-extension.js'));
   errors = []; warns = [];
   origError = console.error; origWarn = console.warn; origInfo = console.info;
   console.error = (m) => errors.push(String(m));
@@ -197,6 +198,43 @@ describe('boot', () => {
     assert.ok(win.jsPsychCyborgHunter === ManualCh, 'the manual class stays');
   });
 
+  // Set first, before the double-load check and anything that can throw: a
+  // researcher trial typed jsPsychCyborgHunter must never be a ReferenceError.
+  it('window.jsPsychCyborgHunter is set even when ch.js stands down (double load) or fails', () => {
+    win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';
+    win.CyborgHunter = {};
+    assert.strictEqual(boot({ script: script({ participantId: 'P1' }), win }), null);
+    assert.ok(win.jsPsychCyborgHunter === OneLinerExtension);
+    delete win.__cyborgHunterLoaded; delete win.jsPsychCyborgHunter;
+    assert.strictEqual(boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => { throw new Error('kaboom'); } }), null);
+    assert.ok(win.jsPsychCyborgHunter === OneLinerExtension);
+  });
+
+  it('double load after cyborg-hunter.min.js: initJsPsych lists the inert extension when nothing else is', () => {
+    const seen = [];
+    win.initJsPsych = function (o) { seen.push(o); return {}; };
+    win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';
+    win.CyborgHunter = { from: 'min.js' };
+    boot({ script: script({ participantId: 'P1' }), win });
+    win.initJsPsych({});
+    win.initJsPsych({ extensions: [{ type: class { static info = { name: 'cyborg-hunter' }; } }] });
+    assert.deepStrictEqual(seen[0].extensions.map((e) => e.type), [OneLinerExtension]);
+    assert.equal(seen[1].extensions.length, 1, 'a manual-mode list is left alone');
+    assert.notStrictEqual(seen[1].extensions[0].type, OneLinerExtension);
+  });
+
+  // The first ch.js already wrapped initJsPsych. A second wrapper would list
+  // the second bundle's own class, which the first ch.js would take for a
+  // manual-mode extension (a different class named 'cyborg-hunter').
+  it('double load after ch.js: initJsPsych is left to the first ch.js', () => {
+    const first = function () { return {}; };
+    win.initJsPsych = first;
+    win.__cyborgHunterLoaded = 'ch.js';
+    win.CyborgHunter = { from: 'ch.js' };
+    boot({ script: script({ participantId: 'P1' }), win });
+    assert.strictEqual(win.initJsPsych, first);
+  });
+
   it('double load: refuses to start a second monitor and leaves the namespace alone', () => {
     const existing = { from: 'min.js' };
     win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';
@@ -217,8 +255,47 @@ describe('boot', () => {
     });
     assert.strictEqual(r, null);
     assert.deepStrictEqual(errors, [MESSAGES.bootFailed('kaboom')]);
-    assert.strictEqual(win.CyborgHunter, undefined);
+    // An inert namespace, so documented calls in the experiment code do not throw.
+    assert.ok(win.CyborgHunter && Object.isFrozen(win.CyborgHunter), 'the inert namespace');
+    assert.strictEqual(win.CyborgHunter.mark('q1'), undefined);
     assert.strictEqual(win.__cyborgHunterLoaded, undefined);
+  });
+
+  it('a failure leaves an existing window.CyborgHunter alone', () => {
+    const existing = { from: 'elsewhere' };
+    win.CyborgHunter = existing;
+    boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => { throw new Error('kaboom'); } });
+    assert.strictEqual(win.CyborgHunter, existing);
+  });
+
+  it('a failure before the jsPsych wrap leaves the inert wrapper over the original initJsPsych', () => {
+    const seen = [];
+    const orig = function (o) { seen.push(o); return {}; };
+    win.initJsPsych = orig;
+    boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => { throw new Error('kaboom'); } });
+    assert.notStrictEqual(win.initJsPsych, orig);
+    win.initJsPsych({});
+    assert.deepStrictEqual(seen[0].extensions.map((e) => e.type), [OneLinerExtension]);
+  });
+
+  // A failure after installJsPsychAdapter (here: the namespace assignment)
+  // must not leave the full wrap in place, wired to a destroyed monitor.
+  it('a failure after the jsPsych wrap removes it and leaves only the inert wrapper', () => {
+    const seen = [];
+    let added = 0;
+    win.initJsPsych = function (o) { seen.push(o); return { data: { addProperties() { added++; } }, run() {} }; };
+    Object.defineProperty(win, 'CyborgHunter', { configurable: true, get() { return undefined; }, set() { throw new Error('locked'); } });
+    try {
+      let r;
+      assert.doesNotThrow(() => { r = boot({ script: script({ participantId: 'P1' }), win }); });
+      assert.strictEqual(r, null);
+      assert.deepStrictEqual(errors, [MESSAGES.bootFailed('locked')]);
+      win.initJsPsych({});
+      assert.deepStrictEqual(seen[0].extensions.map((e) => e.type), [OneLinerExtension], 'only the inert entry');
+      assert.equal(added, 0, 'no participantId / version properties from the full wrap');
+    } finally {
+      delete win.CyborgHunter;
+    }
   });
 
   it('a failure after the monitor exists destroys it (no orphan listeners)', () => {
@@ -335,6 +412,32 @@ describe('public namespace', () => {
     assert.strictEqual(api.data(), undefined);
     assert.strictEqual(api.replay(), undefined);
     assert.strictEqual(api.startFriction(), undefined);
+  });
+
+  // window.CyborgHunter after ch.js failed: every documented call returns a
+  // harmless value, and the first call logs one catalogue warning.
+  it('the inert namespace: same members, harmless values, one warning', () => {
+    const api = buildInertApi();
+    const real = buildPublicApi(fakeCtx().ctx);
+    assert.deepStrictEqual(Object.keys(api).sort(), Object.keys(real).sort());
+    assert.ok(Object.isFrozen(api));
+    assert.strictEqual(api.VERSION, VERSION);
+    assert.strictEqual(api.mark('q1'), undefined);
+    assert.strictEqual(api.startTrial({ trialId: 'q1' }), undefined);
+    assert.strictEqual(api.endTrial(), undefined);
+    assert.strictEqual(api.startFriction(), undefined);
+    assert.strictEqual(api.replay(), null);
+    const blob = api.data();
+    assert.deepStrictEqual(blob.trials, []);
+    assert.match(blob.cyborgHunterError, /did not start/);
+    assert.strictEqual(api.init({ participantId: 'X' }), api);
+    // A timeline node jsPsych skips (conditional_function false): pushing it
+    // into the timeline neither runs friction nor adds a row.
+    const node = api.frictionEntryTrial();
+    assert.ok(Array.isArray(node.timeline) && node.timeline.length === 1);
+    assert.strictEqual(node.conditional_function(), false);
+    assert.deepStrictEqual(warns, [MESSAGES.notRunning()]);
+    assert.deepStrictEqual(errors, []);
   });
 
   it('frictionEntryTrial delegates to GuardFriction.createEntryTrial', () => {

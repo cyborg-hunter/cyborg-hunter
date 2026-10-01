@@ -662,13 +662,18 @@ describe('deferred session start fails (ch.js in <head>)', () => {
     assert.match(blob.cyborgHunterError, /did not start on page 1/);
   });
 
-  it('jsPsych host, initJsPsych not called yet: the wrap is removed and the page is not taken for unhookable', async () => {
+  it('jsPsych host, initJsPsych not called yet: the wrap is replaced by the inert one and the page is not taken for unhookable', async () => {
     head();
-    const orig = function () { return { data: { addProperties() {} }, run() {} }; };
+    const seen = [];
+    const props = [];
+    const orig = function (o) { seen.push(o); return { data: { addProperties(p) { props.push(p); } }, run() {} }; };
     win.initJsPsych = orig;
     const ctx = await failingStart();
     bodyAndReady();
-    assert.strictEqual(win.initJsPsych, orig);
+    win.initJsPsych({});
+    const { OneLinerExtension } = await import('../../src/oneliner/adapters/jspsych-extension.js');
+    assert.deepStrictEqual(seen[0].extensions.map((e) => e.type), [OneLinerExtension], 'only the inert entry');
+    assert.deepStrictEqual(props, [], 'the full wrap is gone');
     win.document.documentElement.setAttribute('jspsych', 'present');
     await tick();
     assert.strictEqual(ctx.host, 'jspsych');
@@ -684,7 +689,7 @@ describe('deferred session start fails (ch.js in <head>)', () => {
     win.initJsPsych({});
     bodyAndReady();
     assert.ok(props.some((p) => /did not start/.test(p.cyborgHunterError || '')));
-    assert.strictEqual(win.initJsPsych, orig);
+    assert.notStrictEqual(win.initJsPsych, orig, 'the inert wrapper, not the full wrap');
     // The extension injected into that instance stands down: no per-trial errors.
     const { OneLinerExtension } = await import('../../src/oneliner/adapters/jspsych-extension.js');
     const ext = new OneLinerExtension({ getProgress: () => ({ current_trial_global: 0 }) });

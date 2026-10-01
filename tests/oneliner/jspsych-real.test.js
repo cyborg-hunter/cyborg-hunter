@@ -276,6 +276,94 @@ describe('ch.js on real jsPsych: per-trial params through window.jsPsychCyborgHu
   });
 });
 
+// ch.js stands down (double load after cyborg-hunter.min.js) or fails at
+// boot or at the deferred session start: nothing is monitored, but the
+// researcher's page must run exactly as it would without ch.js, including
+// per-trial { type: jsPsychCyborgHunter, params } entries (jsPsych 7.3.1 calls
+// this.extensions[name].on_start / on_load for each, :3027-3030, :3050-3053,
+// so an unregistered name would throw) and documented CyborgHunter calls.
+describe('ch.js on real jsPsych: ch.js did not start, the experiment still runs', () => {
+  let savedClass;
+  beforeEach(() => {
+    savedClass = win.jsPsychCyborgHunter;
+    delete win.jsPsychCyborgHunter;
+    // A previous scenario's context (finalized) would make the extension
+    // stand down for the wrong reason.
+    OneLinerExtension.ctx = null;
+  });
+  afterEach(() => { win.jsPsychCyborgHunter = savedClass; });
+
+  const perTrial = (id) => [{ type: win.jsPsychCyborgHunter, params: { trialId: id, phase: 'test' } }];
+  async function runResearcherPage({ useNamespace }) {
+    assert.ok(win.jsPsychCyborgHunter === OneLinerExtension, 'the class is there for the researcher\'s trials');
+    const jsPsych = win.initJsPsych({});
+    const timeline = [];
+    if (useNamespace) {
+      timeline.push(win.CyborgHunter.frictionEntryTrial());
+      win.CyborgHunter.mark('x');
+      win.CyborgHunter.data();
+    }
+    timeline.push({ type: Timer, extensions: perTrial('n1') }, callFunction(), { type: Timer, extensions: perTrial('n2') });
+    const rows = await runTimeline(jsPsych, timeline);
+    assert.equal(rows.length, 3, 'every trial ran (a skipped friction entry adds no row)');
+    for (const r of rows) {
+      for (const k of ['integrity', 'integritySegment', 'cyborgHunterError', 'participantId']) assert.ok(!(k in r), k + ' on a row');
+    }
+    return rows;
+  }
+
+  it('boot fails: per-trial entries and CyborgHunter calls run without errors', async () => {
+    const r = boot({ script: { dataset: { participantId: 'P1' } }, win, monitorFactory: () => { throw new Error('kaboom'); } });
+    assert.strictEqual(r, null);
+    await runResearcherPage({ useNamespace: true });
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('kaboom')]);
+    assert.deepStrictEqual(warns, [MESSAGES.notRunning()]);
+  });
+
+  it('a failure after the jsPsych wrap: the wrap is replaced by the inert one', async () => {
+    Object.defineProperty(win, 'CyborgHunter', { configurable: true, get() { return undefined; }, set() { throw new Error('locked'); } });
+    try {
+      assert.strictEqual(boot({ script: { dataset: { participantId: 'P1' } }, win }), null);
+      await runResearcherPage({ useNamespace: false });
+      assert.deepStrictEqual(errors, [MESSAGES.bootFailed('locked')]);
+    } finally {
+      delete win.CyborgHunter;
+    }
+  });
+
+  it('double load after cyborg-hunter.min.js: ch.js stands down and the page runs', async () => {
+    win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';
+    const core = { from: 'min.js' };
+    win.CyborgHunter = core;
+    assert.strictEqual(boot({ script: { dataset: { participantId: 'P1' } }, win }), null);
+    await runResearcherPage({ useNamespace: false });
+    assert.strictEqual(win.CyborgHunter, core);
+    assert.deepStrictEqual(errors, [MESSAGES.doubleLoad('cyborg-hunter.min.js', 'ch.js')]);
+  });
+
+  it('the deferred session start fails (ch.js in <head>): initJsPsych called afterwards runs the page', async () => {
+    const { init } = await import('../../src/core/monitor.js');
+    const body = win.document.body;
+    win.document.documentElement.removeChild(body);
+    let ctx;
+    try {
+      ctx = boot({
+        script: { dataset: { participantId: 'P1' } }, win,
+        monitorFactory: (cfg) => Object.assign({}, init(cfg), { startSession() { throw new Error('no session'); } })
+      });
+      assert.ok(ctx, 'boot returned before the deferred start');
+    } finally {
+      win.document.documentElement.appendChild(body);
+    }
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    assert.ok(ctx.bootError);
+    // The namespace stays ch.js's own here (boot had returned), so its
+    // frictionEntryTrial is the real entry trial: not used in this run.
+    await runResearcherPage({ useNamespace: false });
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('no session')]);
+  });
+});
+
 describe('ch.js on real jsPsych: manual mode with ch.js alone', () => {
   // The researcher kept extension-cyborg-hunter.js and its initJsPsych entry
   // but loads ch.js instead of cyborg-hunter.min.js: window.CyborgHunter is

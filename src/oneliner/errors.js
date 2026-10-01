@@ -178,5 +178,13 @@ export const MESSAGES = {
       'ch.js records one session per page and ends it when the first instance finishes, so trials run after that are not monitored',
       'create one jsPsych instance with initJsPsych() and run one timeline, or use cyborg-hunter.min.js and the jsPsych extension (manual mode) for several instances',
       DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn, once, from the inert window.CyborgHunter that boot leaves
+  // when ch.js failed (api.js buildInertApi): the call did nothing.
+  notRunning: function () {
+    return formatError('Cyborg Hunter is not running on this page',
+      'ch.js did not start (see the error above), so CyborgHunter calls do nothing',
+      'fix the error logged above; until then the experiment runs without monitoring',
+      DOCS + 'known-issues.md#one-line-setup');
   }
 };

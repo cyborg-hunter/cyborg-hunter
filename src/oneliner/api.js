@@ -20,6 +20,7 @@
 //                           in manual mode, the core init(cfg)
 //   preventTextSelection, addHoneypot, setAltText   (core static helpers)
 // }
+// buildInertApi() → the same members, inert (ch.js failed; see below).
 // mark/data/startFriction depend on the host (jsPsych or vanilla); the host
 // adapter installs them in ctx.handlers, and boot installs replay
 // (replay-loader.js). Until then they return undefined. mark() (with startTrial/endTrial) and data() are vanilla calls:
@@ -72,6 +73,53 @@ export function buildPublicApi(ctx) {
       console.error(MESSAGES.manualInitOnOneLiner());
       return api;
     },
+    preventTextSelection: preventTextSelection,
+    addHoneypot: addHoneypot,
+    setAltText: setAltText
+  };
+  return Object.freeze(api);
+}
+
+// window.CyborgHunter when ch.js failed and nothing else defined it (boot.js
+// fail()): the same members, each returning a harmless value, so documented
+// calls in the experiment code do not throw. The first call logs notRunning
+// once. Return values:
+//   mark / startTrial / endTrial / startFriction   undefined
+//   data()     { libraryVersion, trials: [], cyborgHunterError }, so a save
+//              of it still parses and says why it is empty
+//   replay()   null (as when replay is off)
+//   init()     the namespace itself (as the one-liner's init() outside manual mode)
+//   frictionEntryTrial()   a timeline node jsPsych skips (conditional_function
+//              false): no row, and friction is not started with nothing to
+//              stop it at the end
+// The core's static helpers (preventTextSelection, addHoneypot, setAltText)
+// do not depend on the monitor and stay real.
+export function buildInertApi() {
+  var warned = false;
+  function noted(value) {
+    return function () {
+      if (!warned) { warned = true; console.warn(MESSAGES.notRunning()); }
+      return typeof value === 'function' ? value() : value;
+    };
+  }
+  // Never run (the node is skipped), but a valid trial in case a host walks it.
+  function Skipped(jsPsych) { this.jsPsych = jsPsych; }
+  Skipped.info = { name: 'cyborg-hunter-skipped', parameters: {} };
+  Skipped.prototype.trial = function () { this.jsPsych.finishTrial({}); };
+  var api = {
+    VERSION: VERSION,
+    mark: noted(undefined),
+    startTrial: noted(undefined),
+    endTrial: noted(undefined),
+    data: noted(function () {
+      return { libraryVersion: VERSION, trials: [], cyborgHunterError: 'Cyborg Hunter did not start on this page' };
+    }),
+    replay: noted(null),
+    startFriction: noted(undefined),
+    frictionEntryTrial: noted(function () {
+      return { timeline: [{ type: Skipped }], conditional_function: function () { return false; } };
+    }),
+    init: noted(function () { return api; }),
     preventTextSelection: preventTextSelection,
     addHoneypot: addHoneypot,
     setAltText: setAltText

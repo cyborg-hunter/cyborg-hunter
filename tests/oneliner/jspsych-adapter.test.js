@@ -5,7 +5,7 @@
 // (the jsPsych 7.3.1 behaviour each test relies on is cited next to it).
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { dedupeExtensions, isChType, injectExtensions, detectManualMode, installJsPsychAdapter } from '../../src/oneliner/adapters/jspsych.js';
+import { dedupeExtensions, isChType, injectExtensions, detectManualMode, installJsPsychAdapter, installInertWrapper } from '../../src/oneliner/adapters/jspsych.js';
 import { OneLinerExtension } from '../../src/oneliner/adapters/jspsych-extension.js';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 
@@ -464,6 +464,21 @@ describe('installJsPsychAdapter', () => {
     assert.ok(errors[0].endsWith('known-issues.md#one-line-setup'), errors[0]);
   });
 
+  // A researcher trial typed jsPsychCyborgHunter needs a registered
+  // 'cyborg-hunter' instance (jsPsych 7.3.1 calls
+  // this.extensions[name].on_start on every listed entry, :3027-3030), so the
+  // fallback to the original initJsPsych still lists ours when nothing else is.
+  it('a hook failure still lists our (inert) extension when the researcher listed none', () => {
+    const { win, calls } = fakeWin(); const c = ctx();
+    c.config = null;
+    installJsPsychAdapter({ win, ctx: c });
+    win.initJsPsych({ extensions: [{ type: Mouse }] });
+    const opts = calls.find((x) => x[0] === 'init')[1];
+    assert.deepStrictEqual(names(opts.extensions), ['mouse-tracking', 'cyborg-hunter']);
+    assert.ok(opts.extensions[1].type === OneLinerExtension);
+    assert.strictEqual(OneLinerExtension.ctx, null, 'the extension stays inert');
+  });
+
   it('restore() puts the original initJsPsych back', () => {
     const { win } = fakeWin(); const c = ctx();
     const original = win.initJsPsych;
@@ -471,5 +486,60 @@ describe('installJsPsychAdapter', () => {
     assert.notStrictEqual(win.initJsPsych, original);
     h.restore();
     assert.strictEqual(win.initJsPsych, original);
+  });
+});
+
+// Every failure or stand-down path (boot.js fail(), the double-load stand-down
+// after cyborg-hunter.min.js, failDeferred) leaves this wrapper: ch.js does
+// not monitor, but a researcher trial typed jsPsychCyborgHunter still finds a
+// registered (inert) 'cyborg-hunter' instance.
+describe('installInertWrapper', () => {
+  function fakeWin() {
+    const seen = [];
+    const win = { initJsPsych: function (opts) { seen.push(opts); return { opts }; } };
+    return { win, seen };
+  }
+
+  it('appends { type: OneLinerExtension, params: {} } when no cyborg-hunter entry is listed', () => {
+    const { win, seen } = fakeWin();
+    installInertWrapper(win);
+    win.initJsPsych({ extensions: [{ type: Mouse }] });
+    win.initJsPsych();
+    assert.deepStrictEqual(names(seen[0].extensions), ['mouse-tracking', 'cyborg-hunter']);
+    assert.ok(seen[0].extensions[1].type === OneLinerExtension);
+    assert.deepStrictEqual(seen[0].extensions[1].params, {});
+    assert.deepStrictEqual(names(seen[1].extensions), ['cyborg-hunter']);
+    assert.strictEqual(OneLinerExtension.ctx, null, 'never wires the extension to a context');
+  });
+
+  it('leaves a list that already has a cyborg-hunter entry (manual or ours) untouched', () => {
+    const { win, seen } = fakeWin();
+    installInertWrapper(win);
+    const manual = [{ type: OldCh, params: { participantId: 'X' } }];
+    win.initJsPsych({ extensions: manual });
+    assert.strictEqual(seen[0].extensions, manual);
+    assert.deepStrictEqual(names(manual), ['cyborg-hunter']);
+  });
+
+  it('a non-array extensions value is passed through as it is, and nothing throws', () => {
+    const { win, seen } = fakeWin();
+    installInertWrapper(win);
+    const odd = { not: 'a list' };
+    assert.doesNotThrow(() => win.initJsPsych({ extensions: odd }));
+    assert.strictEqual(seen[0].extensions, odd);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('installs once, and only over a function', () => {
+    const { win, seen } = fakeWin();
+    installInertWrapper(win);
+    const first = win.initJsPsych;
+    installInertWrapper(win);
+    assert.strictEqual(win.initJsPsych, first);
+    win.initJsPsych({});
+    assert.equal(seen[0].extensions.length, 1);
+    const bare = {};
+    installInertWrapper(bare);
+    assert.strictEqual(bare.initJsPsych, undefined);
   });
 });

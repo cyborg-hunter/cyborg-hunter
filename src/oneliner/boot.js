@@ -1,7 +1,16 @@
 // src/oneliner/boot.js
 // Everything dist/ch.js does at load, in order:
+//   0. window.jsPsychCyborgHunter = OneLinerExtension unless a class is
+//      already there, before anything that can stop or fail: the documented
+//      per-trial { type: jsPsychCyborgHunter, params } entry then works with
+//      ch.js alone, and never becomes a ReferenceError in the researcher's
+//      code (extension-cyborg-hunter.js loaded first keeps its own class, and
+//      loaded later replaces this one: manual mode either way when initJsPsych
+//      lists it). With no context wired the class is inert;
 //   1. double-load sentinel: if cyborg-hunter.min.js (or another ch.js)
-//      already ran, say so and stop: no monitor, window.CyborgHunter untouched;
+//      already ran, say so and stop: no monitor, window.CyborgHunter untouched.
+//      After min.js, initJsPsych gets the inert wrapper (below); after another
+//      ch.js it is left to that one;
 //   2. config (tag data-* attributes over window.CyborgHunterConfig);
 //   3. participant id (warns when it has to fall back to a random id). The
 //      id is kept for the tab in sessionStorage, so a later page without an
@@ -34,12 +43,7 @@
 //      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla host (and
 //      on the not-hookable fallback) the standalone recorder, started after
 //      DOMContentLoaded. CyborgHunter.replay() is wired either way;
-//   9. window.CyborgHunter = the one-liner namespace; window.jsPsychCyborgHunter
-//      = OneLinerExtension unless a class is already there (the documented
-//      per-trial { type: jsPsychCyborgHunter, params } entry then works with
-//      ch.js alone; extension-cyborg-hunter.js loaded first keeps its own
-//      class, and loaded later replaces this one: manual mode either way when
-//      initJsPsych lists it); then the sentinel;
+//   9. window.CyborgHunter = the one-liner namespace; then the sentinel;
 //  10. data-debug only (debug.js): the badge and the console summary, shown
 //      once now and again when the jsPsych timeline is walked.
 //
@@ -60,6 +64,15 @@
 // failure at the deferred session start (step 6, ch.js in <head>): boot has
 // returned by then, so the namespace and the sentinel stay, and what can
 // still be saved is marked (failDeferred below).
+//
+// Whenever ch.js does not monitor (a failure, either kind, or the stand-down
+// after min.js) the host page must still run as it would without ch.js:
+// initJsPsych is left with only the inert wrapper (adapters/jspsych.js
+// installInertWrapper), which lists OneLinerExtension when nothing named
+// 'cyborg-hunter' is listed, so the researcher's jsPsychCyborgHunter trials
+// find a registered instance; and a boot failure with no window.CyborgHunter
+// yet leaves the inert namespace (api.js buildInertApi), so documented calls
+// do not throw.
 
 import { init } from '../core/monitor.js';
 import { createSegmentDiffer } from './segment-diff.js';
@@ -67,9 +80,9 @@ import { createSegmenter } from './segmenter.js';
 import { readConfig } from './config.js';
 import { resolveParticipantId, randomParticipantId, DEFAULT_PARAMS } from './participant-id.js';
 import { startGuards } from './guards.js';
-import { buildPublicApi } from './api.js';
+import { buildPublicApi, buildInertApi } from './api.js';
 import { MESSAGES } from './errors.js';
-import { installJsPsychAdapter, watchHostPlacement } from './adapters/jspsych.js';
+import { installJsPsychAdapter, installInertWrapper, watchHostPlacement } from './adapters/jspsych.js';
 import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
 import { installReplay } from './replay-loader.js';
@@ -91,9 +104,18 @@ export function boot(opts) {
   var monitorFactory = opts.monitorFactory || init;
   var monitor = null;
   var ctx = null;
+  var adapter = null;   // the jsPsych adapter, once installed (step 7)
+  try {
+    // detectManualMode (adapters/jspsych.js) treats this class as the one-liner.
+    if (win.jsPsychCyborgHunter === undefined) win.jsPsychCyborgHunter = OneLinerExtension;
+  } catch (_) { /* a locked global: the researcher's own script tag still works */ }
   try {
     if (win.__cyborgHunterLoaded) {
       console.error(MESSAGES.doubleLoad(win.__cyborgHunterLoaded, 'ch.js'));
+      // Another ch.js already wraps initJsPsych; a second wrapper would list
+      // this bundle's own class, which that ch.js takes for a manual-mode
+      // extension (detectManualMode compares classes).
+      if (win.__cyborgHunterLoaded !== 'ch.js') installInertWrapper(win);
       return null;
     }
 
@@ -146,7 +168,6 @@ export function boot(opts) {
     // with ch.js in <head> it waits for DOMContentLoaded; everything else,
     // including the initJsPsych wrap the experiment code may call before
     // DOMContentLoaded, is in place at once.
-    var adapter = null;   // the jsPsych adapter, set below
     if (win.document.body) startMonitoring(ctx);
     else {
       win.document.addEventListener('DOMContentLoaded', function () {
@@ -172,8 +193,6 @@ export function boot(opts) {
       }
     });
     win.CyborgHunter = ctx.api;
-    // detectManualMode (adapters/jspsych.js) treats this class as the one-liner.
-    if (win.jsPsychCyborgHunter === undefined) win.jsPsychCyborgHunter = OneLinerExtension;
     win.__cyborgHunterLoaded = 'ch.js';
     // One console summary per page: vanilla logs once the DOM is parsed;
     // jsPsych logs from the wrapped run() (after the walk), so here it only
@@ -183,7 +202,7 @@ export function boot(opts) {
     }
     return ctx;
   } catch (e) {
-    fail(ctx || { monitor: monitor }, e);
+    fail(win, ctx || { monitor: monitor }, adapter, e);
     return null;
   }
 }
@@ -224,13 +243,28 @@ function failDeferred(ctx, adapter, e) {
     }
     if (adapter) {
       adapter.restore();
+      installInertWrapper(ctx.win);
       if (ctx.jsPsych) ctx.jsPsych.data.addProperties({ cyborgHunterError: 'Cyborg Hunter did not start: ' + msg });
     }
   } catch (_) { /* the failure is logged above */ }
 }
 
-function fail(ctx, e) {
+// A failure inside boot(). ctx.bootError keeps the placement check
+// (watchHostPlacement, registered before some steps that can fail) from
+// taking the page for one ch.js could not hook and starting the vanilla
+// path. A jsPsych wrap already installed is removed (it would drive the
+// destroyed monitor) and the inert wrapper takes its place.
+function fail(win, ctx, adapter, e) {
+  var msg = String((e && e.message) || e);
+  ctx.bootError = msg;
   if (ctx.vanilla) { try { ctx.vanilla.teardown(); } catch (_) { /* already failing */ } }
   if (ctx.monitor) { try { ctx.monitor.destroy(); } catch (_) { /* already failing; the boot error is the one to show */ } }
-  console.error(MESSAGES.bootFailed(String((e && e.message) || e)));
+  console.error(MESSAGES.bootFailed(msg));
+  try {
+    if (adapter) adapter.restore();
+    installInertWrapper(win);
+  } catch (_) { /* the failure is logged above */ }
+  try {
+    if (win.CyborgHunter === undefined) win.CyborgHunter = buildInertApi();
+  } catch (_) { /* a locked global */ }
 }
