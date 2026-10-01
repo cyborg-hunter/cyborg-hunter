@@ -9,26 +9,14 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { makeRecordingCanvasFactory } from './recording-canvas.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXT = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));
 
-// Fake createCanvas: records method calls and property assignments on the 2d
-// context. Methods that must return values get minimal stubs.
-export function makeRecordingCanvasFactory(log) {
-  return function createCanvas(w, h) {
-    log.push(['createCanvas', w, h]);
-    const ctx = new Proxy({}, {
-      get(_, prop) {
-        if (prop === 'measureText') return (s) => { log.push(['measureText', s]); return { width: String(s).length * 6 }; };
-        if (prop === 'createLinearGradient') return (...a) => { log.push(['createLinearGradient', ...a]); return { addColorStop: (o, c) => log.push(['addColorStop', o, c]) }; };
-        return (...args) => { log.push([prop, ...args.map(a => (typeof a === 'number' ? Math.round(a * 100) / 100 : a))]); };
-      },
-      set(_, prop, value) { log.push(['set:' + String(prop), value]); return true; },
-    });
-    return { width: w, height: h, getContext: () => ctx };
-  };
-}
+// Re-exported for tests/demo/plot-adapter.test.js and
+// tests/tools/example-fixtures.test.js, which import it from this file.
+export { makeRecordingCanvasFactory };
 
 function snapshotTest(name, file, render, extraChecks) {
   test(name, async () => {
