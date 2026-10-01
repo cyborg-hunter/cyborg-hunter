@@ -1,10 +1,12 @@
 // build.js — esbuild configuration for cyborg-hunter.
-// Produces five build targets:
+// Produces seven build targets:
 //   1. IIFE for <script> tag users (dist/cyborg-hunter.min.js)
 //   2. ESM for bundler users (dist/cyborg-hunter.esm.js)
 //   3. cyborg-hunter jsPsych extension (dist/extension-cyborg-hunter.js)
 //   4. guard-friction extension — deterrence (dist/extension-guard-friction.js)
 //   5. guard-honeypot extension — detection  (dist/extension-guard-honeypot.js)
+//   6. replay recorder + jsPsych adapter (dist/cyborg-hunter-replay.js)
+//   7. one-line setup bundle (dist/ch.js)
 //
 // The two guard-extension files are SELF-CONTAINED — each bundles its
 // core IIFE plus the jsPsych extension adapter, so a study only loads
@@ -101,6 +103,16 @@ async function build() {
     outfile: 'dist/cyborg-hunter-replay.js',
     platform: 'browser',
     banner: { js: `// cyborg-hunter-replay v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
+  });
+
+  // ch.js — the one-line setup. Bundles the core, the guard cores and the
+  // host adapters; NO globalName: entry.js assigns window.CyborgHunter itself
+  // after the double-load check, so a second load never clobbers the first.
+  await esbuild.build({
+    entryPoints: ['src/oneliner/entry.js'],
+    bundle: true, minify: true, format: 'iife', platform: 'browser',
+    outfile: 'dist/ch.js',
+    banner: { js: `// cyborg-hunter one-line setup v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
   });
 
   console.log('Build complete: dist/');
