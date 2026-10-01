@@ -454,7 +454,7 @@ describe('end-to-end capture → v2 recording', () => {
     // The assertion class that would have caught C-1 end to end: replay the
     // whole recording the way §3 says a player must — re-instantiate at a
     // keyframe, carry on through a continuation — with a player that throws on
-    // any id it was never sent (support/dom-player.js).
+    // any id it was never sent (packages/sessionrecording-conformance/src/fuzz/dom-player.js).
     //
     // It does not BITE C-1 on this session, because every mutation here is
     // bracketed inside an explicit trial and no implicit segment forms. It is

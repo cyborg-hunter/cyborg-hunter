@@ -14,7 +14,8 @@
 // produce — same structure, same attributes, same ids. Exclusion placeholders
 // are compared as what a reconstruction can show (`asPlayerTree`).
 //
-// The generator itself moved to `support/mutation-fuzz.js` in T5 Task 3, so the
+// The generator itself lives in
+// `packages/sessionrecording-conformance/src/fuzz/mutation-fuzz.js`, so the
 // VIEWER's applier can be run over the same batches (`dom-patch.test.js`). This
 // file's claim is unchanged and its seeds, mixes and batch sizes are the same
 // ones: capture's output is faithfully replayable by the strict player.

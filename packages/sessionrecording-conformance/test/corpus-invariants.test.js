@@ -1,4 +1,4 @@
-// tests/replay/schema-v2/corpus-invariants.test.js
+// packages/sessionrecording-conformance/test/corpus-invariants.test.js
 // The corpus invariants' own reject direction, proven on synthetic recordings.
 //
 // WHY SYNTHETIC. Every check in corpus-invariants.js runs against every fixture

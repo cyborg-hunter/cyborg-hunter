@@ -1,7 +1,7 @@
 # SessionRecording v2 — specification draft
 
 **Status:** draft **r2** (2026-08-09, post engineering review), published 2026-09-03 · proposed for joint ownership by jsPsych and Cyborg Hunter — the intended home for this document and its conformance corpus is the jsPsych replay repository.
-**Implementations:** Cyborg Hunter 0.8.0+ (recorder, ingest, report viewer) and a patched jspsych/replay player; a 24-fixture conformance corpus with cross-player checkpoints lives in `tests/replay/schema-v2/`.
+**Implementations:** Cyborg Hunter 0.8.0+ (recorder, ingest, report viewer) and a patched jspsych/replay player; a 24-fixture conformance corpus with cross-player checkpoints lives in `packages/sessionrecording-conformance/` (`npm run test:package` runs the package suite).
 **Since r2:** two clusters of this text were sharpened by implementation and are the first agenda for r3 — segment time semantics (§3: origin order, continuation playback) and player duties (§11/§12: what a player owes a stylesheet it cannot read). See `docs/v2-player-migration.md`.
 **Supersedes:** jsPsych's `schema_version: 1` (record_session branch) and Cyborg Hunter's `schema_version: 1` (CH 0.7.x) — two independently built formats that share a design but do not interoperate.
 **Self-contained:** all inherited jsPsych-v1 definitions are inlined and tagged **[v1-unchanged]**. A delta-form version (changed sections in full, [v1-unchanged] sections collapsed to references) is derived from this document at transmission time for JdL's anchor point.

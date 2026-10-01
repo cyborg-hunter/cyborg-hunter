@@ -12,7 +12,7 @@
 // is TOLERANT (design §4): a patch naming an id the map does not hold is
 // skipped and counted into `patchFailures`, because an analyst looking at an
 // unrepeatable session is better served by as much of it as survives than by a
-// blank stage. `tests/replay/support/dom-player.js` is STRICT: it throws,
+// blank stage. `packages/sessionrecording-conformance/src/fuzz/dom-player.js` is STRICT: it throws,
 // because its job is to catch mapper bugs. The consequence — a tolerant viewer
 // cannot detect a producer emitting dangling references, which is why T7 owes a
 // dangling-reference negative fixture — is design §14 risk 2, and the two
@@ -858,7 +858,7 @@ describe('namespace inheritance on dom.add', () => {
 describe('differential — the same patches through the viewer and the strict player', () => {
   // The plan's differential contract: the capture-side fuzz generator's output
   // driven through THIS applier and `dom-player.js` in parallel. The generator
-  // is imported rather than copied (`support/mutation-fuzz.js`, extracted from
+  // is imported rather than copied (`packages/sessionrecording-conformance/src/fuzz/mutation-fuzz.js`, extracted from
   // `mutations-fuzz.test.js`, which still drives it): two readings of the patch
   // vocabulary is the exact failure this migration exists to remove, and a
   // second generator would be a second reading of what a batch means.

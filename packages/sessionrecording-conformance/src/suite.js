@@ -3,11 +3,10 @@
 //
 // WHY A LIBRARY AND NOT A TEST FILE. Every fixture is checked against its
 // expectations twin, and until this package existed that runner lived in
-// CH's test tree — so a
-// second implementation could answer the corpus only by vendoring CH's tests.
-// Registering the suite from a function means CH and any other consumer run the
-// SAME tests, with the same names and the same messages, because there is one
-// copy of each. The two callers differ in nothing but which package.json's
+// CH's test tree — so a second implementation could answer the corpus only by
+// vendoring CH's tests. Registering the suite from a function means CH and any
+// other consumer run the SAME tests, with the same names and the same
+// messages, because there is one copy of each. The two callers differ in nothing but which package.json's
 // `npm test` invokes them.
 //
 // THE THREE EXPECTATION MODES (`expect`, describing the TOLERANT LOAD only):

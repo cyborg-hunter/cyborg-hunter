@@ -616,7 +616,7 @@ function mountTree(domNode, body, doc) {
 //
 // TOLERANT, COUNTED, SURFACED (design §4). A patch naming an id the map does
 // not hold is skipped and counted into `patchFailures`, never thrown on. This
-// is a DELIBERATE divergence from `tests/replay/support/dom-player.js`, which
+// is a DELIBERATE divergence from `packages/sessionrecording-conformance/src/fuzz/dom-player.js`, which
 // throws on the same input: the test player's job is to catch mapper bugs, the
 // viewer's job is to show an analyst as much of an unrepeatable session as
 // survives. The consequence is recorded and routed — a tolerant viewer cannot

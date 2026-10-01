@@ -84,7 +84,7 @@ function shape(node) {
     kids + '</' + node.tagName.toLowerCase() + '>';
 }
 
-// The fork-faithful, dangling-intolerant player (support/dom-player.js).
+// The fork-faithful, dangling-intolerant player (packages/sessionrecording-conformance/src/fuzz/dom-player.js).
 const playerFor = (session) => createPlayer(session.keyframe);
 
 describe('mapMutations — canonical shapes (spec §5.1)', () => {

@@ -14,8 +14,7 @@
 // viewer: canonical-core's four were authored in the FORK (commit 8be0ef5)
 // before CH had an executor at all, and jspsych-full's ten were authored from
 // the recording's own payloads and executed by the fork's player first (fork
-// commit d49e4b0; evidence in
-// `.superpowers/sdd/2026-08-11-t5-a2-viewer-migration/task-7a-crosscheck.md`).
+// commit d49e4b0).
 // A value CH's viewer and the fork disagree on is escalated, never adjusted.
 // Moving the executor into the package strengthens that: now the fork
 // runs the SAME executor over the same corpus and the two players' readings are

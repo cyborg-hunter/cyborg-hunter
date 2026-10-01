@@ -2,7 +2,7 @@
 // T5 Task 2 — DomNode tree (spec §4) → real DOM, plus the integer-ID map every
 // `dom.*` patch (Task 3) and every `anchor.node` (Task 6) resolves through.
 //
-// The oracle for the shape claims is `tests/replay/support/dom-player.js` — the
+// The oracle for the shape claims is `packages/sessionrecording-conformance/src/fuzz/dom-player.js` — the
 // deliberately strict §5.1 player the capture-side suites judge the mutation
 // mapper against. Reusing its reader rather than mirroring it is the point:
 // the viewer and the test player must hold ONE reading of what a DomNode tree

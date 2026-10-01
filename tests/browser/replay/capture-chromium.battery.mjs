@@ -15,7 +15,7 @@
 //
 // Assertion style follows the sibling suites: hard-labelled checks, exit code
 // is the signal. The oracle for "did the player end up with the right tree" is
-// tests/replay/support/dom-player.js — the same fork-faithful, dangling-
+// packages/sessionrecording-conformance/src/fuzz/dom-player.js — the same fork-faithful, dangling-
 // intolerant player the unit and fuzz suites judge the mapper against.
 //
 // Run: node build.js && node tests/browser/replay/capture-chromium.battery.mjs
