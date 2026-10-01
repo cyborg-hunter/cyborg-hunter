@@ -3,6 +3,31 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [0.9.1] — 2026-10-01
+
+A visual redesign of the HTML triage report and the live demo. No change to
+scoring, data formats or the browser library's behaviour.
+
+### Changed
+- Report typefaces: six Google Fonts families (Space Grotesk, Tomorrow, Sofia
+  Sans, Sora, Recursive, Major Mono Display) are embedded in every
+  `index.html` as base64 WOFF2 (about +227 KB), so the report stays a single
+  offline file. Each text role uses one of them; their OFL licences ship in
+  `src/cli/renderers/fonts/`.
+- Report shapes: high-contrast neutrals, square badges, tiles and boxes, a
+  double rule under the header, soft shadows on cells and plots, an outlined
+  selected participant row, the filter chips as one segmented control, hairline
+  boxes for the triage note and paste evidence, a round ink play button in the
+  replay viewer, and larger keycast chips.
+- Replay viewer: the cursor trail is drawn as fading breadcrumb dots instead of
+  a line.
+- Live demo: restyled in the same aesthetic (fonts, neutrals, segmented tabs,
+  square cards). The report and replay viewer embedded in the demo now get the
+  report's fonts and the CLI's own replay CSS, replacing a hand-kept copy that
+  had drifted.
+- `.mono` in the report now defaults to Sora with tabular figures; form
+  controls no longer fall back to the browser's default font.
+
 ## [0.9.0] — 2026-09-29
 
 The report's triage-score weights are configurable from the CLI config. Default
