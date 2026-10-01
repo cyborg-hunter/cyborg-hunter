@@ -114,7 +114,8 @@ export function collectSegments(raw) {
 // config } — score fields and libraryVersion are NOT in the session (finalize()
 // stores them separately). Returns { session, score, pageOrigins } or null for
 // no segments. Segments from a later page (different pageOrigin) have their
-// times re-based to the first page's origin.
+// times re-based to the first page's origin. The score is the last segment's,
+// i.e. the last page's monitor only (a score cannot be summed across pages).
 export function reassembleSegments(segments) {
   if (!Array.isArray(segments) || segments.length === 0) return null;
   const sorted = segments.slice().sort((a, b) => a.segmentIndex - b.segmentIndex);
@@ -138,12 +139,18 @@ export function reassembleSegments(segments) {
     session[alias] = session[canonical];   // same array, as in the monitor
   }
 
+  // Counters are cumulative per monitor, and every page load runs a new
+  // monitor: the session total is the sum of each page's last counters (a page
+  // is a run of consecutive segments with one pageOrigin). `?? 0` matches
+  // finalize()'s destructuring defaults.
   const last = sorted[sorted.length - 1];
-  const counters = last.counters || {};
-  // `?? 0` matches finalize()'s destructuring defaults.
-  session.pasteCount = counters.pasteCount ?? 0;
-  session.copyCount = counters.copyCount ?? 0;
-  session.dropCount = counters.dropCount ?? 0;
+  for (const k of ['pasteCount', 'copyCount', 'dropCount']) session[k] = 0;
+  sorted.forEach((s, i) => {
+    const next = sorted[i + 1];
+    if (next && next.pageOrigin === s.pageOrigin) return;
+    const counters = s.counters || {};
+    for (const k of ['pasteCount', 'copyCount', 'dropCount']) session[k] += counters[k] ?? 0;
+  });
   const withConfig = sorted.find(s => s.config);
   session.config = withConfig ? withConfig.config : undefined;
 

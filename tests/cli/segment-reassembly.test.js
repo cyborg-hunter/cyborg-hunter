@@ -94,6 +94,35 @@ describe('5th convention in extractIntegrityData', () => {
     assert.equal(tr.tabAwayEvents[0].startRel_ms, 4);
     assert.equal(tr.pasteEvents[0].t, 30030);
   });
+  it('re-bases a later-page row that carries only integritySegmentFinal', () => {
+    const t0 = trial(0, seg(0, {}));
+    const t1 = trial(1, undefined);
+    delete t1.integritySegment;
+    t1.integritySegmentFinal = { ...seg(1, {}), pageOrigin: 6000 };
+    t1.integrity.startTime = 20;
+    const r = extractIntegrityData({ participantId: 'P1', trials: [t0, t1] }, {});
+    assert.equal(r.trials[0].startTime, 10);
+    assert.equal(r.trials[1].startTime, 5020);
+  });
+  it('re-bases guard violations tagged with a later pageOrigin; untagged ones keep their start', () => {
+    const violations = [
+      { reason: 'not_fullscreen', start: 100, end: 200, duration: 100, pageOrigin: 1000 },
+      { reason: 'tab_hidden', start: 50, end: 60, duration: 10, pageOrigin: 31000 },
+      { reason: 'sidebar', start: 70, end: 80, duration: 10 }
+    ];
+    const raw = { participantId: 'P1', trials: [trial(0, seg(0, {})), trial(1, { ...seg(1, {}), pageOrigin: 31000 })],
+      guard_assistance_violations_session: JSON.stringify(violations) };
+    const r = extractIntegrityData(raw, {});
+    assert.deepStrictEqual(r.guardFriction.violations.map(v => v.t), [100, 30050, 70]);
+  });
+  it('sums the counters of each page (every page load starts a new monitor)', () => {
+    const p1 = [seg(0, {}), seg(1, {})].map(s => ({ ...s, counters: { pasteCount: s.segmentIndex + 1, copyCount: 1, dropCount: 0 } }));
+    const p2 = [seg(2, {}), seg(3, {})].map(s => ({ ...s, pageOrigin: 9000, counters: { pasteCount: s.segmentIndex - 1, copyCount: 0, dropCount: 1 } }));
+    const { session } = reassembleSegments([...p1, ...p2]);
+    assert.equal(session.pasteCount, 2 + 2);
+    assert.equal(session.copyCount, 1);
+    assert.equal(session.dropCount, 1);
+  });
   it('surfaces a cyborgHunterError marker as a warning', () => {
     const r = extractIntegrityData({ participantId: 'P1', trials: [{ ...trial(0, seg(0, {})), cyborgHunterError: 'boom' }] }, {});
     assert.ok(r.warnings.some(w => w.includes('cyborgHunterError') && w.includes('boom')));

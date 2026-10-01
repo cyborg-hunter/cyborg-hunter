@@ -61,12 +61,15 @@ export function extractIntegrityData(raw, config) {
     // Only the page-clock fields move (anchors + absolute-time event arrays,
     // listed in segment-reassembly.js); trial-relative mouseTrack/elementTrace
     // times must NOT move, or trajectories misplace every later-page trial.
-    // Single-page data, and data without segments, is untouched.
-    if (raw.trials.some(t => typeof t?.integritySegment?.pageOrigin === 'number')) {
+    // Single-page data, and data without segments, is untouched. A row whose
+    // trial was not segmented itself (it carries only the closing
+    // integritySegmentFinal) takes that segment's page.
+    const rowOrigin = t => t?.integritySegment?.pageOrigin ?? t?.integritySegmentFinal?.pageOrigin;
+    if (raw.trials.some(t => typeof rowOrigin(t) === 'number')) {
       const origin0 = collectSegments(raw)[0]?.pageOrigin;
       if (typeof origin0 === 'number') {
         trials = trials.map(trial => {
-          const origin = trial.integritySegment?.pageOrigin;
+          const origin = rowOrigin(trial);
           return (typeof origin === 'number' && origin !== origin0)
             ? rebaseTrialReport(trial, origin - origin0) : trial;
         });
@@ -376,7 +379,14 @@ function scoreFromSession(session) {
 // (or metadata). Each entry is { reason, start, end, duration, in_progress };
 // the renderer keys off `t` (perfNow ms), so map start → t. Apps that hand-write
 // a top-level `raw.guardFriction` object still take precedence over this.
+// One-line setup across several pages (0.10.0 vanilla host): each page's
+// entries carry that page's `pageOrigin`, and `t` is re-based onto the first
+// segment's origin like the rest of the session; entries without one keep
+// their `start`.
 function findGuardViolations(raw) {
+  const origin0 = collectSegments(raw)[0]?.pageOrigin;
+  const offset = (v) => (typeof v.pageOrigin === 'number' && typeof origin0 === 'number')
+    ? v.pageOrigin - origin0 : 0;
   const parseArr = (v) => {
     if (Array.isArray(v)) return v;
     if (typeof v === 'string') { try { return JSON.parse(v); } catch { return null; } }
@@ -409,7 +419,7 @@ function findGuardViolations(raw) {
     if (Array.isArray(arr)) {
       const violations = arr
         .filter(v => v && typeof v.start === 'number')
-        .map(v => ({ t: v.start, reason: v.reason || 'unknown', phase: 'unknown', duration_ms: v.duration }));
+        .map(v => ({ t: v.start + offset(v), reason: v.reason || 'unknown', phase: 'unknown', duration_ms: v.duration }));
       // Fall through to the next source on an empty/violation-less candidate
       // instead of locking onto it — otherwise an empty placeholder (e.g. a
       // metadata mirror set to []) would shadow real violations on the trial rows.
