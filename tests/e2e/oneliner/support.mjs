@@ -22,13 +22,15 @@
 //   pasteInto         a synthetic paste event: the core listens for `paste` on
 //                     document and reads clipboardData (core/signals/clipboard.js).
 //   parseCsv          papaparse, header row → objects.
+//   newTmpDir / cleanupTmpDirs   a temp dir per CLI run; the spec removes
+//                     them all in afterAll.
 //   saveAndReport     writes the saved file + a CLI config to a temp dir, runs
 //                     `cyborg-hunter report --no-visuals` there, returns stdout,
 //                     the parsed summary.csv rows and triage.md.
 
 import { test as base, expect } from '@playwright/test';
 import { execSync } from 'node:child_process';
-import { writeFileSync, readFileSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -97,8 +99,14 @@ export function parseCsv(text) {
   return parsed.data;
 }
 
+const tmpDirs = [];
 export function newTmpDir(label) {
-  return mkdtempSync(join(tmpdir(), 'ch-oneliner-e2e-' + label + '-'));
+  const dir = mkdtempSync(join(tmpdir(), 'ch-oneliner-e2e-' + label + '-'));
+  tmpDirs.push(dir);
+  return dir;
+}
+export function cleanupTmpDirs() {
+  while (tmpDirs.length) rmSync(tmpDirs.pop(), { recursive: true, force: true });
 }
 
 // The saved file goes to <tmpDir>/data: with dataDir '.', the CLI's own

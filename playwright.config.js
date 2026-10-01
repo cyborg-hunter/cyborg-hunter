@@ -9,9 +9,11 @@
 //   - the one-line setup (tests/e2e/oneliner, project oneliner): fixture
 //     experiments that load dist/ch.js by its real URL plus the vendored
 //     jsPsych in tests/fixtures/, so the second server serves the repo root.
-//     It does not build: the demo server's assemble step rebuilds dist/ when
-//     it is older than src/, and no test starts before both servers answer.
-//     (Building here too would race that step's copy of dist/.)
+//     It builds dist/ first, so the specs never run a stale ch.js (the demo
+//     server's assemble step is skipped when an existing :8177 server is
+//     reused). No race with that step's copy of dist/: Playwright sets up the
+//     webServer entries in series, each one only after the previous one's
+//     URL answers, so the demo site is assembled before this build starts.
 
 import { defineConfig, devices } from '@playwright/test';
 
@@ -36,7 +38,7 @@ export default defineConfig({
       timeout: 180000,
     },
     {
-      command: `node tools/serve-demo.mjs ${ONELINER_PORT} .`,
+      command: `node build.js && node tools/serve-demo.mjs ${ONELINER_PORT} .`,
       url: `http://localhost:${ONELINER_PORT}/package.json`,
       reuseExistingServer: !process.env.CI,
       timeout: 180000,

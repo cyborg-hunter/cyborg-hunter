@@ -13,10 +13,12 @@
 // Paste verdicts use the standard preset's hard paste threshold, 2
 // (src/shared/constants.js): one paste is soft, two are a hard trigger.
 
-import { test, expect, collectConsole, installFullscreenMock, pasteInto, parseCsv, newTmpDir, saveAndReport } from './support.mjs';
+import { test, expect, collectConsole, installFullscreenMock, pasteInto, parseCsv, newTmpDir, cleanupTmpDirs, saveAndReport } from './support.mjs';
 
 const FIX = '/tests/e2e/oneliner/fixtures/';
-const SUMMARY_RE = /Cyborg Hunter active · jsPsych detected · (\d+) trials instrumented · ID from data-participant-id · honeypot on · friction off/;
+
+test.afterAll(() => cleanupTmpDirs());
+const SUMMARY_RE = /Cyborg Hunter active · jsPsych detected · (\d+) trials instrumented · ID from data-participant-id · honeypot on · friction off$/;
 
 // jsPsych's CSV writes object cells as JSON.
 function json(cell) { return cell ? JSON.parse(cell) : null; }
@@ -90,7 +92,7 @@ test('full timeline: every trial instrumented, segments on every row, final segm
   const withSeg = rowsWithSegment(rows);
   expect(withSeg).toHaveLength(65);
   for (const r of rows) {
-    expect(r.integritySegment).not.toBe('');
+    expect(json(r.integritySegment)).not.toBeNull();
     expect(r).toHaveProperty('integrityPasteCount');
     expect(r.cyborgHunterError || '').toBe('');
   }
@@ -201,7 +203,7 @@ test('shared trial object + own extensions: injected once, both rows carry segme
   expect(json(tracked.mouse_tracking_data).length).toBeGreaterThan(0);
   expect(json(tracked.integritySegment)).not.toBeNull();
   for (const r of rows) {
-    expect(r.integritySegment).not.toBe('');
+    expect(json(r.integritySegment)).not.toBeNull();
     expect(r.cyborgHunterError || '').toBe('');
   }
 
@@ -229,7 +231,7 @@ test('researcher-named trials after a synchronous call-function trial keep their
   const rows = parseCsv(await page.evaluate(() => window.__csv));
   expect(rows).toHaveLength(5);
   for (const r of rows) {
-    expect(r.integritySegment).not.toBe('');
+    expect(json(r.integritySegment)).not.toBeNull();
     expect(r.cyborgHunterError || '').toBe('');
   }
   for (const [name, trialId] of [['named1', 'named-by-researcher'], ['named2', 'named-after-gap']]) {
@@ -262,7 +264,7 @@ test('pipe-style save trial: the snapshot taken at the save trial\'s start still
   expect(snap).toHaveLength(5);
   expect(snap.some((r) => r.name === 'save')).toBe(false);
   for (const r of snap) {
-    expect(r.integritySegment).not.toBe('');
+    expect(json(r.integritySegment)).not.toBeNull();
     expect(r.integritySegmentFinal || '').toBe('');
   }
   // The full data (on_finish) has what the snapshot misses.
@@ -311,7 +313,7 @@ test('guards: honeypot on by default, friction enforcing from its entry trial', 
 
   const rows = parseCsv(await page.evaluate(() => window.__csv));
   expect(rows).toHaveLength(3);
-  for (const r of rows) expect(r.integritySegment).not.toBe('');
+  for (const r of rows) expect(json(r.integritySegment)).not.toBeNull();
   const last = rows[rows.length - 1];
   expect(Number(last.guard_assistance_violation_count_session)).toBeGreaterThanOrEqual(1);
   expect(last.guard_assistance_violations_session).toContain('not_fullscreen');
