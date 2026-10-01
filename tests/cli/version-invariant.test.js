@@ -19,9 +19,12 @@ it('every jsPsych extension info.version field matches package.json', async () =
   // extensions) expects browser globals — tests/jspsych/*.test.js shim those
   // with happy-dom before importing. A source-level regex check works
   // regardless of DOM-global requirements, so it's used for every file here.
+  // The first `version:` in each file is its static info.version.
   const files = [
     '../../src/jspsych/extension-cyborg-hunter.js',
     '../../src/jspsych/extension-cyborg-hunter-replay.js',
+    '../../src/jspsych/extension-guard-friction.js',
+    '../../src/jspsych/extension-guard-honeypot.js',
     '../../src/oneliner/adapters/jspsych-extension.js',
   ];
   for (const f of files) {

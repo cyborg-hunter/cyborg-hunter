@@ -1158,7 +1158,7 @@ class GuardFrictionExtension {
     // Hand-bumped on each release to track the package version
     // (package.json / src/shared/constants.js). Shown in the jsPsych developer
     // console only; the runtime library version is independent.
-    version: '0.7.0',
+    version: '0.9.2',
     data: {}
   };
 

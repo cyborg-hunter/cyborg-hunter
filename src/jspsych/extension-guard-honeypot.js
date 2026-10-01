@@ -449,7 +449,7 @@
 class GuardHoneypotExtension {
   static info = {
     name: 'guard-honeypot',
-    version: '0.6.0',
+    version: '0.9.2',
     // Per-trial fields written by on_finish. Reflect violations for this
     // trial only; jsPsych spreads them onto each trial row (CSV columns).
     // Session totals are written as global properties by finalize().

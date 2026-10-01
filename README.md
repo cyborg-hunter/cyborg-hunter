@@ -48,7 +48,7 @@ Browser (experiment page): one tag, below `jspsych.js` and above your experiment
 <script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
 ```
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.9.1/dist/...`. You can also copy `dist/ch.js` (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
+For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.9.2/dist/...`. You can also copy `dist/ch.js` (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
 
 Manual mode (advanced), for experiments that wire the jsPsych extension themselves: see [docs/advanced-integration.md](docs/advanced-integration.md#manual-mode). It loads these files instead of `ch.js`:
 
@@ -205,7 +205,7 @@ Run the test suite with `npm test`. Before publishing, run `scripts/check-public
   author  = {Konuk, Can and Btesh, Victor and Nunez, Jose Luis},
   title   = {cyborg-hunter: detecting AI-tool use in browser-based behavioral experiments},
   year    = {2026},
-  version = {0.9.1},
+  version = {0.9.2},
   url     = {https://github.com/cyborg-hunter/cyborg-hunter},
   license = {MIT}
 }
