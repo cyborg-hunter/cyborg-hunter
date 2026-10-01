@@ -312,3 +312,51 @@ describe('segmenter', () => {
     assert.doesNotThrow(() => { monitor.startTrial({ trialId: 'host' }); monitor.endTrial(); });
   });
 });
+
+// ch.js monitors the whole page: what happens between two host trials falls
+// in a gap span and counts. Manual mode attaches its listeners only inside
+// startTrial/endTrial, so the same behaviour there records nothing. Same
+// session through both: trial A, then a paste and a tab-away, then trial B.
+describe('whole-page monitoring vs manual mode', () => {
+  const cfg = { participantId: 'SEG2', thresholds: { tabAwayDurationMs: 5 } };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function betweenTrials() {
+    paste('between trials');
+    win.dispatchEvent(new win.Event('blur')); await sleep(15); win.dispatchEvent(new win.Event('focus'));
+  }
+
+  it('an event between two trials counts through the segmenter and not in manual mode', async () => {
+    // Manual mode first, destroyed before the second monitor attaches.
+    const manual = init(cfg);
+    manual.startSession();
+    manual.startTrial({ trialId: 'A' }); manual.endTrial();
+    await betweenTrials();
+    manual.startTrial({ trialId: 'B' }); manual.endTrial();
+    const manualReport = manual.getSessionReport();
+    const manualScore = manual.getSessionScore();
+    manual.destroy();
+
+    // The jsPsych host's calls: boot span, then rotate at each on_load and
+    // cut at each on_finish, then finish at the end of the session.
+    monitor = init(cfg);
+    monitor.startSession();
+    const seg = createSegmenter({ monitor, differ: createSegmentDiffer(monitor), clock: () => 0 });
+    seg.start();
+    seg.rotate({ trialId: 'A' }); seg.cut({ source: 'host', nextTrialId: 'gap-0' });
+    await betweenTrials();
+    seg.rotate({ trialId: 'B' });
+    const b = seg.cut({ source: 'host', nextTrialId: 'gap-1' });
+    const last = seg.finish({ source: 'final' }).segment;
+
+    assert.equal(manualReport.pasteCount, 0);
+    assert.equal(manualScore.softScore, 0);
+    assert.equal(manualScore.trialsCompleted, 2);
+
+    assert.equal(b.segment.gap.length, 1, 'the gap before B is folded into B\'s segment');
+    assert.equal(b.segment.gap[0].pasteEvents.length, 1);
+    assert.equal(b.trialReport.pasteEvents.length, 0, 'not in B\'s own trial report');
+    assert.equal(last.counters.pasteCount, 1);
+    assert.ok(last.score.softScore > manualScore.softScore, 'the tab-away raises the soft score');
+    assert.equal(last.score.trialsCompleted, 5, 'spans: boot, A, gap, B, final gap (2N+1)');
+  });
+});
