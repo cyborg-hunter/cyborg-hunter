@@ -114,7 +114,7 @@ describe('buildAssetMap + applyAssetMap', () => {
   it('summarises per recording and words the report note', async () => {
     const { assetMap } = await buildAssetMap([recording()], dropped);
     const s = assetMatchSummary(recording(), assetMap);
-    assert.deepStrictEqual(s.stylesheets, { matched: 1, total: 2, missing: ['fonts.css'] });
+    assert.deepStrictEqual(s.stylesheets, { matched: 1, total: 2, missing: ['fonts.css'], ambiguous: [] });
     assert.strictEqual(s.images.total, 6);
     assert.strictEqual(s.images.matched, 2);
     assert.strictEqual(assetNoteText(s), 'Experiment assets: 1 of 2 stylesheets matched (missing: fonts.css); 2 of 6 images matched (missing: poster.jpg, clip.webm, stim-2.png, stim-3.png).');
@@ -124,6 +124,126 @@ describe('buildAssetMap + applyAssetMap', () => {
     assert.strictEqual(contentTypeFor('a/b.CSS'), 'text/css');
     assert.strictEqual(contentTypeFor('x.woff2'), 'font/woff2');
     assert.strictEqual(contentTypeFor('x.bin'), 'application/octet-stream');
+  });
+});
+
+// A recording whose one sheet the capture could not inline: href-only, so its
+// text (and everything it references) comes from the supplied files.
+function hrefOnly(extraNodes = [], events = []) {
+  const r = recording();
+  r.stylesheets = [{ id: 1, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null }];
+  r.segments[0].initial_dom.children = extraNodes;
+  r.segments[0].events = events;
+  return r;
+}
+const STYLE = '@font-face{font-family:F;src:url(fonts/a.woff2)} body{background:url(\'../img/bg.png\')}';
+const WOFF = new Uint8Array([0x77, 0x4f, 0x46, 0x32]);
+
+describe('references inside a supplied stylesheet', () => {
+  it('matches and inlines the fonts and images a supplied sheet references, resolved against its recorded URL', async () => {
+    const files = [
+      { path: 'study/css/style.css', read: async () => bytes(STYLE) },
+      { path: 'study/css/fonts/a.woff2', read: async () => WOFF },
+      { path: 'study/img/bg.png', read: async () => PNG },
+    ];
+    const { assetMap, report } = await buildAssetMap([hrefOnly()], files);
+    assert.deepStrictEqual(report.matched.map((m) => m.path).sort(), ['study/css/fonts/a.woff2', 'study/css/style.css', 'study/img/bg.png']);
+    assert.deepStrictEqual(report.missing, []);
+    const rec = hrefOnly();
+    const s = assetMatchSummary(rec, assetMap);
+    assert.strictEqual(assetNoteText(s), 'Experiment assets: 1 of 1 stylesheets matched; 1 of 1 images matched; 1 of 1 fonts matched.');
+    const model = applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(model.stylesheets[0].css,
+      '@font-face{font-family:F;src:url("data:font/woff2;base64,d09GMg==")} body{background:url("data:image/png;base64,iVBORw==")}');
+    const once = JSON.stringify(model);
+    assert.strictEqual(JSON.stringify(applyAssetMap(model, assetMap)), once, 'a second apply changes nothing');
+  });
+  it('turns the references it cannot supply into absolute URLs and says what is missing', async () => {
+    const { assetMap, report } = await buildAssetMap([hrefOnly()], [{ path: 'style.css', read: async () => bytes(STYLE) }]);
+    assert.deepStrictEqual(report.missing.sort(), ['https://exp.example.org/study/css/fonts/a.woff2', 'https://exp.example.org/study/img/bg.png']);
+    const rec = hrefOnly();
+    assert.strictEqual(assetNoteText(assetMatchSummary(rec, assetMap)),
+      'Experiment assets: 1 of 1 stylesheets matched; 0 of 1 images matched (missing: bg.png); 0 of 1 fonts matched (missing: a.woff2).');
+    const model = applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(model.stylesheets[0].css,
+      '@font-face{font-family:F;src:url("https://exp.example.org/study/css/fonts/a.woff2")} body{background:url("https://exp.example.org/study/img/bg.png")}');
+  });
+  it('splices a supplied @import in place; the imported sheet\'s own references are made absolute, not followed', async () => {
+    const files = [
+      { path: 'css/style.css', read: async () => bytes('@import "base.css";\nh1{color:red}') },
+      { path: 'css/base.css', read: async () => bytes('p{background:url(../img/p.png)}') },
+      { path: 'img/p.png', read: async () => PNG },
+    ];
+    const { assetMap, report } = await buildAssetMap([hrefOnly()], files);
+    assert.deepStrictEqual(report.matched.map((m) => m.path), ['css/style.css', 'css/base.css']);
+    const rec = hrefOnly();
+    assert.deepStrictEqual(assetMatchSummary(rec, assetMap).stylesheets, { matched: 2, total: 2, missing: [], ambiguous: [] });
+    const model = applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(model.stylesheets[0].css, 'p{background:url("https://exp.example.org/study/img/p.png")}\nh1{color:red}');
+    const once = JSON.stringify(model);
+    assert.strictEqual(JSON.stringify(applyAssetMap(model, assetMap)), once, 'a second apply changes nothing');
+  });
+  it('an @import in recorded CSS counts as a stylesheet, not an image, and is spliced in, never turned into a data: URI', async () => {
+    const r = hrefOnly();
+    r.stylesheets = [{ id: 1, kind: 'link', href: 'https://exp.example.org/study/css/main.css',
+      css: '@import url("theme.css") screen;\n@import url(l.css) layer(base);\n.a{color:red}', media: null }];
+    const u = collectAssetUrls(r);
+    assert.deepStrictEqual(u.images, []);
+    assert.deepStrictEqual(u.stylesheets, ['https://exp.example.org/study/css/theme.css'], 'a layer()/supports() import is left alone');
+    const { assetMap } = await buildAssetMap([r], [{ path: 'css/theme.css', read: async () => bytes('.t{}') }, { path: 'css/l.css', read: async () => bytes('.l{}') }]);
+    const model = applyAssetMap(buildViewerModel(r), assetMap);
+    // The import left as a URL moves to the top: an @import after a rule is ignored.
+    assert.strictEqual(model.stylesheets[0].css, '@import url("https://exp.example.org/study/css/l.css") layer(base);\n@media screen{.t{}}\n\n.a{color:red}');
+  });
+  it('drops a byte-order mark from a supplied sheet', async () => {
+    const { assetMap } = await buildAssetMap([hrefOnly()], [{ path: 'style.css', read: async () => bytes('﻿body{margin:0}') }]);
+    const model = applyAssetMap(buildViewerModel(hrefOnly()), assetMap);
+    assert.strictEqual(model.stylesheets[0].css, 'body{margin:0}');
+  });
+  it('a recorded href cannot break out of the url("...") it is resolved into', async () => {
+    // other.png matches, so the map is not empty and the sheet is rewritten.
+    const r = hrefOnly([{ id: 2, kind: 'element', tag: 'img', attrs: { src: 'https://h/other.png' }, children: [] }]);
+    r.stylesheets = [
+      { id: 1, kind: 'link', href: 'https://h/a"b)c/main.css?x="y', css: '.a{background:url(x.png)}', media: null },
+      // A non-http scheme keeps a backslash through the URL parser; it is escaped.
+      { id: 2, kind: 'link', href: 'foo://h/a/main.css', css: '.b{background:url(x\\)}', media: null },
+    ];
+    const { assetMap } = await buildAssetMap([r], [{ path: 'other.png', read: async () => PNG }]);
+    const model = applyAssetMap(buildViewerModel(r), assetMap);
+    assert.strictEqual(model.stylesheets[0].css, '.a{background:url("https://h/a%22b)c/x.png")}');
+    assert.strictEqual(model.stylesheets[1].css, '.b{background:url("foo://h/a/x\\5c ")}');
+  });
+});
+
+describe('matching rules', () => {
+  it('the candidate sharing the longest path suffix with the URL wins', () => {
+    const url = 'https://h/study/node_modules/jspsych/css/jspsych.css';
+    const r = matchAssets([url], ['node_modules/jspsych/css/jspsych.css', 'jspsych/css/jspsych.css']);
+    assert.strictEqual(r.matched.get(url), 'node_modules/jspsych/css/jspsych.css');
+  });
+  it('a dropped folder named differently from the URL path still matches on the shared tail', () => {
+    const url = 'https://h/study/css/style.css';
+    const r = matchAssets([url], ['my-exp/css/style.css', 'my-exp/other/style.css']);
+    assert.strictEqual(r.matched.get(url), 'my-exp/css/style.css');
+    assert.deepStrictEqual(r.ambiguous, []);
+  });
+  it('a tie at the longest shared suffix is ambiguous, and the note says so instead of calling it missing', async () => {
+    const files = [{ path: 'a/img/stim-1.png', read: async () => PNG }, { path: 'b/img/stim-1.png', read: async () => PNG }];
+    const r = hrefOnly([{ id: 2, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/study/img/stim-1.png' }, children: [] }]);
+    const { assetMap, report } = await buildAssetMap([r], files);
+    assert.deepStrictEqual(report.ambiguous, [{ url: 'https://exp.example.org/study/img/stim-1.png', candidates: ['a/img/stim-1.png', 'b/img/stim-1.png'] }]);
+    assert.strictEqual(assetNoteText(assetMatchSummary(r, assetMap)),
+      'Experiment assets: 0 of 1 stylesheets matched (missing: style.css); 0 of 1 images matched (ambiguous: stim-1.png).');
+    const model = applyAssetMap(buildViewerModel(r), assetMap);
+    assert.strictEqual(model.segments[0].initialDom.children[0].attrs.src, 'https://exp.example.org/study/img/stim-1.png', 'an ambiguous URL is not inlined');
+  });
+  it('only image and media elements contribute src/poster URLs (an iframe\'s src is not an image)', () => {
+    const r = hrefOnly(
+      [{ id: 2, kind: 'element', tag: 'iframe', attrs: { src: 'https://survey.example.org/form.html' }, children: [] },
+        { id: 3, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/a.png' }, children: [] }],
+      [{ type: 'dom.attr', t: 1, node: 2, name: 'src', value: 'https://survey.example.org/page2.html' },
+        { type: 'dom.attr', t: 2, node: 3, name: 'src', value: 'https://exp.example.org/b.png' }]);
+    assert.deepStrictEqual(collectAssetUrls(r).images, ['https://exp.example.org/a.png', 'https://exp.example.org/b.png']);
   });
 });
 
