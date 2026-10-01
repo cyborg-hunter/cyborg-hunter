@@ -364,6 +364,59 @@ describe('ch.js on real jsPsych: ch.js did not start, the experiment still runs'
   });
 });
 
+describe('ch.js on real jsPsych: a half-migrated manual page', () => {
+  // ch.js replaced cyborg-hunter.min.js, but initJsPsych still lists
+  // jsPsychCyborgHunter with the manual docs' params, and on_finish still
+  // calls finalize(). Without finalize() on ch.js's class that call threw
+  // and the researcher's save after it never ran.
+  it('finalize() and the manual params only warn; the save after them runs and carries the final segment', async () => {
+    const saved = win.jsPsychCyborgHunter;
+    delete win.jsPsychCyborgHunter;
+    try {
+      bootCh();
+      let jsPsych;
+      let savedRows = null;
+      jsPsych = win.initJsPsych({
+        extensions: [{ type: win.jsPsychCyborgHunter, params: { participantId: 'OLD', preset: 'strict' } }],
+        on_finish: () => {
+          jsPsych.extensions['cyborg-hunter'].finalize();
+          savedRows = jsPsych.data.get().values();
+        }
+      });
+      await runTimeline(jsPsych, [{ type: Timer }, { type: Timer }]);
+      assert.ok(savedRows, 'the researcher\'s save ran');
+      assert.equal(savedRows.length, 2);
+      assert.equal(savedRows[0].participantId, 'P1', 'the tag\'s id, not the params\'');
+      assert.ok(savedRows[1].integritySegmentFinal);
+      assert.deepStrictEqual(warns, [MESSAGES.extensionParamsIgnored(), MESSAGES.finalizeNotNeeded()]);
+      assert.deepStrictEqual(errors, []);
+    } finally {
+      win.jsPsychCyborgHunter = saved;
+    }
+  });
+});
+
+describe('ch.js on real jsPsych: data-debug badge', () => {
+  // jsPsych's prepareDom (jspsych.js 7.3.1 :2893-2920) replaces <body>'s
+  // content, badge included, before the first trial.
+  it('the badge is on the page while the first trial is on screen', async () => {
+    bootCh({ debug: '' });
+    console.info = () => {};
+    const seen = [];
+    class Probe {
+      static info = { name: 'probe', parameters: {} };
+      constructor(jsPsych) { this.jsPsych = jsPsych; }
+      trial(el) {
+        el.innerHTML = '<p>probe</p>';
+        setTimeout(() => { seen.push(!!win.document.getElementById('ch-debug-badge')); this.jsPsych.finishTrial({}); }, 5);
+      }
+    }
+    const jsPsych = win.initJsPsych({});
+    await runTimeline(jsPsych, [{ type: Probe }, { type: Probe }]);
+    assert.deepStrictEqual(seen, [true, true]);
+  });
+});
+
 describe('ch.js on real jsPsych: manual mode with ch.js alone', () => {
   // The researcher kept extension-cyborg-hunter.js and its initJsPsych entry
   // but loads ch.js instead of cyborg-hunter.min.js: window.CyborgHunter is

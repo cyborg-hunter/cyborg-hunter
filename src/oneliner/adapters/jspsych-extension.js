@@ -53,7 +53,17 @@
 //
 // ctx (set by installJsPsychAdapter): { monitor, segmenter, jspsych, debug? }.
 // None of the hooks throws into jsPsych: a failure becomes cyborgHunterError
-// on the row.
+// on the row. With no ctx (ch.js failed or stood down, boot.js; the class is
+// still registered so researcher trials typed jsPsychCyborgHunter run) every
+// hook does nothing.
+//
+// Leftovers of manual wiring on a half-migrated page, where
+// jsPsychCyborgHunter is this class: participantId / preset in the
+// initJsPsych entry's params (initialize) and the on_finish finalize() call
+// each warn once from the catalogue and are otherwise ignored; finalize()
+// existing at all keeps the researcher's save code after it running.
+
+import { MESSAGES } from '../errors.js';
 
 export class OneLinerExtension {
   static info = {
@@ -75,14 +85,32 @@ export class OneLinerExtension {
     this._loadError = null;
     this._loadArmed = false;
     this._armedParams = undefined;
+    this._paramsWarned = false;
+    this._finalizeWarned = false;
   }
 
   get monitor() {
     return OneLinerExtension.ctx ? OneLinerExtension.ctx.monitor : null;
   }
 
-  // The monitor already exists (boot); nothing to set up.
-  initialize(_params) {}
+  // The monitor already exists (boot); nothing to set up. jsPsych passes the
+  // initJsPsych entry's params (a researcher's entry wins the dedupe over
+  // ours, adapters/jspsych.js).
+  initialize(params) {
+    if (this._paramsWarned || !params) return;
+    if (params.participantId !== undefined || params.preset !== undefined) {
+      this._paramsWarned = true;
+      console.warn(MESSAGES.extensionParamsIgnored());
+    }
+  }
+
+  // The manual extension's end-of-session call. ch.js ends the session from
+  // initJsPsych's on_finish (adapters/jspsych.js), before the researcher's.
+  finalize() {
+    if (this._finalizeWarned) return;
+    this._finalizeWarned = true;
+    console.warn(MESSAGES.finalizeNotNeeded());
+  }
 
   // jsPsych 7 calls on_start on every trial that lists the extension, before
   // the plugin's trial(): arm this trial's on_load, for these params only.
@@ -116,6 +144,9 @@ export class OneLinerExtension {
     } catch (e) {
       this._loadError = String((e && e.message) || e);
     }
+    // jsPsych's prepareDom wiped <body>, badge included, before the first
+    // trial; this puts it back while that trial is on screen.
+    try { if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh(); } catch (_) { /* a debug aid */ }
   }
 
   on_finish(_params) {

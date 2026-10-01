@@ -186,5 +186,21 @@ export const MESSAGES = {
       'ch.js did not start (see the error above), so CyborgHunter calls do nothing',
       'fix the error logged above; until then the experiment runs without monitoring',
       DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn, once: a half-migrated manual page still calls the manual
+  // extension's finalize() from its on_finish.
+  finalizeNotNeeded: function () {
+    return formatError('finalize() is not needed with ch.js',
+      'ch.js ends the session itself when the jsPsych timeline finishes, so this call does nothing',
+      'remove the finalize() call from your on_finish (keep your own save code)',
+      DOCS + 'advanced-integration.md#switching-to-the-one-liner');
+  },
+  // console.warn, once: the manual docs' initJsPsych entry still carries
+  // participantId / preset params, which the one-liner does not read.
+  extensionParamsIgnored: function () {
+    return formatError('participantId and preset in the cyborg-hunter extension params are ignored by ch.js',
+      'ch.js reads the participant ID and the preset from its own <script> tag',
+      'use data-participant-id / data-preset on the ch.js tag instead',
+      DOCS + 'advanced-integration.md#switching-to-the-one-liner');
   }
 };

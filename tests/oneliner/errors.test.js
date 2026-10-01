@@ -134,6 +134,16 @@ const CASES = {
     args: [],
     fix: 'fix the error logged above; until then the experiment runs without monitoring',
     link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  finalizeNotNeeded: {
+    args: [],
+    fix: 'remove the finalize() call from your on_finish (keep your own save code)',
+    link: DOCS + 'advanced-integration.md#switching-to-the-one-liner'
+  },
+  extensionParamsIgnored: {
+    args: [],
+    fix: 'use data-participant-id / data-preset on the ch.js tag instead',
+    link: DOCS + 'advanced-integration.md#switching-to-the-one-liner'
   }
 };
 

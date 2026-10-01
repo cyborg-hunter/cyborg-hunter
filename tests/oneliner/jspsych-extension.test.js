@@ -6,6 +6,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { OneLinerExtension } from '../../src/oneliner/adapters/jspsych-extension.js';
+import { MESSAGES } from '../../src/oneliner/errors.js';
 
 function segment(i) {
   return {
@@ -26,9 +27,14 @@ function makeCtx(over) {
 
 const fakeJsPsych = (idx) => ({ getProgress: () => ({ current_trial_global: idx }) });
 
-let errs, origError;
-beforeEach(() => { errs = []; origError = console.error; console.error = (m) => errs.push(String(m)); });
-afterEach(() => { console.error = origError; OneLinerExtension.ctx = null; });
+let errs, warns, origError, origWarn;
+beforeEach(() => {
+  errs = []; warns = [];
+  origError = console.error; origWarn = console.warn;
+  console.error = (m) => errs.push(String(m));
+  console.warn = (m) => warns.push(String(m));
+});
+afterEach(() => { console.error = origError; console.warn = origWarn; OneLinerExtension.ctx = null; });
 
 describe('OneLinerExtension: jsPsych hooks', () => {
   // jsPsych 7 calls these four unconditionally on every trial listing the
@@ -61,7 +67,84 @@ describe('OneLinerExtension: jsPsych hooks', () => {
   });
 });
 
+// ch.js failed or stood down (boot.js): the class is still registered so
+// researcher trials typed jsPsychCyborgHunter run, but no context is wired.
+describe('OneLinerExtension: inert without a context', () => {
+  it('every hook does nothing and never throws; .monitor is null', () => {
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    assert.strictEqual(OneLinerExtension.ctx, null);
+    assert.strictEqual(ext.monitor, null);
+    assert.strictEqual(ext.initialize({}), undefined);
+    const p = { trialId: 'q1' };
+    assert.doesNotThrow(() => { ext.on_start(p); ext.on_load(p); });
+    assert.deepStrictEqual(ext.on_finish(p), {});
+    assert.deepStrictEqual(errs, []);
+  });
+});
+
+// A half-migrated manual page: ch.js is loaded, but the manual docs' wiring
+// is still there. jsPsychCyborgHunter is ch.js's class, so it gets the
+// initJsPsych entry's params and the on_finish finalize() call.
+describe('OneLinerExtension: leftovers from manual wiring', () => {
+  it('finalize() exists, does nothing and warns once', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    assert.strictEqual(ext.finalize(), undefined);
+    ext.finalize();
+    assert.deepStrictEqual(warns, [MESSAGES.finalizeNotNeeded()]);
+    assert.deepStrictEqual(calls, [], 'the session is not touched');
+    OneLinerExtension.ctx = null;
+    assert.doesNotThrow(() => new OneLinerExtension(fakeJsPsych(0)).finalize());
+  });
+
+  it('participantId or preset in the initJsPsych params are warned about once', () => {
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    ext.initialize({ participantId: 'P9', preset: 'strict' });
+    ext.initialize({ preset: 'strict' });
+    assert.deepStrictEqual(warns, [MESSAGES.extensionParamsIgnored()]);
+    new OneLinerExtension(fakeJsPsych(0)).initialize({ preset: 'permissive' });
+    assert.equal(warns.length, 2, 'preset alone is warned about too');
+  });
+
+  it('no warning for ch.js\'s own params or trial params', () => {
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    ext.initialize({});
+    ext.initialize(undefined);
+    ext.initialize({ trialId: 'x', phase: 'p' });
+    assert.deepStrictEqual(warns, []);
+  });
+});
+
 describe('OneLinerExtension: on_load', () => {
+  // jsPsych's prepareDom wipes <body> (and the badge with it) before the
+  // first trial; on_load runs inside that trial, so the badge is back while
+  // the trial is on screen, not only after its on_finish.
+  it('refreshes the debug badge after the rotate; a stale on_load does not', () => {
+    const { ctx, calls } = makeCtx();
+    const order = [];
+    ctx.debug = { refresh: () => order.push('refresh:' + calls.length) };
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    const p = {};
+    ext.on_start(p);
+    ext.on_load(p);
+    assert.deepStrictEqual(order, ['refresh:1']);
+    ext.on_load(p);
+    assert.deepStrictEqual(order, ['refresh:1']);
+  });
+
+  it('a throwing debug refresh never reaches jsPsych', () => {
+    const { ctx } = makeCtx();
+    ctx.debug = { refresh: () => { throw new Error('badge'); } };
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    const p = {};
+    ext.on_start(p);
+    assert.doesNotThrow(() => ext.on_load(p));
+    assert.ok(!('cyborgHunterError' in ext.on_finish(p)));
+  });
+
   it('rotates into the host trial with trialId, phase and decoyAnswer:false passed through', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
