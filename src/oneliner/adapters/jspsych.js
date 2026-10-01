@@ -99,6 +99,7 @@ var injectedCopies = new WeakSet();
 export function injectExtensions(timeline, entries, seen) {
   seen = seen || new WeakSet();
   var result = { trials: 0, skippedOwnEntry: 0, sharedObjects: 0, entryTrialFound: false };
+  var warnedFrozen = false;
 
   function copyOf(entry) {
     var c = Object.assign({}, entry);
@@ -151,8 +152,18 @@ export function injectExtensions(timeline, entries, seen) {
     var missing = entries.filter(function (e) { return present.indexOf(nameOf(e)) === -1; });
     if (missing.length === 0) return;
     missing = missing.map(copyOf);
-    if (hasOwnList) Array.prototype.push.apply(node.extensions, missing);
-    else node.extensions = list.concat(missing);
+    // A frozen or sealed trial object (or extensions array) throws in strict
+    // mode; that trial stays unmonitored and the walk goes on.
+    try {
+      if (hasOwnList) Array.prototype.push.apply(node.extensions, missing);
+      else node.extensions = list.concat(missing);
+    } catch (err) {
+      result.trials -= 1;
+      if (!warnedFrozen) {
+        warnedFrozen = true;
+        console.warn('[cyborg-hunter] a trial object could not be changed (frozen or sealed), so ch.js left it unmonitored');
+      }
+    }
   }
 
   walkList(timeline, { type: undefined, extensions: undefined });

@@ -104,6 +104,23 @@ describe('injectExtensions: dedupe rules (a) and (b)', () => {
     assert.equal(r.trials, 2);
   });
 
+  it('a frozen trial object is left unmonitored, with one warning, and the walk goes on', () => {
+    const first = { type: 'kb' };
+    const frozen = Object.freeze({ type: 'kb' });
+    const frozenList = { type: 'kb', extensions: Object.freeze([{ type: Mouse }]) };
+    const last = { type: 'kb' };
+    let r;
+    assert.doesNotThrow(() => { r = injectExtensions([first, frozen, frozenList, { timeline: [last] }], [CH]); });
+    assert.equal(frozen.extensions, undefined);
+    assert.deepStrictEqual(names(frozenList.extensions), ['mouse-tracking']);
+    assert.deepStrictEqual(names(first.extensions), ['cyborg-hunter']);
+    assert.deepStrictEqual(names(last.extensions), ['cyborg-hunter']);
+    assert.equal(r.trials, 2, 'only the trials that got the entry count');
+    assert.equal(warns.length, 1);
+    assert.match(warns[0], /left it unmonitored/);
+    assert.deepStrictEqual(errors, []);
+  });
+
   it('an extensions array shared by two trials gets one copy and no own-entry count', () => {
     const list = [{ type: Mouse }];
     const r = injectExtensions([{ type: 'kb', extensions: list }, { type: 'kb', extensions: list }], [CH]);
