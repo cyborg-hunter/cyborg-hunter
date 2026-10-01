@@ -29,6 +29,13 @@ async function build() {
   // shared with dist/ch.js (window.__cyborgHunterLoaded): if ch.js already
   // ran, it logs the catalogue's double-load error; if another copy of this
   // bundle set it, the neutral loaded-twice error (src/oneliner/errors.js).
+  // After ch.js the bundle must not take the namespace either: globalName's
+  // top-level `var CyborgHunter = ...` replaces ch.js's window.CyborgHunter
+  // before the footer runs, so the banner keeps ch.js's namespace in
+  // __cyborgHunterPrevNS and the footer puts it back (IntegrityMonitor then
+  // points at it too). A manual-mode extension's CyborgHunter.init() reaches
+  // ch.js's init(), which hands out a core monitor once ch.js has handed over
+  // (src/oneliner/api.js).
   await esbuild.build({
     entryPoints: ['src/core/index.js'],
     bundle: true,
@@ -37,12 +44,13 @@ async function build() {
     globalName: 'CyborgHunter',
     outfile: 'dist/cyborg-hunter.min.js',
     platform: 'browser',
-    banner: { js: `// cyborg-hunter v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` },
+    banner: { js: `// cyborg-hunter v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter\n` +
+      'var __cyborgHunterPrevNS=typeof window!=="undefined"&&window.__cyborgHunterLoaded==="ch.js"?window.CyborgHunter:void 0;' },
     footer: { js: 'if(typeof window!=="undefined"){if(window.__cyborgHunterLoaded==="ch.js"){console.error(' +
       JSON.stringify(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')) +
-      ')}else if(window.__cyborgHunterLoaded){console.error(' +
+      ');if(__cyborgHunterPrevNS)CyborgHunter=__cyborgHunterPrevNS}else if(window.__cyborgHunterLoaded){console.error(' +
       JSON.stringify(MESSAGES.coreLoadedTwice()) +
-      ')}else{window.__cyborgHunterLoaded="cyborg-hunter.min.js"}window.IntegrityMonitor=CyborgHunter;}' }
+      ')}else{window.__cyborgHunterLoaded="cyborg-hunter.min.js"}window.IntegrityMonitor=CyborgHunter;__cyborgHunterPrevNS=void 0}' }
   });
 
   // ESM module

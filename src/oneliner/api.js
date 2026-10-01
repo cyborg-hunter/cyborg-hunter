@@ -64,10 +64,11 @@ export function buildPublicApi(ctx) {
     frictionEntryTrial: function (opts) { return ctx.win.GuardFriction.createEntryTrial(opts); },
     // Manual mode (adapters/jspsych.js handOver): the researcher's own
     // jsPsych extension creates the monitor by calling window.CyborgHunter
-    // .init(). With cyborg-hunter.min.js loaded after ch.js that is the core
-    // namespace; with ch.js alone it is this one, so init() hands out a core
-    // monitor here (ch.js's own monitor is already destroyed by then).
-    // ctx.host is read at call time: the hand-over happens after boot.
+    // .init(). That is this namespace, with ch.js alone and with
+    // cyborg-hunter.min.js loaded after ch.js (min.js's footer restores it;
+    // build.js), so init() hands out a core monitor here (ch.js's own monitor
+    // is already destroyed by then). ctx.host is read at call time: the
+    // hand-over happens after boot.
     init: function (cfg) {
       if (ctx.host === 'manual') return coreInit(cfg);
       console.error(MESSAGES.manualInitOnOneLiner());

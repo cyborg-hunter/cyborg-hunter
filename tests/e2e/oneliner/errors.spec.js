@@ -7,7 +7,7 @@
 // The `pageErrors` fixture (support.mjs) fails a spec on any uncaught page
 // error, so "does not throw" is checked on every spec.
 
-import { test, expect, collectConsole, pasteInto, parseCsv, newTmpDir, cleanupTmpDirs, saveAndReport } from './support.mjs';
+import { test, expect, collectConsole, pasteInto, parseCsv, newTmpDir, cleanupTmpDirs, saveAndReport, rewriteFixture } from './support.mjs';
 import { MESSAGES } from '../../../src/oneliner/errors.js';
 
 const FIX = '/tests/e2e/oneliner/fixtures/';
@@ -49,14 +49,14 @@ test('not hookable (ch.js above jspsych.js): loud error with fix + link, vanilla
 test('double load (ch.js then cyborg-hunter.min.js and the guard bundles): loud errors, first monitor intact', async ({ page }) => {
   const log = collectConsole(page);
   await page.goto(FIX + 'jspsych-double-load.html');
-  // What window.CyborgHunter is once every script has run (recorded in the
-  // report; the brief's checks are below).
+  // min.js's footer restores ch.js's namespace once every script has run, so
+  // a half-migrated page's CyborgHunter.mark()/data()/replay() calls still work.
   const ns = await page.evaluate(() => ({
     mark: typeof window.CyborgHunter.mark,
     data: typeof window.CyborgHunter.data,
     replay: typeof window.CyborgHunter.replay
   }));
-  test.info().annotations.push({ type: 'window.CyborgHunter after min.js', description: JSON.stringify(ns) });
+  expect(ns).toEqual({ mark: 'function', data: 'function', replay: 'function' });
 
   await page.locator('button.jspsych-btn', { hasText: 'One' }).click();
   await page.getByText('Double-load question').waitFor();
@@ -98,4 +98,43 @@ test('cyborg-hunter.min.js loaded twice: the neutral loaded-twice error, no load
   expect(errors[0]).not.toContain('loaded after');
   // The bundle still works: a monitor can be created from it.
   expect(await page.evaluate(() => typeof window.CyborgHunter.init)).toBe('function');
+});
+
+// Manual mode on a page that also loads cyborg-hunter.min.js after ch.js
+// (jspsych-manual.html with the min.js tag added in flight): min.js's footer
+// hands window.CyborgHunter back to ch.js, so the researcher's extension
+// reaches ch.js's init(), which gives it a core monitor once ch.js has handed
+// over (src/oneliner/api.js).
+test('manual mode with cyborg-hunter.min.js after ch.js: one double-load error, the manual extension still monitors', async ({ page }) => {
+  const log = collectConsole(page);
+  await rewriteFixture(page, '**/jspsych-manual.html', (html) => html.replace(
+    '<script src="/dist/extension-cyborg-hunter.js"></script>',
+    '<script src="/dist/cyborg-hunter.min.js"></script>\n  <script src="/dist/extension-cyborg-hunter.js"></script>'));
+  await page.goto(FIX + 'jspsych-manual.html');
+  expect(await page.evaluate(() => typeof window.CyborgHunter.mark)).toBe('function');
+  await page.locator('button.jspsych-btn', { hasText: 'One' }).click();
+  await page.getByText('Manual question').waitFor();
+  await pasteInto(page, '#input-0', 'pasted text');
+  await page.locator('#input-0').pressSequentially(' typed', { delay: 120 });
+  await page.click('#jspsych-survey-text-next');
+  await page.locator('button.jspsych-btn', { hasText: 'Three' }).click();
+  await page.waitForFunction(() => typeof window.__csv === 'string');
+
+  expect(chErrors(log)).toEqual([MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')]);
+  expect(log.info.some((t) => t.startsWith('[cyborg-hunter] manual mode: initJsPsych lists a cyborg-hunter extension'))).toBe(true);
+
+  const rows = parseCsv(await page.evaluate(() => window.__csv));
+  expect(rows).toHaveLength(3);
+  for (const r of rows) {
+    expect(json(r.integrity)).not.toBeNull();
+    expect(r.integritySegment || '').toBe('');   // ch.js injected nothing
+  }
+  expect(json(rows[1].integrity).pasteEvents).toHaveLength(1);
+  expect(json(rows[2].integritySession)).not.toBeNull();
+
+  const out = saveAndReport(newTmpDir('manual-min'), 'E2E-MANUAL-1.csv', await page.evaluate(() => window.__csv));
+  expect(out.stdout).toContain('Found 1 participants');
+  expect(out.stdout).not.toContain('files had warnings');
+  expect(out.summaryCsv[0].participantId).toBe('E2E-MANUAL-1');
+  expect(out.summaryCsv[0].totalPasteEvents).toBe('1');
 });

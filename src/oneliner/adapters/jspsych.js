@@ -206,13 +206,11 @@ export function detectManualMode(options) {
 // hands over: its boot span is closed without a segment and its monitor is
 // destroyed (two monitors would double-count every event).
 //
-// The researcher's extension calls window.CyborgHunter.init(). With
-// cyborg-hunter.min.js loaded after ch.js, esbuild's globalName has replaced
-// window.CyborgHunter with the core namespace before min.js's footer runs, so
-// that call reaches the core init(); ch.js does not restore its own
-// namespace. With ch.js alone, window.CyborgHunter is the one-liner's
-// namespace, whose init() returns a core monitor once ctx.host is 'manual'
-// (api.js), so the manual wiring works either way.
+// The researcher's extension calls window.CyborgHunter.init(), which is
+// ch.js's namespace whether or not cyborg-hunter.min.js was loaded after
+// ch.js (min.js's footer puts ch.js's namespace back; build.js). Its init()
+// returns a core monitor once ctx.host is 'manual' (api.js), so the manual
+// wiring works either way.
 function handOver(ctx) {
   ctx.host = 'manual';
   try { ctx.segmenter.abandon(); } catch (_) { /* the hand-over continues */ }
