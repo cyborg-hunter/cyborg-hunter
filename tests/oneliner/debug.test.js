@@ -60,6 +60,18 @@ describe('createDebug', () => {
     assert.strictEqual(logs.length, 1);
   });
 
+  it('badge shows repeated-trial rows as "N trials (M planned)"', () => {
+    function badge(w, p) {
+      var c = jsCtx({ win: win });
+      c.jspsych.segmentsWritten = w; c.jspsych.instrumented = p;
+      return createDebug({ doc: win.document, ctx: c, log: log }).badgeText();
+    }
+    assert.match(badge(5, 3), /· 5 trials \(3 planned\) ·/);
+    assert.doesNotMatch(badge(5, 3), /5\/3/);
+    assert.match(badge(2, 3), /· 2\/3 trials ·/);
+    assert.match(badge(3, 3), /· 3\/3 trials ·/);
+  });
+
   it('id sources and friction modes read from ctx', () => {
     function sum(extra) { return createDebug({ doc: win.document, ctx: jsCtx(Object.assign({ win: win }, extra)), log: log }).summary(); }
     assert.match(sum({ participantIdSource: 'attribute' }), /ID from data-participant-id/);

@@ -18,7 +18,9 @@
 //   [data-ch-trial] elements in the DOM.
 //   One summary is logged per page: update() logs, refresh() never does. The
 //   badge on jsPsych shows live progress, "written/planned trials"
-//   (ctx.jspsych.segmentsWritten / instrumented), and refresh() updates it.
+//   (ctx.jspsych.segmentsWritten / instrumented), or "N trials (M planned)"
+//   once loops / timeline_variables write more rows than planned (so never
+//   "5/3"); refresh() updates it.
 //   <source> is the URL parameter name that resolved, data-participant-id,
 //   CyborgHunterConfig, or "random id (not linkable)".
 //
@@ -58,9 +60,10 @@ export function createDebug(opts) {
     } else {
       hostPart = 'jsPsych detected';
       var js = ctx.jspsych || {};
-      countPart = live
-        ? (js.segmentsWritten || 0) + '/' + (js.instrumented || 0) + ' trials'
-        : (js.instrumented || 0) + ' trials instrumented';
+      var written = js.segmentsWritten || 0, planned = js.instrumented || 0;
+      if (!live) countPart = planned + ' trials instrumented';
+      else if (written > planned) countPart = written + ' trials (' + planned + ' planned)';   // loops repeat one trial object
+      else countPart = written + '/' + planned + ' trials';
     }
     return ['Cyborg Hunter active', hostPart, countPart,
       'ID from ' + idSource(ctx.participantIdSource),
