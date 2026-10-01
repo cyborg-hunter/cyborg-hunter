@@ -223,9 +223,13 @@ test('single page: manual marks + custom fetch save via CyborgHunter.data(), rep
   const labels = rec.segments.map((s) => s.label);
   for (const id of ['q1', 'q2', 'q3']) expect(labels).toContain(id);
 
-  // data-debug: one console summary for the page.
+  // data-debug: one console summary for the page; with data-replay it ends
+  // with the save reminder, which is then not logged on its own. The
+  // recorder's own autoSave warning (it names getRecording()) is silenced.
   const summaries = log.info.filter((t) => t.startsWith('Cyborg Hunter active'));
-  expect(summaries).toEqual(['Cyborg Hunter active · vanilla mode · 3 mark elements · ID from data-participant-id · honeypot on · friction off']);
+  expect(summaries).toEqual(['Cyborg Hunter active · vanilla mode · 3 mark elements · ID from data-participant-id · honeypot on · friction off · data-replay is on: save CyborgHunter.replay() in your save code']);
+  expect(log.info).not.toContain(MESSAGES.replaySaveReminder());
+  expect(log.warn.filter((t) => t.includes('autoSave.mode is "none"'))).toEqual([]);
   expect(chErrors(log)).toEqual([]);
 
   const out = saveAndReport(newTmpDir('van-marks'), 'E2E-VAN-2.json', JSON.stringify(saved.data));

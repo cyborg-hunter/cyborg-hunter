@@ -56,6 +56,10 @@ test('jsPsych + data-replay: the recorder loads from next to ch.js and CyborgHun
   expect(replay).not.toBeNull();
   expect(replay.schema_version).toBe(2);
   expect(replay.participant_id).toBe('E2E-RP-1');
+  // The one-liner's own save reminder (no data-debug here), once; the
+  // recorder's autoSave warning, which names getRecording(), is silenced.
+  expect(log.info.filter((t) => t === MESSAGES.replaySaveReminder())).toHaveLength(1);
+  expect(log.warn.filter((t) => t.includes('autoSave.mode is "none"'))).toEqual([]);
   expect(replay.segments).toHaveLength(3);   // one per trial
   expect(replay.segments.reduce((n, s) => n + s.events.length, 0)).toBeGreaterThan(0);
   expect(chErrors(log)).toEqual([]);

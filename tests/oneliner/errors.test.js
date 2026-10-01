@@ -130,6 +130,11 @@ const CASES = {
     fix: 'check that the autoSave target (for example DataPipe) is reachable, or save the recording yourself with CyborgHunter.replay()',
     link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
   },
+  replaySaveReminder: {
+    args: [],
+    fix: 'save CyborgHunter.replay() in your save code',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
+  },
   notRunning: {
     args: [],
     fix: 'fix the error logged above; until then the experiment runs without monitoring',

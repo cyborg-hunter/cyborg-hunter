@@ -360,7 +360,11 @@ export function createRecorder(userConfig) {
         ? { w: de.clientWidth || 0, h: de.clientHeight || 0 } : null;
       session.userAgent = typeof navigator !== 'undefined' && navigator.userAgent
         ? String(navigator.userAgent) : '';
-      if (config.autoSave.mode === 'none') {
+      // _ownerSavesRecording (internal): the embedding library takes the
+      // recording itself and tells its user how to save it (the one-line
+      // setup's CyborgHunter.replay(), src/oneliner/replay-loader.js), so
+      // this warning, which names getRecording(), would only mislead there.
+      if (config.autoSave.mode === 'none' && !config._ownerSavesRecording) {
         console.warn('[cyborg-hunter-replay] autoSave.mode is "none" — the recording will be lost unless you call getRecording() yourself.');
       }
     },

@@ -21,7 +21,8 @@
 //
 // CyborgHunter.replay() stops the recorder, serializes it and returns the
 // recording for the researcher's own save code (default autoSave mode
-// 'none'). CyborgHunterConfig.replay = { tier, autoSave } keeps the
+// 'none'; boot reminds the researcher to save it, replaySaveReminder, in
+// place of the recorder's own warning). CyborgHunterConfig.replay = { tier, autoSave } keeps the
 // recorder's own DataPipe save available (adapters/jspsych.js finalizes it at
 // the end of the session).
 //
@@ -42,8 +43,23 @@ function message(e) { return String((e && e.message) || e); }
 
 // The recorder's defaults under the one-liner; the researcher's
 // CyborgHunterConfig.replay keys (tier, autoSave) override them.
+// _ownerSavesRecording silences the recorder's "autoSave.mode is none"
+// warning (src/replay/recorder.js), which names getRecording(): the
+// one-liner's own reminder (replaySaveReminder below) names
+// CyborgHunter.replay() instead.
 function recorderConfig(ctx, params) {
-  return Object.assign({ participantId: ctx.participantId, autoSave: { mode: 'none' } }, params);
+  return Object.assign({ participantId: ctx.participantId, autoSave: { mode: 'none' }, _ownerSavesRecording: true }, params);
+}
+
+// Whether the researcher must save CyborgHunter.replay() themselves: replay
+// is on and has a script URL, and the recorder does not save itself
+// (CyborgHunterConfig.replay.autoSave, which only the jsPsych host runs).
+// Read by debug.js for the summary.
+export function replaySaveReminderApplies(ctx) {
+  if (!ctx.config.replay || !ctx.replaySrc) return false;
+  var autoSave = ctx.config.replay.autoSave;
+  var selfSaving = !!(autoSave && autoSave.mode && autoSave.mode !== 'none');
+  return !(selfSaving && ctx.host !== 'vanilla');
 }
 
 // data-replay-src when given, else cyborg-hunter-replay.js next to ch.js.
@@ -256,6 +272,8 @@ export function installReplay(opts) {
   if (ctx.host === 'vanilla' && autoSave && autoSave.mode && autoSave.mode !== 'none') {
     console.warn(MESSAGES.replayAutoSaveVanilla());
   }
+  // With data-debug the summary says it (debug.js), so the page gets one line.
+  if (!ctx.debug && replaySaveReminderApplies(ctx)) console.info(MESSAGES.replaySaveReminder());
   if (ctx.host === 'jspsych') {
     ctx.replayProxy = makeReplayProxy({ doc: doc, src: ctx.replaySrc, ctx: ctx, timeoutMs: opts.timeoutMs });
   }

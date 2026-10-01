@@ -7,6 +7,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createRecorder } from '../../src/replay/recorder.js';
 import { markRedacted } from '../../src/replay/redaction.js';
+import { serialize } from '../../src/replay/serializer.js';
 
 // Minimal window stub: startSession reads viewport geometry if available.
 beforeEach(() => {
@@ -436,5 +437,34 @@ describe('capture stop and the keyframe size budget', () => {
     const trial = rec.getState().trials[0];
     assert.strictEqual(trial.initialDom, null);
     assert.strictEqual(trial.initialState, null);
+  });
+});
+
+// autoSave.mode 'none' warns at startSession that the recording is lost
+// unless the caller takes it. The one-line setup saves it through its own
+// CyborgHunter.replay() and says so itself, so it passes the internal
+// _ownerSavesRecording option; every other caller still gets the warning.
+describe('recorder: the autoSave "none" warning', () => {
+  function warnsOf(config) {
+    const seen = [];
+    const orig = console.warn;
+    console.warn = (m) => seen.push(String(m));
+    try {
+      const rec = freshRecorder(config);
+      rec.startSession();
+      return { seen, rec };
+    } finally { console.warn = orig; }
+  }
+
+  it('warns without _ownerSavesRecording', () => {
+    const { seen } = warnsOf({});
+    assert.deepStrictEqual(seen.filter((m) => m.includes('autoSave.mode is "none"')).length, 1);
+  });
+
+  it('does not warn with _ownerSavesRecording: true, and the recording does not carry the option', () => {
+    const { seen, rec } = warnsOf({ _ownerSavesRecording: true });
+    assert.deepStrictEqual(seen, []);
+    rec.stopSession('finished');
+    assert.ok(!JSON.stringify(serialize(rec.getState(), {})).includes('_ownerSavesRecording'));
   });
 });

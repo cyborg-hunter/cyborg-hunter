@@ -23,10 +23,16 @@
 //   "5/3"); refresh() updates it.
 //   <source> is the URL parameter name that resolved, data-participant-id,
 //   CyborgHunterConfig, or "random id (not linkable)".
+//   With data-replay (and no recorder autoSave) the summary, not the badge,
+//   ends with " · data-replay is on: save CyborgHunter.replay() in your save
+//   code", in place of boot's console.info reminder (replay-loader.js).
 //
 // The badge never takes focus or clicks (pointer-events: none) and nothing
 // here throws into the host page. update() and refresh() re-attach it when
 // the host has wiped it from the document (jsPsych's run() resets <body>).
+
+import { REPLAY_SAVE_REMINDER } from './errors.js';
+import { replaySaveReminderApplies } from './replay-loader.js';
 
 var BADGE_ID = 'ch-debug-badge';
 var BADGE_STYLE = 'position:fixed;left:8px;bottom:8px;z-index:2147483646;font:12px/1.4 system-ui;' +
@@ -66,10 +72,12 @@ export function createDebug(opts) {
       else if (written > planned) countPart = written + ' trials (' + planned + ' planned)';   // loops repeat one trial object
       else countPart = written + '/' + planned + ' trials';
     }
-    return ['Cyborg Hunter active', hostPart, countPart,
+    var out = ['Cyborg Hunter active', hostPart, countPart,
       'ID from ' + idSource(ctx.participantIdSource),
       'honeypot ' + (ctx.config.guards.honeypot ? 'on' : 'off'),
-      'friction ' + frictionMode(ctx)].join(' · ');
+      'friction ' + frictionMode(ctx)];
+    if (!live && replaySaveReminderApplies(ctx)) out.push(REPLAY_SAVE_REMINDER);
+    return out.join(' · ');
   }
   function summary() { return parts(false); }
   function badgeText() { return parts(true); }

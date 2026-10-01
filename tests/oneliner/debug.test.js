@@ -90,6 +90,22 @@ describe('createDebug', () => {
     assert.match(d.summary(), /^Cyborg Hunter active · vanilla mode · 2 mark elements · /);
   });
 
+  // With data-replay the one summary line carries the save reminder (the
+  // one-liner's replacement for the recorder's own autoSave warning); the
+  // live badge does not.
+  it('data-replay: the summary ends with the save reminder, the badge does not carry it', () => {
+    var ctx = jsCtx({ win: win, replaySrc: 'https://x/cyborg-hunter-replay.js' });
+    ctx.config = Object.assign({}, ctx.config, { replay: { tier: 'trace' } });
+    var d = createDebug({ doc: win.document, ctx: ctx, log: log });
+    assert.strictEqual(d.summary(),
+      'Cyborg Hunter active · jsPsych detected · 14 trials instrumented · ID from workerId · honeypot on · friction off · ' +
+      'data-replay is on: save CyborgHunter.replay() in your save code');
+    assert.ok(!d.badgeText().includes('data-replay'), d.badgeText());
+    // The recorder saves itself (jsPsych autoSave): no reminder.
+    ctx.config.replay = { autoSave: { mode: 'datapipe' } };
+    assert.ok(!d.summary().includes('data-replay'), d.summary());
+  });
+
   it('stats() holds the perf counter array, same one each call', () => {
     var d = createDebug({ doc: win.document, ctx: jsCtx({ win: win }), log: log });
     d.stats().segmentWriteMs.push(1.5);

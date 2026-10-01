@@ -21,6 +21,7 @@ import { VERSION } from '../../src/shared/constants.js';
 import {
   replaySrcFor, loadScript, makeReplayProxy, createVanillaReplay, installReplay
 } from '../../src/oneliner/replay-loader.js';
+import { MESSAGES } from '../../src/oneliner/errors.js';
 
 let win, errors, warns, orig;
 
@@ -185,7 +186,7 @@ describe('ReplayProxyExtension (jsPsych host)', () => {
     await init;
     assert.deepStrictEqual(log.slice(0, 2), ['construct', 'initialize']);
     assert.strictEqual(log.jsPsych, jsPsych);
-    assert.deepStrictEqual(log.params, { participantId: 'P1', autoSave: { mode: 'none' }, tier: 'trace' });
+    assert.deepStrictEqual(log.params, { participantId: 'P1', autoSave: { mode: 'none' }, _ownerSavesRecording: true, tier: 'trace' });
   });
 
   it('params override the defaults (CyborgHunterConfig.replay.autoSave)', async () => {
@@ -195,7 +196,7 @@ describe('ReplayProxyExtension (jsPsych host)', () => {
     const proxy = new (makeReplayProxy({ doc, src: SRC, ctx: baseCtx() }))({});
     const autoSave = { mode: 'datapipe', experimentId: 'ABC123' };
     await proxy.initialize({ tier: 'dom', autoSave, participantId: 'X9' });
-    assert.deepStrictEqual(log.params, { participantId: 'X9', autoSave, tier: 'dom' });
+    assert.deepStrictEqual(log.params, { participantId: 'X9', autoSave, _ownerSavesRecording: true, tier: 'dom' });
     assert.strictEqual(doc.appended.length, 0, 'the extension was already on the page: nothing loaded');
   });
 
@@ -381,7 +382,7 @@ describe('vanilla replay', () => {
     doc.appended[0].dispatchEvent(new win.Event('load'));
     const h = await p;
     assert.deepStrictEqual([...log], ['attach', 'startSession', 'startTrial:span-0']);
-    assert.deepStrictEqual(log.cfg, { participantId: 'P1', autoSave: { mode: 'none' }, tier: 'trace' });
+    assert.deepStrictEqual(log.cfg, { participantId: 'P1', autoSave: { mode: 'none' }, _ownerSavesRecording: true, tier: 'trace' });
     h.endTrial();
     h.startTrial('q1');
     h.stop();
@@ -435,5 +436,35 @@ describe('vanilla replay', () => {
     assert.strictEqual(ctx.replay, undefined);
     assert.strictEqual(ctx.handlers.replay(), null);
     assert.strictEqual(warns.length, 1);
+  });
+});
+
+// The recorder's own "autoSave.mode is none" warning is silenced under the
+// one-liner (recorderConfig's _ownerSavesRecording; it names getRecording(),
+// which one-liner users never call), so the one-liner says it itself: one
+// console.info at install, or, with data-debug, a part of the debug summary
+// (debug.js) instead.
+describe('the replay save reminder', () => {
+  let infos, origInfo;
+  beforeEach(() => { infos = []; origInfo = console.info; console.info = (m) => infos.push(String(m)); });
+  afterEach(() => { console.info = origInfo; });
+
+  it('data-replay without data-debug: one console.info at install, on either host', () => {
+    installReplay({ win, ctx: baseCtx(), doc: stubDoc() });
+    installReplay({ win, ctx: baseCtx({ host: 'vanilla' }), doc: stubDoc() });
+    assert.deepStrictEqual(infos, [MESSAGES.replaySaveReminder(), MESSAGES.replaySaveReminder()]);
+  });
+
+  it('none with data-debug (the summary says it), with replay off, with no replay URL, or when the recorder saves itself (jsPsych autoSave)', () => {
+    installReplay({ win, ctx: baseCtx({ debug: { summary() {} } }), doc: stubDoc() });
+    installReplay({ win, ctx: baseCtx({ config: { replay: null, replaySrc: null } }), doc: stubDoc() });
+    installReplay({ win, ctx: baseCtx({ scriptSrc: null }), doc: stubDoc() });
+    installReplay({ win, ctx: baseCtx({ config: { replay: { autoSave: { mode: 'datapipe' } }, replaySrc: null } }), doc: stubDoc() });
+    assert.deepStrictEqual(infos, []);
+  });
+
+  it('vanilla with autoSave set: still reminded (autoSave is jsPsych-only)', () => {
+    installReplay({ win, ctx: baseCtx({ host: 'vanilla', config: { replay: { autoSave: { mode: 'datapipe' } }, replaySrc: null } }), doc: stubDoc() });
+    assert.deepStrictEqual(infos, [MESSAGES.replaySaveReminder()]);
   });
 });

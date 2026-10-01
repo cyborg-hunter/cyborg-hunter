@@ -22,6 +22,9 @@ export function loudError(problem, cause, fix, link) {
 
 var REPORT_FIX = 'open an issue with this message and your <script> tag';
 
+// The data-debug summary's part for MESSAGES.replaySaveReminder (debug.js).
+export const REPLAY_SAVE_REMINDER = 'data-replay is on: save CyborgHunter.replay() in your save code';
+
 export const MESSAGES = {
   doubleLoad: function (first, second) {
     return formatError('Not starting a second monitor', second + ' was loaded after ' + first,
@@ -178,6 +181,16 @@ export const MESSAGES = {
       'ch.js records one session per page and ends it when the first instance finishes, so trials run after that are not monitored',
       'create one jsPsych instance with initJsPsych() and run one timeline, or use cyborg-hunter.min.js and the jsPsych extension (manual mode) for several instances',
       DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.info, once at boot, with data-replay and no data-debug (with
+  // data-debug the summary carries REPLAY_SAVE_REMINDER instead; debug.js).
+  // It replaces the recorder's own autoSave warning, which the one-liner
+  // silences (replay-loader.js recorderConfig).
+  replaySaveReminder: function () {
+    return formatError('data-replay is on',
+      'ch.js records the session but does not save the recording',
+      'save CyborgHunter.replay() in your save code',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
   },
   // console.warn, once, from the inert window.CyborgHunter that boot leaves
   // when ch.js failed (api.js buildInertApi): the call did nothing.

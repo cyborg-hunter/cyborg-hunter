@@ -70,6 +70,23 @@ describe('boot', () => {
     assert.strictEqual(typeof win.__cyborgHunterDebug.stats().segmentWriteMs.push, 'function');
   });
 
+  it('data-replay: the save reminder is one console.info without data-debug, part of the one summary with it', () => {
+    const infos = [];
+    console.info = (m) => infos.push(String(m));
+    // The recorder is already on the page, so nothing is fetched.
+    const rec = { startSession() {}, startTrial() {}, endTrial() {}, stopSession() {}, getRecording() { return null; }, destroy() {} };
+    win.CyborgHunterReplay = { attach: () => rec };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none', replay: '' }), win });
+    assert.deepStrictEqual(infos, [MESSAGES.replaySaveReminder()]);
+    ctx.monitor.destroy();
+    delete win.__cyborgHunterLoaded;
+    delete win.CyborgHunter;
+    infos.length = 0;
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none', replay: '', debug: '' }), win });
+    assert.strictEqual(infos.length, 1, infos.join('\n'));
+    assert.match(infos[0], /^Cyborg Hunter active · vanilla mode · .* · data-replay is on: save CyborgHunter\.replay\(\) in your save code$/);
+  });
+
   it('without data-debug there is no badge, no log, no global and no ctx.debug', () => {
     const infos = [];
     console.info = (m) => infos.push(String(m));
