@@ -44,6 +44,10 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // was hand-rolled in nine places and missing from exactly this one, which is
   // why the rule now lives in one module (T5 Task 10 + its fix round 3).
   const replayClientSrc = inlineSafeSrc(opts.replayClientSrc);
+  // @font-face rules for the report's typefaces (report-fonts.js builds them
+  // as base64 data URIs for the CLI). Absent → no faces, and every role
+  // renders in its fallback stack (the demo bundle and the snapshot tests).
+  const fontFaceCss = opts.fontFaceCss ? String(opts.fontFaceCss) + '\n' : '';
   const visualsUnavailableNote = opts.visualsUnavailableNote
     ?? 'Visual renderers not available (install the canvas package).';
   const imageSources = opts.imageSources ?? null;       // pid → {typingProfile, sessionTimeline, trajectories} data URIs (null entry = omit that img)
@@ -105,7 +109,7 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cyborg Hunter Report</title>
   <style>
-    :root {
+${fontFaceCss}    :root {
       --bg: #fafafa; --surface: #fff; --ink: #1a1814;
       --dim: #706a5c; --line: #e2ddd1;
       --hard: #d32f2f; --soft: #f57c00; --clean: #388e3c;

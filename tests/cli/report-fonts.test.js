@@ -63,3 +63,40 @@ describe('report fonts: @font-face CSS', () => {
     assert.ok(css.length <= 240 * 1024, `${css.length} bytes`);
   });
 });
+
+describe('report fonts: plumbing into index.html', () => {
+  const tiny = () => {
+    const s = { participantId: 'P1', trialCount: 0, totalPasteEvents: 0, totalCopyEvents: 0, hardTriggered: false,
+      totalSoftScore: 0, authoritativeSoftScore: null, sidebarEventCount: 0, aiExtensionsFound: [], metadata: {} };
+    return {
+      summaries: [s],
+      triage: [{ participantId: 'P1', score: 0, terms: [], reason: 'clean', hardTriggered: false, softFlagged: false, summary: s, edgeExitCount: 0 }],
+      participants: [{ participantId: 'P1', trials: [], session: {} }],
+    };
+  };
+
+  it('the CLI report (renderHtmlIndex) embeds the @font-face block once, inside the first <style>', async () => {
+    const { renderHtmlIndex } = await import('../../src/cli/renderers/html-index.js');
+    const { mkdtempSync, rmSync } = await import('fs');
+    const { tmpdir } = await import('os');
+    const outputDir = mkdtempSync(join(tmpdir(), 'ch-fonts-'));
+    try {
+      const { summaries, triage, participants } = tiny();
+      await renderHtmlIndex(summaries, triage, participants, { outputDir }, false);
+      const html = readFileSync(join(outputDir, 'index.html'), 'utf8');
+      const fontCss = buildFontFaceCss();
+      assert.equal(html.split(fontCss).length - 1, 1, 'embedded exactly once');
+      const firstStyle = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+      assert.ok(firstStyle.includes(fontCss), 'inside the report <style>');
+    } finally {
+      rmSync(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it('renderIndexHtml without opts.fontFaceCss emits no @font-face (demo and snapshot path)', async () => {
+    const { renderIndexHtml } = await import('../../src/cli/renderers/html-index-core.js');
+    const { summaries, triage, participants } = tiny();
+    const html = await renderIndexHtml(summaries, triage, participants, { outputDir: '.' }, false);
+    assert.doesNotMatch(html, /@font-face/);
+  });
+});
