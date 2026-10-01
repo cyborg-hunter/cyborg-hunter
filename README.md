@@ -28,9 +28,11 @@ Reproduce the table and page yourself: run `cyborg-hunter report` in `examples/s
 - `src/jspsych/` — jsPsych extension adapters (one per concern)
 - `src/cli/` + `bin/` — CLI that turns saved data into the triage report
 - `tools/convert/` — `jspsych-v1-to-v2.mjs`, converts jsPsych `schema_version: 1` recordings to SessionRecording v2 (ships in the npm package)
-- `bench/` — CH vs competitor benchmark harness on a vendored jsPsych timeline; `demo/` — the interactive tour
+- `demo/` — the interactive tour (also deployed to GitHub Pages)
 - `tests/`, `docs/` — tests, package docs
 - `examples/synthetic-pilot/` — synthetic three-participant dataset for trying the CLI (see [docs/worked-example.md](docs/worked-example.md))
+
+Benchmarking and research tooling live in a separate repository.
 
 ## Install
 

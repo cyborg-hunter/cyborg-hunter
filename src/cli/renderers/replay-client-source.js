@@ -25,11 +25,11 @@
 //   tools/assemble-demo-site.mjs       → this module (writes the ASSEMBLED file,
 //                                        which demo/results.js fetches by name)
 //   cursor-alignment.battery.mjs       → this module (Task 8's harness)
-//   tools/investigate/probe-support.mjs → NOT a consumer of the assembly: it
+//   cyborg-hunter-lab: probes/investigate/probe-support.mjs → NOT a consumer of the assembly: it
 //                                        extracts the literal `srcdocCsp()` out
 //                                        of the client source and needs the raw
 //                                        file, not the bundle.
-//   tools/investigate/cursor-alignment-probe.mjs → superseded (Task 1).
+//   cyborg-hunter-lab: probes/investigate/cursor-alignment-probe.mjs → superseded (Task 1).
 
 import { readFileSync } from 'fs';
 

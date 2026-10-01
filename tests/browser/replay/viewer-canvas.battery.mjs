@@ -90,7 +90,7 @@ function check(cond, label) {
 }
 
 // ── PNG decode (8-bit, non-interlaced — what Playwright emits) ─────────────
-// A local copy rather than an import from tools/investigate/probe-support.mjs:
+// A local copy rather than an import from cyborg-hunter-lab: probes/investigate/probe-support.mjs:
 // the batteries are self-contained by convention (own `resolvePlaywright`, own
 // `check`), and a test suite must not depend on an investigation harness.
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
