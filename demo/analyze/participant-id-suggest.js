@@ -9,7 +9,7 @@ import { DEFAULT_PARAMS } from '../../src/oneliner/participant-id.js';
 export var KNOWN_ID_NAMES = ['participant_id', 'participantId', 'subject_ID', 'subject_id', 'subject'].concat(DEFAULT_PARAMS);
 
 function constantUniqueAcross(field, peeks) {
-  var seen = {};
+  var seen = Object.create(null);
   for (var i = 0; i < peeks.length; i++) {
     var vals = (peeks[i].values && peeks[i].values[field]) || [];
     if (vals.length === 0) return false;
@@ -22,7 +22,7 @@ function constantUniqueAcross(field, peeks) {
 
 export function suggestIdField(peeks) {
   var candidates = [];
-  var counted = {};
+  var counted = Object.create(null);
   for (var i = 0; i < peeks.length; i++) {
     var keys = peeks[i].keys || [];
     for (var j = 0; j < keys.length; j++) counted[keys[j]] = (counted[keys[j]] || 0) + 1;

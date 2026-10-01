@@ -5,24 +5,33 @@ import Papa from 'papaparse';
 
 var decode = function (bytes) { return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes); };
 
+// Maps are prototype-free so a key named __proto__ is just a key.
 function scalarKeys(obj, prefix) {
-  var keys = [], values = {};
-  for (var k in obj) {
-    if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+  var keys = [], values = Object.create(null);
+  var own = Object.keys(obj);
+  for (var i = 0; i < own.length; i++) {
+    var k = own[i];
     var v = obj[k];
     if (v === null || typeof v !== 'object') { keys.push(prefix + k); values[prefix + k] = [String(v)]; }
   }
   return { keys: keys, values: values };
 }
 
+// Gzip magic bytes: a .json.gz participant file is decompressed before reading.
+async function gunzipIfGzip(bytes) {
+  if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
+  var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
 export async function peekParticipantFile(reader, opts) {
   var maxRows = (opts && opts.maxRows) || 50;
   var text;
-  try { text = decode(await reader.read()); } catch (e) { return null; }
+  try { text = decode(await gunzipIfGzip(await reader.read())); } catch (e) { return null; }
   if (/\.csv$/i.test(reader.name)) {
-    var parsed = Papa.parse(text.replace(/\s+$/, ''), { header: true, skipEmptyLines: true, preview: maxRows });
+    var parsed = Papa.parse(text.trimEnd(), { header: true, skipEmptyLines: true, preview: maxRows });
     var fields = (parsed.meta && parsed.meta.fields) || [];
-    var values = {};
+    var values = Object.create(null);
     for (var i = 0; i < fields.length; i++) values[fields[i]] = parsed.data.map(function (r) { return String(r[fields[i]]); });
     return { keys: fields, values: values };
   }
@@ -34,7 +43,7 @@ export async function peekParticipantFile(reader, opts) {
   if (json.metadata && typeof json.metadata === 'object') {
     var meta = scalarKeys(json.metadata, 'metadata.');
     top.keys = top.keys.concat(meta.keys);
-    for (var k in meta.values) top.values[k] = meta.values[k];
+    for (var m = 0; m < meta.keys.length; m++) top.values[meta.keys[m]] = meta.values[meta.keys[m]];
   }
   return top;
 }

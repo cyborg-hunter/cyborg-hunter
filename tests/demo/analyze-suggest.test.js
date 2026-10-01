@@ -46,13 +46,13 @@ const reader = (name, text) => ({ name, read: async () => new TextEncoder().enco
 test('peek: CSV header and sampled values, capped at maxRows', async () => {
   const p = await peekParticipantFile(reader('p.csv', 'a,b\n1,x\n2,x\n3,x\n'), { maxRows: 2 });
   assert.deepEqual(p.keys, ['a', 'b']);
-  assert.deepEqual(p.values, { a: ['1', '2'], b: ['x', 'x'] });
+  assert.deepEqual({ ...p.values }, { a: ['1', '2'], b: ['x', 'x'] });
 });
 
 test('peek: JSON object gives top-level scalars and dotted metadata scalars', async () => {
   const p = await peekParticipantFile(reader('p.json', JSON.stringify({ id: 'a', trials: [1], metadata: { sessionId: 's1', nested: { z: 1 } } })));
   assert.deepEqual(p.keys, ['id', 'metadata.sessionId']);
-  assert.deepEqual(p.values, { id: ['a'], 'metadata.sessionId': ['s1'] });
+  assert.deepEqual({ ...p.values }, { id: ['a'], 'metadata.sessionId': ['s1'] });
 });
 
 test('peek: JSON array uses the first element; unparsable gives null', async () => {
@@ -60,4 +60,28 @@ test('peek: JSON array uses the first element; unparsable gives null', async () 
   assert.deepEqual(p.keys, ['subject_ID', 'rt']);
   assert.equal(await peekParticipantFile(reader('p.json', '{oops')), null);
   assert.equal(await peekParticipantFile(reader('p.json', '[]')), null);
+});
+
+test('peek: a long whitespace run mid-file does not stall the parse', async () => {
+  const t0 = Date.now();
+  const p = await peekParticipantFile(reader('p.csv', 'a,b\n1,' + ' '.repeat(200000) + 'x\n2,y\n'));
+  assert.deepEqual(p.keys, ['a', 'b']);
+  assert.ok(Date.now() - t0 < 200, 'took ' + (Date.now() - t0) + ' ms');
+});
+
+test('a __proto__ key is an ordinary key, in peek and in suggestion', async () => {
+  const p = await peekParticipantFile(reader('p.json', '{"__proto__":"S1","metadata":{"__proto__":"m"}}'));
+  assert.deepEqual(p.keys, ['__proto__', 'metadata.__proto__']);
+  assert.deepEqual(p.values['__proto__'], ['S1']);
+  assert.deepEqual(Object.keys(p.values), ['__proto__', 'metadata.__proto__']);
+  const q = await peekParticipantFile(reader('q.json', '{"__proto__":"S2"}'));
+  const r = suggestIdField([p, q]);
+  assert.equal(r.suggested, '__proto__');
+});
+
+test('peek: a gzipped JSON file is decompressed first', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const bytes = gzipSync(Buffer.from(JSON.stringify({ subject_ID: 'S1', metadata: { run: 'r' } })));
+  const p = await peekParticipantFile({ name: 'p.json.gz', read: async () => new Uint8Array(bytes) });
+  assert.deepEqual(p.keys, ['subject_ID', 'metadata.run']);
 });
