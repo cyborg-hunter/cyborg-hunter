@@ -7,22 +7,54 @@
 //
 // createSegmenter({ monitor, differ, clock, sourceDefault }) → {
 //   start({ trialId })          open the boot span; no-op if already open
+//                               → null | { error }
 //   rotate(opts)                close the span (a "gap"), open the host's trial;
 //                               no segment; the gap report is buffered for the
 //                               next cut() and also returned
+//                               → gapReport | null (nothing was open) | { error }
 //   cut({ source, nextTrialId?, nextOpts? })   close + segment + open next
-//                               → { segment, trialReport } | { error }
-//   finish({ source })          close + segment, nothing reopened; null if closed
+//                               → { segment, trialReport }          success
+//                               → { segment, trialReport, error }   cut OK, reopen failed
+//                               → { error }                         nothing was cut
+//   finish({ source })          close + segment, nothing reopened
+//                               → { segment, trialReport } | null (closed) | { error }
 //   abandon()                   close without a segment (manual-mode hand-over)
+//                               → null | { error }
 //   state()                     { open, segmentIndex, currentTrialId }
 //   setSegmentIndex(n)          multi-page restore
 // }
 //   differ: createSegmentDiffer(monitor) (src/oneliner/segment-diff.js)
 //   clock:  () => number, the page origin (performance.timeOrigin); injectable
 //
+// Contract for the host adapters: a result with `segment` must be saved even
+// when it also carries `error` (the data is complete; only the next span failed
+// to open, and the error becomes the cyborgHunterError marker). A result with
+// `error` alone means nothing was cut.
+//
 // None of these throws into the host: a monitor or differ failure is logged
-// and returned as { error: message }, and the segmenter is marked closed so a
-// later start() can reopen it.
+// and returned as { error: message }. After finish() or abandon() the segmenter
+// is latched: start/rotate/cut return { error: 'finished' | 'abandoned' }
+// without touching the monitor, and finish() returns null.
+//
+// Keeping `open` true to the monitor. The monitor has no state getter, but
+// transition() is the FIRST statement of both startTrial and endTrial
+// (monitor.js), and its rejection message names the current state. So:
+//   - any endTrial throw leaves the monitor outside a trial (rejected, or
+//     already transitioned) → open = false;
+//   - a startTrial throw that is not a lifecycle rejection means the
+//     transition happened → the trial IS open (listeners maybe partly
+//     attached) → open = true, so cut()/finish() still segment it rather than
+//     drop it, and endTrial's removeTrialListeners cleans up whatever attached;
+//   - a startTrial rejected "from 'trial'" means a trial we thought closed is
+//     still open → close it, keep its report as a gap, and retry once.
+
+// Mirrors the message thrown by monitor.js transition(); null when `e` is not
+// a lifecycle rejection.
+var LIFECYCLE_FROM = /invalid lifecycle call: cannot transition from '(\w+)'/;
+function lifecycleFrom(e) {
+  var m = LIFECYCLE_FROM.exec(String((e && e.message) || e));
+  return m ? m[1] : null;
+}
 
 export function createSegmenter(opts) {
   var monitor = opts.monitor;
@@ -31,12 +63,12 @@ export function createSegmenter(opts) {
   var sourceDefault = opts.sourceDefault || 'host';
 
   var open = false;
+  var latched = null;    // 'finished' | 'abandoned': the segmenter no longer drives the monitor
   var segmentIndex = 0;
   var currentTrialId = null;
   var gapReports = [];   // gap trial reports since the last cut
 
   function fail(what, e) {
-    open = false;
     var message = String((e && e.message) || e);
     console.error('[cyborg-hunter] ' + what + ' failed: ' + message);
     return { error: message };
@@ -45,16 +77,34 @@ export function createSegmenter(opts) {
   // A span the host did not name is called after the segment it will become.
   function spanId() { return 'span-' + segmentIndex; }
 
+  function closeTrial() {
+    try { return monitor.endTrial(); }
+    finally { open = false; }
+  }
+
+  // The explicit trialId always wins: it is assigned last, so a trialId inside
+  // `extra` (nextOpts, rotate's opts) can never rename the span.
   function openTrial(trialId, extra) {
-    monitor.startTrial(Object.assign({}, extra || {}, { trialId: trialId }));
+    var args = Object.assign({}, extra || {}, { trialId: trialId });
+    try {
+      monitor.startTrial(args);
+    } catch (e) {
+      var from = lifecycleFrom(e);
+      if (from === 'trial') {
+        gapReports.push(closeTrial());
+        monitor.startTrial(args);
+      } else {
+        if (from === null) { currentTrialId = trialId; open = true; }
+        throw e;
+      }
+    }
     currentTrialId = trialId;
     open = true;
   }
 
   // Close the open trial and turn everything since the last cut into a segment.
   function closeAndSegment(source) {
-    var report = monitor.endTrial();
-    open = false;
+    var report = closeTrial();
     var segment = differ.cut({
       segmentIndex: segmentIndex, source: source, trialId: currentTrialId,
       pageOrigin: clock(), trialReport: report, gapReports: gapReports
@@ -66,49 +116,64 @@ export function createSegmenter(opts) {
 
   return {
     start: function (o) {
-      if (open) return;
+      if (latched) return { error: latched };
+      if (open) return null;
       try {
         openTrial((o && o.trialId) || spanId());
+        return null;
       } catch (e) { return fail('start', e); }
     },
 
     rotate: function (o) {
+      if (latched) return { error: latched };
       o = o || {};
+      var gap = null;
       try {
-        var gap = null;
         if (open) {
-          gap = monitor.endTrial();
-          open = false;
+          gap = closeTrial();
           gapReports.push(gap);
         }
-        var extra = Object.assign({}, o);
-        delete extra.trialId;
-        openTrial(o.trialId || spanId(), extra);
-        return gap;
       } catch (e) { return fail('trial rotation', e); }
+      var extra = Object.assign({}, o);
+      delete extra.trialId;
+      try {
+        openTrial(o.trialId || spanId(), extra);
+      } catch (e) { return fail('trial rotation', e); }   // the gap, if any, stays buffered
+      return gap;
     },
 
     cut: function (o) {
+      if (latched) return { error: latched };
       o = o || {};
+      var out;
       try {
-        var out = closeAndSegment(o.source || sourceDefault);
-        openTrial(o.nextTrialId || spanId(), o.nextOpts);
-        return out;
+        out = closeAndSegment(o.source || sourceDefault);
       } catch (e) { return fail('segment write', e); }
+      try {
+        openTrial(o.nextTrialId || spanId(), o.nextOpts);
+      } catch (e) { out.error = fail('trial reopen', e).error; }
+      return out;
     },
 
     finish: function (o) {
+      if (latched) return null;
+      latched = 'finished';
       if (!open) return null;
       try {
         return closeAndSegment((o && o.source) || 'final');
       } catch (e) { return fail('segment write', e); }
     },
 
+    // Hands the monitor to the host (manual mode). Gap reports still buffered
+    // are intentionally discarded: no cut() follows, and the abandoned spans
+    // carry no host trial to attach them to.
     abandon: function () {
-      if (!open) return;
+      if (latched) return null;
+      latched = 'abandoned';
+      if (!open) return null;
       try {
-        monitor.endTrial();
-        open = false;
+        closeTrial();
+        return null;
       } catch (e) { return fail('abandon', e); }
     },
 
