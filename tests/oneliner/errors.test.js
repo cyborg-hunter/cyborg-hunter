@@ -79,6 +79,26 @@ const CASES = {
     args: [],
     fix: 'create one jsPsych instance with initJsPsych() and run one timeline, or use cyborg-hunter.min.js and the jsPsych extension (manual mode) for several instances',
     link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  vanillaEventFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  frictionStartWithoutFriction: {
+    args: [],
+    fix: 'add friction to data-guards (for example data-guards="honeypot friction"), or remove the friction start',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  storageNearlyFull: {
+    args: [],
+    fix: 'set CyborgHunterConfig.collectForPostHoc.rawMouseTrack = false',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  storageFailed: {
+    args: ['QuotaExceededError'],
+    fix: 'allow site storage for the study page, or save CyborgHunter.data() on every page',
+    link: DOCS + 'known-issues.md#one-line-setup'
   }
 };
 

@@ -95,6 +95,37 @@ export const MESSAGES = {
       'add friction to data-guards (for example data-guards="honeypot friction"), or remove the entry trial',
       DOCS + 'known-issues.md#one-line-setup');
   },
+  // Vanilla host: a mark click, a form submit or pagehide. The page carries on;
+  // the segment may be missing from the blob.
+  vanillaEventFailed: function (msg) {
+    return formatError('Cyborg Hunter could not record a page boundary', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn, vanilla host: CyborgHunter.startFriction() or a
+  // data-ch-friction-start click still starts enforcement (as the jsPsych
+  // entry trial does), but nothing injected the refusal notices.
+  frictionStartWithoutFriction: function () {
+    return formatError('Friction is only partly set up',
+      'friction was started (data-ch-friction-start or CyborgHunter.startFriction()) but data-guards does not enable friction',
+      'add friction to data-guards (for example data-guards="honeypot friction"), or remove the friction start',
+      DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn, once per page, vanilla host: the whole session is kept in
+  // sessionStorage so the last page's form carries it; browsers cap it at
+  // about 5 MB per origin.
+  storageNearlyFull: function () {
+    return formatError('The saved session is approaching the sessionStorage limit',
+      'the session kept for the next page is over 4 MB, mostly the raw mouse trace',
+      'set CyborgHunterConfig.collectForPostHoc.rawMouseTrack = false',
+      DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.error, vanilla host: the session could not be kept for the next
+  // page (storage blocked or full). This page's form and data() still carry
+  // everything recorded so far.
+  storageFailed: function (msg) {
+    return formatError('The session could not be carried to the next page', msg,
+      'allow site storage for the study page, or save CyborgHunter.data() on every page',
+      DOCS + 'known-issues.md#one-line-setup');
+  },
   // console.warn: ch.js keeps one session per page. The session ends when the
   // first instance finishes; rows recorded after that carry no integrity data.
   secondJsPsychInstance: function () {

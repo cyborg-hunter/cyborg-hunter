@@ -18,12 +18,17 @@
 // }
 // mark/data/replay/startFriction depend on the host (jsPsych or vanilla); the
 // host adapter installs them in ctx.handlers. Until it does they return
-// undefined.
+// undefined. mark() (with startTrial/endTrial) and data() are vanilla calls:
+// on the jsPsych host, and in manual mode, they warn and do nothing (ctx.host
+// is read at call time: a jsPsych page ch.js cannot hook becomes vanilla
+// after boot).
 
 import { VERSION } from '../shared/constants.js';
 import { init as coreInit } from '../core/monitor.js';
 import { preventTextSelection, addHoneypot, setAltText } from '../core/signals/dom-protection.js';
 import { MESSAGES } from './errors.js';
+
+var VANILLA_ONLY = '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych trials are segmented automatically';
 
 export function buildPublicApi(ctx) {
   function handler(name) {
@@ -32,13 +37,23 @@ export function buildPublicApi(ctx) {
       return h ? h.apply(null, arguments) : undefined;
     };
   }
-  var mark = handler('mark');
+  function vanillaOnly(name) {
+    var h = handler(name);
+    return function () {
+      if (ctx.host === 'jspsych' || ctx.host === 'manual') {
+        console.warn(VANILLA_ONLY);
+        return undefined;
+      }
+      return h.apply(null, arguments);
+    };
+  }
+  var mark = vanillaOnly('mark');
   var api = {
     VERSION: VERSION,
     mark: mark,
     startTrial: function (opts) { return mark(opts && opts.trialId); },
     endTrial: function () { return mark(); },
-    data: handler('data'),
+    data: vanillaOnly('data'),
     replay: handler('replay'),
     startFriction: handler('startFriction'),
     frictionEntryTrial: function (opts) { return ctx.win.GuardFriction.createEntryTrial(opts); },

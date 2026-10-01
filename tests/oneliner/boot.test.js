@@ -201,7 +201,7 @@ describe('boot', () => {
     const calls = [];
     win.initJsPsych = function () {};
     win.GuardHoneypot = { init: () => calls.push('honeypot.init') };
-    win.GuardFriction = { start: () => { calls.push('friction.start'); return 'T'; }, onViolation: () => () => {} };
+    win.GuardFriction = { start: () => { calls.push('friction.start'); return 'T'; }, injectRefusalNotices: () => calls.push('friction.notices'), onViolation: () => () => {} };
     ctx = boot({ script: script({ participantId: 'P1', guards: 'honeypot,friction' }), win });
     await Promise.resolve();
     assert.strictEqual(ctx.host, 'jspsych');
@@ -209,14 +209,14 @@ describe('boot', () => {
     assert.strictEqual(win._guardFrictionToken, undefined);
   });
 
-  it('vanilla host: boot starts the honeypot and friction observe-only', async () => {
+  it('vanilla host: boot starts the honeypot, friction\'s refusal notices (once) and friction observe-only', async () => {
     const calls = [];
     win.GuardHoneypot = { init: (o) => calls.push(['honeypot.init', o.jsPsych]) };
-    win.GuardFriction = { start: (o) => { calls.push(['friction.start', o.observeOnly]); return 'T'; }, onViolation: () => () => {} };
+    win.GuardFriction = { start: (o) => { calls.push(['friction.start', o.observeOnly]); return 'T'; }, injectRefusalNotices: () => calls.push(['friction.notices']), onViolation: () => () => {} };
     ctx = boot({ script: script({ participantId: 'P1', guards: 'honeypot,friction' }), win });
     await Promise.resolve();
     assert.strictEqual(ctx.host, 'vanilla');
-    assert.deepStrictEqual(calls, [['honeypot.init', null], ['friction.start', true]]);
+    assert.deepStrictEqual(calls, [['honeypot.init', null], ['friction.notices'], ['friction.start', true]]);
   });
 
   it('starts the honeypot guard by default', () => {
@@ -277,6 +277,7 @@ describe('guards', () => {
     const log = [];
     const friction = {
       start: (o) => { log.push(['friction.start', o]); return 'TOKEN'; },
+      injectRefusalNotices: () => log.push(['friction.notices']),
       onViolation: () => () => {}
     };
     const honeypot = { init: (o) => log.push(['honeypot.init', o]) };
@@ -294,10 +295,10 @@ describe('guards', () => {
     const f = fakes();
     const w = { GuardHoneypot: f.honeypot, GuardFriction: f.friction };
     startGuards({ win: w, doc: { body: {} }, guards: { honeypot: true, friction: true }, debug: true });
-    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init']);
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init', 'friction.notices']);
     await Promise.resolve();
-    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init', 'friction.start']);
-    assert.deepStrictEqual(f.log[1][1], { jsPsych: null, observeOnly: true, debug: true });
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init', 'friction.notices', 'friction.start']);
+    assert.deepStrictEqual(f.log[2][1], { jsPsych: null, observeOnly: true, debug: true });
     assert.strictEqual(w._guardFrictionToken, 'TOKEN');
     assert.ok(!Object.keys(w).includes('_guardFrictionToken'), 'token slot is non-enumerable');
   });
@@ -312,7 +313,7 @@ describe('guards', () => {
     assert.deepStrictEqual(f.log, []);
     listeners.DOMContentLoaded();
     await Promise.resolve();
-    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init', 'friction.start']);
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['honeypot.init', 'friction.notices', 'friction.start']);
   });
 
   it("guards 'none' starts nothing; missing guard cores are skipped", async () => {
@@ -330,7 +331,7 @@ describe('guards', () => {
     startGuards({ win: w, doc: { body: {} }, guards: { honeypot: true, friction: true } });
     await Promise.resolve();
     assert.deepStrictEqual(errors, [MESSAGES.guardFailed('honeypot', 'hp broke')]);
-    assert.deepStrictEqual(f.log.map((e) => e[0]), ['friction.start']);
+    assert.deepStrictEqual(f.log.map((e) => e[0]), ['friction.notices', 'friction.start']);
   });
 });
 

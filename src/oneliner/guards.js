@@ -1,8 +1,10 @@
 // src/oneliner/guards.js
 // Starts the guard cores that ch.js bundles (window.GuardHoneypot,
 // window.GuardFriction) without jsPsych: the honeypot injects its bait DOM and
-// subscribes to friction's violations; friction runs observe-only (it logs
-// violations, shows no curtain) until a host mark starts enforcement.
+// subscribes to friction's violations; friction injects its AI refusal
+// notices and runs observe-only (it logs violations, shows no curtain) until
+// a host mark starts enforcement. Called once per page: by boot on the
+// vanilla host, or when a jsPsych page falls back to vanilla.
 //
 // startGuards({ win, doc, guards: { honeypot, friction }, debug })
 //
@@ -32,6 +34,9 @@ export function startGuards(opts) {
       });
     }
     if (guards.friction && win.GuardFriction) {
+      // Once per page, as the friction extension's initialize() does (the
+      // notices are not idempotent: each call adds another refresh interval).
+      attempt('friction', function () { win.GuardFriction.injectRefusalNotices(); });
       Promise.resolve().then(function () {
         attempt('friction', function () {
           var token = win.GuardFriction.start({ jsPsych: null, observeOnly: true, debug: debug });

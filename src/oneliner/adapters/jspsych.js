@@ -331,11 +331,13 @@ export function installJsPsychAdapter(opts) {
 //     it. jsPsych marks <html jspsych="present"> only once run() is past the
 //     window load event and extension loading (:2693-2696), so the check
 //     watches for that attribute rather than DOMContentLoaded. Then the
-//     wrapper is removed and ctx.host becomes 'vanilla'.
+//     wrapper is removed, ctx.host becomes 'vanilla' and onVanilla() (from
+//     boot) starts the guards and the vanilla adapter.
 //   vanilla host: if initJsPsych appears by DOMContentLoaded, ch.js was
 //     loaded above jspsych.js. ctx.host stays 'vanilla'.
 export function watchHostPlacement(opts) {
   var win = opts.win, doc = opts.doc, ctx = opts.ctx, adapter = opts.adapter;
+  var onVanilla = opts.onVanilla;
   if (!doc || !doc.documentElement) return;
   if (ctx.host === 'jspsych') {
     var root = doc.documentElement;
@@ -344,6 +346,7 @@ export function watchHostPlacement(opts) {
       console.error(MESSAGES.notHookable());
       ctx.host = 'vanilla';
       if (adapter) adapter.restore();
+      if (onVanilla) onVanilla();
     };
     if (root.hasAttribute('jspsych')) { notHookable(); return; }
     if (typeof win.MutationObserver !== 'function') return;
