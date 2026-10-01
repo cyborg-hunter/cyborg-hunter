@@ -121,6 +121,19 @@ describe('injectExtensions: dedupe rules (a) and (b)', () => {
     assert.deepStrictEqual(errors, []);
   });
 
+  it('a write that fails silently (sloppy-mode bundle) still counts as unmonitored, with the warning', () => {
+    // ch.js ships as a non-strict IIFE, where assigning to a frozen object
+    // fails without throwing; an accessor that drops writes behaves the same here.
+    const silent = Object.create({ get extensions() { return undefined; }, set extensions(v) {} });
+    silent.type = 'kb';
+    const last = { type: 'kb' };
+    const r = injectExtensions([silent, last], [CH]);
+    assert.deepStrictEqual(names(last.extensions), ['cyborg-hunter']);
+    assert.equal(r.trials, 1);
+    assert.equal(warns.length, 1);
+    assert.match(warns[0], /left it unmonitored/);
+  });
+
   it('an extensions array shared by two trials gets one copy and no own-entry count', () => {
     const list = [{ type: Mouse }];
     const r = injectExtensions([{ type: 'kb', extensions: list }, { type: 'kb', extensions: list }], [CH]);

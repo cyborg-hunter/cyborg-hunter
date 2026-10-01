@@ -153,10 +153,15 @@ export function injectExtensions(timeline, entries, seen) {
     if (missing.length === 0) return;
     missing = missing.map(copyOf);
     // A frozen or sealed trial object (or extensions array) throws in strict
-    // mode; that trial stays unmonitored and the walk goes on.
+    // mode; that trial stays unmonitored and the walk goes on. The shipped
+    // bundle is not strict, where the same write fails silently, so check
+    // that it took.
     try {
       if (hasOwnList) Array.prototype.push.apply(node.extensions, missing);
       else node.extensions = list.concat(missing);
+      if (!Array.isArray(node.extensions) || node.extensions.indexOf(missing[0]) === -1) {
+        throw new Error('trial object not writable');
+      }
     } catch (err) {
       result.trials -= 1;
       if (!warnedFrozen) {
