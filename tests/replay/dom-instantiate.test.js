@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { Window } from 'happy-dom';
 
-import { instantiateTree, mountTree } from '../../src/replay/dom-instantiate.js';
+import { instantiateTree, mountTree, applyPatches } from '../../src/replay/dom-instantiate.js';
 import { createPlayer, readTree, asPlayerTree } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
 
 import { FIXTURES_URL as FIXTURES } from '@cyborg-hunter/sessionrecording-conformance/corpus';
@@ -333,6 +333,57 @@ describe('spec §12 player filters', () => {
     assert.equal(root.getAttribute('srcdoc'), null);
     assert.equal(root.getAttribute('data-ch-placeholder'), 'iframe');
     assert.equal(root.getAttribute('width'), '300');
+  });
+
+  // The THIRD route to an iframe placeholder's `src`/`srcdoc`: a later
+  // recorded `dom.attr`. Instantiation honours IFRAME_SKIP and `media_src`
+  // obeys it since fix round 1, but `applyAttr` went straight to
+  // `setFilteredAttr`, which never consulted the skip set, so a patch could
+  // re-arm the placeholder. The viewer's `frame-src 'none'` CSP already
+  // blocked the load; this is defence in depth, for the same reason as above.
+  // Only the SET verb is refused: the placeholder carries no label a removal
+  // could strip, and its marker is viewer-owned on both verbs already.
+  // The marker constant (`data-ch-placeholder`) is not exported; the literal
+  // matches the other placeholder tests in this file.
+  function placeholderMount() {
+    const mount = instantiateTree({
+      id: 1, kind: 'element', tag: 'div', attrs: {}, children: [
+        { id: 2, kind: 'element', tag: 'iframe',
+          attrs: { width: '300', height: '150' }, children: [] },
+      ],
+    }, freshDoc());
+    assert.equal(mount.idMap.get(2).getAttribute('data-ch-placeholder'), 'iframe');
+    return mount;
+  }
+
+  for (const [name, value] of [
+    ['srcdoc', '<p>x</p>'],
+    ['src', 'https://example.com/'],
+    ['SRC', 'https://example.com/'],
+  ]) {
+    it(`a dom.attr cannot re-arm an iframe placeholder with ${name}`, () => {
+      const mount = placeholderMount();
+      applyPatches([{ type: 'dom.attr', t: 1, node: 2, name, value }], mount);
+      const frame = mount.idMap.get(2);
+      assert.equal(frame.getAttribute(name), null);
+      assert.equal(frame.getAttribute('src'), null);
+      assert.equal(frame.getAttribute('srcdoc'), null);
+      assert.equal(frame.getAttribute('data-ch-placeholder'), 'iframe');
+      // Silent and uncounted, like the viewer-owned refusals: the
+      // reconstruction is right without it, and counting would light the
+      // "could not be reapplied" chip every time the filter worked.
+      assert.equal(mount.skipped, 0);
+      assert.equal(mount.patchFailures, 0);
+    });
+  }
+
+  it('other recorded attributes still reach an iframe placeholder', () => {
+    // Proves the refusal is narrow: only the IFRAME_SKIP names are refused.
+    const mount = placeholderMount();
+    applyPatches([{ type: 'dom.attr', t: 1, node: 2, name: 'title', value: 'survey' }], mount);
+    assert.equal(mount.idMap.get(2).getAttribute('title'), 'survey');
+    assert.equal(mount.skipped, 0);
+    assert.equal(mount.patchFailures, 0);
   });
 
   it('media elements do not carry autoplay into the reconstruction', () => {

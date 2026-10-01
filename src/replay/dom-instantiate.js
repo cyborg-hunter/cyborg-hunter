@@ -715,6 +715,15 @@ function applyAttr(patch, mount) {
     el.removeAttribute(name);
     return;
   }
+  // An iframe placeholder never receives the IFRAME_SKIP names after mount
+  // either, or a later patch could re-arm what instantiation disarmed. The
+  // marker is viewer-owned on both verbs, so a recording can neither forge nor
+  // strip it, and checking it here is checking what instantiation decided.
+  // Silent and uncounted, like the viewer-owned refusals. Defence in depth:
+  // the viewer's `frame-src 'none'` CSP already blocks the load. SET verb
+  // only — the placeholder carries no label a removal could strip.
+  if (el.getAttribute(PLACEHOLDER_ATTR) === 'iframe'
+      && IFRAME_SKIP[name.toLowerCase()] === true) return;
   // ONE §12 gate on the set path, and it is the gate instantiation uses, so a
   // keyframe and a patch can never disagree about what an element may carry.
   setFilteredAttr(el, name, patch.value, mount);
