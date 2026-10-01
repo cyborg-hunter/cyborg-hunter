@@ -147,6 +147,30 @@ export const MESSAGES = {
       'call CyborgHunter.replay() when the session ends (your on_finish or save code)',
       DOCS + 'advanced-integration.md#replay-with-the-one-liner');
   },
+  // console.warn, from CyborgHunter.replay(): the autoSave finalize() ran but
+  // left no recording (its save failed, or it timed out); replay() returns null.
+  replayFinalizeFailed: function () {
+    return formatError('CyborgHunter.replay() has no recording',
+      'the recorder\'s autoSave finalize ended without a recording (its save failed; see the error above)',
+      'check the console for the save error above, or set autoSave.mode to \'none\' and save the recording CyborgHunter.replay() returns yourself',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
+  // console.warn at boot, vanilla host: CyborgHunterConfig.replay.autoSave
+  // has no effect there (no session-end hook to run the recorder's save from).
+  replayAutoSaveVanilla: function () {
+    return formatError('CyborgHunterConfig.replay.autoSave is ignored',
+      'autoSave is jsPsych-only under the one-liner, and this page has no jsPsych',
+      'save the recording yourself: call CyborgHunter.replay() in your submit or save code and send what it returns (autoSave works only with jsPsych)',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
+  // console.warn, jsPsych host: the autoSave finalize() did not settle in time;
+  // the researcher's on_finish runs anyway.
+  replayFinalizeTimedOut: function () {
+    return formatError('The replay recorder\'s autoSave did not finish',
+      'finalize() had not settled after 15 s, so the session ends without waiting for it',
+      'check that the autoSave target (for example DataPipe) is reachable, or save the recording yourself with CyborgHunter.replay()',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
   // console.warn: ch.js keeps one session per page. The session ends when the
   // first instance finishes; rows recorded after that carry no integrity data.
   secondJsPsychInstance: function () {

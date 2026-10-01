@@ -118,6 +118,7 @@ export function boot(opts) {
       segmenter: segmenter,
       host: host,
       scriptSrc: (script && script.src) || null,
+      scriptNonce: (script && script.nonce) || null,   // copied onto the lazily loaded replay <script>
       handlers: {},
       win: win,
       api: null

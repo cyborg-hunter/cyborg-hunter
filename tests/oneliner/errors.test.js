@@ -114,6 +114,21 @@ const CASES = {
     args: [],
     fix: 'call CyborgHunter.replay() when the session ends (your on_finish or save code)',
     link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
+  },
+  replayFinalizeFailed: {
+    args: [],
+    fix: 'check the console for the save error above, or set autoSave.mode to \'none\' and save the recording CyborgHunter.replay() returns yourself',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
+  },
+  replayAutoSaveVanilla: {
+    args: [],
+    fix: 'save the recording yourself: call CyborgHunter.replay() in your submit or save code and send what it returns (autoSave works only with jsPsych)',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
+  },
+  replayFinalizeTimedOut: {
+    args: [],
+    fix: 'check that the autoSave target (for example DataPipe) is reachable, or save the recording yourself with CyborgHunter.replay()',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
   }
 };
 

@@ -139,6 +139,31 @@ describe('loadScript', () => {
   });
 });
 
+describe('loadScript nonce', () => {
+  it('copies the ch.js tag\'s nonce onto the injected script', () => {
+    const doc = stubDoc();
+    loadScript(doc, SRC, undefined, 'abc123').catch(() => {});
+    assert.strictEqual(doc.appended[0].nonce, 'abc123');
+    loadScript(doc, 'https://other/r.js').catch(() => {});
+    assert.ok(!doc.appended[1].nonce, 'no nonce on the tag: none set');
+    doc.appended[0].dispatchEvent(new win.Event('error'));
+    doc.appended[1].dispatchEvent(new win.Event('error'));
+  });
+
+  it('the proxy and the vanilla loader pass ctx.scriptNonce', async () => {
+    const doc = stubDoc();
+    const ctx = baseCtx({ scriptNonce: 'n1' });
+    new (makeReplayProxy({ doc, src: SRC, ctx }))({}).initialize({});
+    assert.strictEqual(doc.appended[0].nonce, 'n1');
+    const doc2 = stubDoc();
+    createVanillaReplay({ win, doc: doc2, src: SRC + '?v', ctx }).catch(() => {});
+    assert.strictEqual(doc2.appended[0].nonce, 'n1');
+    doc.appended[0].dispatchEvent(new win.Event('error'));
+    doc2.appended[0].dispatchEvent(new win.Event('error'));
+    await flush();
+  });
+});
+
 describe('ReplayProxyExtension (jsPsych host)', () => {
   it('keeps the replay extension\'s name, so jsPsych.extensions[\'cyborg-hunter-replay\'] is the proxy', () => {
     const Proxy = makeReplayProxy({ doc: stubDoc(), src: SRC, ctx: baseCtx() });
@@ -294,6 +319,30 @@ describe('CyborgHunter.replay()', () => {
     assert.strictEqual(ctx.handlers.replay(), null);
     assert.strictEqual(warns.length, 2, warns.join('\n'));
     assert.ok(warns.every((w) => w.includes('Fix: ')), warns.join('\n'));
+  });
+
+  it('jsPsych: a finalize that took the recorder but saved nothing warns replayFinalizeFailed, not "not started"', async () => {
+    const log = [];
+    const { ctx, proxy } = await jsPsychCtx(log);
+    proxy.inner.api = null;   // finalize() destroyed the recorder; getLastRecording() is null
+    assert.strictEqual(ctx.handlers.replay(), null);
+    assert.strictEqual(warns.length, 1, warns.join('\n'));
+    assert.ok(warns[0].includes('Fix: ') && !warns[0].includes('has not started yet'), warns[0]);
+    assert.ok(warns[0].includes('save'), warns[0]);
+  });
+
+  it('vanilla host with autoSave: one catalogue warning at install (autoSave is jsPsych-only)', () => {
+    const ctx = baseCtx({ host: 'vanilla', config: { replay: { tier: 'trace', autoSave: { mode: 'datapipe', experimentId: 'A' } }, replaySrc: null } });
+    installReplay({ win, ctx, doc: stubDoc() });
+    assert.strictEqual(warns.length, 1, warns.join('\n'));
+    assert.ok(warns[0].includes('Fix: ') && warns[0].includes('jsPsych'), warns[0]);
+  });
+
+  it('vanilla host with autoSave none or absent, and jsPsych with autoSave: no such warning', () => {
+    installReplay({ win, ctx: baseCtx({ host: 'vanilla', config: { replay: { autoSave: { mode: 'none' } }, replaySrc: null } }), doc: stubDoc() });
+    installReplay({ win, ctx: baseCtx({ host: 'vanilla' }), doc: stubDoc() });
+    installReplay({ win, ctx: baseCtx({ config: { replay: { autoSave: { mode: 'datapipe' } }, replaySrc: null } }), doc: stubDoc() });
+    assert.deepStrictEqual(warns, []);
   });
 
   it('jsPsych: after an autosaving finalize() the recording it saved is returned', async () => {

@@ -61,7 +61,7 @@ export function replaySrcFor(scriptSrc, override) {
 // One <script> per src and document; every caller gets the same promise.
 var loads = new WeakMap();   // doc → { src: promise }
 
-export function loadScript(doc, src, timeoutMs) {
+export function loadScript(doc, src, timeoutMs, nonce) {
   var perDoc = loads.get(doc);
   if (!perDoc) { perDoc = Object.create(null); loads.set(doc, perDoc); }
   if (perDoc[src]) return perDoc[src];
@@ -76,6 +76,8 @@ export function loadScript(doc, src, timeoutMs) {
       clearTimeout(timer);
       reject(new Error('could not load ' + src + ' (missing file, network error or Content-Security-Policy)'));
     });
+    // A page with a nonce-based Content-Security-Policy only runs scripts that carry its nonce.
+    if (nonce) el.nonce = nonce;
     el.src = src;
     (doc.head || doc.documentElement || doc.body).appendChild(el);
   });
@@ -101,7 +103,7 @@ export function makeReplayProxy(opts) {
       var inner = null;
       try {
         // Already on the page (a <script> of the researcher's own): no load.
-        if (typeof win.jsPsychCyborgHunterReplay !== 'function') await loadScript(doc, src, timeoutMs);
+        if (typeof win.jsPsychCyborgHunterReplay !== 'function') await loadScript(doc, src, timeoutMs, ctx.scriptNonce);
         var Inner = win.jsPsychCyborgHunterReplay;
         if (typeof Inner !== 'function') throw new Error(src + ' loaded but did not define jsPsychCyborgHunterReplay');
         inner = new Inner(this.jsPsych);
@@ -150,7 +152,7 @@ export function makeReplayProxy(opts) {
 // (handle.api is null then).
 export function createVanillaReplay(opts) {
   var win = opts.win, doc = opts.doc, src = opts.src, ctx = opts.ctx;
-  var ready = win.CyborgHunterReplay ? Promise.resolve() : loadScript(doc, src, opts.timeoutMs);
+  var ready = win.CyborgHunterReplay ? Promise.resolve() : loadScript(doc, src, opts.timeoutMs, ctx.scriptNonce);
   return ready.then(function () {
     var R = win.CyborgHunterReplay;
     if (!R || typeof R.attach !== 'function') throw new Error(src + ' loaded but did not define CyborgHunterReplay');
@@ -221,7 +223,9 @@ function replay(ctx) {
   // An autosaving finalize() (CyborgHunterConfig.replay.autoSave) took it.
   var last = holder && typeof holder.getLastRecording === 'function' ? holder.getLastRecording() : null;
   if (last) return last;
-  console.warn(MESSAGES.replayNotReady());
+  // The holder exists but its recorder is gone and saved nothing: an autosaving
+  // finalize() destroyed it and failed. Not "has not started yet".
+  console.warn(holder ? MESSAGES.replayFinalizeFailed() : MESSAGES.replayNotReady());
   return null;
 }
 
@@ -247,6 +251,10 @@ export function installReplay(opts) {
   } catch (e) {
     console.error(MESSAGES.replayUnavailable(message(e)));
     return none;
+  }
+  var autoSave = ctx.config.replay.autoSave;
+  if (ctx.host === 'vanilla' && autoSave && autoSave.mode && autoSave.mode !== 'none') {
+    console.warn(MESSAGES.replayAutoSaveVanilla());
   }
   if (ctx.host === 'jspsych') {
     ctx.replayProxy = makeReplayProxy({ doc: doc, src: ctx.replaySrc, ctx: ctx, timeoutMs: opts.timeoutMs });

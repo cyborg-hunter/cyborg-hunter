@@ -58,6 +58,11 @@ function paste(text) {
 }
 
 describe('boot', () => {
+  it('captures the ch.js tag\'s nonce for the replay script', () => {
+    ctx = boot({ script: Object.assign(script({ participantId: 'P1', guards: 'none' }), { nonce: 'xyz' }), win });
+    assert.strictEqual(ctx.scriptNonce, 'xyz');
+  });
+
   it('creates a monitor inside a trial, sets the sentinel and the namespace', () => {
     ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
     assert.ok(ctx);

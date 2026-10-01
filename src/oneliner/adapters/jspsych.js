@@ -240,6 +240,8 @@ function runFinalHook(ctx, win, has, jsPsych) {
   return finalizeReplay(ctx, jsPsych);
 }
 
+var FINALIZE_TIMEOUT_MS = 15000;
+
 // The replay recorder's own save (DataPipe, CyborgHunterConfig.replay
 // .autoSave), before the researcher's on_finish saves the data, so the rows
 // carry its integrityReplayMeta (the order manual mode documents). With the
@@ -253,9 +255,19 @@ function finalizeReplay(ctx, jsPsych) {
     var ext = jsPsych.extensions && jsPsych.extensions[REPLAY_NAME];
     if (!(ext instanceof ctx.replayProxy)) return null;
     // finalize() never throws (extension-cyborg-hunter-replay.js); the catch is for the host's sake.
-    return Promise.resolve(ext.finalize()).catch(function (e) {
+    // Bounded: a save that never settles must not hold back the researcher's
+    // own save and redirect.
+    var timer = null;
+    var timeout = new Promise(function (resolve) {
+      timer = setTimeout(function () {
+        console.warn(MESSAGES.replayFinalizeTimedOut());
+        resolve();
+      }, ctx.replayFinalizeTimeoutMs || FINALIZE_TIMEOUT_MS);
+    });
+    var done = Promise.resolve(ext.finalize()).catch(function (e) {
       console.error(MESSAGES.sessionEndFailed('replay: ' + message(e)));
     });
+    return Promise.race([done, timeout]).then(function () { clearTimeout(timer); });
   } catch (e) {
     console.error(MESSAGES.sessionEndFailed('replay: ' + message(e)));
     return null;

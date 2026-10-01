@@ -369,4 +369,23 @@ describe('ch.js on real jsPsych: lazy replay', () => {
     assert.deepStrictEqual(recording, { schema_version: 2 }, 'replay() returns what finalize saved');
     assert.deepStrictEqual(warns, []);
   });
+
+  it('a finalize that never settles is bounded: a catalogue warning, then the researcher\'s on_finish runs', async () => {
+    win.jsPsychCyborgHunterReplay = class {
+      static info = { name: 'cyborg-hunter-replay' };
+      initialize() { this.api = {}; }
+      on_start() {}
+      on_load() {}
+      on_finish() { return {}; }
+      finalize() { return new Promise(() => {}); }
+      getLastRecording() { return null; }
+    };
+    const ctx = bootCh({}, { replay: { tier: 'trace', autoSave: { mode: 'datapipe', experimentId: 'ABC123' } } });
+    ctx.replayFinalizeTimeoutMs = 30;
+    let finished = false;
+    const jsPsych = win.initJsPsych({ on_finish: () => { finished = true; } });
+    await runTimeline(jsPsych, [{ type: Timer }]);
+    assert.ok(finished, 'the researcher\'s on_finish ran');
+    assert.ok(warns.some((w) => w.startsWith('[cyborg-hunter]') && w.includes('Fix: ')), warns.join('\n'));
+  });
 });
