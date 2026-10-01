@@ -2,7 +2,8 @@
 // The window.CyborgHunter namespace under the one-line setup. It replaces the
 // core's namespace (init + static helpers), so a researcher's leftover
 // CyborgHunter.init() cannot destroy the one-liner's monitor (core init()
-// destroys the previous instance): here init() only explains itself.
+// destroys the previous instance): here init() only explains itself, except
+// in manual mode (below).
 //
 // buildPublicApi(ctx) → frozen {
 //   VERSION,
@@ -11,7 +12,8 @@
 //   endTrial()              ≡ mark()
 //   data(), replay(), startFriction()
 //   frictionEntryTrial(opts)   GuardFriction.createEntryTrial(opts)
-//   init(cfg)               logs manualInitOnOneLiner, returns the namespace
+//   init(cfg)               logs manualInitOnOneLiner, returns the namespace;
+//                           in manual mode, the core init(cfg)
 //   preventTextSelection, addHoneypot, setAltText   (core static helpers)
 // }
 // mark/data/replay/startFriction depend on the host (jsPsych or vanilla); the
@@ -19,6 +21,7 @@
 // undefined.
 
 import { VERSION } from '../shared/constants.js';
+import { init as coreInit } from '../core/monitor.js';
 import { preventTextSelection, addHoneypot, setAltText } from '../core/signals/dom-protection.js';
 import { MESSAGES } from './errors.js';
 
@@ -39,7 +42,14 @@ export function buildPublicApi(ctx) {
     replay: handler('replay'),
     startFriction: handler('startFriction'),
     frictionEntryTrial: function (opts) { return ctx.win.GuardFriction.createEntryTrial(opts); },
-    init: function () {
+    // Manual mode (adapters/jspsych.js handOver): the researcher's own
+    // jsPsych extension creates the monitor by calling window.CyborgHunter
+    // .init(). With cyborg-hunter.min.js loaded after ch.js that is the core
+    // namespace; with ch.js alone it is this one, so init() hands out a core
+    // monitor here (ch.js's own monitor is already destroyed by then).
+    // ctx.host is read at call time: the hand-over happens after boot.
+    init: function (cfg) {
+      if (ctx.host === 'manual') return coreInit(cfg);
       console.error(MESSAGES.manualInitOnOneLiner());
       return api;
     },

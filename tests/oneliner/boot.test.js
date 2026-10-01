@@ -172,6 +172,27 @@ describe('boot', () => {
     assert.strictEqual(ctx.monitor.getSessionReport().config.participantId, 'P1');
   });
 
+  // Manual mode with ch.js alone (no cyborg-hunter.min.js after it): the
+  // jsPsych adapter has handed over (ctx.host 'manual'), and the researcher's
+  // extension calls window.CyborgHunter.init(), which must return a real
+  // monitor instead of explaining itself.
+  it('manual mode: CyborgHunter.init() returns a core monitor and logs nothing', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    ctx.segmenter.abandon();
+    ctx.monitor.destroy();
+    ctx.host = 'manual';
+    const m = win.CyborgHunter.init({ participantId: 'X' });
+    try {
+      assert.notStrictEqual(m, win.CyborgHunter);
+      assert.strictEqual(typeof m.startSession, 'function');
+      m.startSession();
+      assert.strictEqual(m.getSessionReport().config.participantId, 'X');
+      assert.deepStrictEqual(errors, []);
+    } finally {
+      m.destroy();
+    }
+  });
+
   // On the jsPsych host the injected guard extensions own the guards: their
   // initialize() calls GuardHoneypot.init and friction's setJsPsych. Boot
   // starting them too would init the honeypot twice (the second init resets

@@ -37,7 +37,8 @@ export const MESSAGES = {
       DOCS + 'advanced-integration.md#double-load');
   },
   notHookable: function () {
-    return formatError('Not monitoring jsPsych trials', 'ch.js loaded after initJsPsych() ran',
+    return formatError('Not monitoring jsPsych trials',
+      'ch.js loaded after initJsPsych() ran, or the page calls jsPsychModule.initJsPsych / new JsPsych directly (a bundler or ES module build), which never goes through window.initJsPsych',
       'move the ch.js <script> above your experiment code (and below jspsych.js)',
       DOCS + 'quickstart.md#placement');
   },
@@ -84,5 +85,22 @@ export const MESSAGES = {
   },
   guardFailed: function (guard, msg) {
     return formatError('The ' + guard + ' guard is not running', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn: the experiment runs; the entry trial still starts friction,
+  // but without the friction extension it has no jsPsych instance and no
+  // refusal notices.
+  frictionEntryWithoutFriction: function () {
+    return formatError('Friction is only partly set up',
+      'the timeline has friction\'s entry trial but data-guards does not enable friction',
+      'add friction to data-guards (for example data-guards="honeypot friction"), or remove the entry trial',
+      DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn: ch.js keeps one session per page. The session ends when the
+  // first instance finishes; rows recorded after that carry no integrity data.
+  secondJsPsychInstance: function () {
+    return formatError('A second jsPsych instance was created',
+      'ch.js records one session per page and ends it when the first instance finishes, so trials run after that are not monitored',
+      'create one jsPsych instance with initJsPsych() and run one timeline, or use cyborg-hunter.min.js and the jsPsych extension (manual mode) for several instances',
+      DOCS + 'known-issues.md#one-line-setup');
   }
 };

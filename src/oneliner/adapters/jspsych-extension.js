@@ -20,6 +20,28 @@
 // params.trialId) reaches this instance too, with its params, so its trialId
 // names the segment.
 //
+// A late on_load is dropped. A synchronous plugin (call-function) finishes
+// inside its own trial() call, and jsPsych runs that trial's load callback
+// only afterwards (jspsych.js 7.3.1 :3046-3056, :3101-3103), in one of two
+// orders:
+//   - nextTrial runs synchronously from finishTrial: the next trial's
+//     on_start and on_load come first, then the stale on_load, which would
+//     close the next trial's span as a gap and reopen it unnamed;
+//   - post_trial_gap / default_iti > 0 defer nextTrial: the stale on_load
+//     comes right after its own on_finish and would open a span for a trial
+//     that already ended.
+// An index check (current_trial_global) catches only the first order: in the
+// second the index has not moved yet. So on_start arms the load, on_load
+// consumes it, on_finish disarms it: an on_load counts only between its
+// trial's on_start and on_finish, which rejects the stale call in both orders.
+// (jsPsych calls the extension's on_start on every trial that lists it,
+// :3027-3030, so every real on_load is armed.)
+//
+// After the session has ended (the final hook ran, ctx.jspsych.finalized),
+// both hooks leave the segmenter alone: rows of a second jsPsych instance
+// that runs afterwards get no cyborgHunterError ('finished') marker; the
+// adapter warned about the second instance when it was created.
+//
 // ctx (set by installJsPsychAdapter): { monitor, segmenter, jspsych, debug? }.
 // None of the hooks throws into jsPsych: a failure becomes cyborgHunterError
 // on the row.
@@ -42,6 +64,7 @@ export class OneLinerExtension {
     this.jsPsych = jsPsych;
     this._trialStart_perfNow = null;
     this._loadError = null;
+    this._loadArmed = false;
   }
 
   get monitor() {
@@ -51,13 +74,20 @@ export class OneLinerExtension {
   // The monitor already exists (boot); nothing to set up.
   initialize(_params) {}
 
-  // jsPsych 7 calls on_start on every trial that lists the extension.
-  on_start(_params) {}
+  // jsPsych 7 calls on_start on every trial that lists the extension, before
+  // the plugin's trial(): arm this trial's on_load.
+  on_start(_params) {
+    this._loadArmed = true;
+  }
 
   on_load(params) {
     var ctx = OneLinerExtension.ctx;
+    // A late on_load (see the header) is dropped before anything is reset:
+    // the trial now open keeps its anchor and any rotate error.
+    if (!this._loadArmed) return;
+    this._loadArmed = false;
     this._loadError = null;
-    if (!ctx) return;
+    if (!ctx || (ctx.jspsych && ctx.jspsych.finalized)) return;
     try {
       // Same anchor as the manual extension: ingest subtracts it from the
       // tab-away `start` times (same performance.now() clock).
@@ -78,7 +108,8 @@ export class OneLinerExtension {
 
   on_finish(_params) {
     var ctx = OneLinerExtension.ctx;
-    if (!ctx) return {};
+    this._loadArmed = false;
+    if (!ctx || (ctx.jspsych && ctx.jspsych.finalized)) return {};
     var t0 = performance.now();
     var out;
     try {

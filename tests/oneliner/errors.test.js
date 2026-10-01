@@ -69,6 +69,16 @@ const CASES = {
     args: ['honeypot', 'boom'],
     fix: 'open an issue with this message and your <script> tag',
     link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  frictionEntryWithoutFriction: {
+    args: [],
+    fix: 'add friction to data-guards (for example data-guards="honeypot friction"), or remove the entry trial',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  secondJsPsychInstance: {
+    args: [],
+    fix: 'create one jsPsych instance with initJsPsych() and run one timeline, or use cyborg-hunter.min.js and the jsPsych extension (manual mode) for several instances',
+    link: DOCS + 'known-issues.md#one-line-setup'
   }
 };
 
@@ -94,6 +104,16 @@ describe('error catalogue', () => {
   it('the double-load message names both scripts in load order', () => {
     assert.ok(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')
       .includes(': cyborg-hunter.min.js was loaded after ch.js. Fix:'));
+  });
+
+  // ch.js loaded after the experiment code is one cause; a bundler or ES
+  // module build calling jsPsychModule.initJsPsych / new JsPsych directly
+  // never goes through window.initJsPsych at all.
+  it('the not-hookable message names both causes', () => {
+    const msg = MESSAGES.notHookable();
+    assert.ok(msg.includes('ch.js loaded after initJsPsych() ran'), msg);
+    assert.ok(msg.includes('jsPsychModule.initJsPsych'), msg);
+    assert.ok(msg.includes('new JsPsych'), msg);
   });
 
   it('the random-id message carries the generated id', () => {

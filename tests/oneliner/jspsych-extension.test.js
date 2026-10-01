@@ -54,7 +54,7 @@ describe('OneLinerExtension: jsPsych hooks', () => {
     assert.strictEqual(new OneLinerExtension({}).monitor, ctx.monitor);
   });
 
-  it('initialize and on_start do nothing and never throw', () => {
+  it('initialize and on_start never throw', () => {
     const ext = new OneLinerExtension({});
     assert.doesNotThrow(() => ext.initialize({}));
     assert.doesNotThrow(() => ext.on_start(undefined));
@@ -65,7 +65,9 @@ describe('OneLinerExtension: on_load', () => {
   it('rotates into the host trial with trialId, phase and decoyAnswer:false passed through', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
-    new OneLinerExtension(fakeJsPsych(3)).on_load({ trialId: 'q1', phase: 'test', decoyAnswer: false });
+    const ext = new OneLinerExtension(fakeJsPsych(3));
+    ext.on_start({});
+    ext.on_load({ trialId: 'q1', phase: 'test', decoyAnswer: false });
     const [name, o] = calls[0];
     assert.equal(name, 'rotate');
     assert.equal(o.trialId, 'q1');
@@ -76,7 +78,9 @@ describe('OneLinerExtension: on_load', () => {
   it('names an unnamed trial trial-<global index>; missing params become null', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
-    new OneLinerExtension(fakeJsPsych(7)).on_load(undefined);
+    const ext = new OneLinerExtension(fakeJsPsych(7));
+    ext.on_start(undefined);
+    ext.on_load(undefined);
     const o = calls[0][1];
     assert.equal(o.trialId, 'trial-7');
     assert.strictEqual(o.phase, null);
@@ -88,7 +92,44 @@ describe('OneLinerExtension: on_load', () => {
     const { ctx } = makeCtx();
     ctx.segmenter.rotate = () => { throw new Error('boom'); };
     OneLinerExtension.ctx = ctx;
-    assert.doesNotThrow(() => new OneLinerExtension(fakeJsPsych(0)).on_load({}));
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    ext.on_start({});
+    assert.doesNotThrow(() => ext.on_load({}));
+  });
+
+  // A synchronous plugin (call-function) finishes inside its own trial()
+  // call; jsPsych runs its load callback afterwards (jspsych.js :3101-3103),
+  // either after the next trial's on_load (nextTrial ran synchronously) or
+  // before the next trial's on_start (post_trial_gap / default_iti > 0).
+  it('an on_load arriving after its trial finished does not rotate (next trial not started yet)', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(1));
+    ext.on_start({});
+    ext.on_finish({});
+    ext.on_load({});
+    assert.deepStrictEqual(calls.map((c) => c[0]), ['cut']);
+  });
+
+  it('a stale on_load after the next trial loaded does not rename it', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(2));
+    ext.on_start({});                         // call-function
+    ext.on_finish({});                        // ... finishes inside trial()
+    ext.on_start({ trialId: 'T-named' });     // next trial starts synchronously
+    ext.on_load({ trialId: 'T-named' });
+    ext.on_load({});                          // call-function's late load callback
+    assert.deepStrictEqual(calls.map((c) => c[0] + ':' + (c[1].trialId || c[1].nextTrialId)), ['cut:gap-2', 'rotate:T-named']);
+  });
+
+  it('after the session has ended, on_load does not touch the segmenter', () => {
+    const { ctx, calls } = makeCtx({ jspsych: { finalized: true } });
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(0));
+    ext.on_start({});
+    ext.on_load({});
+    assert.deepStrictEqual(calls, []);
   });
 });
 
@@ -97,6 +138,7 @@ describe('OneLinerExtension: on_finish', () => {
     const { ctx, calls } = makeCtx();
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(4));
+    ext.on_start({ trialId: 't4' });
     ext.on_load({ trialId: 't4' });
     const out = ext.on_finish({});
     assert.deepStrictEqual(calls[1], ['cut', { source: 'host', nextTrialId: 'gap-4' }]);
@@ -116,6 +158,7 @@ describe('OneLinerExtension: on_finish', () => {
     const { ctx } = makeCtx();
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(4));
+    ext.on_start({});
     ext.on_load({});
     ext.on_finish({});
     assert.strictEqual(ext.on_finish({}).integrity.trialStart_perfNow, null);
@@ -152,10 +195,21 @@ describe('OneLinerExtension: on_finish', () => {
     ctx.segmenter.rotate = () => ({ error: 'rotation failed' });
     OneLinerExtension.ctx = ctx;
     const ext = new OneLinerExtension(fakeJsPsych(1));
+    ext.on_start({});
     ext.on_load({});
     const out = ext.on_finish({});
     assert.equal(out.integritySegment.segmentIndex, 4);
     assert.equal(out.cyborgHunterError, 'rotation failed');
+  });
+
+  // A second jsPsych instance running after the first one ended the session
+  // (adapters/jspsych.js warns about it at initJsPsych): its rows are left
+  // alone rather than marked with the segmenter's 'finished' error.
+  it('after the session has ended, returns {} without cutting', () => {
+    const { ctx, calls } = makeCtx({ jspsych: { finalized: true } });
+    OneLinerExtension.ctx = ctx;
+    assert.deepStrictEqual(new OneLinerExtension(fakeJsPsych(5)).on_finish({}), {});
+    assert.deepStrictEqual(calls, []);
   });
 
   it('without a context (ch.js did not boot) returns {}', () => {

@@ -25,6 +25,12 @@
 // moment the monitor already records (the boot span), but the honeypot bait
 // and friction are not active yet.
 //
+// One jsPsych instance per page is assumed: one boot monitor, one segmenter,
+// one session. A second wrapped initJsPsych gets a catalogue warning; each
+// instance's final hook writes to that instance's own data, and the first
+// one to finish ends the session (later rows are left unmarked, see
+// jspsych-extension.js).
+//
 // Nothing here throws into the page: a failure is logged from the catalogue
 // (errors.js) and jsPsych runs as if ch.js were absent from that step on.
 
@@ -136,12 +142,13 @@ export function detectManualMode(options) {
 // hands over: its boot span is closed without a segment and its monitor is
 // destroyed (two monitors would double-count every event).
 //
-// The researcher's extension calls window.CyborgHunter.init(). That only
-// works when cyborg-hunter.min.js is loaded after ch.js: esbuild's globalName
-// replaces window.CyborgHunter with the core namespace before min.js's footer
-// runs, and that replacement is what makes the manual wiring work, so ch.js
-// does not restore its own namespace. With ch.js alone, window.CyborgHunter
-// is the one-liner's namespace, whose init() only explains itself.
+// The researcher's extension calls window.CyborgHunter.init(). With
+// cyborg-hunter.min.js loaded after ch.js, esbuild's globalName has replaced
+// window.CyborgHunter with the core namespace before min.js's footer runs, so
+// that call reaches the core init(); ch.js does not restore its own
+// namespace. With ch.js alone, window.CyborgHunter is the one-liner's
+// namespace, whose init() returns a core monitor once ctx.host is 'manual'
+// (api.js), so the manual wiring works either way.
 function handOver(ctx) {
   ctx.host = 'manual';
   try { ctx.segmenter.abandon(); } catch (_) { /* the hand-over continues */ }
@@ -149,13 +156,14 @@ function handOver(ctx) {
   console.info('[cyborg-hunter] manual mode: initJsPsych lists a cyborg-hunter extension, so ch.js injects nothing; finalize() is still required.');
 }
 
-// The end of the session, from the chained on_finish. Runs once; never throws.
-// Friction is stopped before the honeypot writes its session summary, so a
-// violation still open at the end is closed first (extension-guard-honeypot.js).
-function runFinalHook(ctx, win, has) {
+// The end of the session, from the chained on_finish of `jsPsych` (the
+// instance that finished, not necessarily the latest one wrapped). Runs once;
+// never throws. Friction is stopped before the honeypot writes its session
+// summary, so a violation still open at the end is closed first
+// (extension-guard-honeypot.js).
+function runFinalHook(ctx, win, has, jsPsych) {
   if (ctx.jspsych.finalized) return;
   ctx.jspsych.finalized = true;
-  var jsPsych = ctx.jsPsych;
   var problems = [];
   var marker = null;
   function step(fn) {
@@ -177,12 +185,14 @@ function runFinalHook(ctx, win, has) {
     // The segmenter has already logged its own failure.
     if (r && r.error) marker = r.error;
   });
-  if (has(FRICTION_NAME)) {
-    step(function () {
-      var token = win._guardFrictionToken;
-      if (win.GuardFriction && token) win.GuardFriction.stop(token);
-    });
-  }
+  // Whenever friction holds a token, not only when ch.js injected friction:
+  // the entry trial starts friction from its own on_finish timer even when
+  // data-guards does not enable it, and its intervals and curtain would
+  // outlive the experiment.
+  step(function () {
+    var token = win._guardFrictionToken;
+    if (win.GuardFriction && token) win.GuardFriction.stop(token);
+  });
   if (has(HONEYPOT_NAME)) {
     step(function () {
       if (win.GuardHoneypot) win.GuardHoneypot.attachToJsPsychData();
@@ -209,6 +219,7 @@ export function installJsPsychAdapter(opts) {
   ctx.jspsych = { invoked: false, instrumented: 0, entryTrialFound: false, segmentsWritten: 0, finalized: false };
 
   win.initJsPsych = function (options) {
+    if (ctx.jspsych.invoked) console.warn(MESSAGES.secondJsPsychInstance());
     ctx.jspsych.invoked = true;
     options = options || {};
     var manual = false;
@@ -244,14 +255,20 @@ export function installJsPsychAdapter(opts) {
     var ourNames = ours.map(nameOf);
     var injected = listed.filter(function (e) { return ourNames.indexOf(nameOf(e)) !== -1; });
     function has(name) { return injected.some(function (e) { return nameOf(e) === name; }); }
+    // Friction listed at all, ours or the researcher's own entry: either one
+    // sets friction up for the entry trial.
+    var frictionListed = listed.some(function (e) { return nameOf(e) === FRICTION_NAME; });
 
+    // jsPsych calls on_finish as this.opts.on_finish(...) (:2969), so `this`
+    // is the options object: the instance is captured below, per call.
+    var jsPsych = null;
     var userFinish = options.on_finish;
     options.on_finish = function () {
-      runFinalHook(ctx, win, has);
+      runFinalHook(ctx, win, has, jsPsych);
       return typeof userFinish === 'function' ? userFinish.apply(this, arguments) : undefined;
     };
 
-    var jsPsych = orig(options);
+    jsPsych = orig(options);
     try {
       OneLinerExtension.ctx = ctx;
       ctx.jsPsych = jsPsych;
@@ -265,6 +282,7 @@ export function installJsPsychAdapter(opts) {
           // Shared with the initJsPsych list, which loadExtensions reads
           // after this.
           if (frictionEntry) frictionEntry.params.observeOnly = !r.entryTrialFound;
+          if (r.entryTrialFound && !frictionListed) console.warn(MESSAGES.frictionEntryWithoutFriction());
           if (ctx.debug && ctx.debug.update) ctx.debug.update();
         } catch (e) {
           console.error(MESSAGES.instrumentFailed(message(e)));

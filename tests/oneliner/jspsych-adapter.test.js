@@ -175,7 +175,7 @@ describe('installJsPsychAdapter', () => {
         calls.push(['init', opts]);
         const inst = {
           opts,
-          data: { addProperties: (p) => calls.push(['addProperties', p]), addDataToLastTrial: (d) => calls.push(['last', d]) },
+          data: { addProperties: (p) => calls.push(['addProperties', p]), addDataToLastTrial: (d) => calls.push(['last', d, inst]) },
           run: (tl) => { calls.push(['run', tl]); return Promise.resolve('ran'); },
           // jsPsych 7.3.1 simulate() calls this.run() (:2700-2706); run is an
           // own bound property (autoBind, :2648), so the wrapper is reached.
@@ -335,6 +335,55 @@ describe('installJsPsychAdapter', () => {
     const w2 = fakeWin(); const c2 = ctx(); c2.config.guards = { honeypot: false, friction: false };
     installJsPsychAdapter({ win: w2.win, ctx: c2 });
     assert.deepStrictEqual(names(w2.win.initJsPsych({}).opts.extensions), ['cyborg-hunter']);
+  });
+
+  // GuardFriction.createEntryTrial() starts friction itself (a timer in its
+  // on_finish), so friction can be running although data-guards never enabled
+  // it and no friction extension was injected.
+  it('the final hook stops friction whenever a friction token exists, even with friction not enabled', () => {
+    const { win } = fakeWin(); const c = ctx();
+    const stopped = [];
+    win.GuardFriction = { stop: (tok) => stopped.push(tok) };
+    Object.defineProperty(win, '_guardFrictionToken', { value: 'tok', enumerable: false, configurable: true });
+    installJsPsychAdapter({ win, ctx: c });
+    const j = win.initJsPsych({});
+    assert.ok(!names(j.opts.extensions).includes('guard-friction'));
+    j.opts.on_finish({});
+    assert.deepStrictEqual(stopped, ['tok']);
+  });
+
+  it('an entry trial in the timeline with friction not enabled is warned about at run()', async () => {
+    const { win } = fakeWin(); const c = ctx();
+    installJsPsychAdapter({ win, ctx: c });
+    const j = win.initJsPsych({});
+    await j.run([{ type: 'btn', data: { trial_type_label: 'guard_friction_entry' } }]);
+    assert.deepStrictEqual(warns, [MESSAGES.frictionEntryWithoutFriction()]);
+  });
+
+  it('no entry-trial warning when friction is enabled, or listed in initJsPsych by the researcher', async () => {
+    const entry = () => [{ type: 'btn', data: { trial_type_label: 'guard_friction_entry' } }];
+    const a = fakeWin(); const ca = ctx(); ca.config.guards.friction = true;
+    installJsPsychAdapter({ win: a.win, ctx: ca });
+    await a.win.initJsPsych({}).run(entry());
+    const b = fakeWin(); const cb = ctx();
+    installJsPsychAdapter({ win: b.win, ctx: cb });
+    await b.win.initJsPsych({ extensions: [{ type: b.win.jsPsychGuardFriction }] }).run(entry());
+    assert.deepStrictEqual(warns, []);
+  });
+
+  // ch.js assumes one jsPsych instance per page (one session, one segmenter).
+  it('a second initJsPsych is warned about; each instance\'s final hook writes to that instance', () => {
+    const { win, calls } = fakeWin(); const c = ctx();
+    installJsPsychAdapter({ win, ctx: c });
+    const first = win.initJsPsych({});
+    assert.deepStrictEqual(warns, []);
+    const second = win.initJsPsych({});
+    assert.deepStrictEqual(warns, [MESSAGES.secondJsPsychInstance()]);
+    first.opts.on_finish({});
+    const last = calls.filter((x) => x[0] === 'last');
+    assert.equal(last.length, 1);
+    assert.strictEqual(last[0][2], first, 'the final segment goes to the instance that finished, not the latest one');
+    assert.notStrictEqual(first, second);
   });
 
   it('a timeline walk that throws is logged and jsPsych still runs', async () => {

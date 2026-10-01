@@ -12,13 +12,13 @@ it('constants.js VERSION matches package.json', () => {
   assert.strictEqual(VERSION, pkg.version);
 });
 
-it('both jsPsych extension info.version fields match package.json', async () => {
+it('every jsPsych extension info.version field matches package.json', async () => {
   // Read the source directly rather than importing: extension-cyborg-hunter.js
   // imports cleanly under plain node, but extension-cyborg-hunter-replay.js
   // pulls in ../replay/index.js, which (like the guard-friction/honeypot
   // extensions) expects browser globals — tests/jspsych/*.test.js shim those
   // with happy-dom before importing. A source-level regex check works
-  // regardless of DOM-global requirements, so it's used for both files here.
+  // regardless of DOM-global requirements, so it's used for every file here.
   const files = [
     '../../src/jspsych/extension-cyborg-hunter.js',
     '../../src/jspsych/extension-cyborg-hunter-replay.js',
