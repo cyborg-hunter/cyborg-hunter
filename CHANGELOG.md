@@ -3,6 +3,58 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [0.10.0] — 2026-10-01
+
+A one-line setup: a single `<script>` tag, `dist/ch.js`, monitors an
+experiment and writes the integrity data into the data the experiment already
+saves. Manual mode (the jsPsych extension wired by hand) is unchanged.
+
+### Added
+- `dist/ch.js`, the one-line setup, for jsPsych 7 and for pages without
+  jsPsych. Below `jspsych.js` it monitors every trial, nested timelines
+  included, with no extension list, per-trial loop or `finalize()` call.
+  Without jsPsych, trials are marked with `data-ch-trial` or
+  `CyborgHunter.mark()`. The participant ID comes from the study URL or
+  `data-participant-id`; the guards are set with `data-guards`.
+- Rolling snapshot: under ch.js each row carries `integritySegment` (what
+  happened since the previous row, with running counters and score) and
+  running totals. At the end of the session the last row gets
+  `integritySegmentFinal` and every row gets the end-of-session totals under
+  `*Final` names (`integritySoftScoreFinal`, `integrityPasteCountFinal`, …).
+- CLI: the rolling snapshot is a fifth session-lookup convention, next to the
+  four it already reads. The CLI joins the segments into the session report;
+  for a session spread over several pages it re-bases each page's times onto
+  the first page and sums the pages' counters and scores.
+- `data-debug`: an on-page badge and a console summary while piloting.
+- `data-replay` records a session replay. ch.js loads the replay recorder
+  only when this attribute is set.
+- On the browser global: `CyborgHunter.data()` (the object to save on a
+  page without jsPsych), `CyborgHunter.mark()` (a trial boundary) and
+  `CyborgHunter.replay()` (the recording, for your save code).
+- `docs/advanced-integration.md`: manual mode, switching to the one-liner,
+  double loads, friction, the honeypot ethics note and the data format.
+
+### Changed
+- Under the one-line setup the honeypot is on by default
+  (`data-guards="none"` turns it off). In manual mode it still runs only when
+  `jsPsychGuardHoneypot` is listed.
+- The README and quickstart lead with the one-liner; manual mode moved to
+  `docs/advanced-integration.md`.
+- A double load now logs an error in the console. `cyborg-hunter.min.js`
+  loaded twice, or after ch.js, no longer silently replaces the namespace,
+  and the guard files no longer throw when ch.js already defined the guards.
+
+### Notes
+- No change to manual-mode data formats. The CLI reads files from both
+  setups.
+- ch.js monitors the whole page, so events before the first trial and
+  between trials count toward the counters and the soft score. Manual mode
+  counted only events inside trials, so soft scores of a study moved to ch.js
+  can be higher.
+- Under ch.js, `trialsCompleted` counts the spans between boundaries, not
+  jsPsych trials.
+- Qualtrics support and the heuristic detector arrive in 0.11.0.
+
 ## [0.9.2] — 2026-10-01
 
 A maintenance release: documentation for keeping replays on your own server,
