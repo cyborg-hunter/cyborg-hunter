@@ -9,7 +9,7 @@ Two layers:
 - **Library** (`cyborg-hunter.min.js`) — runs in the participant's browser, records signals.
 - **CLI** (`cyborg-hunter` binary) — runs on your laptop after data collection, reads the saved data files, generates a report.
 
-The library writes its observations into the same data file your experiment already saves (jsPsych CSV, custom JSON, whatever). It does NOT make network calls or save anything separately. The CLI's job is to find your data files, parse them, and render the report.
+The integrity monitor writes its observations into the same data file your experiment already saves (jsPsych CSV, custom JSON, whatever) and makes no network calls of its own. (The optional replay recorder saves a separate artifact; see [Session replay](#session-replay).) The CLI's job is to find your data files, parse them, and render the report.
 
 ## jsPsych integration
 
@@ -67,7 +67,7 @@ const jsPsych = initJsPsych({
 
 Forgetting `finalize()` means you'll lose all of the above, and the CLI will warn "No session-level integrity data."
 
-**If you save with DataPipe (`jsPsychPipe`) — or any "save-as-a-trial" plugin — `on_finish` is too late.** The example above works because `localSave` is a *function call* inside the experiment-level `on_finish`, so `finalize()` runs first and the save sees its output. `jsPsychPipe` is different: it's a **trial** in your timeline, and its `data_string` callback snapshots `jsPsych.data` the moment that trial *starts* — which is *before* the experiment-level `on_finish` runs. So `finalize()` placed in `on_finish` never makes it into the saved data, even though it's in the right order and runs without error. The same applies to `jsPsychSavePavlovia` or any plugin whose `data_string`/`data` snapshots mid-timeline.
+**If you save with DataPipe (`jsPsychPipe`) — or any "save-as-a-trial" plugin — `on_finish` is too late.** The example above works because `localSave` is a *function call* inside the experiment-level `on_finish`, so `finalize()` runs first and the save sees its output. `jsPsychPipe` is different: it's a **trial** in your timeline, and its `data_string` callback snapshots `jsPsych.data` the moment that trial *starts* — which is *before* the experiment-level `on_finish` runs. So `finalize()` placed in `on_finish` never makes it into the saved data, even though it's in the right order and runs without error. The same applies to `jsPsychSavePavlovia` or any plugin whose `data_string`/`data` snapshots mid-timeline. (If you also use the replay extension, its `finalize()` is async and so cannot run inside a save trial's `data_string`; use the async `jsPsychCallFunction`-before-save pattern in [Saving the replay to your own server](#saving-the-replay-to-your-own-server).)
 
 The rule: **whatever must land in saved data has to run before the save trial.** Two ways to do that —
 
@@ -342,7 +342,11 @@ await fetch('https://your-lab-server.example/upload', {
 // jsPsych: in an async on_finish, after the other finalize() calls
 await jsPsych.extensions['cyborg-hunter-replay'].finalize();
 const recording = jsPsych.extensions['cyborg-hunter-replay'].getLastRecording();
-// POST it as above, then redirect (e.g. to the Prolific completion URL) only after the upload resolves
+if (recording) {
+  // POST it as above (getLastRecording() is undefined if finalize failed
+  // or the session never started)
+}
+// then, then redirect (e.g. to the Prolific completion URL) only after the upload resolves
 ```
 
 - Name the file with `CyborgHunterReplay.replayFilename(recording)`
@@ -360,10 +364,12 @@ const recording = jsPsych.extensions['cyborg-hunter-replay'].getLastRecording();
   `integrityReplayMeta.saved_to` reads `'none'`, which is correct here: the
   recorder did not save the file, your upload did.
 - For large `dom`-tier recordings, the standalone handle's
-  `rec.getRecordingCompressed()` returns a gzip `Blob` (plain JSON if the
-  browser lacks `CompressionStream`; check `blob.type`). Upload it as the
-  request body and name it `replayFilename(recording) + '.gz'`; the CLI
-  reads `.json.gz`.
+  `rec.getRecordingCompressed()` returns a promise of a gzip `Blob` (`await`
+  it). If the browser lacks `CompressionStream` the Blob is plain JSON, so
+  check `blob.type`; it resolves `null` only when `Blob` itself is missing. Upload it as the
+  request body. Add `.gz` to the name (`replayFilename(recording) + '.gz'`)
+  only when `blob.type === 'application/gzip'`; a plain-JSON Blob keeps the
+  `.json` name, because the CLI treats a `.gz` suffix as gzip.
 - At `startSession` the recorder warns "autoSave.mode is \"none\" — the
   recording will be lost unless you call getRecording() yourself." That is
   expected with this setup.
