@@ -17,7 +17,7 @@ const CASES = {
   },
   notHookable: {
     args: [],
-    fix: 'move the ch.js <script> above your experiment code (and below jspsych.js)',
+    fix: 'move the ch.js <script> above your experiment code (and below jspsych.js); for a bundled jsPsych, use manual mode (cyborg-hunter.min.js)',
     link: DOCS + 'quickstart.md#placement'
   },
   loadedAboveJsPsych: {

@@ -42,7 +42,7 @@ export const MESSAGES = {
   notHookable: function () {
     return formatError('Not monitoring jsPsych trials',
       'ch.js loaded after initJsPsych() ran, or the page calls jsPsychModule.initJsPsych / new JsPsych directly (a bundler or ES module build), which never goes through window.initJsPsych',
-      'move the ch.js <script> above your experiment code (and below jspsych.js)',
+      'move the ch.js <script> above your experiment code (and below jspsych.js); for a bundled jsPsych, use manual mode (cyborg-hunter.min.js)',
       DOCS + 'quickstart.md#placement');
   },
   loadedAboveJsPsych: function () {
