@@ -136,7 +136,7 @@ Benign tags (Grammarly, LastPass, 1Password, etc.) are filtered out of the `Muta
 
 ## Report CSV columns from session-level data
 
-`cyborg-hunter report` emits per-trial signal counts AND aggregates derived from session-level data. The session columns require `finalize()` to have been called in the experiment's `on_finish` (see [`using-cyborg-hunter.md`](using-cyborg-hunter.md)). If only per-trial `data.integrity` records are present, these columns are zero/empty and the CLI prints a warning.
+`cyborg-hunter report` emits per-trial signal counts AND aggregates derived from session-level data. The session columns need session-level data: the one-line setup writes it on every row as it goes, and manual mode needs `finalize()` to have been called before the save (see [`advanced-integration.md`](advanced-integration.md#manual-mode)). If only per-trial `data.integrity` records are present, these columns are zero/empty and the CLI prints a warning.
 
 | Column | Source | Description |
 |---|---|---|

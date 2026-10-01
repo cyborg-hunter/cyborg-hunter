@@ -4,4 +4,6 @@ Start with [`quickstart.md`](quickstart.md): install → instrument → collect 
 
 To try the pipeline before you have data, run the bundled synthetic dataset: [`worked-example.md`](worked-example.md).
 
-For depth (jsPsych setup gotchas, standalone usage, per-trial parameters, common pitfalls, DOM-protection helpers), see [`using-cyborg-hunter.md`](using-cyborg-hunter.md).
+For depth (per-trial parameters, session replay, common pitfalls, DOM-protection helpers), see [`using-cyborg-hunter.md`](using-cyborg-hunter.md).
+
+Wiring the jsPsych extension by hand (manual mode), moving an existing experiment to the one-line setup, the honeypot's ethics note, friction, pages without jsPsych, and replay under the one-line setup are in [`advanced-integration.md`](advanced-integration.md).

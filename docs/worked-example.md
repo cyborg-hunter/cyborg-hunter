@@ -23,7 +23,7 @@ Analyzing...
   Clean:                                                  1
 ```
 
-No ingest warnings appear. On your own data, warnings at this point are the first thing to fix; the usual causes are a wrong `participantIdField` or a missing `finalize()` call ([quickstart § 3](quickstart.md#3-wire-the-extension-into-jspsych)).
+No ingest warnings appear. On your own data, warnings at this point are the first thing to fix; the usual causes are a wrong `participantIdField` ([quickstart § 5](quickstart.md#5-generate-the-report)) or, in manual mode, a missing `finalize()` call ([advanced-integration.md → Manual mode](advanced-integration.md#manual-mode)).
 
 ## triage.md — where review starts
 
@@ -88,5 +88,5 @@ One caveat specific to this fixture: the timelines print "perfNow→session-rel 
 
 ## Next
 
-- Point the same three-line config at your own data directory: [quickstart § 6](quickstart.md#6-generate-the-report).
+- Point the same three-line config at your own data directory: [quickstart § 5](quickstart.md#5-generate-the-report).
 - Before making exclusion decisions, read [interpreting-signals.md](interpreting-signals.md).

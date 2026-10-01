@@ -42,7 +42,15 @@ CLI (analysis):
 npm install -g cyborg-hunter
 ```
 
-Browser (experiment page) — load via unpkg or copy `dist/*.js` into your project:
+Browser (experiment page): one tag, below `jspsych.js` and above your experiment code (on a page without jsPsych, anywhere in the page):
+
+```html
+<script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
+```
+
+For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.9.1/dist/...`. You can also copy `dist/ch.js` (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
+
+Manual mode (advanced), for experiments that wire the jsPsych extension themselves: see [docs/advanced-integration.md](docs/advanced-integration.md#manual-mode). It loads these files instead of `ch.js`:
 
 ```html
 <!-- Signal collection -->
@@ -55,35 +63,22 @@ Browser (experiment page) — load via unpkg or copy `dist/*.js` into your proje
 <script src="https://unpkg.com/cyborg-hunter/dist/cyborg-hunter-replay.js"></script>
 ```
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.9.1/dist/...`.
+## Plug into an experiment
 
-## Plug into a jsPsych experiment
+Add the tag below `jspsych.js` and above your experiment code. Every trial is monitored and recorded as its own segment, and the integrity data lands in the data your experiment already saves. There is no extension list, no per-trial loop and no `finalize()` call.
 
-```javascript
-const jsPsych = initJsPsych({
-  extensions: [
-    { type: jsPsychCyborgHunter, params: { participantId: participant_id, preset: 'standard' } },
-    { type: jsPsychGuardFriction },     // optional
-    { type: jsPsychGuardHoneypot }      // optional
-  ],
-  on_finish: function () {
-    jsPsych.extensions['guard-friction'].finalize();   // stop friction first
-    jsPsych.extensions['guard-honeypot'].finalize();   // then attach data
-    jsPsych.extensions['cyborg-hunter'].finalize();    // then save
-    jsPsych.data.get().localSave('csv', 'data.csv');
-  }
-});
-
-timeline.push(jsPsychGuardFriction.entryTrial());     // user-gesture fullscreen entry
-timeline.forEach(t => t.extensions = (t.extensions || []).concat([
-  { type: jsPsychCyborgHunter },
-  { type: jsPsychGuardFriction },
-  { type: jsPsychGuardHoneypot }
-]));
-jsPsych.run(timeline);
+```html
+<script src="jspsych/jspsych.js"></script>
+<script src="https://unpkg.com/cyborg-hunter/dist/ch.js" data-participant-id="P001"></script>
+<script src="experiment.js"></script>
 ```
 
-`participantId` must exist before `initJsPsych`. Full walk-through (per-trial params, standalone non-jsPsych use, opt-in/exclude modes): [docs/using-cyborg-hunter.md](docs/using-cyborg-hunter.md).
+- `data-guards`: the honeypot is on by default (read the [ethics and IRB note](docs/advanced-integration.md#honeypot-ethics-and-irb-note)); `data-guards="honeypot,friction"` adds friction, `data-guards="none"` turns both off.
+- `data-replay`: records a session replay; save `CyborgHunter.replay()` in your save code.
+- `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
+- Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (a POST form gets it as a hidden `cyborgHunterData` field).
+
+Walk-through, placement and participant IDs: [docs/quickstart.md](docs/quickstart.md). Moving an experiment wired by hand: [docs/advanced-integration.md](docs/advanced-integration.md#switching-to-the-one-liner).
 
 ## Generate a report
 
@@ -110,6 +105,8 @@ ingest and the report viewer all speak v2; the CLI also reads v2 files from
 other producers and converts jsPsych `schema_version: 1` recordings on the
 way in ([docs/v2-player-migration.md](docs/v2-player-migration.md)).
 Releases before 0.8.0 recorded the earlier v1 shape.
+
+With the one-line setup, add `data-replay` to the tag and save `CyborgHunter.replay()` in your save code ([details](docs/advanced-integration.md#replay-with-the-one-liner)). Manual mode wires the recorder itself:
 
 ```javascript
 // jsPsych: one more extension (declare anywhere; finalize LAST)
@@ -179,6 +176,7 @@ The optional **guard** extensions add: fullscreen / sidebar / focus enforcement 
 ## Documentation
 
 - [docs/quickstart.md](docs/quickstart.md) — zero to triage report
+- [docs/advanced-integration.md](docs/advanced-integration.md) — manual mode, switching to the one-line setup, the honeypot's ethics note, friction, pages without jsPsych, replay
 - [docs/worked-example.md](docs/worked-example.md) — full pipeline run on the bundled synthetic dataset, outputs interpreted
 - [docs/interpreting-signals.md](docs/interpreting-signals.md) — scores vs tiers, viewport shifts, phase scoping: the common misreadings
 - [docs/upgrading.md](docs/upgrading.md) — what each release changes in collected data, configuration and reports; read before re-running old data

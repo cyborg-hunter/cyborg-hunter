@@ -1,154 +1,29 @@
 # Using cyborg-hunter
 
-How to plug the library into a browser-based experiment, end-to-end. Covers jsPsych (the most common case) and standalone usage.
+How the library fits into a browser-based experiment, past the [quickstart](quickstart.md): per-trial parameters, session replay, the report and common pitfalls. Manual mode and standalone use are in [advanced-integration.md](advanced-integration.md).
 
 ## Mental model
 
 Two layers:
 
-- **Library** (`cyborg-hunter.min.js`) — runs in the participant's browser, records signals.
+- **Library** (`ch.js`; `cyborg-hunter.min.js` in manual mode) — runs in the participant's browser, records signals.
 - **CLI** (`cyborg-hunter` binary) — runs on your laptop after data collection, reads the saved data files, generates a report.
 
 The integrity monitor writes its observations into the same data file your experiment already saves (jsPsych CSV, custom JSON, whatever) and makes no network calls of its own. (The optional replay recorder saves a separate artifact; see [Session replay](#session-replay).) The CLI's job is to find your data files, parse them, and render the report.
 
-## jsPsych integration
-
-### 1. Load the two scripts
-
-In your experiment HTML, after jsPsych itself but before your own `script.js`:
+## One-line setup
 
 ```html
-<script src="path/to/cyborg-hunter.min.js"></script>
-<script src="path/to/extension-cyborg-hunter.js"></script>
+<script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
 ```
 
-Order matters — `extension-cyborg-hunter.js` references `window.CyborgHunter`, which the first file defines.
+For production studies pin an exact version (see [README § Install](../README.md#install)).
 
-### 2. Set the participant ID before `initJsPsych`
-
-The wrapper reads `participantId` at extension `initialize()` time, which is BEFORE any trial runs. If you assign `subject.id` after `initJsPsych`, the extension will record an empty participant ID.
-
-```javascript
-let subject = {};
-subject.id = jsPsych.randomization.randomID(10);  // or your own ID source
-
-const jsPsych = initJsPsych({
-  extensions: [
-    { type: jsPsychCyborgHunter, params: {
-        participantId: subject.id,
-        preset: 'standard',
-    }}
-  ],
-  ...
-});
-```
-
-If you must use `jsPsych.randomization.randomID` (which only exists after `initJsPsych`), use `Math.random().toString(36).slice(2, 12)` instead, or assign a stand-in ID and overwrite later.
-
-### 3. Call `finalize()` before saving
-
-This is the most common cause of "session data missing." jsPsych 7's extension API has no `on_finish_experiment` hook — the wrapper exposes `finalize()` instead, which you call manually from the experiment-level `on_finish` callback:
-
-```javascript
-const jsPsych = initJsPsych({
-  ...
-  on_finish: function () {
-    jsPsych.extensions['cyborg-hunter'].finalize();
-    jsPsych.data.get().localSave('csv', 'data.csv');
-    // or: SaveData('your-experiment', subject.id, jsPsych.data.get().csv());
-  }
-});
-```
-
-`finalize()` attaches:
-
-- Per-row scalars (paste count, copy count, soft score, etc.) — added via `addProperties`, so every trial row gets these columns.
-- Session arrays and nested objects (`integritySession`, `integrityScore`) — added via `addDataToLastTrial`, so they appear once on the final row.
-
-Forgetting `finalize()` means you'll lose all of the above, and the CLI will warn "No session-level integrity data."
-
-**If you save with DataPipe (`jsPsychPipe`) — or any "save-as-a-trial" plugin — `on_finish` is too late.** The example above works because `localSave` is a *function call* inside the experiment-level `on_finish`, so `finalize()` runs first and the save sees its output. `jsPsychPipe` is different: it's a **trial** in your timeline, and its `data_string` callback snapshots `jsPsych.data` the moment that trial *starts* — which is *before* the experiment-level `on_finish` runs. So `finalize()` placed in `on_finish` never makes it into the saved data, even though it's in the right order and runs without error. The same applies to `jsPsychSavePavlovia` or any plugin whose `data_string`/`data` snapshots mid-timeline. (If you also use the replay extension, its `finalize()` is async and so cannot run inside a save trial's `data_string`; use the async `jsPsychCallFunction`-before-save pattern in [Saving the replay to your own server](#saving-the-replay-to-your-own-server).)
-
-The rule: **whatever must land in saved data has to run before the save trial.** Two ways to do that —
-
-```javascript
-// Option A — finalize() inside the save trial's data_string, before the snapshot:
-const save_data = {
-  type: jsPsychPipe,
-  action: 'save',
-  experiment_id: EXPERIMENT_ID,
-  filename: filename,
-  data_string: () => {
-    jsPsych.extensions['guard-friction'].finalize();   // if you use the guard layers,
-    jsPsych.extensions['guard-honeypot'].finalize();   // finalize them first, then
-    jsPsych.extensions['cyborg-hunter'].finalize();    // cyborg-hunter last
-    return jsPsych.data.get().json();
-  },
-  on_success: () => window.location.replace(REDIRECT_URL)
-};
-timeline.push(save_data);
-```
-
-```javascript
-// Option B — a bookkeeping trial pushed BEFORE the save trial:
-timeline.push({
-  type: jsPsychHtmlButtonResponse,
-  stimulus: getCompletionHTML(),
-  choices: ['Finish'],
-  on_finish: () => {
-    jsPsych.extensions['guard-friction'].finalize();
-    jsPsych.extensions['guard-honeypot'].finalize();
-    jsPsych.extensions['cyborg-hunter'].finalize();
-  }
-  // no navigation here — let the save trial's on_success redirect
-});
-timeline.push(save_data);   // save runs after the bookkeeping trial's on_finish
-```
-
-Either way, the navigation away (e.g. `window.location.replace(REDIRECT_URL)`) must live in the save trial's `on_success`, not in a trial before it — if an earlier trial navigates, the save trial never runs.
-
-### 4. Opt trials in to monitoring
-
-jsPsych extensions only fire for trials whose `extensions: [...]` array lists them. There are two ways to opt in:
-
-**Recommended for most experiments — opt all trials in via a single forEach** (works even with 100+ trials):
-
-```javascript
-// After all timeline.push() calls, just before jsPsych.run:
-timeline.forEach(t => {
-  t.extensions = (t.extensions || []).concat([{ type: jsPsychCyborgHunter }]);
-});
-
-jsPsych.run(timeline);
-```
-
-**Per-trial opt-in** (when you want to monitor only some trials and pass per-trial parameters like `trialId`, `phase`, or `decoyAnswer`):
-
-```javascript
-const myTrial = {
-  type: jsPsychSurvey,
-  questions: [...],
-  extensions: [
-    { type: jsPsychCyborgHunter, params: { trialId: 'memory-recall-1', phase: 'test' } }
-  ]
-};
-```
-
-The wrapper falls back to `trial-{index}` if you don't provide a `trialId`.
-
-### 5. Verify
-
-Run the experiment locally (e.g. `python3 -m http.server 8080`), click through, save the CSV. Open it and confirm:
-
-- Each trial row has columns `integrityPasteCount`, `integritySoftScore`, `cyborgHunterVersion`, etc.
-- The last row has columns `integritySession` (a JSON object with arrays of events) and `integrityScore`.
-- The `integrity` cell on each row contains a JSON object with `pasteEvents`, `mouseTrack`, `tabAwayEvents`, etc.
-
-If `integritySession` is missing on the last row, `finalize()` either wasn't called or ran too late (see the DataPipe note in section 3).
+Placed below `jspsych.js` and above your experiment code, this tag monitors every trial, records each one as its own segment and writes the integrity data into the rows your experiment already saves. On a page without jsPsych, you can mark trials yourself and save `CyborgHunter.data()`. Placement, the participant ID, the tag's attributes and a smoke test: [quickstart.md](quickstart.md#2-add-one-script-tag). Manual mode (wiring the jsPsych extension yourself), the migration note, friction and replay under the one-line setup: [advanced-integration.md](advanced-integration.md).
 
 ## Per-trial parameters
 
-The per-trial `params` object accepts:
+To name a trial's segment or pass trial-level options, give the trial its own entry: `extensions: [{ type: jsPsychCyborgHunter, params: { trialId: 'recall-1' } }]`. ch.js uses that entry's params and adds no second one; manual mode reads the same params. The per-trial `params` object accepts:
 
 | Param | Type | Purpose |
 |---|---|---|
@@ -157,7 +32,7 @@ The per-trial `params` object accepts:
 | `decoyAnswer` | string | A "honeytoken" string injected into the DOM (off-screen by default) for a trial, framed per `decoyFraming`. An AI tool scraping the page may surface it; a human reader never sees it. The library records the injected text in the trial's `decoy` metadata — it does **not** auto-match it against paste/typed text. Cross-reference the decoy string with `event-log.csv` paste/typed content downstream to flag hits. |
 | `experimentContainer` | string \| Element | Selector or DOM element bounding the response area. Used for the foreign-input detector — typing outside this region is flagged. |
 
-Extension-level (passed to `initJsPsych` once, applies to all trials):
+Extension-level, manual mode only (passed to `initJsPsych` once, applies to all trials). Under the one-line setup, use `data-participant-id` and `data-preset` on the tag instead; `excludeTrialTypes` and `autoMonitor` do not apply, because ch.js monitors every trial.
 
 | Param | Type | Purpose |
 |---|---|---|
@@ -165,38 +40,6 @@ Extension-level (passed to `initJsPsych` once, applies to all trials):
 | `preset` | `'permissive' \| 'standard' \| 'strict'` | Threshold preset. See `docs/signals-reference.md`. |
 | `excludeTrialTypes` | string[] | Plugin type names to skip (e.g. `['html-keyboard-response', 'instructions']`). |
 | `autoMonitor` | boolean | Default `true`. Set `false` to require an explicit `trialId` per-trial as the opt-in signal. |
-
-## Standalone (non-jsPsych) usage
-
-If your experiment isn't jsPsych, use the library directly:
-
-```html
-<script src="path/to/cyborg-hunter.min.js"></script>
-<script>
-  const monitor = CyborgHunter.init({
-    participantId: 'P001',
-    preset: 'standard'
-  });
-
-  // Session-scoped listeners (tab-away, sidebar, extension scan):
-  monitor.startSession();
-
-  // For each trial:
-  monitor.startTrial({ trialId: 'rule-3' });
-  // ... participant responds ...
-  const trialReport = monitor.endTrial();
-  // Save trialReport with your own data persistence layer.
-
-  // At the end of the experiment:
-  const sessionReport = monitor.getSessionReport();
-  // Save sessionReport too — the CLI looks for it under metadata.integritySession
-  // OR the last trial's integritySession field.
-
-  monitor.destroy();
-</script>
-```
-
-The library exports `window.CyborgHunter` for forward use; `window.IntegrityMonitor` is a backward-compatible alias.
 
 ## Session replay
 
@@ -213,6 +56,8 @@ producers attach to the report as they are, and jsPsych `schema_version: 1`
 recordings (the record_session branch, PR #3661) are converted on the way in
 by `tools/convert/jspsych-v1-to-v2.mjs`; see `docs/v2-player-migration.md`.
 Releases before 0.8.0 recorded the earlier v1 shape.
+
+With the one-line setup, replay is `data-replay` on the tag and `CyborgHunter.replay()` in your save code: see [advanced-integration.md → Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner). The wiring below is manual mode's; the configuration, privacy, volume and viewing notes apply to both.
 
 ### jsPsych wiring
 
@@ -520,7 +365,9 @@ Unknown flags now exit with an error rather than silently falling back to the co
 
 **"on_start is not a function" crash mid-experiment.** You're on a pre-0.3.0 version of the wrapper. Update — `on_start` was added in 0.3.0.
 
-**`integritySession` cell is empty / missing on last trial.** Either you forgot `jsPsych.extensions['cyborg-hunter'].finalize()`, or you call it from the experiment-level `on_finish` but save with DataPipe (`jsPsychPipe`) / another save-as-a-trial plugin — in which case the save snapshots the data *before* `on_finish` runs, so `finalize()` is too late. Move `finalize()` into the save trial's `data_string` or a trial that precedes it. See section 3 above.
+**`integritySession` cell is empty / missing on last trial (manual mode).** Under the one-line setup there is no `integritySession` cell: the session travels as `integritySegment` cells instead. In manual mode, either you forgot `jsPsych.extensions['cyborg-hunter'].finalize()`, or you call it from the experiment-level `on_finish` but save with DataPipe (`jsPsychPipe`) / another save-as-a-trial plugin — in which case the save snapshots the data *before* `on_finish` runs, so `finalize()` is too late. Move `finalize()` into the save trial's `data_string` or a trial that precedes it. See [advanced-integration.md → Call `finalize()` before saving](advanced-integration.md#3-call-finalize-before-saving).
+
+**Badge still visible to participants.** Remove `data-debug` from the ch.js tag before launch. The badge it adds is visible to everyone who takes the study.
 
 **Window outline shifts mid-experiment but mouse path doesn't follow.** The polled-and-resize-event geometry capture can't always keep up with rapid window changes. Trials spanning a resize show the snapshot for one moment of the trial's duration. For wild-collected data this is rare; for stress-tests it shows up.
 

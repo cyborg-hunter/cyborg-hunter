@@ -2,6 +2,26 @@
 
 Issues we've identified but not yet fixed. Filed here rather than dropped in commit messages so they're easy to find and revisit.
 
+## One-line setup
+
+Every console error from `ch.js` links here or to the page that explains its fix. Each one starts with `[cyborg-hunter]`, then names the problem, its cause and the fix. In every case the experiment keeps running.
+
+| Message starts with | What it means | What to do |
+|---|---|---|
+| `Cyborg Hunter did not start`, `could not hook initJsPsych`, `could not instrument the timeline`, `could not write the end-of-session data`, `could not record a page boundary`, `The … guard is not running` | An unexpected failure inside ch.js. Data recorded before it is kept, and the affected rows or saved object carry `cyborgHunterError`. | [Open an issue](https://github.com/cyborg-hunter/cyborg-hunter/issues) with the console message and your `<script>` tag. Never attach participant data. |
+| `Cyborg Hunter is not running on this page` | A `CyborgHunter` call ran after ch.js failed to start (see the error above it), so the call did nothing. `CyborgHunter.data()` returns an empty session that names the failure. | Fix the earlier error. |
+| `A second jsPsych instance was created` | ch.js records one session per page and ends it when the first instance finishes. Later trials are not monitored. | Use one `initJsPsych()` and one timeline, or [manual mode](advanced-integration.md#manual-mode) with `cyborg-hunter.min.js`. |
+| `Friction is only partly set up` | The page has a friction start (the entry trial, `data-ch-friction-start` or `CyborgHunter.startFriction()`) but `data-guards` does not list `friction`. Enforcement still starts, without the AI refusal notices. | Add `friction` to `data-guards`, or remove the start ([Friction](advanced-integration.md#friction)). |
+| `The saved session is approaching the sessionStorage limit` / `The session could not be carried to the next page` | Pages without jsPsych: the session kept for the next page is over 4 MB, or storage refused it. | Set `CyborgHunterConfig.collectForPostHoc.rawMouseTrack = false`, or save `CyborgHunter.data()` on every page ([Vanilla segmentation reference](advanced-integration.md#vanilla-segmentation-reference)). |
+| `Session replay is not recording` | `cyborg-hunter-replay.js` did not load: missing file, network error, Content-Security-Policy, or more than 15 s. | Put it next to `ch.js` or set `data-replay-src`, and allow its URL in `script-src` ([Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner)). |
+
+Known limits of the one-line setup:
+
+- **Bundled jsPsych cannot be hooked.** A build that calls `jsPsychModule.initJsPsych` or `new JsPsych` directly (npm, ES modules) never goes through `window.initJsPsych`. ch.js logs the placement error and records the page as one without jsPsych. Use [manual mode](advanced-integration.md#manual-mode). jsPsych 8 is not supported yet.
+- **`<head>` placement misses the first moments.** With ch.js in `<head>`, monitoring starts at `DOMContentLoaded`, so a paste before then is not recorded.
+- **Some programmatic submits are not covered.** `form.submit()` on a form inside another frame, or through a reference taken before ch.js ran, does not get the `cyborgHunterData` field. GET forms never get it.
+- **A save trial cannot hold the end of the session.** A save-as-a-trial plugin (DataPipe) saves before the session ends, so that file has no `integritySegmentFinal` and nothing from the save trial itself ([loss bound](advanced-integration.md#data-format-the-rolling-snapshot)).
+
 ## Session replay (0.7.0 feature)
 
 The items below are known limitations of the replay feature, kept open deliberately.
