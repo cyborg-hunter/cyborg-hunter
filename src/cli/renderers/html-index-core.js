@@ -110,8 +110,8 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   <title>Cyborg Hunter Report</title>
   <style>
 ${fontFaceCss}    :root {
-      --bg: #fafafa; --surface: #fff; --ink: #1a1814;
-      --dim: #706a5c; --line: #e2ddd1;
+      --bg: #fafafa; --surface: #fff; --ink: #0f0f0f;
+      --dim: #4f4a40; --line: #b9b2a2;
       --hard: #d32f2f; --soft: #f57c00; --clean: #388e3c;
       /* Typefaces (embedded by report-fonts.js; picked in the 2026-09 report
          palette). Each stack falls back to the system face when a font is
@@ -128,7 +128,7 @@ ${fontFaceCss}    :root {
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
            color: var(--ink); background: var(--bg); display: grid; grid-template-rows: auto 1fr; height: 100vh; }
     .topbar { display: flex; align-items: center; gap: 16px; padding: 12px 20px;
-              background: var(--surface); border-bottom: 1px solid var(--line); }
+              background: var(--surface); border-bottom: 3px double var(--ink); }
     .topbar h1 { font-family: var(--ff-space); font-size: 32.4px; font-weight: 550; letter-spacing: 0.01em; }
     .topbar .meta { font-family: var(--ff-tomorrow); color: var(--dim); font-size: 13px; flex: 1; }
     .topbar button { padding: 6px 12px; border: 1px solid var(--line); background: var(--surface);
@@ -172,16 +172,22 @@ ${fontFaceCss}    :root {
     }
     .search-wrap input:focus { outline: 1px solid var(--ink); border-color: var(--ink); }
 
-    /* Filter chips */
-    .filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    /* Filter chips — one segmented control: joined buttons, square inner
+       edges, outer corners 4px. 15px with 4px 8px padding keeps four 3-digit
+       counts on one line in the 360px rail (measured 2026-09-30). */
+    .filter-chips { display: flex; flex-wrap: wrap; gap: 0; }
     .filter-chip {
-      padding: 3px 8px; border: 1px solid var(--line); background: var(--surface);
-      color: var(--ink); border-radius: 12px; cursor: pointer;
+      padding: 4px 8px; border: 1px solid var(--line); background: var(--surface);
+      color: var(--ink); border-radius: 0; margin-left: -1px; cursor: pointer;
       font-family: var(--ff-recursive); font-size: 15px; font-weight: 400; letter-spacing: 0;
     }
+    .filter-chip:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+    .filter-chip:last-child { border-radius: 0 4px 4px 0; }
     .filter-chip:hover { background: var(--bg); }
+    /* Raised so the next chip's -1px overlap can't paint over its ink edge. */
     .filter-chip.active {
       background: var(--ink); color: var(--surface); border-color: var(--ink);
+      position: relative; z-index: 1;
     }
 
     /* Sort selector */
@@ -198,10 +204,12 @@ ${fontFaceCss}    :root {
       cursor: pointer;
     }
     .cohort-row:hover { background: var(--bg); }
+    /* Selected row: a 2px inset ink outline (no layout shift, row tone kept). */
     .cohort-row.selected {
-      border-left: 4px solid var(--ink);
-      padding-left: 8px;  /* compensate for the 4px left border */
-      background: var(--bg);
+      border-left: 0;
+      padding-left: 12px;
+      background: transparent;
+      box-shadow: inset 0 0 0 2px var(--ink);
     }
     .cohort-row-top { display: flex; align-items: center; gap: 8px; }
     .cohort-row-top .pid {
@@ -231,10 +239,10 @@ ${fontFaceCss}    :root {
     .tier-dot[data-tier="soft"]  { background: var(--soft); }
     .tier-dot[data-tier="clean"] { background: var(--clean); }
 
-    /* Tier badge — small pill, filled for hard/soft, outline for clean */
+    /* Tier badge — small square tag, filled for hard/soft, outline for clean */
     .tier-badge {
       font-family: var(--ff-sora);
-      font-size: 10px; padding: 2px 6px; border-radius: 3px;
+      font-size: 10px; padding: 2px 6px; border-radius: 0;
       font-weight: 600; letter-spacing: 0.04em; flex-shrink: 0;
     }
     .tier-badge[data-tier="hard"]  { background: var(--hard);  color: white; }
@@ -268,7 +276,7 @@ ${fontFaceCss}    :root {
 
     /* Header strip */
     .detail-header {
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid var(--ink);
       padding-bottom: 12px; margin-bottom: 16px;
     }
     .detail-header-top { display: flex; align-items: center; gap: 12px; }
@@ -279,10 +287,10 @@ ${fontFaceCss}    :root {
        face rather than taking the meta-line face by source order. */
     .detail-header-sub.mono { font-family: var(--ff-sora); }
 
-    /* Tier pill — bigger version of the tier badge in the rail */
+    /* Tier pill — bigger version of the tier badge in the rail (square tag) */
     .tier-pill {
       font-family: var(--ff-sora);
-      font-size: 11px; padding: 3px 8px; border-radius: 4px;
+      font-size: 11px; padding: 3px 8px; border-radius: 0;
       font-weight: 600; letter-spacing: 0.04em;
     }
     .tier-pill[data-tier="hard"]  { background: var(--hard); color: white; }
@@ -303,7 +311,7 @@ ${fontFaceCss}    :root {
     }
     .signal-tile {
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: 0;
       padding: 8px 10px;
       display: flex;
       flex-direction: column;
@@ -334,16 +342,16 @@ ${fontFaceCss}    :root {
     .score-term .label { font-family: var(--ff-recursive); color: var(--dim); }
     .score-term .contrib { font-family: var(--ff-sora); color: var(--ink); }
     .score-term .bar {
-      height: 6px; background: var(--ink); opacity: 0.4; border-radius: 3px;
+      height: 6px; background: var(--ink); opacity: 0.4; border-radius: 2px;
     }
     .score-total { font-family: var(--ff-sora); margin-left: auto; font-weight: 600; color: var(--ink); }
 
-    /* Reason pull-quote — warm-tinted block-quote with a left rule. The bg
-       color is picked by hand from --bg's family rather than computed, so
-       it shifts cleanly when the palette changes. */
+    /* Reason note — a hairline box on the surface (the earlier warm tint and
+       3px left rule were dropped in the 2026-09 reshape). */
     .reason {
-      border-left: 3px solid var(--ink);
-      background: #f5f1e8;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
       padding: 10px 14px;
       margin: 0 0 16px;
       font-family: var(--ff-tomorrow);
@@ -366,7 +374,8 @@ ${fontFaceCss}    :root {
     }
     .sig-cell {
       background: var(--surface); border: 1px solid var(--line);
-      border-radius: 6px; padding: 10px;
+      border-radius: 0; padding: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.05);
     }
     .sig-cell-title {
       font-family: var(--ff-sofia);
@@ -391,8 +400,8 @@ ${fontFaceCss}    :root {
     .paste-toggle:hover:not(:disabled) { color: var(--ink); }
     .paste-trial { font-family: var(--ff-majormono); color: var(--dim); flex-shrink: 0; }
     .paste-preview, .paste-full {
-      background: #f5f1e8;  /* warm tinted bg, same as the reason pull-quote */
-      padding: 4px 8px; border-radius: 3px;
+      background: var(--surface); border: 1px solid var(--line);  /* hairline box, like .reason */
+      padding: 4px 8px; border-radius: 0;
       font-family: var(--ff-tomorrow);
       font-size: 12px;
       word-break: break-word; white-space: pre-wrap;
@@ -414,7 +423,8 @@ ${fontFaceCss}    :root {
     .image-block .section-heading { margin: 0 0 6px; }
     .detail img {
       max-width: 100%; display: block; margin: 6px 0 0;
-      border: 1px solid var(--line); border-radius: 4px;
+      border: 1px solid var(--line); border-radius: 0;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.05);
     }
     .zoomable {
       display: block; cursor: zoom-in;
@@ -454,7 +464,7 @@ ${fontFaceCss}    :root {
       max-width: 560px; max-height: calc(100vh - 16vh);
       margin: 8vh auto 0;
       padding: 20px 24px;
-      border-radius: 8px;
+      border-radius: 0;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
       overflow-y: auto;
     }
@@ -765,12 +775,12 @@ ${fontFaceCss}    :root {
   <style>
     /* Replay viewer (see replay-viewer.client.js) — matches report house style */
     .replay-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
-    .replay-badge { font-family: var(--ff-sora); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    .replay-badge { font-family: var(--ff-sora); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 0;
                     background: var(--ink); color: var(--surface); }
     .replay-badge[data-tier="trace"] { background: var(--surface); color: var(--ink);
                     border: 1px solid var(--line); }
     .replay-stage { position: relative; overflow: hidden; background: var(--surface);
-                    border: 1px solid var(--line); border-radius: 4px; }
+                    border: 1px solid var(--line); border-radius: 0; }
     .replay-frame { position: absolute; top: 0; left: 0; border: 0; }
     .replay-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
     .replay-neutral { background: #e8e6e0; }
@@ -789,7 +799,13 @@ ${fontFaceCss}    :root {
       padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
       color: var(--ink); border-radius: 4px; cursor: pointer;
       font-family: var(--ff-recursive); font-size: 13px; }
-    .replay-play:hover, .replay-load-btn:hover, .replay-css-btn:hover { background: var(--bg); }
+    /* Play is the transport's primary action: a round ink button. Its hover
+       is its own (darker ink); the light shared hover below would leave a
+       white ▶ on a light ground. */
+    .replay-play { background: var(--ink); color: var(--surface); border-color: var(--ink);
+                   width: 36px; height: 30px; padding: 0; border-radius: 50%; }
+    .replay-play:hover { background: #2b2b2b; }
+    .replay-load-btn:hover, .replay-css-btn:hover { background: var(--bg); }
     .replay-play:disabled, .replay-load-btn:disabled { opacity: 0.6; cursor: default; }
     .replay-fetch-css-label { font-family: var(--ff-recursive); margin-left: 10px; font-size: 12px; color: #555; }
     .replay-unstyled { position: absolute; left: 0; right: 0; top: 0; z-index: 3; background: #fff4dd; color: #7a4b00; border-bottom: 1px solid #e8b24a; padding: 6px 10px; font-family: var(--ff-recursive); font-size: 12px; line-height: 1.4; }
@@ -799,8 +815,8 @@ ${fontFaceCss}    :root {
     .replay-keycast { position: absolute; left: 0; right: 0; bottom: 0; display: flex;
                     gap: 4px; padding: 5px 6px; pointer-events: none; flex-wrap: wrap-reverse; }
     .replay-key-chip { font: 400 13px/1.2 var(--ff-tomorrow);
-                    background: rgba(0,0,0,0.72); color: #fff; padding: 2px 7px;
-                    border-radius: 3px; white-space: nowrap; }
+                    background: rgba(0,0,0,0.72); color: #fff; padding: 3px 9px;
+                    border-radius: 2px; white-space: nowrap; }
     .replay-key-chip--redacted { background: rgba(0,0,0,0.5); font-style: italic; }
     /* Media is reported as state, never played (design §7): the badges say what
        the recorded element was doing, in the stage's top-left. */
