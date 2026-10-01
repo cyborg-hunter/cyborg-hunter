@@ -18,6 +18,9 @@ export { renderIndexHtml } from './renderers/html-index-core.js';
 // The replay viewer's CSS, shared with the demo's replay-host iframe so it
 // no longer keeps its own hand-synced copy (results.js passes it down).
 export { REPLAY_STYLES_CSS } from './renderers/replay-styles.js';
+// The pure @font-face formatter: the demo fetches the report's WOFF2 files
+// and formats them exactly as the CLI's report-fonts.js does.
+export { fontFaceCss } from './renderers/font-face-css.js';
 export { computeSummary } from './analyzers/summary.js';
 export { detectEdgeExits } from './analyzers/edge-exit.js';
 export { rankTriage } from './analyzers/triage.js';

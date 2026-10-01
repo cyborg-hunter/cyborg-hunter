@@ -85,6 +85,11 @@ function main() {
   // demo/results.js fetches — never a copy of the client alone, which would
   // load into the demo with `mountTree` undefined.
   writeFileSync(join(SITE_DIR, 'replay-viewer.client.js'), readReplayClientSrc());
+  // The report's typefaces (WOFF2 + each family's OFL.txt + the manifest),
+  // copied from their one committed home rather than duplicated under demo/.
+  // demo.css loads them by URL for the tour itself; demo/results.js fetches
+  // them and inlines them into the in-browser report and the replay host.
+  cpSync(join(ROOT, 'src', 'cli', 'renderers', 'fonts'), join(SITE_DIR, 'assets', 'fonts'), { recursive: true });
 
   console.log('assemble-demo-site: assembled ' + SITE_DIR);
 }

@@ -12,16 +12,13 @@
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { fontFaceCss } from './font-face-css.js';
 
 export const FONTS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fonts');
 
-// font-display: block — a face must never swap in after a fallback flash;
-// everything is inline, so the block period is effectively zero.
+// The rule format lives in font-face-css.js (shared with the browser demo);
+// this only supplies the bytes from disk.
 export function buildFontFaceCss(dir = FONTS_DIR) {
   const manifest = JSON.parse(readFileSync(join(dir, 'FONTS_MANIFEST.json'), 'utf8'));
-  return manifest.files.map(f => {
-    const b64 = readFileSync(join(dir, f.path)).toString('base64');
-    return `@font-face { font-family: "${f.family}"; font-style: normal; font-weight: ${f.weight}; ` +
-      `font-display: block; src: url(data:font/woff2;base64,${b64}) format("woff2"); }`;
-  }).join('\n');
+  return fontFaceCss(manifest.files, p => readFileSync(join(dir, p)).toString('base64'));
 }

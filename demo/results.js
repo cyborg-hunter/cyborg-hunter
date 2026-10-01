@@ -9,9 +9,10 @@
 //
 // The report loads in a Blob-URL iframe, sandbox="allow-scripts" (opaque
 // origin: scripts run, so the report's own row-click/legend JS works across
-// the now-multiple participants, but it can't reach this page, storage, or
-// the network). Old blob URLs are revoked only AFTER the replacement loads
-// (spec §7.3).
+// the now-multiple participants, but it can't reach this page or storage,
+// and any subresource it fetches is a cross-origin request — which is why
+// its fonts are inlined, see loadFontFaceCss). Old blob URLs are revoked
+// only AFTER the replacement loads (spec §7.3).
 //
 // The visitor's own session recording does NOT nest inside this report
 // iframe (walkthrough item 12: nesting it there froze DOM-tier
@@ -128,7 +129,7 @@ function identity(x) { return x; }
 // (which builds the visitor+examples payload list from `state`) and before
 // extractIntegrityData, so every downstream step — summaries, triage,
 // plots, the rendered HTML — sees the rewritten data.
-export async function buildReportHtml(core, state, examples, replayModel, replayClientSrc, configOverrides, transformPayloads) {
+export async function buildReportHtml(core, state, examples, replayModel, replayClientSrc, configOverrides, transformPayloads, fontFaceCss) {
   var config = Object.assign({ outputDir: '.', participantIdField: 'participantId' }, configOverrides || {});
   var inputs = assembleReportInputs(state, examples, replayModel);
   var payloads = (transformPayloads || identity)(inputs.payloads);
@@ -168,8 +169,48 @@ export async function buildReportHtml(core, state, examples, replayModel, replay
     imageSources: imageSources,
     replayClientSrc: replayClientSrc,
     replayShownExternally: true,
+    // The report's typefaces as base64 @font-face rules (loadFontFaceCss).
+    fontFaceCss: fontFaceCss || '',
   });
   return { html: html, triage: triage };
+}
+
+// The report's typefaces for the in-browser report and the replay host.
+// Fetched same-origin from the TOP document (assembled from
+// src/cli/renderers/fonts/ by tools/assemble-demo-site.mjs) and inlined as
+// base64, exactly as the CLI's report-fonts.js does: the report iframe is an
+// opaque origin (sandbox="allow-scripts"), and font loads are CORS requests,
+// so it could not load them by URL. Any failure returns '' and the report
+// renders in each role's fallback stack.
+export async function loadFontFaceCss(core, fetchImpl, base) {
+  var get = fetchImpl || fetch;
+  var dir = base || './assets/fonts/';
+  try {
+    var mres = await get(dir + 'FONTS_MANIFEST.json');
+    if (!mres.ok) return '';
+    var manifest = await mres.json();
+    var b64 = {};
+    for (var i = 0; i < manifest.files.length; i++) {
+      var f = manifest.files[i];
+      var r = await get(dir + f.path);
+      if (!r.ok) return '';
+      b64[f.path] = toBase64(new Uint8Array(await r.arrayBuffer()));
+    }
+    return core.fontFaceCss(manifest.files, function (p) { return b64[p]; });
+  } catch (e) {
+    console.warn('cyborg-hunter demo: report fonts unavailable', e);
+    return '';
+  }
+}
+
+// Bytes → base64 in chunks (String.fromCharCode on a whole font would blow
+// the argument limit).
+function toBase64(bytes) {
+  var s = '';
+  for (var i = 0; i < bytes.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
 }
 
 // Swaps the report iframe to freshly-built HTML via a Blob URL. The OLD url
@@ -272,6 +313,7 @@ export function buildResults(container, state, manifest, hooks, initial) {
     var core = await import('./preview-core.js');
     var examples = await fetchJson('./assets/example-participants.json').catch(function () { return []; });
     var replayClientSrc = await fetchText('./replay-viewer.client.js').catch(function () { return ''; });
+    var fontFaceCss = await loadFontFaceCss(core);
     var replayModel = null;
     if (state.replayRecording && core.buildViewerModel) {
       try { replayModel = core.buildViewerModel(state.replayRecording); }
@@ -295,7 +337,7 @@ export function buildResults(container, state, manifest, hooks, initial) {
     // omitted on every call this file makes itself (the real session data,
     // untouched) and on any caller that doesn't pass one.
     function run(configOverrides, transformPayloads) {
-      return buildReportHtml(core, state, examples, replayModel, replayClientSrc, configOverrides, transformPayloads).then(function (built) {
+      return buildReportHtml(core, state, examples, replayModel, replayClientSrc, configOverrides, transformPayloads, fontFaceCss).then(function (built) {
         if (gaveUp) return built; // pipeline watchdog already replaced the DOM; don't resurrect a report into it
         var t = built.triage.find(function (x) { return x.participantId === state.participantId; }) ||
           { hardTriggered: false, softFlagged: false, reason: 'no trials this session' };
@@ -327,7 +369,8 @@ export function buildResults(container, state, manifest, hooks, initial) {
     // existed, or core.buildViewerModel threw, above) — the walkthrough's
     // existing replayUnavailable hint covers that case; no host is the
     // honest state, not a broken one.
-    if (replayModel) mountReplayHost(container, replayModel, replayClientSrc);
+    if (replayModel) mountReplayHost(container, replayModel, replayClientSrc,
+      { replayCss: core.REPLAY_STYLES_CSS || '', fontFaceCss: fontFaceCss });
     if (hooks && hooks.onReady) {
       hooks.onReady({ rerun: run, container: container, manifest: manifest });
     }

@@ -7,7 +7,10 @@
 // its new transformPayloads seam to the right place in the pipeline.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assembleReportInputs, buildReportHtml, resolveInitialRun } from '../../demo/results.js';
+import { assembleReportInputs, buildReportHtml, resolveInitialRun, loadFontFaceCss } from '../../demo/results.js';
+import { readFileSync } from 'node:fs';
+import { fontFaceCss } from '../../src/cli/renderers/font-face-css.js';
+import { buildFontFaceCss } from '../../src/cli/renderers/report-fonts.js';
 
 test('assembleReportInputs merges visitor + examples and builds demo opts', () => {
   const state = {
@@ -141,4 +144,32 @@ test('buildReportHtml, given the args resolveInitialRun hands the FIRST run() ca
   await buildReportHtml(makeStubCore(seenIds), state, [], null, '', initial.configOverrides, initial.transformPayloads);
 
   assert.deepEqual(seenIds, ['DEMO-test6-recomputed']);
+});
+
+// The embedded report in the demo gets its typefaces the same way the CLI
+// report does: base64 @font-face rules. A URL route can't work there — the
+// report iframe is an opaque origin, and font loads are CORS requests.
+test('buildReportHtml hands fontFaceCss to renderIndexHtml', async () => {
+  const state = { participantId: 'DEMO-fonts', trialReports: [], sessionReport: { trialsCompleted: 0 }, violations: [] };
+  let seenOpts = null;
+  const core = { ...makeStubCore([]), renderIndexHtml: async (...args) => { seenOpts = args[5]; return '<html></html>'; } };
+  await buildReportHtml(core, state, [], null, '', null, undefined, '@font-face { font-family: "Sora"; }');
+  assert.equal(seenOpts.fontFaceCss, '@font-face { font-family: "Sora"; }');
+});
+
+test('loadFontFaceCss fetches the committed fonts and formats them exactly as the CLI does', async () => {
+  const fontsDir = new URL('../../src/cli/renderers/fonts/', import.meta.url);
+  const fetchImpl = async (url) => {
+    const rel = String(url).replace('./assets/fonts/', '');
+    const bytes = readFileSync(new URL(rel, fontsDir));
+    return { ok: true, json: async () => JSON.parse(bytes.toString('utf8')),
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+  };
+  const css = await loadFontFaceCss({ fontFaceCss }, fetchImpl);
+  assert.equal(css, buildFontFaceCss());
+});
+
+test('loadFontFaceCss returns an empty string when the fonts cannot be fetched', async () => {
+  const css = await loadFontFaceCss({ fontFaceCss }, async () => ({ ok: false, status: 404 }));
+  assert.equal(css, '');
 });

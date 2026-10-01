@@ -91,7 +91,7 @@ for pat in "${patterns[@]}"; do
   fi
 
   if [ -n "${GATE_SCAN_DIR:-}" ] && [ -d "$GATE_SCAN_DIR" ]; then
-    if raw=$(grep -rnE "$pat" "$GATE_SCAN_DIR" 2>/dev/null); then
+    if raw=$(grep -rnIE "$pat" "$GATE_SCAN_DIR" 2>/dev/null); then
       hits=$(printf '%s\n' "$raw" | filter_hits "$pat")
       if [ -n "$hits" ]; then
         echo "BANNED TOKEN /$pat/ in \$GATE_SCAN_DIR ($GATE_SCAN_DIR):"

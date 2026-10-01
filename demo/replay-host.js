@@ -24,56 +24,20 @@
 // replay-viewer.client.js's srcdocCsp/buildSrcdoc) — a pasted <script> still
 // never runs, same guarantee the CLI report's own nested replay relies on.
 
-// .replay-* rules, copied verbatim from src/cli/renderers/html-index-core.js's
-// report <style> block (grep .replay- there for the source of truth — no
-// build-time extraction step touches this Blob-embedded document, so this
-// copy is kept in sync by hand). Selectors reference --surface/--ink/--dim/
-// --line/--bg/--hard, resolved below to concrete values, NOT the CLI
-// report's own palette — see ROOT_CSS.
-var REPLAY_RULES_CSS = `
-.replay-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
-.replay-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
-                background: var(--ink); color: var(--surface); }
-.replay-badge[data-tier="trace"] { background: var(--surface); color: var(--ink);
-                border: 1px solid var(--line); }
-.replay-stage { position: relative; overflow: hidden; background: var(--surface);
-                border: 1px solid var(--line); border-radius: 4px; }
-.replay-frame { position: absolute; top: 0; left: 0; border: 0; }
-.replay-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
-.replay-neutral { background: #e8e6e0; }
-.replay-neutral-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-                        color: var(--dim); font-size: 13px; }
-.replay-lane { display: block; margin-top: 6px; border-radius: 2px; }
-.replay-scrub { display: block; margin: 2px 0 4px; }
-.replay-ticker { font: 12px/1.3 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
-                 color: var(--dim); font-variant-numeric: tabular-nums;
-                 height: 1.4em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.replay-note { font-size: 12px; color: var(--dim); }
-.replay-warn { color: var(--hard); }
-.replay-play, .replay-load-btn, .replay-css-btn, .replay-segment-select, .replay-speed {
-  padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
-  color: var(--ink); border-radius: 4px; cursor: pointer; font-size: 13px; }
-.replay-play:hover, .replay-load-btn:hover, .replay-css-btn:hover { background: var(--bg); }
-.replay-play:disabled, .replay-load-btn:disabled { opacity: 0.6; cursor: default; }
-.replay-css-btn { font-size: 12px; padding: 2px 8px; }
-.replay-clock { font: 12px/1.3 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
-                font-variant-numeric: tabular-nums; }
-.replay-keycast { position: absolute; left: 0; right: 0; bottom: 0; display: flex;
-                gap: 4px; padding: 5px 6px; pointer-events: none; flex-wrap: wrap-reverse; }
-.replay-key-chip { font: 11px/1.2 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
-                background: rgba(0,0,0,0.72); color: #fff; padding: 2px 7px;
-                border-radius: 3px; white-space: nowrap; }
-.replay-key-chip--redacted { background: rgba(0,0,0,0.5); font-style: italic; }
-`;
-
-// Concrete values for the vars REPLAY_RULES_CSS references, copied from
-// demo.css's OWN tokens (--panel/--ground/--ink/--dim/--line/--hard) rather
-// than the CLI report's beige palette — this is a fully separate Blob
-// document with no access to demo.css's cascade, so the host maps onto the
-// results screen's actual card chrome by value, not by reference. Mapping:
-// --bg<-demo --ground, --surface<-demo --panel, everything else same name.
+// The host is a separate Blob document with no access to demo.css or the
+// report's cascade, so it declares the report's tokens itself: the same
+// values the CLI report's :root uses (palette + --ff-* font stacks), which
+// the shared .replay-* rules (src/cli/renderers/replay-styles.js, passed in
+// by results.js) reference. tests/demo/replay-host.test.js checks that every
+// var() those rules use is declared here.
 var ROOT_CSS = `
-:root{ --bg:#F6F8FA; --surface:#FFFFFF; --ink:#1B232C; --dim:#5F6B77; --line:#E6EBF0; --hard:#C62828; }
+:root{ --bg:#fafafa; --surface:#ffffff; --ink:#0f0f0f; --dim:#4f4a40; --line:#b9b2a2; --hard:#d32f2f;
+  --ff-space:"Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-tomorrow:"Tomorrow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-sofia:"Sofia Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-sora:"Sora",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-recursive:"Recursive",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-majormono:"Major Mono Display",ui-monospace,SFMono-Regular,monospace; }
 *{ box-sizing:border-box; }
 html,body{ margin:0; padding:0; background:var(--surface); color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
@@ -116,13 +80,18 @@ function escapeJsonForScript(value) {
 }
 
 // Pure: the host document's full HTML. DOM-free — see
-// tests/demo/replay-host.test.js.
-export function buildReplayHostHtml(replayModel, replayClientSrc) {
+// tests/demo/replay-host.test.js. `styles.replayCss` is the CLI's own
+// REPLAY_STYLES_CSS and `styles.fontFaceCss` the report's base64 @font-face
+// block, both handed down by results.js (from the preview-core bundle and
+// loadFontFaceCss); without them the viewer renders unstyled in system faces.
+export function buildReplayHostHtml(replayModel, replayClientSrc, styles) {
   var clientScript = escapeScriptClose(replayClientSrc || '');
   var modelJson = escapeJsonForScript(replayModel);
+  var fontFaceCss = (styles && styles.fontFaceCss) || '';
+  var replayCss = (styles && styles.replayCss) || '';
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-    '<style>' + ROOT_CSS + REPLAY_RULES_CSS + '</style>' +
+    '<style>' + fontFaceCss + ROOT_CSS + replayCss + '</style>' +
     '</head><body>' +
     '<div id="ch-replay-mount"></div>' +
     '<script>' + clientScript + '</script>' +
@@ -136,7 +105,7 @@ export function buildReplayHostHtml(replayModel, replayClientSrc) {
 // swapIframe() also appends directly to `container`. Idempotent: a second
 // call is a no-op while a host iframe is already mounted, so a caller never
 // needs to track whether it already ran.
-export function mountReplayHost(container, replayModel, replayClientSrc) {
+export function mountReplayHost(container, replayModel, replayClientSrc, styles) {
   if (!container || container.querySelector('iframe.replay-host-frame')) return null;
   var section = document.createElement('div');
   section.className = 'replay-host-card';
@@ -156,7 +125,7 @@ export function mountReplayHost(container, replayModel, replayClientSrc) {
   section.appendChild(iframe);
   container.appendChild(section);
   iframe.src = URL.createObjectURL(new Blob(
-    [buildReplayHostHtml(replayModel, replayClientSrc)], { type: 'text/html' }));
+    [buildReplayHostHtml(replayModel, replayClientSrc, styles)], { type: 'text/html' }));
   return iframe;
 }
 

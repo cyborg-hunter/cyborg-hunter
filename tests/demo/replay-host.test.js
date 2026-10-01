@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildReplayHostHtml } from '../../demo/replay-host.js';
 import { inlineSafeJson, inlineSafeSrc } from '../../src/shared/inline-safe.js';
+import { REPLAY_STYLES_CSS } from '../../src/cli/renderers/replay-styles.js';
 
 // The model shape is a v2 VIEWER MODEL (design §9): `segments`, not `trials`.
 // Re-pointed in T5 Task 10 — the demo host is the A6 regeneration path's
@@ -68,8 +69,25 @@ test('both inlining rules mirror src/shared/inline-safe.js exactly', () => {
     'the data rule must match inlineSafeJson');
 });
 
-test('buildReplayHostHtml redeclares the .replay-* CSS vars with concrete (non-var) values', () => {
+// The .replay-* rules are no longer copied here: they come from the CLI's
+// own src/cli/renderers/replay-styles.js, passed down by results.js (through
+// the preview-core bundle), together with the report's @font-face block.
+test('buildReplayHostHtml uses the replay CSS and font faces it is given', () => {
+  const html = buildReplayHostHtml({ segments: [] }, '', { replayCss: REPLAY_STYLES_CSS, fontFaceCss: '@font-face { font-family: "Sora"; }' });
+  assert.ok(html.includes(REPLAY_STYLES_CSS), 'the shared replay rules, verbatim');
+  assert.ok(html.includes('@font-face { font-family: "Sora"; }'), 'the font faces');
+});
+
+test('the host :root declares every token the shared replay CSS uses', () => {
+  const html = buildReplayHostHtml({ segments: [] }, '', { replayCss: REPLAY_STYLES_CSS });
+  const root = html.match(/:root\{([^}]*)\}/)[1];
+  const declared = new Set([...root.matchAll(/(--[\w-]+)\s*:/g)].map(m => m[1]));
+  const used = new Set([...REPLAY_STYLES_CSS.matchAll(/var\((--[\w-]+)\)/g)].map(m => m[1]));
+  assert.deepEqual([...used].filter(v => !declared.has(v)), []);
+});
+
+test('the host :root matches the report palette (high-contrast lines)', () => {
   const html = buildReplayHostHtml({ segments: [] }, '');
-  assert.match(html, /:root\{[^}]*--surface:#FFFFFF/);
-  assert.match(html, /\.replay-badge \{[^}]*background: var\(--ink\)/);
+  assert.match(html, /--ink:#0f0f0f/);
+  assert.match(html, /--line:#b9b2a2/);
 });

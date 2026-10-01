@@ -64,6 +64,23 @@ describe('report fonts: @font-face CSS', () => {
   });
 });
 
+describe('report fonts: the shared pure formatter', () => {
+  it('fontFaceCss formats manifest files the same way the CLI does, and is in the demo bundle', async () => {
+    const { fontFaceCss } = await import('../../src/cli/renderers/font-face-css.js');
+    const b64 = Object.fromEntries(manifest.files.map(f => [f.path, readFileSync(join(dir, f.path)).toString('base64')]));
+    assert.equal(fontFaceCss(manifest.files, p => b64[p]), buildFontFaceCss());
+    const entry = await import('../../src/cli/preview-entry.js');
+    assert.equal(entry.fontFaceCss, fontFaceCss);
+  });
+
+  it('takes a font-display override (swap for pages that fetch their fonts)', async () => {
+    const { fontFaceCss } = await import('../../src/cli/renderers/font-face-css.js');
+    const css = fontFaceCss([{ family: 'Sora', weight: '100 800', path: 'x' }], () => 'AAAA', 'swap');
+    assert.match(css, /font-display: swap/);
+    assert.match(css, /font-weight: 100 800/);
+  });
+});
+
 describe('report fonts: plumbing into index.html', () => {
   const tiny = () => {
     const s = { participantId: 'P1', trialCount: 0, totalPasteEvents: 0, totalCopyEvents: 0, hardTriggered: false,
