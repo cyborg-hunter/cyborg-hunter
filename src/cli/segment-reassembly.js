@@ -8,14 +8,55 @@
 // Pure: no imports, no Node APIs — extract-core.js (bundled by the browser
 // demo) depends on it.
 
-// Field names that hold a performance.now()-style time in the session arrays
-// and trial reports. Everything else (duration_ms, ISO `timestamp` strings,
-// counts) is left alone when re-basing.
+// Field names that hold a performance.now()-style time. Everything else
+// (duration_ms, ISO `timestamp` strings, counts) is left alone when re-basing.
+// rebaseTimes() applies this at any depth, which is right for the SESSION
+// arrays (every entry's t/start is a raw page performance.now()), but not for
+// a whole trial report — use rebaseTrialReport() for those.
+// Bare-number arrays are never shifted: editTimestamps holds absolute
+// performance.now() values too, but the CLI only uses their differences
+// (typing speed), so they are intentionally left on their own page's clock.
 const TIME_KEYS = new Set(['t', 'start', 'startTime', 'trialStart_perfNow']);
 
-// Mirrors ALIAS_KEYS in src/oneliner/segment-diff.js: the alias key is not
-// shipped in segments, so it is restored here pointing at its canonical key.
-const ALIAS_KEYS = { layoutShifts: 'viewportWidthShifts' };
+// Mirrors ALIAS_KEYS in src/oneliner/segment-diff.js (a test pins the two
+// equal): the alias key is not shipped in segments, so it is restored here
+// pointing at its canonical key.
+export const ALIAS_KEYS = { layoutShifts: 'viewportWidthShifts' };
+
+// Trial-report fields that carry the page's performance.now() clock and so
+// move with the page origin. Time base of each, from src/core:
+//   startTime            performance.now() at startTrial   (monitor.js startTrial)
+//   trialStart_perfNow   performance.now() at on_load      (jspsych extension on_load)
+//   pasteEvents[].t      performance.now()                 (signals/clipboard.js)
+//   copyEvents[].t       performance.now()                 (signals/clipboard.js)
+//   dropEvents[].t       performance.now()                 (signals/clipboard.js)
+//   tabAwayEvents[].start performance.now() at leave      (signals/focus.js)
+//   idleGaps[].t         performance.now()                 (signals/focus.js)
+//   syntheticInsertions[].t performance.now()              (signals/typing.js)
+//   foreignInputEvents[].t  performance.now()              (signals/typing.js)
+// NOT shifted (left as they are):
+//   mouseTrack/mouseEvents[].t  ms since trial start       (signals/mouse.js)
+//   elementTrace[].t            ms since trial start       (signals/browser.js)
+//   mouseTrackingCappedAtMs, duration_ms  durations
+//   editTimestamps              absolute, bare numbers — see TIME_KEYS note
+//   anything else on the row (integrity, integritySegment, jsPsych columns)
+const TRIAL_ANCHOR_KEYS = ['startTime', 'trialStart_perfNow'];
+const TRIAL_PAGE_TIME_ARRAYS = ['pasteEvents', 'copyEvents', 'dropEvents', 'tabAwayEvents',
+  'idleGaps', 'syntheticInsertions', 'foreignInputEvents'];
+
+// Returns a shallow copy of a merged trial report with only the page-clock
+// fields above shifted by offsetMs. Offset 0 returns the input itself.
+export function rebaseTrialReport(trial, offsetMs) {
+  if (!offsetMs || !trial || typeof trial !== 'object') return trial;
+  const out = { ...trial };
+  for (const k of TRIAL_ANCHOR_KEYS) {
+    if (typeof out[k] === 'number') out[k] += offsetMs;
+  }
+  for (const k of TRIAL_PAGE_TIME_ARRAYS) {
+    if (Array.isArray(out[k])) out[k] = rebaseTimes(out[k], offsetMs);
+  }
+  return out;
+}
 
 // Returns a deep copy of `value` with every numeric property named t, start,
 // startTime or trialStart_perfNow shifted by offsetMs, at any depth.

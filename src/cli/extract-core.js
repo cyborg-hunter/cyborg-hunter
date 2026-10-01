@@ -15,7 +15,7 @@
 
 import { TRIAL_REPORT_FIELDS } from '../shared/schema.js';
 import { getByPath } from '../shared/paths.js';
-import { collectSegments, reassembleSegments, rebaseTimes } from './segment-reassembly.js';
+import { collectSegments, reassembleSegments, rebaseTrialReport } from './segment-reassembly.js';
 
 // Extracts integrity trial data from a single participant's raw JSON.
 // Returns { participantId, trials, warnings, metadata }.
@@ -56,17 +56,19 @@ export function extractIntegrityData(raw, config) {
       .map(t => ({ ...t, ...t[intField] }));
     // One-line setup (0.10.0) across several pages: each page has its own
     // performance.now() origin, recorded as integritySegment.pageOrigin.
-    // Re-base trials from later pages onto the first page's origin (startTime,
-    // trialStart_perfNow and every nested t/start) so the session timeline and
-    // the per-trial anchors below stay on one clock. Single-page data, and
-    // data without segments, is untouched.
+    // Re-base trials from later pages onto the first page's origin so the
+    // session timeline and the per-trial anchors below stay on one clock.
+    // Only the page-clock fields move (anchors + absolute-time event arrays,
+    // listed in segment-reassembly.js); trial-relative mouseTrack/elementTrace
+    // times must NOT move, or trajectories misplace every later-page trial.
+    // Single-page data, and data without segments, is untouched.
     if (raw.trials.some(t => typeof t?.integritySegment?.pageOrigin === 'number')) {
       const origin0 = collectSegments(raw)[0]?.pageOrigin;
       if (typeof origin0 === 'number') {
         trials = trials.map(trial => {
           const origin = trial.integritySegment?.pageOrigin;
           return (typeof origin === 'number' && origin !== origin0)
-            ? rebaseTimes(trial, origin - origin0) : trial;
+            ? rebaseTrialReport(trial, origin - origin0) : trial;
         });
       }
     }
@@ -257,7 +259,10 @@ function looksLikeSessionData(obj) {
 //   5. Rolling snapshot (0.10.0 one-line setup) — per-row integritySegment
 //      deltas, reassembled by src/cli/segment-reassembly.js.
 // Returns { session, score }, both null if not found. `warnings` receives a
-// note when a dumped session and rolling segments are both present.
+// note when a dumped session and rolling segments are both present. Not
+// exported (ingest.js re-exports only extractIntegrityData and
+// ruleChronologicalCompare); its one caller always passes `warnings`, and the
+// `= []` default only keeps a warnings-less call from throwing.
 function findSessionData(raw, config, warnings = []) {
   let session = null;
   let score = null;
@@ -318,7 +323,9 @@ function findSessionData(raw, config, warnings = []) {
 
   // A file carrying both is a study that mixed manual finalize() with the
   // one-line setup. The dumped session is complete by construction, so it
-  // wins; say so rather than silently ignoring the segments.
+  // wins; say so rather than silently ignoring the segments. This also fires
+  // when branch 0 (the analyst's sessionIntegrityPath) found the session,
+  // since that leaves usedSegments false too.
   if (session && !usedSegments && collectSegments(raw).length > 0) {
     warnings.push('both a dumped integritySession and rolling segments (integritySegment) were found — the dumped integritySession was used; this file mixes manual mode and the one-line setup');
   }

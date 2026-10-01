@@ -1,7 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { collectSegments, reassembleSegments, rebaseTimes } from '../../src/cli/segment-reassembly.js';
+import { collectSegments, reassembleSegments, rebaseTimes, ALIAS_KEYS } from '../../src/cli/segment-reassembly.js';
+import { ALIAS_KEYS as DIFFER_ALIAS_KEYS } from '../../src/oneliner/segment-diff.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { ingest } from '../../src/cli/ingest.js';
+import Papa from 'papaparse';
+import { mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 const seg = (i, deltas, extra = {}) => ({ segmentIndex: i, source: 'host', trialId: 't' + i, pageOrigin: 1000,
   deltas: { tabAwaySums: [], tabAwayEvents: [], sidebarEvents: [], viewportWidthShifts: [], ...deltas },
@@ -35,6 +41,12 @@ describe('reassembleSegments', () => {
   });
 });
 
+describe('ALIAS_KEYS', () => {
+  it('the CLI copy matches the browser differ (segment-reassembly.js must stay import-free, so it is duplicated)', () => {
+    assert.deepStrictEqual(ALIAS_KEYS, DIFFER_ALIAS_KEYS);
+  });
+});
+
 describe('5th convention in extractIntegrityData', () => {
   const trial = (i, segment) => ({ trialId: 't' + i, integrity: { trialId: 't' + i, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], startTime: 10 }, integritySegment: segment });
   it('builds session + score from per-row segments when no integritySession exists', () => {
@@ -61,8 +73,54 @@ describe('5th convention in extractIntegrityData', () => {
     assert.equal(r.trials[1].tabAwayEvents[0].start, 5025);
     assert.equal(r.trials[1].tabAwayEvents[0].startRel_ms, 5, 'normalizeTabAwayTimestamps still sees consistent anchors');
   });
+  it('re-bases only page-load times: trial-relative mouseTrack/elementTrace and the segment copy are left alone', () => {
+    const t0 = trial(0, seg(0, {}));
+    const t1 = trial(1, { ...seg(1, { sidebarEvents: [{ t: 7 }] }), pageOrigin: 1000 + 30000 });
+    Object.assign(t1.integrity, {
+      startTime: 20, trialStart_perfNow: 21,
+      tabAwayEvents: [{ start: 25, duration_ms: 1 }], pasteEvents: [{ type: 'paste', t: 30 }],
+      mouseTrack: [{ x: 1, y: 1, t: 100, type: 'move' }], elementTrace: [{ tag: 'div', t: 200 }],
+      editTimestamps: [15, 16],
+    });
+    const r = extractIntegrityData({ participantId: 'P1', trials: [t0, t1] }, {});
+    const tr = r.trials[1];
+    assert.equal((tr.mouseEvents || tr.mouseTrack)[0].t, 100, 'mouse samples are trial-relative (mouse.js)');
+    assert.equal(tr.elementTrace[0].t, 200, 'elementTrace is trial-relative (browser.js)');
+    assert.deepStrictEqual(tr.editTimestamps, [15, 16]);
+    assert.equal(tr.integritySegment.deltas.sidebarEvents[0].t, 7, 'the copied segment is not shifted');
+    assert.equal(tr.startTime, 30020);
+    assert.equal(tr.trialStart_perfNow, 30021);
+    assert.equal(tr.tabAwayEvents[0].start, 30025);
+    assert.equal(tr.tabAwayEvents[0].startRel_ms, 4);
+    assert.equal(tr.pasteEvents[0].t, 30030);
+  });
   it('surfaces a cyborgHunterError marker as a warning', () => {
     const r = extractIntegrityData({ participantId: 'P1', trials: [{ ...trial(0, seg(0, {})), cyborgHunterError: 'boom' }] }, {});
     assert.ok(r.warnings.some(w => w.includes('cyborgHunterError') && w.includes('boom')));
+  });
+});
+
+describe('rolling segments through a jsPsych-style CSV', () => {
+  it('JSON-stringified integritySegment cells survive the CSV round trip and are reassembled', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ch-seg-csv-'));
+    try {
+      const s = (i, origin, sidebar) => ({ ...seg(i, { sidebarEvents: sidebar }), pageOrigin: origin });
+      const rows = [0, 1].map(i => ({
+        participantId: 'P1', trialId: 't' + i, rt: 100,
+        integrity: JSON.stringify({ trialId: 't' + i, startTime: 10, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] }),
+        integritySegment: JSON.stringify(s(i, i ? 5000 : 0, [{ t: 1 + i }])),
+      }));
+      writeFileSync(join(dir, 'p1.csv'), Papa.unparse(rows));
+      const { participants } = await ingest({ dataDir: dir, filePattern: '*.csv' });
+      assert.equal(participants.length, 1);
+      const p = participants[0];
+      assert.deepStrictEqual(p.session.sidebarEvents, [{ t: 1 }, { t: 5002 }], 'second page re-based by its pageOrigin');
+      assert.equal(p.score.softScore, 1, 'score from the last segment');
+      assert.equal(p.score.trialsCompleted, 2);
+      assert.equal(p.trials[1].startTime, 5010, "second trial's anchor re-based");
+      assert.equal(p.trials[0].startTime, 10);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

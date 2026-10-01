@@ -21,7 +21,8 @@
 
 // Keys that are the same array as another key inside the monitor (monitor.js
 // keeps layoutShifts as a deprecated alias of viewportWidthShifts). Skipped on
-// the way out so the entries are not shipped twice; restored on the way in.
+// the way out so the entries are not shipped twice; restored on the way in
+// (src/cli/segment-reassembly.js keeps a copy; a test pins the two equal).
 export const ALIAS_KEYS = { layoutShifts: 'viewportWidthShifts' };
 
 export function createSegmentDiffer(monitor) {

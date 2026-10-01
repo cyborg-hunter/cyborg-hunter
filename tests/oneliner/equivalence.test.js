@@ -1,5 +1,5 @@
 // Dumped-vs-rolled equivalence: one REAL monitor session (happy-dom), observed
-// both through the finalize()-style dump and through per-trial segments
+// both through the jsPsych extension's finalize() dump and through per-trial segments
 // reassembled by the CLI. The two session objects must be identical, so the
 // one-line setup's rolling snapshot carries exactly what manual mode saves.
 // Bootstrap mirrors tests/core/monitor-session.test.js.
@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { Window } from 'happy-dom';
 import { createSegmentDiffer } from '../../src/oneliner/segment-diff.js';
 import { reassembleSegments } from '../../src/cli/segment-reassembly.js';
+import { CyborgHunterExtension } from '../../src/jspsych/extension-cyborg-hunter.js';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -41,7 +42,7 @@ afterEach(() => {
 });
 
 describe('dumped vs rolled session', () => {
-  it('the same session through finalize()-style dump and through segments gives an identical session object', async () => {
+  it('the same session through finalize() and through segments gives an identical session object', async () => {
     monitor = init({ participantId: 'EQ1' });
     monitor.startSession();
     const differ = createSegmentDiffer(monitor);
@@ -53,17 +54,24 @@ describe('dumped vs rolled session', () => {
       const report = monitor.endTrial();
       segs.push(differ.cut({ segmentIndex: idx++, source: 'host', trialId: tid, pageOrigin: 0, trialReport: report }));
     }
-    // Dump path: exactly what extension-cyborg-hunter.js finalize() builds.
-    const full = monitor.getSessionReport();
-    const { sidebarEvents = [], keyboardShortcuts = [], windowPositions = [], layoutShifts = [], zoomChanges = [], idleGaps = [],
-      extensionInjections = [], tabAwaySums = [], charsPerSec = [], aiExtensionsFound = [],
-      hardScore, softScore, anyHardTriggered, trialsCompleted, softScoreThreshold,
-      pasteCount = 0, copyCount = 0, dropCount = 0, libraryVersion, config, ...extras } = full;
-    const dumped = { pasteCount, copyCount, dropCount, sidebarEvents, keyboardShortcuts, windowPositions, layoutShifts, zoomChanges,
-      idleGaps, extensionInjections, tabAwaySums, charsPerSec, aiExtensionsFound, config, ...extras };
+    // Rolled side first: finalize() below destroys the monitor.
     const rolled = reassembleSegments(segs);
-    assert.deepStrictEqual(rolled.session, dumped);
-    assert.deepStrictEqual(rolled.score, { hardScore, softScore, anyHardTriggered, trialsCompleted, softScoreThreshold });
+    // Dump side: the real jsPsych extension's finalize(), with a stub jsPsych
+    // that captures what it would write into the data.
+    let lastTrial, properties = {};
+    const ext = new CyborgHunterExtension({
+      data: {
+        addDataToLastTrial: (d) => { lastTrial = d; },
+        addProperties: (p) => { Object.assign(properties, p); },
+      },
+    });
+    ext.monitor = monitor;
+    ext.finalize();
+    monitor = null;   // destroyed by finalize()
+    assert.ok(!('cyborgHunterFinalizeError' in properties), `finalize() failed: ${properties.cyborgHunterFinalizeError}`);
+    assert.ok(lastTrial, 'finalize() wrote integritySession/integrityScore');
+    assert.deepStrictEqual(rolled.session, lastTrial.integritySession);
+    assert.deepStrictEqual(rolled.score, lastTrial.integrityScore);
     assert.equal(rolled.session.tabAwayEvents.length, 3, 'sanity: the three tab-aways made it through');
   });
 });
