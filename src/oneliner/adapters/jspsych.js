@@ -15,7 +15,9 @@
 //   4. chains initJsPsych's on_finish: the last segment, the *Final totals,
 //      friction stop, honeypot session summary and monitor teardown run
 //      first, then the researcher's own on_finish (its return value, possibly
-//      a promise, is passed back to jsPsych, :2968-2980).
+//      a promise, is passed back to jsPsych, :2968-2980). With data-replay
+//      and a CyborgHunterConfig.replay.autoSave mode other than 'none', the
+//      replay recorder's finalize() (serialize + save) is awaited in between.
 // Per-trial segments and running totals are returned by OneLinerExtension's
 // on_finish, merged into each row by jsPsych.
 //
@@ -41,6 +43,7 @@ import { OneLinerExtension } from './jspsych-extension.js';
 var CH_NAME = 'cyborg-hunter';
 var HONEYPOT_NAME = 'guard-honeypot';
 var FRICTION_NAME = 'guard-friction';
+var REPLAY_NAME = 'cyborg-hunter-replay';
 var ENTRY_TRIAL_LABEL = 'guard_friction_entry';   // GuardFriction.createEntryTrial's data label
 
 function message(e) { return String((e && e.message) || e); }
@@ -234,6 +237,29 @@ function runFinalHook(ctx, win, has, jsPsych) {
   if (marker) {
     try { jsPsych.data.addProperties({ cyborgHunterError: marker }); } catch (_) { /* logged above */ }
   }
+  return finalizeReplay(ctx, jsPsych);
+}
+
+// The replay recorder's own save (DataPipe, CyborgHunterConfig.replay
+// .autoSave), before the researcher's on_finish saves the data, so the rows
+// carry its integrityReplayMeta (the order manual mode documents). With the
+// default mode 'none' nothing happens here: the researcher's save code calls
+// CyborgHunter.replay(). Only the proxy ch.js listed is finalized; a
+// researcher's own replay entry is theirs to finalize. → a promise or null.
+function finalizeReplay(ctx, jsPsych) {
+  var r = ctx.config.replay;
+  if (!r || !r.autoSave || !r.autoSave.mode || r.autoSave.mode === 'none' || !ctx.replayProxy) return null;
+  try {
+    var ext = jsPsych.extensions && jsPsych.extensions[REPLAY_NAME];
+    if (!(ext instanceof ctx.replayProxy)) return null;
+    // finalize() never throws (extension-cyborg-hunter-replay.js); the catch is for the host's sake.
+    return Promise.resolve(ext.finalize()).catch(function (e) {
+      console.error(MESSAGES.sessionEndFailed('replay: ' + message(e)));
+    });
+  } catch (e) {
+    console.error(MESSAGES.sessionEndFailed('replay: ' + message(e)));
+    return null;
+  }
 }
 
 // installJsPsychAdapter({ win, ctx }) → { restore() }
@@ -291,8 +317,12 @@ export function installJsPsychAdapter(opts) {
     var jsPsych = null;
     var userFinish = options.on_finish;
     options.on_finish = function () {
-      runFinalHook(ctx, win, has, jsPsych);
-      return typeof userFinish === 'function' ? userFinish.apply(this, arguments) : undefined;
+      var self = this, args = arguments;
+      var pending = runFinalHook(ctx, win, has, jsPsych);
+      function researcherFinish() {
+        return typeof userFinish === 'function' ? userFinish.apply(self, args) : undefined;
+      }
+      return pending ? pending.then(researcherFinish) : researcherFinish();
     };
 
     jsPsych = orig(options);

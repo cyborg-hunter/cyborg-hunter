@@ -60,7 +60,9 @@
 //   blob(), cut(source, nextTrialId?), persist(), restore(), teardown(),
 //   noteError(text)   adds a cyborgHunterError note to this and later blobs
 // }
-//   ctx:        boot's context; gains ctx.handlers.mark / data / startFriction
+//   ctx:        boot's context; gains ctx.handlers.mark / data / startFriction;
+//               ctx.replay (data-replay, set later by replay-loader.js) follows
+//               every cut and is stopped at pagehide
 //   clock:      () => page origin, the segmenter's clock (performance.timeOrigin)
 //   warnChars:  persist() warns once above this many characters (4,000,000)
 // install restores the saved state first, so the boot span opened after it is
@@ -223,8 +225,18 @@ export function installVanillaAdapter(opts) {
       if (r.error) row.cyborgHunterError = r.error;
       trials.push(row);
       submitted = false;
+      followReplay();
     }
     return r;
+  }
+
+  // data-replay: the recorder's trials follow the segments (replay-loader.js
+  // sets ctx.replay once the recorder has started; its calls never throw).
+  function followReplay() {
+    if (!ctx.replay) return;
+    ctx.replay.endTrial();
+    var state = ctx.segmenter.state();
+    if (state.open) ctx.replay.startTrial(state.currentTrialId);
   }
 
   function persist() {
@@ -367,6 +379,7 @@ export function installVanillaAdapter(opts) {
     try {
       if (!submitted) cut('page');
       persist();
+      if (ctx.replay) ctx.replay.stop();
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
     }

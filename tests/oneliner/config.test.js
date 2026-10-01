@@ -104,6 +104,22 @@ describe('readConfig', () => {
     assert.ok(warns.some((w) => w.includes('excludeTrialTypes')), warns.join('\n'));
   });
 
+  // The object form keeps DataPipe autosave available for the replay
+  // recorder (default autoSave mode is 'none': the researcher saves
+  // CyborgHunter.replay() themselves).
+  it('CyborgHunterConfig.replay as an object: tier parsed, autoSave passed through', () => {
+    const autoSave = { mode: 'datapipe', experimentId: 'ABC123' };
+    assert.deepStrictEqual(readConfig({ globalConfig: { replay: { tier: 'dom', autoSave } } }).replay, { tier: 'dom', autoSave });
+    assert.deepStrictEqual(readConfig({ globalConfig: { replay: {} } }).replay, { tier: 'trace' });
+    assert.strictEqual(readConfig({ globalConfig: { replay: false } }).replay, null);
+  });
+
+  it('data-replay sets the tier; the CyborgHunterConfig.replay object still supplies autoSave', () => {
+    const autoSave = { mode: 'datapipe', experimentId: 'ABC123' };
+    const c = readConfig({ dataset: { replay: 'dom' }, globalConfig: { replay: { tier: 'trace', autoSave } } });
+    assert.deepStrictEqual(c.replay, { tier: 'dom', autoSave });
+  });
+
   it('one-liner keys do not leak into the init() config; participantId rides through for the resolver', () => {
     const c = readConfig({ dataset: {}, globalConfig: { preset: 'strict', guards: 'none', replay: 'dom', replaySrc: 'x', debug: true, participantId: 'C1' } });
     assert.deepStrictEqual(c.monitor, { participantId: 'C1' });

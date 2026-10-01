@@ -12,7 +12,10 @@
 //   guards: { honeypot, friction },          data-guards: comma list of
 //                                            honeypot | friction | none;
 //                                            default honeypot on, friction off
-//   replay: null | { tier: 'trace'|'dom' },  data-replay: "" | trace → trace, dom → dom
+//   replay: null | { tier: 'trace'|'dom',    data-replay: "" | trace → trace, dom → dom;
+//                    autoSave? },            CyborgHunterConfig.replay may be
+//                                            { tier, autoSave } (autoSave kept
+//                                            even when data-replay sets the tier)
 //   replaySrc,                               data-replay-src, or null
 //   debug,                                   data-debug present (and not "false")
 //   monitor                                  every other CyborgHunterConfig key,
@@ -71,6 +74,7 @@ function parsePreset(v) {
 function parseReplay(v) {
   if (v === false) return null;
   if (v === true) return { tier: 'trace' };
+  if (typeof v === 'object') return parseReplay(v.tier === undefined || v.tier === null ? '' : v.tier);
   var tier = String(v).trim().toLowerCase();
   if (tier === '' || tier === 'trace') return { tier: 'trace' };
   if (tier === 'dom') return { tier: 'dom' };
@@ -101,12 +105,16 @@ export function readConfig(opts) {
 
   var guards = pick('guards');
   var replay = pick('replay');
+  replay = replay === undefined ? null : parseReplay(replay);
+  // The replay recorder's autoSave (DataPipe) only comes from the object form.
+  var g = globalConfig.replay;
+  if (replay && g && typeof g === 'object' && g.autoSave) replay.autoSave = g.autoSave;
   var debug = pick('debug');
   return {
     preset: parsePreset(pick('preset')),
     participantIdAttr: has(dataset, 'participantId') ? dataset.participantId : null,
     guards: guards === undefined ? { honeypot: true, friction: false } : parseGuards(guards),
-    replay: replay === undefined ? null : parseReplay(replay),
+    replay: replay,
     replaySrc: pick('replaySrc') || null,
     debug: debug === undefined ? false : flag(debug),
     monitor: monitor

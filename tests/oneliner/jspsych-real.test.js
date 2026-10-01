@@ -298,3 +298,69 @@ describe('ch.js on real jsPsych: two instances', () => {
     }
   });
 });
+
+// data-replay on real jsPsych. initJsPsych runs before cyborg-hunter-replay.js
+// could have loaded, so ch.js lists a proxy whose async initialize() loads it
+// and delegates; run() waits for it (loadExtensions awaits every
+// initialize(), jspsych.js 7.3.1 :2946, run() :2695).
+describe('ch.js on real jsPsych: lazy replay', () => {
+  let RealReplay;
+  before(async () => {
+    await import('../../src/jspsych/extension-cyborg-hunter-replay.js');
+    RealReplay = win.jsPsychCyborgHunterReplay;
+  });
+  afterEach(() => {
+    win.jsPsychCyborgHunterReplay = RealReplay;
+    win.happyDOM.settings.disableJavaScriptFileLoading = false;
+  });
+
+  it('records every trial; CyborgHunter.replay() in on_finish returns the recording', async () => {
+    bootCh({ replay: '' });
+    let recording = null;
+    const jsPsych = win.initJsPsych({ on_finish: () => { recording = win.CyborgHunter.replay(); } });
+    const rows = await runTimeline(jsPsych, [{ type: Timer }, { type: Timer }]);
+    assert.equal(rows.length, 2);
+    assert.ok(rows[1].integritySegment, 'the monitor segments as usual');
+    assert.ok(recording, 'a recording came back');
+    assert.equal(recording.schema_version, 2);
+    assert.equal(recording.participant_id, 'P1');
+    assert.deepStrictEqual(recording.segments.map((s) => s.label).filter(Boolean), ['trial-0', 'trial-1']);
+    assert.equal(jsPsych.extensions['cyborg-hunter-replay'].inner.api, null, 'the recorder was destroyed');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('a replay script that fails to load is reported; the experiment runs without replay', async () => {
+    delete win.jsPsychCyborgHunterReplay;
+    win.happyDOM.settings.disableJavaScriptFileLoading = true;   // the script's error event, no fetch
+    bootCh({ replay: '', replaySrc: 'https://x/missing-replay.js' });
+    let recording;
+    const jsPsych = win.initJsPsych({ on_finish: () => { recording = win.CyborgHunter.replay(); } });
+    const rows = await runTimeline(jsPsych, [{ type: Timer }, { type: Timer }]);
+    assert.equal(rows.length, 2);
+    assert.ok(rows[1].integritySegmentFinal, 'the session ended normally');
+    const ours = errors.filter((e) => e.startsWith('[cyborg-hunter]'));
+    assert.equal(ours.length, 1, errors.join('\n'));
+    assert.ok(ours[0].includes('https://x/missing-replay.js') && ours[0].includes('Fix: '), ours[0]);
+    assert.strictEqual(recording, null);
+  });
+
+  it('CyborgHunterConfig.replay.autoSave: the recorder finalizes (and saves) before the researcher\'s on_finish', async () => {
+    const order = [];
+    win.jsPsychCyborgHunterReplay = class {
+      static info = { name: 'cyborg-hunter-replay' };
+      initialize(params) { order.push('initialize:' + params.autoSave.mode); this.api = {}; }
+      on_start() {}
+      on_load() {}
+      on_finish() { return {}; }
+      async finalize() { await new Promise((r) => setTimeout(r, 5)); order.push('finalize'); this.api = null; }
+      getLastRecording() { return { schema_version: 2 }; }
+    };
+    bootCh({}, { replay: { tier: 'trace', autoSave: { mode: 'datapipe', experimentId: 'ABC123' } } });
+    let recording = null;
+    const jsPsych = win.initJsPsych({ on_finish: () => { order.push('on_finish'); recording = win.CyborgHunter.replay(); } });
+    await runTimeline(jsPsych, [{ type: Timer }]);
+    assert.deepStrictEqual(order, ['initialize:datapipe', 'finalize', 'on_finish']);
+    assert.deepStrictEqual(recording, { schema_version: 2 }, 'replay() returns what finalize saved');
+    assert.deepStrictEqual(warns, []);
+  });
+});

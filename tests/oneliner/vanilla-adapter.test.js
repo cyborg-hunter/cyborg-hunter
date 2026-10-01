@@ -854,3 +854,70 @@ describe('host-specific calls', () => {
     assert.ok('ai_use_session' in blob);
   });
 });
+
+// data-replay on a vanilla page: the standalone recorder (window
+// CyborgHunterReplay, a fake here, already on the page so nothing is
+// fetched) starts once the page has loaded and follows the segmenter: every
+// cut ends the recorder's trial and starts the next span's; pagehide stops it.
+describe('vanilla host: data-replay', () => {
+  function fakeReplay() {
+    const log = [];
+    win.CyborgHunterReplay = {
+      attach: (cfg) => {
+        log.cfg = cfg;
+        return {
+          startSession: () => log.push('startSession'),
+          startTrial: (o) => log.push('startTrial:' + o.trialId),
+          endTrial: () => log.push('endTrial'),
+          stopSession: (r) => log.push('stopSession:' + r),
+          getRecording: () => { log.push('getRecording'); return { schema_version: 2 }; },
+          destroy: () => log.push('destroy')
+        };
+      }
+    };
+    return log;
+  }
+
+  it('marks and a form submit move the recorder\'s trials with the segments; pagehide stops it', async () => {
+    const log = fakeReplay();
+    const ctx = start({ replay: '' });
+    await tick();
+    assert.deepStrictEqual([...log], ['startSession', 'startTrial:span-0']);
+    assert.strictEqual(log.cfg.participantId, 'P1');
+    assert.deepStrictEqual(log.cfg.autoSave, { mode: 'none' });
+    click(el('<button data-ch-trial="q1">Next</button>'));
+    win.CyborgHunter.mark('q2');
+    submit(form());
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual(log.slice(2), [
+      'endTrial', 'startTrial:q1',
+      'endTrial', 'startTrial:q2',
+      'endTrial', 'startTrial:span-3',
+      'stopSession:finished'
+    ]);
+    assert.strictEqual(ctx.vanilla.blob().trials.length, 3);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('CyborgHunter.replay() returns the recording; later marks leave the destroyed recorder alone', async () => {
+    const log = fakeReplay();
+    start({ replay: 'dom' });
+    await tick();
+    assert.strictEqual(log.cfg.tier, 'dom');
+    log.length = 0;
+    assert.deepStrictEqual(win.CyborgHunter.replay(), { schema_version: 2 });
+    assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
+    win.CyborgHunter.mark('q9');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
+  });
+
+  it('without data-replay nothing is loaded and replay() warns', async () => {
+    const log = fakeReplay();
+    start();
+    await tick();
+    assert.deepStrictEqual([...log], []);
+    assert.strictEqual(win.CyborgHunter.replay(), null);
+    assert.ok(warns.some((w) => w.includes('data-replay')), warns.join('\n'));
+  });
+});

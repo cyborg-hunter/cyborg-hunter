@@ -29,7 +29,12 @@
 //      check reports a ch.js tag above jspsych.js or below the experiment
 //      code, and a jsPsych page that turns out not hookable falls back to the
 //      vanilla host (its guards and adapter start then);
-//   8. window.CyborgHunter = the one-liner namespace, then the sentinel.
+//   8. replay, only with data-replay (replay-loader.js): on the jsPsych
+//      host a proxy extension the initJsPsych wrap lists, which loads
+//      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla host (and
+//      on the not-hookable fallback) the standalone recorder, started after
+//      DOMContentLoaded. CyborgHunter.replay() is wired either way;
+//   9. window.CyborgHunter = the one-liner namespace, then the sentinel.
 //
 // boot({ script, win, monitorFactory?, participantParams? }) → ctx | null
 //   script:            the ch.js <script> element (document.currentScript), or null
@@ -37,7 +42,8 @@
 //   monitorFactory:    core init(); injectable for tests
 //   participantParams: URL parameter names for the participant id, in order
 // ctx = { config, participantId, participantIdSource, monitor, differ,
-//         segmenter, host, scriptSrc, handlers, win, api, vanilla? }
+//         segmenter, host, scriptSrc, handlers, win, api, vanilla?,
+//         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle) }
 //
 // boot never throws into the page: any failure is logged as bootFailed, a
 // monitor created before the failure is destroyed, and boot returns null.
@@ -57,6 +63,7 @@ import { buildPublicApi } from './api.js';
 import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, watchHostPlacement } from './adapters/jspsych.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
+import { installReplay } from './replay-loader.js';
 
 // Not under the session prefix (adapters/vanilla.js, cyborg-hunter:oneliner:
 // session:<id>), so no participant id can collide with it.
@@ -116,6 +123,7 @@ export function boot(opts) {
       api: null
     };
     ctx.api = buildPublicApi(ctx);
+    var replay = installReplay({ win: win, ctx: ctx });
     if (host === 'vanilla') ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });
 
     // The session start observes document.body (core signals/browser.js), so
@@ -130,14 +138,17 @@ export function boot(opts) {
       }, { once: true });
     }
 
-    if (host === 'vanilla') startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
-    else adapter = installJsPsychAdapter({ win: win, ctx: ctx });
+    if (host === 'vanilla') {
+      startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
+      replay.startVanilla();
+    } else adapter = installJsPsychAdapter({ win: win, ctx: ctx });
     watchHostPlacement({
       win: win, doc: win.document, ctx: ctx, adapter: adapter,
       onVanilla: function () {
         try {
           startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
           if (!ctx.vanilla) ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });
+          replay.startVanilla();
         } catch (e) {
           console.error(MESSAGES.bootFailed(String((e && e.message) || e)));
         }

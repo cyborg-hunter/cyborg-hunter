@@ -118,6 +118,29 @@ describe('boot', () => {
     assert.deepStrictEqual(errors, []);
   });
 
+  it('jsPsych host with data-replay: initJsPsych gets the replay proxy extension, loaded from next to ch.js', () => {
+    let opts = null;
+    win.initJsPsych = function (o) { opts = o; return { data: { addProperties() {} }, run() {} }; };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none', replay: 'dom' }), win });
+    win.initJsPsych({});
+    const entry = opts.extensions.find((e) => e.type.info.name === 'cyborg-hunter-replay');
+    assert.ok(entry, 'the replay entry is listed');
+    assert.strictEqual(entry.type, ctx.replayProxy);
+    assert.deepStrictEqual(entry.params, { tier: 'dom' });
+    assert.strictEqual(ctx.replaySrc, 'https://cdn/x/cyborg-hunter-replay.js');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('without data-replay no replay entry is listed and CyborgHunter.replay() warns', () => {
+    let opts = null;
+    win.initJsPsych = function (o) { opts = o; return { data: { addProperties() {} }, run() {} }; };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.initJsPsych({});
+    assert.ok(!opts.extensions.some((e) => e.type.info.name === 'cyborg-hunter-replay'));
+    assert.strictEqual(win.CyborgHunter.replay(), null);
+    assert.ok(warns.some((w) => w.includes('data-replay')), warns.join('\n'));
+  });
+
   it('a script that is null (no document.currentScript) boots with defaults', () => {
     ctx = boot({ script: null, win });
     assert.ok(ctx);

@@ -126,6 +126,27 @@ export const MESSAGES = {
       'allow site storage for the study page, or save CyborgHunter.data() on every page',
       DOCS + 'known-issues.md#one-line-setup');
   },
+  // Session replay (data-replay): cyborg-hunter-replay.js is loaded lazily
+  // from next to ch.js (or data-replay-src). console.error; the experiment
+  // runs on without replay.
+  replayUnavailable: function (msg) {
+    return formatError('Session replay is not recording', msg,
+      'put cyborg-hunter-replay.js next to ch.js or point data-replay-src at it, and allow its URL in the page\'s Content-Security-Policy',
+      DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn, from CyborgHunter.replay(), which then returns null.
+  replayOff: function () {
+    return formatError('CyborgHunter.replay() has no recording',
+      'session replay is off (the ch.js tag has no data-replay)',
+      'add data-replay to the ch.js tag',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
+  replayNotReady: function () {
+    return formatError('CyborgHunter.replay() has no recording',
+      'the replay recorder has not started yet, or cyborg-hunter-replay.js failed to load (see the error above)',
+      'call CyborgHunter.replay() when the session ends (your on_finish or save code)',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
   // console.warn: ch.js keeps one session per page. The session ends when the
   // first instance finishes; rows recorded after that carry no integrity data.
   secondJsPsychInstance: function () {

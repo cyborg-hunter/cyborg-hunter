@@ -10,15 +10,19 @@
 //   mark(trialId?)          close the current segment, open the next
 //   startTrial(opts)        ≡ mark(opts && opts.trialId)
 //   endTrial()              ≡ mark()
-//   data(), replay(), startFriction()
+//   data(), startFriction()
+//   replay()                stop the replay recorder (data-replay) and return
+//                           its recording for the researcher's own save code;
+//                           null, with a warning, when replay is off or not
+//                           started yet (replay-loader.js)
 //   frictionEntryTrial(opts)   GuardFriction.createEntryTrial(opts)
 //   init(cfg)               logs manualInitOnOneLiner, returns the namespace;
 //                           in manual mode, the core init(cfg)
 //   preventTextSelection, addHoneypot, setAltText   (core static helpers)
 // }
-// mark/data/replay/startFriction depend on the host (jsPsych or vanilla); the
-// host adapter installs them in ctx.handlers. Until it does they return
-// undefined. mark() (with startTrial/endTrial) and data() are vanilla calls:
+// mark/data/startFriction depend on the host (jsPsych or vanilla); the host
+// adapter installs them in ctx.handlers, and boot installs replay
+// (replay-loader.js). Until then they return undefined. mark() (with startTrial/endTrial) and data() are vanilla calls:
 // on the jsPsych host, and in manual mode, they warn and do nothing (ctx.host
 // is read at call time: a jsPsych page ch.js cannot hook becomes vanilla
 // after boot).

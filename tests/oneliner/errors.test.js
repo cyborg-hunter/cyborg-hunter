@@ -99,6 +99,21 @@ const CASES = {
     args: ['QuotaExceededError'],
     fix: 'allow site storage for the study page, or save CyborgHunter.data() on every page',
     link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  replayUnavailable: {
+    args: ['https://cdn/x/cyborg-hunter-replay.js did not load'],
+    fix: 'put cyborg-hunter-replay.js next to ch.js or point data-replay-src at it, and allow its URL in the page\'s Content-Security-Policy',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  replayOff: {
+    args: [],
+    fix: 'add data-replay to the ch.js tag',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
+  },
+  replayNotReady: {
+    args: [],
+    fix: 'call CyborgHunter.replay() when the session ends (your on_finish or save code)',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
   }
 };
 
