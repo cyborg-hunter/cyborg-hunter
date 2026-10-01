@@ -4,7 +4,7 @@
 
 import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, symlinkSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { gzipSync } from 'zlib';
@@ -903,5 +903,65 @@ describe('A3 review fixes', () => {
     const out = await migrateArtifact({ schema_version: 1, trials: [] }, 'jspsych-v1', boom);
     assert.strictEqual(out.refusal, undefined, 'a TypeError is not a refusal');
     assert.ok(out.internal && /cannot read properties/.test(out.internal), JSON.stringify(out));
+  });
+});
+
+// A directory entry that cannot be read (here a symlink to a missing target)
+// is ONE file's problem: it gets its own warning and every other file in the
+// directory is ingested as usual. Listing the directory must never touch the
+// entries' contents, or one dangling link would cost the whole run.
+describe('unreadable directory entries', () => {
+  let dir;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ch-dangling-')); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  const dangle = (path) => symlinkSync(join(dir, 'missing-target'), path);
+  const mentioning = (warnings, name) => warnings.filter(w => String(w.file).endsWith(name));
+  // P1's own extraction notes (no session block in this minimal file) are not
+  // what these tests are about.
+  const others = (warnings) => warnings.filter(w => !String(w.file).endsWith('P1.json'));
+
+  it('a dangling replay candidate in dataDir warns once and the other replays still attach', async () => {
+    writeFileSync(join(dir, 'P1.json'), participantFile('P1'));
+    writeFileSync(join(dir, 'P1-replay-1751600000000.json'), JSON.stringify(recordingV2('P1', 1751600000000)));
+    dangle(join(dir, 'ghost.json.gz'));        // outside the participant pattern
+    const { participants, warnings } = await ingest({
+      dataDir: dir, filePattern: 'P*.json', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.strictEqual(participants.length, 1);
+    assert.ok(participants[0].replay && participants[0].replay.recording, 'P1 keeps its replay');
+    const ghost = mentioning(warnings, 'ghost.json.gz');
+    assert.strictEqual(ghost.length, 1, JSON.stringify(warnings));
+    assert.match(ghost[0].warnings[0], /^Replay candidate ghost\.json\.gz could not be read: ENOENT/);
+    assert.strictEqual(others(warnings).length, 1, JSON.stringify(warnings));
+  });
+
+  it('a dangling entry in an explicit replayDir warns once and the other replays still attach', async () => {
+    const rdir = join(dir, 'replays');
+    mkdirSync(rdir);
+    writeFileSync(join(dir, 'P1.json'), participantFile('P1'));
+    writeFileSync(join(rdir, 'P1-replay-1751600000000.json'), JSON.stringify(recordingV2('P1', 1751600000000)));
+    dangle(join(rdir, 'ghost.json'));
+    const { participants, warnings } = await ingest({
+      dataDir: dir, replayDir: rdir, filePattern: '*.json', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.ok(participants[0].replay && participants[0].replay.recording, 'P1 keeps its replay');
+    assert.strictEqual(others(warnings).length, 1, JSON.stringify(warnings));
+    assert.strictEqual(others(warnings)[0].file, join(rdir, 'ghost.json'));
+    assert.match(others(warnings)[0].warnings[0], /^Replay candidate ghost\.json could not be read: ENOENT/);
+  });
+
+  it('a dangling participant-pattern match is reported as a parse failure, not thrown', async () => {
+    writeFileSync(join(dir, 'P1.json'), participantFile('P1'));
+    dangle(join(dir, 'P2.json'));
+    const { participants, warnings } = await ingest({
+      dataDir: dir, filePattern: '*.json', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['P1']);
+    assert.deepStrictEqual(others(warnings), [{ file: join(dir, 'P2.json'),
+      warnings: [`Failed to parse: ENOENT: no such file or directory, open '${join(dir, 'P2.json')}'`] }]);
+  });
+
+  it('a file named exactly ".csv" has no extension, so it is read as JSON', async () => {
+    writeFileSync(join(dir, '.csv'), participantFile('P1'));
+    const { participants } = await ingest({
+      dataDir: dir, filePattern: '*.csv', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['P1']);
   });
 });

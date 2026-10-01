@@ -95,7 +95,9 @@ export function artifactKind(j) {
 // Bytes → text the way readFileSync(path, 'utf8') did: a leading BOM is KEPT
 // (TextDecoder strips it by default), so CSV/JSON text is unchanged.
 const decodeUtf8 = (bytes) => new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
-const extOf = (name) => { const i = name.lastIndexOf('.'); return i < 0 ? '' : name.slice(i).toLowerCase(); };
+// path.extname's reading of a basename: a leading dot starts a hidden file's
+// name, not an extension, so a file called exactly `.csv` is not a CSV.
+const extOf = (name) => { const i = name.lastIndexOf('.'); return i <= 0 ? '' : name.slice(i).toLowerCase(); };
 
 // Reads one file as a recording candidate: { json } or { error }.
 // Gzip is decompressed HERE, not only at attach time: reading the compressed
