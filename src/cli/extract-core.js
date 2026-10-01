@@ -15,6 +15,7 @@
 
 import { TRIAL_REPORT_FIELDS } from '../shared/schema.js';
 import { getByPath } from '../shared/paths.js';
+import { collectSegments, reassembleSegments, rebaseTimes } from './segment-reassembly.js';
 
 // Extracts integrity trial data from a single participant's raw JSON.
 // Returns { participantId, trials, warnings, metadata }.
@@ -53,6 +54,22 @@ export function extractIntegrityData(raw, config) {
     trials = raw.trials
       .filter(t => t && t[intField])
       .map(t => ({ ...t, ...t[intField] }));
+    // One-line setup (0.10.0) across several pages: each page has its own
+    // performance.now() origin, recorded as integritySegment.pageOrigin.
+    // Re-base trials from later pages onto the first page's origin (startTime,
+    // trialStart_perfNow and every nested t/start) so the session timeline and
+    // the per-trial anchors below stay on one clock. Single-page data, and
+    // data without segments, is untouched.
+    if (raw.trials.some(t => typeof t?.integritySegment?.pageOrigin === 'number')) {
+      const origin0 = collectSegments(raw)[0]?.pageOrigin;
+      if (typeof origin0 === 'number') {
+        trials = trials.map(trial => {
+          const origin = trial.integritySegment?.pageOrigin;
+          return (typeof origin === 'number' && origin !== origin0)
+            ? rebaseTimes(trial, origin - origin0) : trial;
+        });
+      }
+    }
     // jsPsych extension data carries trialStart_perfNow per trial (set by the
     // wrapper's on_load), so normalization takes the exact-subtraction fast
     // path. Without it, renderers see only session-absolute `start` values
@@ -156,7 +173,7 @@ export function extractIntegrityData(raw, config) {
     }
   }
 
-  const { session, score } = findSessionData(raw, config);
+  const { session, score } = findSessionData(raw, config, warnings);
   if (session === null && trials.length > 0) {
     warnings.push('No session-level integrity data — some signals unavailable (did the experiment call getSessionReport()?)');
   }
@@ -172,6 +189,16 @@ export function extractIntegrityData(raw, config) {
         : undefined);
   if (finalizeError) {
     warnings.push(`finalize() failed for this participant (cyborgHunterFinalizeError): ${finalizeError} — session data may be incomplete`);
+  }
+  // The one-line setup (0.10.0) has no finalize(); when it hits an internal
+  // error it drops a `cyborgHunterError` marker instead. Same three locations.
+  const oneLinerError = raw.cyborgHunterError
+    ?? raw.metadata?.cyborgHunterError
+    ?? (Array.isArray(raw.trials)
+        ? raw.trials.find(t => t?.cyborgHunterError)?.cyborgHunterError
+        : undefined);
+  if (oneLinerError) {
+    warnings.push(`one-line setup reported an error for this participant (cyborgHunterError): ${oneLinerError} — data after that point may be incomplete`);
   }
 
   return {
@@ -227,10 +254,14 @@ function looksLikeSessionData(obj) {
 //   4. raw.cyborgHunter — native top-level location used by raw-DOM
 //      adopters before they adopt the
 //      metadata.integritySession mirror. Added 2026-05-26.
-// Returns { session, score }, both null if not found.
-function findSessionData(raw, config) {
+//   5. Rolling snapshot (0.10.0 one-line setup) — per-row integritySegment
+//      deltas, reassembled by src/cli/segment-reassembly.js.
+// Returns { session, score }, both null if not found. `warnings` receives a
+// note when a dumped session and rolling segments are both present.
+function findSessionData(raw, config, warnings = []) {
   let session = null;
   let score = null;
+  let usedSegments = false;
 
   // 0. Analyst-specified location, e.g. "payload.cyborgHunter" for pipelines
   //    that nest the getSessionReport() output somewhere non-standard. Falls
@@ -272,6 +303,24 @@ function findSessionData(raw, config) {
   else if (raw.cyborgHunter && typeof raw.cyborgHunter === 'object') {
     session = raw.cyborgHunter;
     score = null;
+  }
+  // 5. Rolling snapshot (0.10.0 one-line setup): per-row integritySegment deltas,
+  //    concatenated in segmentIndex order into the same shape finalize() dumps.
+  else {
+    const segs = collectSegments(raw);
+    if (segs.length > 0) {
+      const rolled = reassembleSegments(segs);
+      session = rolled.session;
+      score = rolled.score;
+      usedSegments = true;
+    }
+  }
+
+  // A file carrying both is a study that mixed manual finalize() with the
+  // one-line setup. The dumped session is complete by construction, so it
+  // wins; say so rather than silently ignoring the segments.
+  if (session && !usedSegments && collectSegments(raw).length > 0) {
+    warnings.push('both a dumped integritySession and rolling segments (integritySegment) were found — the dumped integritySession was used; this file mixes manual mode and the one-line setup');
   }
 
   // When no separate integrityScore blob was saved, synthesize the authoritative

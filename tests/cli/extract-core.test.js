@@ -34,6 +34,11 @@ describe('extractIntegrityData (pure core)', () => {
     const src = readFileSync(new URL('../../src/cli/extract-core.js', import.meta.url), 'utf8');
     assert.doesNotMatch(src, /from ['"](node:)?(fs|path|zlib)['"]/);
   });
+
+  it('segment-reassembly.js (imported by extract-core) imports nothing', () => {
+    const src = readFileSync(new URL('../../src/cli/segment-reassembly.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(src, /^\s*import\s/m);
+  });
 });
 
 describe('ruleChronologicalCompare (pure core)', () => {
