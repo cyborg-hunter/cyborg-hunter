@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: vanilla form, page 1</title>
+  <!-- Fixture for tests/e2e/oneliner/vanilla.spec.js. Page 1 of a two-page
+       form study without jsPsych. No marks: the whole page is one span
+       (span-0), closed by the form's POST submit. The spec answers /submit
+       with a redirect to vanilla-form-page2.html. -->
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-VAN-1"></script>
+  <form id="form1" method="post" action="/submit">
+    <label for="answer1">Page 1 question</label>
+    <textarea id="answer1" name="answer1"></textarea>
+    <button type="submit" id="next">Next page</button>
+  </form>
+</body>
+</html>

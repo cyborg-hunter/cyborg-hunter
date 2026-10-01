@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: ch.js, then cyborg-hunter.min.js and the guard bundles</title>
+  <!-- Fixture for tests/e2e/oneliner/errors.spec.js. A half-migrated page:
+       ch.js, then cyborg-hunter.min.js (a second monitor bundle), then both
+       guard bundles (ch.js already contains both guard cores), then a
+       normal experiment. Two trials:
+         one (button), q (survey-text)                             2 rows -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-survey-text.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-DL-1"></script>
+  <script src="/dist/cyborg-hunter.min.js"></script>
+  <script src="/dist/extension-guard-honeypot.js"></script>
+  <script src="/dist/extension-guard-friction.js"></script>
+  <script>
+    var jsPsych = initJsPsych({
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+    jsPsych.run([
+      { type: jsPsychHtmlButtonResponse, stimulus: '<p>One</p>', choices: ['One'], data: { name: 'one' } },
+      { type: jsPsychSurveyText, questions: [{ prompt: 'Double-load question', name: 'q' }], data: { name: 'q' } }
+    ]);
+  </script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: vanilla marks and a custom save</title>
+  <!-- Fixture for tests/e2e/oneliner/vanilla.spec.js and replay.spec.js.
+       One page, three data-ch-trial marks, saved by the page's own fetch.
+       Spans: span-0 (boot, closed by the q1 click), q1, q2, q3 (closed by
+       CyborgHunter.data() in the Finish handler). The tag has data-replay
+       (cyborg-hunter-replay.js is loaded from next to ch.js) and data-debug.
+       The Finish button carries no mark. -->
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-VAN-2" data-replay data-debug></script>
+  <button type="button" data-ch-trial="q1">Question 1</button>
+  <button type="button" data-ch-trial="q2">Question 2</button>
+  <button type="button" data-ch-trial="q3">Question 3</button>
+  <textarea id="answer"></textarea>
+  <button type="button" id="finish">Finish</button>
+  <script>
+    document.getElementById('finish').addEventListener('click', function () {
+      fetch('/save', { method: 'POST', body: JSON.stringify({ data: CyborgHunter.data(), replay: CyborgHunter.replay() }) })
+        .then(function () { window.__saved = true; });
+    });
+  </script>
+</body>
+</html>

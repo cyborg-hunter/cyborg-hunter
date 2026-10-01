@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: ch.js above jspsych.js</title>
+  <!-- Fixture for tests/e2e/oneliner/errors.spec.js. The ch.js tag is ABOVE
+       jspsych.js, so initJsPsych does not exist when ch.js runs: ch.js
+       cannot wrap it and runs on the vanilla host. One trial:
+         q (survey-text)                                            1 row -->
+  <script src="/dist/ch.js" data-participant-id="E2E-NH-1"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-survey-text.js"></script>
+</head>
+<body>
+  <script>
+    var jsPsych = initJsPsych({
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+    jsPsych.run([{
+      type: jsPsychSurveyText,
+      questions: [{ prompt: 'Only question', name: 'q' }],
+      data: { name: 'q' }
+    }]);
+  </script>
+</body>
+</html>

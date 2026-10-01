@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: jsPsych with data-replay</title>
+  <!-- Fixture for tests/e2e/oneliner/replay.spec.js. data-replay loads
+       cyborg-hunter-replay.js from next to ch.js; the experiment's on_finish
+       keeps CyborgHunter.replay() on window.__replay and the CSV on
+       window.__csv. Three trials:
+         start (button), q (survey-text), finish (button)          3 rows -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-html-button-response.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-survey-text.js"></script>
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-RP-1" data-replay></script>
+  <script>
+    var jsPsych = initJsPsych({
+      on_finish: function () {
+        window.__replay = CyborgHunter.replay();
+        window.__csv = jsPsych.data.get().csv();
+      }
+    });
+    jsPsych.run([
+      { type: jsPsychHtmlButtonResponse, stimulus: '<p>Replay start</p>', choices: ['Start'], data: { name: 'start' } },
+      { type: jsPsychSurveyText, questions: [{ prompt: 'Replay question', name: 'q' }], data: { name: 'q' } },
+      { type: jsPsychHtmlButtonResponse, stimulus: '<p>Replay end</p>', choices: ['Finish'], data: { name: 'finish' } }
+    ]);
+  </script>
+</body>
+</html>

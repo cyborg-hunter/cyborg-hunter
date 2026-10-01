@@ -27,6 +27,9 @@
 //   saveAndReport     writes the saved file + a CLI config to a temp dir, runs
 //                     `cyborg-hunter report --no-visuals` there, returns stdout,
 //                     the parsed summary.csv rows and triage.md.
+//   rewriteFixture    serves a fixture with its HTML edited in flight (for
+//                     example the ch.js tag without data-participant-id), so a
+//                     one-attribute variant needs no near-duplicate file.
 
 import { test as base, expect } from '@playwright/test';
 import { execSync } from 'node:child_process';
@@ -126,4 +129,18 @@ export function saveAndReport(tmpDir, filename, text) {
     summaryCsv: parseCsv(readFileSync(join(outDir, 'summary.csv'), 'utf8')),
     triage: readFileSync(join(outDir, 'triage.md'), 'utf8'),
   };
+}
+
+// Every request matching `glob` gets the served fixture passed through
+// `edit(html)`. The original headers are not forwarded (their
+// content-length belongs to the unedited body). `edit` must change the
+// page, so a stale pattern cannot silently test the unedited fixture.
+export async function rewriteFixture(page, glob, edit) {
+  await page.route(glob, async (route) => {
+    const res = await route.fetch();
+    const html = await res.text();
+    const body = edit(html);
+    if (body === html) throw new Error('rewriteFixture: the edit changed nothing in ' + route.request().url());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body });
+  });
 }

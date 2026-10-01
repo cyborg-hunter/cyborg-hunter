@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: vanilla form, page 2</title>
+  <!-- Fixture for tests/e2e/oneliner/vanilla.spec.js. Page 2 of the
+       two-page form study. Its spans:
+         the boot span (span-1, continuing page 1's index), closed by the
+           click on the data-ch-trial="page2-q1" button;
+         page2-q1, closed by the POST form's submit.
+       The POST form is sent by "Finish", a plain button whose handler calls
+       form.submit() (no submit event). The GET form is used on its own by
+       the GET spec. -->
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-VAN-1"></script>
+  <button type="button" data-ch-trial="page2-q1">Show question 2</button>
+  <form id="form2" method="post" action="/submit">
+    <label for="answer2">Page 2 question</label>
+    <textarea id="answer2" name="answer2"></textarea>
+    <button type="button" id="finish">Finish</button>
+  </form>
+  <form id="getform" method="get" action="/done">
+    <input name="q" value="search-term">
+    <button type="submit" id="get-submit">Search</button>
+  </form>
+  <script>
+    document.getElementById('finish').addEventListener('click', function () {
+      document.getElementById('form2').submit();
+    });
+  </script>
+</body>
+</html>

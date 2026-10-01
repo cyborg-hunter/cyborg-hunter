@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: ch.js in head</title>
+  <!-- Fixture for tests/e2e/oneliner/vanilla.spec.js. The ch.js tag is in
+       <head>, before <body> exists: the session starts at DOMContentLoaded.
+       No marks: one span (span-0), closed by CyborgHunter.data(). -->
+  <script src="/dist/ch.js" data-participant-id="E2E-VAN-3"></script>
+</head>
+<body>
+  <textarea id="answer"></textarea>
+  <button type="button" id="get-data">Save</button>
+  <script>
+    document.getElementById('get-data').addEventListener('click', function () {
+      window.__data = CyborgHunter.data();
+    });
+  </script>
+</body>
+</html>
