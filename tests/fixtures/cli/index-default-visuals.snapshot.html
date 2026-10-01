@@ -9,6 +9,15 @@
       --bg: #fafafa; --surface: #fff; --ink: #1a1814;
       --dim: #706a5c; --line: #e2ddd1;
       --hard: #d32f2f; --soft: #f57c00; --clean: #388e3c;
+      /* Typefaces (embedded by report-fonts.js; picked in the 2026-09 report
+         palette). Each stack falls back to the system face when a font is
+         absent (demo bundle) or lacks a glyph (≥ ≤ ▶ ⓘ). */
+      --ff-space: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --ff-tomorrow: "Tomorrow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --ff-sofia: "Sofia Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --ff-sora: "Sora", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --ff-recursive: "Recursive", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --ff-majormono: "Major Mono Display", ui-monospace, SFMono-Regular, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -16,17 +25,21 @@
            color: var(--ink); background: var(--bg); display: grid; grid-template-rows: auto 1fr; height: 100vh; }
     .topbar { display: flex; align-items: center; gap: 16px; padding: 12px 20px;
               background: var(--surface); border-bottom: 1px solid var(--line); }
-    .topbar h1 { font-size: 18px; font-weight: 600; }
-    .topbar .meta { color: var(--dim); font-size: 13px; flex: 1; }
+    .topbar h1 { font-family: var(--ff-space); font-size: 32.4px; font-weight: 550; letter-spacing: 0.01em; }
+    .topbar .meta { font-family: var(--ff-tomorrow); color: var(--dim); font-size: 13px; flex: 1; }
     .topbar button { padding: 6px 12px; border: 1px solid var(--line); background: var(--surface);
-                     color: var(--ink); border-radius: 4px; cursor: pointer; font-size: 13px; }
+                     color: var(--ink); border-radius: 4px; cursor: pointer;
+                     font-family: var(--ff-recursive); font-size: 19.5px; font-weight: 400; letter-spacing: 0; }
     .topbar button:hover { background: var(--bg); }
     .layout { display: grid; grid-template-columns: 360px 1fr; height: 100%; overflow: hidden; }
     .rail { background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
     .detail { overflow-y: auto; padding: 20px; }
-    .note { color: var(--dim); font-style: italic; font-size: 13px; }
+    .note { font-family: var(--ff-tomorrow); color: var(--dim); font-style: italic; font-size: 13px; }
+    /* .mono marks data values (ids, scores, counts, timestamps). It was a
+       system monospace; it now defaults to Sora with tabular figures, and the
+       roles below override it (timestamps, evidence text). */
     .mono {
-      font: 13px/1.3 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
+      font: 13px/1.3 var(--ff-sora);
       font-variant-numeric: tabular-nums;
     }
     [hidden] { display: none !important; }
@@ -42,15 +55,16 @@
       padding: 10px 12px; border-top: 1px solid var(--line);
       background: var(--surface); font-size: 12px;
     }
-    .totals-title { color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
-    .totals-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-    .totals-row .count { margin-left: auto; }
+    .totals-title { font-family: var(--ff-sora); color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .totals-row { font-family: var(--ff-sora); display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+    .totals-row .count { font-family: var(--ff-sora); margin-left: auto; }
 
     /* Search */
     .search-wrap input {
       width: 100%; padding: 6px 8px; border: 1px solid var(--line);
-      border-radius: 4px; font-size: 13px; background: var(--bg);
+      border-radius: 4px; background: var(--bg);
       color: var(--ink);
+      font-family: var(--ff-recursive); font-size: 19.5px; font-weight: 400; letter-spacing: 0;
     }
     .search-wrap input:focus { outline: 1px solid var(--ink); border-color: var(--ink); }
 
@@ -58,7 +72,8 @@
     .filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
     .filter-chip {
       padding: 3px 8px; border: 1px solid var(--line); background: var(--surface);
-      color: var(--ink); border-radius: 12px; cursor: pointer; font-size: 12px;
+      color: var(--ink); border-radius: 12px; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 15px; font-weight: 400; letter-spacing: 0;
     }
     .filter-chip:hover { background: var(--bg); }
     .filter-chip.active {
@@ -66,10 +81,11 @@
     }
 
     /* Sort selector */
-    .sort-wrap { font-size: 12px; color: var(--dim); }
+    .sort-wrap { font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
     .sort-wrap select {
       background: var(--surface); color: var(--ink); border: 1px solid var(--line);
-      border-radius: 4px; padding: 2px 4px; font-size: 12px;
+      border-radius: 4px; padding: 2px 4px;
+      font-family: var(--ff-recursive); font-size: 18px; font-weight: 400; letter-spacing: 0;
     }
 
     /* Cohort rows */
@@ -85,16 +101,18 @@
     }
     .cohort-row-top { display: flex; align-items: center; gap: 8px; }
     .cohort-row-top .pid {
+      font-family: var(--ff-sora);
       flex: 1; min-width: 0; color: var(--ink);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .cohort-row-top .score { color: var(--dim); flex-shrink: 0; }
+    .cohort-row-top .score { font-family: var(--ff-sora); color: var(--dim); flex-shrink: 0; }
     .cohort-row.selected .cohort-row-top .score { color: var(--ink); font-weight: 600; }
     .cohort-row-bot {
       display: flex; align-items: flex-start; gap: 8px;
       margin-top: 4px;
     }
     .reason-excerpt {
+      font-family: var(--ff-recursive);
       flex: 1; color: var(--dim); font-size: 12px;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
       overflow: hidden; text-overflow: ellipsis;
@@ -111,6 +129,7 @@
 
     /* Tier badge — small pill, filled for hard/soft, outline for clean */
     .tier-badge {
+      font-family: var(--ff-sora);
       font-size: 10px; padding: 2px 6px; border-radius: 3px;
       font-weight: 600; letter-spacing: 0.04em; flex-shrink: 0;
     }
@@ -149,12 +168,16 @@
       padding-bottom: 12px; margin-bottom: 16px;
     }
     .detail-header-top { display: flex; align-items: center; gap: 12px; }
-    .detail-header-top .pid-full { flex: 1; font-size: 13px; color: var(--ink); }
-    .detail-header-top .score-big { font-size: 36px; font-weight: 600; color: var(--ink); }
-    .detail-header-sub { color: var(--dim); font-size: 12px; margin-top: 4px; }
+    .detail-header-top .pid-full { font-family: var(--ff-sora); flex: 1; font-size: 13px; color: var(--ink); }
+    .detail-header-top .score-big { font-family: var(--ff-sora); font-size: 36px; font-weight: 600; color: var(--ink); }
+    .detail-header-sub { font-family: var(--ff-tomorrow); color: var(--dim); font-size: 12px; margin-top: 4px; }
+    /* The optional platform-ID line is an identifier, so it stays in the ID
+       face rather than taking the meta-line face by source order. */
+    .detail-header-sub.mono { font-family: var(--ff-sora); }
 
     /* Tier pill — bigger version of the tier badge in the rail */
     .tier-pill {
+      font-family: var(--ff-sora);
       font-size: 11px; padding: 3px 8px; border-radius: 4px;
       font-weight: 600; letter-spacing: 0.04em;
     }
@@ -190,8 +213,8 @@
     .signal-tile.tone-warn     { color: var(--soft); border-color: var(--soft); background: rgba(245, 124,  0, 0.04); }
     .signal-tile.tone-muted    { color: var(--ink);  border-color: var(--ink);  background: rgba(26,  24, 20, 0.03); }
     .signal-tile.tone-zero     { color: #b8b1a0; border-color: #ebe6d8; background: transparent; }
-    .signal-value { font-size: 18px; font-weight: 700; line-height: 1; }
-    .signal-label { font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
+    .signal-value { font-family: var(--ff-sora); font-size: 18px; font-weight: 700; line-height: 1; }
+    .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -204,12 +227,12 @@
       display: inline-flex; gap: 6px; align-items: center;
       font-size: 12px;
     }
-    .score-term .label { color: var(--dim); }
-    .score-term .contrib { color: var(--ink); }
+    .score-term .label { font-family: var(--ff-recursive); color: var(--dim); }
+    .score-term .contrib { font-family: var(--ff-sora); color: var(--ink); }
     .score-term .bar {
       height: 6px; background: var(--ink); opacity: 0.4; border-radius: 3px;
     }
-    .score-total { margin-left: auto; font-weight: 600; color: var(--ink); }
+    .score-total { font-family: var(--ff-sora); margin-left: auto; font-weight: 600; color: var(--ink); }
 
     /* Reason pull-quote — warm-tinted block-quote with a left rule. The bg
        color is picked by hand from --bg's family rather than computed, so
@@ -219,6 +242,7 @@
       background: #f5f1e8;
       padding: 10px 14px;
       margin: 0 0 16px;
+      font-family: var(--ff-tomorrow);
       font-size: 14px;
       color: var(--ink);
     }
@@ -226,6 +250,7 @@
     /* Session-level signals — small cards in a responsive grid. The grid
        collapses from 3 cells to 1 in narrow detail panes via auto-fit. */
     .section-heading {
+      font-family: var(--ff-sofia);
       font-size: 13px; color: var(--dim);
       text-transform: uppercase; letter-spacing: 0.04em;
       margin: 18px 0 8px;
@@ -240,11 +265,12 @@
       border-radius: 6px; padding: 10px;
     }
     .sig-cell-title {
+      font-family: var(--ff-sofia);
       font-size: 11px; color: var(--dim);
       text-transform: uppercase; letter-spacing: 0.04em;
     }
     .sig-cell ul { list-style: none; margin-top: 4px; font-size: 12px; padding: 0; }
-    .sig-cell li { padding: 2px 0; word-break: break-word; }
+    .sig-cell li { font-family: var(--ff-recursive); padding: 2px 0; word-break: break-word; }
     .muted { color: var(--dim); }
 
     /* Paste evidence — list of expandable entries */
@@ -259,10 +285,11 @@
     }
     .paste-toggle:disabled { cursor: default; }
     .paste-toggle:hover:not(:disabled) { color: var(--ink); }
-    .paste-trial { color: var(--dim); flex-shrink: 0; }
+    .paste-trial { font-family: var(--ff-majormono); color: var(--dim); flex-shrink: 0; }
     .paste-preview, .paste-full {
       background: #f5f1e8;  /* warm tinted bg, same as the reason pull-quote */
       padding: 4px 8px; border-radius: 3px;
+      font-family: var(--ff-tomorrow);
       font-size: 12px;
       word-break: break-word; white-space: pre-wrap;
       flex: 1; min-width: 0;  /* allow flex item to shrink and wrap correctly */
@@ -270,7 +297,7 @@
     /* When expanded by Task 11's JS: hide preview, show full text */
     .paste-entry.expanded .paste-preview { display: none; }
     .paste-entry:not(.expanded) .paste-full { display: none; }
-    .paste-overflow { font-size: 12px; margin-top: 4px; }
+    .paste-overflow { font-family: var(--ff-tomorrow); font-size: 12px; margin-top: 4px; }
 
     /* Image blocks — wrapper containers so a missing PNG hides its heading too.
        Each .image-block contains a <h4 class="section-heading"> + a zoomable
@@ -336,6 +363,7 @@
     }
     .modal-close:hover { color: var(--ink); }
     .modal-card h3 {
+      font-family: var(--ff-space);
       font-size: 16px; margin-bottom: 12px;
     }
     .legend-table {
@@ -347,7 +375,9 @@
       border-bottom: 1px solid var(--line);
       vertical-align: top;
     }
+    .legend-table td { font-family: var(--ff-recursive); }
     .legend-table th {
+      font-family: var(--ff-sofia);
       color: var(--dim); font-weight: 500; font-size: 12px;
       text-transform: uppercase; letter-spacing: 0.04em;
     }
@@ -855,7 +885,7 @@
   <style>
     /* Replay viewer (see replay-viewer.client.js) — matches report house style */
     .replay-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
-    .replay-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    .replay-badge { font-family: var(--ff-sora); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
                     background: var(--ink); color: var(--surface); }
     .replay-badge[data-tier="trace"] { background: var(--surface); color: var(--ink);
                     border: 1px solid var(--line); }
@@ -865,28 +895,30 @@
     .replay-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
     .replay-neutral { background: #e8e6e0; }
     .replay-neutral-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-                            color: var(--dim); font-size: 13px; }
+                            font-family: var(--ff-recursive); color: var(--dim); font-size: 13px; }
     .replay-lane { display: block; margin-top: 6px; border-radius: 2px; }
     .replay-scrub { display: block; margin: 2px 0 4px; }
-    .replay-ticker { font: 12px/1.3 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
+    .replay-ticker { font: 12px/1.3 var(--ff-majormono);
                      color: var(--dim); font-variant-numeric: tabular-nums;
                      height: 1.4em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .replay-note { font-size: 12px; color: var(--dim); }
+    .replay-note { font-family: var(--ff-recursive); font-size: 12px; color: var(--dim); }
     .replay-warn { color: var(--hard); }
+    .replay-pause-toggle { font-family: var(--ff-recursive); }
     /* Controls share the report's flat, line-bordered button style */
     .replay-play, .replay-load-btn, .replay-css-btn, .replay-segment-select, .replay-speed {
       padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
-      color: var(--ink); border-radius: 4px; cursor: pointer; font-size: 13px; }
+      color: var(--ink); border-radius: 4px; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 13px; }
     .replay-play:hover, .replay-load-btn:hover, .replay-css-btn:hover { background: var(--bg); }
     .replay-play:disabled, .replay-load-btn:disabled { opacity: 0.6; cursor: default; }
-    .replay-fetch-css-label { margin-left: 10px; font-size: 12px; color: #555; }
-    .replay-unstyled { position: absolute; left: 0; right: 0; top: 0; z-index: 3; background: #fff4dd; color: #7a4b00; border-bottom: 1px solid #e8b24a; padding: 6px 10px; font-size: 12px; line-height: 1.4; }
+    .replay-fetch-css-label { font-family: var(--ff-recursive); margin-left: 10px; font-size: 12px; color: #555; }
+    .replay-unstyled { position: absolute; left: 0; right: 0; top: 0; z-index: 3; background: #fff4dd; color: #7a4b00; border-bottom: 1px solid #e8b24a; padding: 6px 10px; font-family: var(--ff-recursive); font-size: 12px; line-height: 1.4; }
     .replay-css-btn { font-size: 12px; padding: 2px 8px; }
-    .replay-clock { font: 12px/1.3 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
+    .replay-clock { font: 12px/1.3 var(--ff-majormono);
                     font-variant-numeric: tabular-nums; }
     .replay-keycast { position: absolute; left: 0; right: 0; bottom: 0; display: flex;
                     gap: 4px; padding: 5px 6px; pointer-events: none; flex-wrap: wrap-reverse; }
-    .replay-key-chip { font: 11px/1.2 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
+    .replay-key-chip { font: 400 13px/1.2 var(--ff-tomorrow);
                     background: rgba(0,0,0,0.72); color: #fff; padding: 2px 7px;
                     border-radius: 3px; white-space: nowrap; }
     .replay-key-chip--redacted { background: rgba(0,0,0,0.5); font-style: italic; }
@@ -894,7 +926,7 @@
        the recorded element was doing, in the stage's top-left. */
     .replay-media { position: absolute; left: 0; top: 0; display: flex; gap: 4px;
                     padding: 5px 6px; pointer-events: none; flex-wrap: wrap; }
-    .replay-media-badge { font: 11px/1.2 ui-monospace, SFMono-Regular, 'IBM Plex Mono', monospace;
+    .replay-media-badge { font: 11px/1.2 var(--ff-tomorrow);
                     background: rgba(0,137,123,0.85); color: #fff; padding: 2px 7px;
                     border-radius: 3px; white-space: nowrap; }
   </style>
