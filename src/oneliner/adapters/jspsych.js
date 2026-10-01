@@ -225,7 +225,7 @@ function runFinalHook(ctx, win, has, jsPsych) {
       if (win.GuardHoneypot) win.GuardHoneypot.attachToJsPsychData();
     });
   }
-  step(function () { ctx.monitor.destroy(); });
+  step(function () { if (!ctx.bootError) ctx.monitor.destroy(); });   // failDeferred destroyed it
 
   if (problems.length) {
     console.error(MESSAGES.sessionEndFailed(problems.join('; ')));
@@ -342,7 +342,8 @@ export function watchHostPlacement(opts) {
   if (ctx.host === 'jspsych') {
     var root = doc.documentElement;
     var notHookable = function () {
-      if (ctx.jspsych && ctx.jspsych.invoked) return;
+      // bootError: the deferred session start failed and removed the wrap.
+      if (ctx.bootError || (ctx.jspsych && ctx.jspsych.invoked)) return;
       console.error(MESSAGES.notHookable());
       ctx.host = 'vanilla';
       if (adapter) adapter.restore();

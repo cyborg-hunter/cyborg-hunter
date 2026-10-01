@@ -214,9 +214,10 @@ describe('vanilla host: forms and page loads', () => {
     assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials.length, 1);
   });
 
-  it('a submit the page prevents (validation) leaves pagehide free to cut', () => {
+  it('a submit the page prevents (validation) leaves pagehide free to cut', async () => {
     const ctx = start();
     submit(form());
+    await tick();   // the prevented submit is noticed after the page's handlers ran
     paste('later');
     win.dispatchEvent(new win.Event('pagehide'));
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
@@ -315,6 +316,225 @@ describe('vanilla host: forms and page loads', () => {
     small.persist();
     assert.deepStrictEqual(warns.filter((w) => w.includes('sessionStorage')), [MESSAGES.storageNearlyFull()]);
     small.teardown();
+  });
+});
+
+describe('vanilla host: page-load edge cases', () => {
+  // happy-dom's sessionStorage is per Window: copy the tab's storage over.
+  function nextPage(ms) {
+    const saved = {};
+    for (let i = 0; i < win.sessionStorage.length; i++) {
+      const k = win.sessionStorage.key(i);
+      saved[k] = win.sessionStorage.getItem(k);
+    }
+    const page = new Window({ url: 'https://lab.example/next.html' });
+    for (const [k, v] of Object.entries(saved)) page.sessionStorage.setItem(k, v);
+    win.close();
+    useWindow(page);
+    laterPage(ms);
+  }
+  function endPage(ctx) {
+    win.dispatchEvent(new win.Event('pagehide'));
+    ctx.vanilla.teardown();
+    ctx.monitor.destroy();
+  }
+
+  it('without a participant id, the next page in the tab keeps the first random id and continues the index', () => {
+    const ctx1 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx1);
+    assert.match(ctx1.participantId, /^ch-[0-9a-f]{12}$/);
+    assert.strictEqual(ctx1.participantIdSource, 'random');
+    paste('page one');
+    endPage(ctx1);
+    const warnedOnPage1 = warns.filter((w) => w === MESSAGES.randomId(ctx1.participantId)).length;
+    assert.strictEqual(warnedOnPage1, 1);
+
+    nextPage(30000);
+    const ctx2 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx2);
+    assert.strictEqual(ctx2.participantId, ctx1.participantId);
+    assert.strictEqual(ctx2.participantIdSource, 'session');
+    assert.strictEqual(warns.filter((w) => w.includes('cannot be linked')).length, 1, 'no second random-id warning');
+    assert.deepStrictEqual(ctx2.segmenter.state(), { open: true, segmentIndex: 1, currentTrialId: 'span-1' });
+    assert.strictEqual(win.CyborgHunter.data().cyborgHunterOneLiner.pageCount, 2);
+  });
+
+  it('a URL, attribute or config id still wins over the id kept in the tab', () => {
+    win.sessionStorage.setItem('cyborg-hunter:oneliner:participantId', 'ch-000000000000');
+    const ctx = start();
+    assert.strictEqual(ctx.participantId, 'P1');
+    assert.strictEqual(win.sessionStorage.getItem('cyborg-hunter:oneliner:participantId'), 'P1');
+  });
+
+  it('formdata (form.submit() fires no submit event) carries the blob without cutting a segment', () => {
+    const ctx = start();
+    const f = form();
+    const set = [];
+    const ev = new win.Event('formdata', { bubbles: true });
+    Object.defineProperty(ev, 'formData', { value: { has: () => false, set: (k, v) => set.push([k, v]) } });
+    f.dispatchEvent(ev);
+    assert.strictEqual(set.length, 1);
+    assert.strictEqual(set[0][0], 'cyborgHunterData');
+    assert.strictEqual(JSON.parse(set[0][1]).participantId, 'P1');
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0, 'no segment cut');
+
+    // A submit already wrote the hidden input: the entry list has it.
+    const ev2 = new win.Event('formdata', { bubbles: true });
+    Object.defineProperty(ev2, 'formData', { value: { has: (k) => k === 'cyborgHunterData', set: () => set.push('again') } });
+    f.dispatchEvent(ev2);
+    assert.strictEqual(set.length, 1);
+  });
+
+  it('a page that stops the propagation of a prevented submit still leaves pagehide free to cut', async () => {
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"></form>');
+    f.addEventListener('submit', (e) => { e.preventDefault(); e.stopPropagation(); });
+    submit(f);
+    await tick();
+    paste('after validation');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+  });
+
+  it('sessionStorage full: a slim record keeps the indices, the next page carries a cyborgHunterError', () => {
+    const store = {};
+    const full = {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => {
+        if (k === KEY && JSON.parse(v).trials.length > 0) throw new Error('QuotaExceededError');
+        store[k] = v;
+      }
+    };
+    Object.defineProperty(win, 'sessionStorage', { value: full, configurable: true });
+    const ctx1 = start();
+    paste('page one');
+    win.CyborgHunter.mark('q1');
+    endPage(ctx1);
+    assert.deepStrictEqual(JSON.parse(store[KEY]), { segmentIndex: 2, pageCount: 1, trials: [], storageError: true, errors: [] });
+    assert.ok(errors.some((e) => e.startsWith('[cyborg-hunter] The session could not be carried')));
+
+    const page2 = new Window({ url: 'https://lab.example/page2.html' });
+    win.close();
+    useWindow(page2);
+    page2.sessionStorage.setItem(KEY, store[KEY]);
+    laterPage(30000);
+    const ctx2 = start();
+    assert.deepStrictEqual(ctx2.segmenter.state(), { open: true, segmentIndex: 2, currentTrialId: 'span-2' });
+    const note = 'session storage full on page 1; earlier pages only in their own saves';
+    const blob = win.CyborgHunter.data();
+    assert.strictEqual(blob.cyborgHunterError, note);
+    assert.strictEqual(blob.cyborgHunterOneLiner.pageCount, 2);
+    const out = extractIntegrityData(JSON.parse(JSON.stringify(blob)), {});
+    assert.ok(out.warnings.some((w) => w.includes(note)));
+
+    // The note travels on to later pages.
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).errors, [note]);
+  });
+
+  it('back/forward cache: a page shown again re-adopts the saved session and cuts again at pagehide', () => {
+    win.GuardHoneypot = fakeHoneypot([{ reason: 'tab_hidden', start: 10, end: 20, duration: 10 }]);
+    const ctx = start({ guards: 'honeypot' });
+    const f = el('<form method="post" action="/next"></form>');
+    submit(f);   // not prevented: the browser navigates to the next page
+    win.dispatchEvent(new win.Event('pagehide'));
+
+    // The next page added two segments, a violation, and saved.
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    const pageB = saved.trials[0].integritySegment.pageOrigin + 30000;
+    const row = (i) => ({ trialId: 'b' + i, integrity: {}, integritySegment: { segmentIndex: i, pageOrigin: pageB } });
+    saved.trials.push(row(1), row(2));
+    saved.segmentIndex = 3;
+    saved.pageCount = 2;
+    const hp = JSON.parse(saved.honeypot.guard_assistance_violations_session);
+    hp.push({ reason: 'not_fullscreen', start: 5, end: 9, duration: 4, pageOrigin: pageB });
+    saved.honeypot.guard_assistance_violations_session = JSON.stringify(hp);
+    win.sessionStorage.setItem(KEY, JSON.stringify(saved));
+
+    const normal = new win.Event('pageshow');
+    Object.defineProperty(normal, 'persisted', { value: false });
+    win.dispatchEvent(normal);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1, 'a normal pageshow changes nothing');
+
+    const back = new win.Event('pageshow');
+    Object.defineProperty(back, 'persisted', { value: true });
+    win.dispatchEvent(back);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 3);
+    const blob = ctx.vanilla.blob();
+    assert.deepStrictEqual(blob.trials.map((t) => t.integritySegment.segmentIndex), [0, 1, 2]);
+    assert.strictEqual(blob.cyborgHunterOneLiner.pageCount, 3);
+    const v = JSON.parse(blob.guard_assistance_violations_session);
+    assert.deepStrictEqual(v.map((x) => x.reason).sort(), ['not_fullscreen', 'tab_hidden'], "this page's violation is not counted twice");
+
+    paste('back again');
+    win.dispatchEvent(new win.Event('pagehide'));
+    const after = JSON.parse(win.sessionStorage.getItem(KEY));
+    assert.deepStrictEqual(after.trials.map((t) => t.integritySegment.segmentIndex), [0, 1, 2, 3]);
+    assert.strictEqual(after.trials[3].integrity.pasteEvents.length, 1);
+  });
+});
+
+describe('deferred session start fails (ch.js in <head>)', () => {
+  function head() {
+    Object.defineProperty(win.document, 'readyState', { value: 'loading', configurable: true });
+    win.document.documentElement.removeChild(win.document.body);
+  }
+  function bodyAndReady() {
+    win.document.documentElement.appendChild(win.document.createElement('body'));
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+  }
+  async function failingStart() {
+    const { init } = await import('../../src/core/monitor.js');
+    const ctx = boot({
+      script: { dataset: { participantId: 'P1', guards: 'none' } }, win,
+      monitorFactory: (cfg) => Object.assign({}, init(cfg), { startSession() { throw new Error('no session'); } })
+    });
+    contexts.push(ctx);
+    return ctx;
+  }
+
+  it('vanilla: logged once; data() and the form still carry earlier pages, marked', async () => {
+    win.sessionStorage.setItem(KEY, JSON.stringify({ segmentIndex: 1, pageCount: 1, trials: [{ trialId: 'span-0', integrity: {}, integritySegment: { segmentIndex: 0 } }] }));
+    head();
+    await failingStart();
+    bodyAndReady();
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('no session')]);
+    const blob = win.CyborgHunter.data();
+    assert.strictEqual(blob.trials.length, 1);
+    assert.match(blob.cyborgHunterError, /did not start on page 2: no session/);
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).errors.length, 1);
+  });
+
+  it('jsPsych host, initJsPsych not called yet: the wrap is removed and the page is not taken for unhookable', async () => {
+    head();
+    const orig = function () { return { data: { addProperties() {} }, run() {} }; };
+    win.initJsPsych = orig;
+    const ctx = await failingStart();
+    bodyAndReady();
+    assert.strictEqual(win.initJsPsych, orig);
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.strictEqual(ctx.host, 'jspsych');
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('no session')]);
+  });
+
+  it('jsPsych host, instance already created: every row gets the cyborgHunterError marker', async () => {
+    head();
+    const props = [];
+    const orig = function () { return { data: { addProperties(p) { props.push(p); } }, run() {} }; };
+    win.initJsPsych = orig;
+    await failingStart();
+    win.initJsPsych({});
+    bodyAndReady();
+    assert.ok(props.some((p) => /did not start/.test(p.cyborgHunterError || '')));
+    assert.strictEqual(win.initJsPsych, orig);
+    // The extension injected into that instance stands down: no per-trial errors.
+    const { OneLinerExtension } = await import('../../src/oneliner/adapters/jspsych-extension.js');
+    const ext = new OneLinerExtension({ getProgress: () => ({ current_trial_global: 0 }) });
+    ext.on_start({}); ext.on_load({});
+    assert.deepStrictEqual(ext.on_finish({}), {});
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('no session')]);
   });
 });
 
@@ -425,6 +645,41 @@ describe('host-specific calls', () => {
       '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych trials are segmented automatically',
       '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych trials are segmented automatically'
     ]);
+  });
+
+  it('not hookable, guards the researcher listed already running: the fallback does not start them again', async () => {
+    const log = [];
+    win.GuardHoneypot = { init: () => log.push('honeypot.init'), getSessionSummary: fakeHoneypot([]).getSessionSummary };
+    win.GuardFriction = {
+      start: () => { log.push('friction.start'); return 'T'; },
+      injectRefusalNotices: () => log.push('injectRefusalNotices'),
+      onViolation: () => () => {}
+    };
+    win.initJsPsych = function () {};
+    const ctx = start({ guards: 'honeypot,friction' });
+    // What the researcher's own guard extensions left behind at initialize().
+    el('<div id="fg-honeypot"></div>');
+    el('<div id="ai-research-notice"></div>');
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.deepStrictEqual(log, []);
+  });
+
+  it('not hookable, friction token already set (no notice in the DOM): friction is not started again', async () => {
+    const log = [];
+    win.GuardFriction = {
+      start: () => { log.push('friction.start'); return 'T'; },
+      injectRefusalNotices: () => log.push('injectRefusalNotices'),
+      onViolation: () => () => {}
+    };
+    Object.defineProperty(win, '_guardFrictionToken', { value: 'THEIRS', configurable: true });
+    win.initJsPsych = function () {};
+    start({ guards: 'friction' });
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.deepStrictEqual(log, []);
+    assert.strictEqual(win._guardFrictionToken, 'THEIRS');
   });
 
   it('not hookable (jsPsych ran without ch.js): falls back to vanilla, with its guards and handlers', async () => {

@@ -47,7 +47,9 @@
 // After the session has ended (the final hook ran, ctx.jspsych.finalized),
 // both hooks leave the segmenter alone: rows of a second jsPsych instance
 // that runs afterwards get no cyborgHunterError ('finished') marker; the
-// adapter warned about the second instance when it was created.
+// adapter warned about the second instance when it was created. They also
+// stand down when the deferred session start failed (ctx.bootError, boot.js
+// failDeferred), which marked every row already.
 //
 // ctx (set by installJsPsychAdapter): { monitor, segmenter, jspsych, debug? }.
 // None of the hooks throws into jsPsych: a failure becomes cyborgHunterError
@@ -97,7 +99,7 @@ export class OneLinerExtension {
     this._loadArmed = false;
     this._armedParams = undefined;
     this._loadError = null;
-    if (!ctx || (ctx.jspsych && ctx.jspsych.finalized)) return;
+    if (!ctx || ctx.bootError || (ctx.jspsych && ctx.jspsych.finalized)) return;
     try {
       // Same anchor as the manual extension: ingest subtracts it from the
       // tab-away `start` times (same performance.now() clock).
@@ -120,7 +122,7 @@ export class OneLinerExtension {
     var ctx = OneLinerExtension.ctx;
     this._loadArmed = false;
     this._armedParams = undefined;
-    if (!ctx || (ctx.jspsych && ctx.jspsych.finalized)) return {};
+    if (!ctx || ctx.bootError || (ctx.jspsych && ctx.jspsych.finalized)) return {};
     var t0 = performance.now();
     var out;
     try {

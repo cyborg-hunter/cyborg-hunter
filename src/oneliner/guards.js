@@ -16,6 +16,14 @@
 //
 // A missing core (only possible outside the ch.js bundle) is skipped. A core
 // that throws is reported loudly and does not stop the other one.
+//
+// A guard already running is not started again. That happens on a jsPsych
+// page ch.js could not hook whose researcher listed the guard extensions
+// themselves: their initialize() ran before the fallback. A second
+// GuardHoneypot.init would reset its violation log, a second
+// injectRefusalNotices adds another refresh interval. The signs are the DOM
+// each one leaves (the honeypot's #fg-honeypot bait, friction's
+// #ai-research-notice) and friction's token.
 
 import { MESSAGES } from './errors.js';
 
@@ -27,13 +35,17 @@ export function startGuards(opts) {
   var win = opts.win, doc = opts.doc, guards = opts.guards;
   var debug = !!opts.debug;
 
+  function present(id) {
+    return typeof doc.getElementById === 'function' && !!doc.getElementById(id);
+  }
+
   function run() {
-    if (guards.honeypot && win.GuardHoneypot) {
+    if (guards.honeypot && win.GuardHoneypot && !present('fg-honeypot')) {
       attempt('honeypot', function () {
         win.GuardHoneypot.init({ jsPsych: null, friction: win.GuardFriction, debug: debug });
       });
     }
-    if (guards.friction && win.GuardFriction) {
+    if (guards.friction && win.GuardFriction && !win._guardFrictionToken && !present('ai-research-notice')) {
       // Once per page, as the friction extension's initialize() does (the
       // notices are not idempotent: each call adds another refresh interval).
       attempt('friction', function () { win.GuardFriction.injectRefusalNotices(); });

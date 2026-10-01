@@ -34,14 +34,26 @@
 // A form post fires submit and then pagehide. The submit already closed the
 // span, so pagehide only persists; without that the post would write an empty
 // extra segment. A submit the page cancels (validation) leaves the page
-// alive, so pagehide cuts again.
+// alive, so pagehide cuts again. form.requestSubmit() fires submit as a click
+// does; form.submit() fires no submit event, only formdata (see onFormData).
+//
+// A page shown again from the back/forward cache (pageshow with persisted)
+// keeps its monitor and this adapter's memory from before it was left; it
+// re-adopts the saved session, which later pages have added to, so the
+// indices continue and its next pagehide cuts again.
+//
+// When sessionStorage refuses the session (quota), a slim record still keeps
+// the segment index and the page count; the next page's blob then carries a
+// cyborgHunterError saying the earlier pages are only in their own saves.
+// Such notes travel on to every later page (record field `errors`).
 //
 // Listeners go on document and window, which exist while ch.js runs in
 // <head>; nothing here needs <body> before a click or a submit. The guards
 // (honeypot bait, friction) wait for DOMContentLoaded in guards.js.
 //
 // installVanillaAdapter({ win, ctx, clock?, warnChars? }) → {
-//   blob(), cut(source, nextTrialId?), persist(), restore(), teardown()
+//   blob(), cut(source, nextTrialId?), persist(), restore(), teardown(),
+//   noteError(text)   adds a cyborgHunterError note to this and later blobs
 // }
 //   ctx:        boot's context; gains ctx.handlers.mark / data / startFriction
 //   clock:      () => page origin, the segmenter's clock (performance.timeOrigin)
@@ -83,6 +95,7 @@ export function installVanillaAdapter(opts) {
   var restored = false;
   var submitted = false;        // this page's span was closed by a form submit
   var warnedSize = false;
+  var notes = [];               // cyborgHunterError notes, this page's and earlier pages'
 
   function readState() {
     try {
@@ -91,23 +104,47 @@ export function installVanillaAdapter(opts) {
     } catch (_) { return null; }   // blocked storage or a damaged value: start fresh
   }
 
+  // On failure (usually the quota) a slim record keeps the indices counting.
   function writeState(json) {
     try {
       win.sessionStorage.setItem(key, json);
+      return;
     } catch (e) {
       console.error(MESSAGES.storageFailed(message(e)));
     }
+    try {
+      win.sessionStorage.setItem(key, JSON.stringify({
+        segmentIndex: ctx.segmenter.state().segmentIndex,
+        pageCount: pageCount,
+        trials: [],
+        storageError: true,
+        errors: notes
+      }));
+    } catch (_) { /* storage blocked altogether: logged above */ }
+  }
+
+  function usable(saved) {
+    return !!saved && typeof saved.segmentIndex === 'number' && Array.isArray(saved.trials);
+  }
+
+  // Takes over a saved record's counters and notes (not its trials).
+  function adopt(saved) {
+    pageCount = (typeof saved.pageCount === 'number' ? saved.pageCount : 1) + 1;
+    earlierHoneypot = saved.honeypot || null;
+    notes = Array.isArray(saved.errors) ? saved.errors.slice() : [];
+    if (saved.storageError) {
+      notes.push('session storage full on page ' + (pageCount - 1) + '; earlier pages only in their own saves');
+    }
+    ctx.segmenter.setSegmentIndex(saved.segmentIndex);
   }
 
   function restore() {
     if (restored) return null;
     restored = true;
     var saved = readState();
-    if (!saved || typeof saved.segmentIndex !== 'number' || !Array.isArray(saved.trials)) return null;
+    if (!usable(saved)) return null;
     trials = saved.trials.concat(trials);
-    pageCount = (typeof saved.pageCount === 'number' ? saved.pageCount : 1) + 1;
-    earlierHoneypot = saved.honeypot || null;
-    ctx.segmenter.setSegmentIndex(saved.segmentIndex);
+    adopt(saved);
     return saved;
   }
 
@@ -122,7 +159,10 @@ export function installVanillaAdapter(opts) {
     }
     if (!current) return earlierHoneypot;
     var origin = clock();
-    var violations = parseViolations(earlierHoneypot).concat(parseViolations(current).map(function (v) {
+    // Earlier entries tagged with this page's origin are this page's own
+    // (re-adopted after the back/forward cache); `current` has them all.
+    var earlier = parseViolations(earlierHoneypot).filter(function (v) { return v.pageOrigin !== origin; });
+    var violations = earlier.concat(parseViolations(current).map(function (v) {
       return Object.assign({}, v, { pageOrigin: origin });
     }));
     var reports = [earlierHoneypot && earlierHoneypot.ai_report_session, current.ai_report_session]
@@ -144,6 +184,7 @@ export function installVanillaAdapter(opts) {
     };
     var hp = honeypotSummary();
     if (hp) Object.assign(b, hp);
+    if (notes.length) b.cyborgHunterError = notes.join('; ');
     return b;
   }
 
@@ -187,7 +228,8 @@ export function installVanillaAdapter(opts) {
         segmentIndex: ctx.segmenter.state().segmentIndex,
         pageCount: pageCount,
         trials: trials,
-        honeypot: honeypotSummary()
+        honeypot: honeypotSummary(),
+        errors: notes
       });
     } catch (e) {
       console.error(MESSAGES.storageFailed(message(e)));
@@ -238,6 +280,10 @@ export function installVanillaAdapter(opts) {
       var form = ev.target;
       cut('page');
       submitted = true;
+      // A cancelled submit (validation) keeps the page, so its next pagehide
+      // must cut. Decided once the page's own handlers have run; a bubble
+      // listener would miss a page that stops the event's propagation.
+      win.setTimeout(function () { if (ev.defaultPrevented) submitted = false; }, 0);
       persist();
       if (!form || typeof form.querySelector !== 'function') return;
       var input = form.querySelector('input[name="' + HIDDEN_INPUT + '"]');
@@ -253,10 +299,33 @@ export function installVanillaAdapter(opts) {
     }
   }
 
-  // Bubble phase on window: by now the page's handlers have run. A cancelled
-  // submit keeps the page, so its next pagehide must cut.
-  function afterSubmit(ev) {
-    if (ev.defaultPrevented) submitted = false;
+  // form.submit() posts without a submit event; building its entry list
+  // fires formdata, so the blob goes along (with the segments cut so far:
+  // nothing is cut here, since new FormData(form) fires formdata too; the
+  // following pagehide cuts and saves this page's last span for the next
+  // page). After a submit event the hidden input is already in the list.
+  function onFormData(ev) {
+    try {
+      var fd = ev.formData;
+      if (fd && typeof fd.has === 'function' && !fd.has(HIDDEN_INPUT)) fd.set(HIDDEN_INPUT, JSON.stringify(blob()));
+    } catch (e) {
+      console.error(MESSAGES.vanillaEventFailed(message(e)));
+    }
+  }
+
+  // Back/forward cache: see the header. Without a usable record (storage
+  // blocked) the page keeps what it had in memory.
+  function onPageShow(ev) {
+    if (!ev || !ev.persisted) return;
+    try {
+      submitted = false;
+      var saved = readState();
+      if (!usable(saved)) return;
+      trials = saved.trials.slice();
+      adopt(saved);
+    } catch (e) {
+      console.error(MESSAGES.vanillaEventFailed(message(e)));
+    }
   }
 
   function onPageHide() {
@@ -271,8 +340,9 @@ export function installVanillaAdapter(opts) {
   restore();
   doc.addEventListener('click', onClick, true);
   doc.addEventListener('submit', onSubmit, true);
-  win.addEventListener('submit', afterSubmit, false);
+  doc.addEventListener('formdata', onFormData, true);
   win.addEventListener('pagehide', onPageHide);
+  win.addEventListener('pageshow', onPageShow);
 
   ctx.handlers.mark = function (trialId) { cut('manual', trialId); };
   ctx.handlers.data = function () { cut('manual'); return blob(); };
@@ -283,11 +353,13 @@ export function installVanillaAdapter(opts) {
     cut: cut,
     persist: persist,
     restore: restore,
+    noteError: function (text) { notes.push(String(text)); },
     teardown: function () {
       doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('submit', onSubmit, true);
-      win.removeEventListener('submit', afterSubmit, false);
+      doc.removeEventListener('formdata', onFormData, true);
       win.removeEventListener('pagehide', onPageHide);
+      win.removeEventListener('pageshow', onPageShow);
       delete ctx.handlers.mark;
       delete ctx.handlers.data;
       delete ctx.handlers.startFriction;

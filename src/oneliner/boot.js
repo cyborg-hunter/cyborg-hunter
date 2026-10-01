@@ -3,7 +3,10 @@
 //   1. double-load sentinel: if cyborg-hunter.min.js (or another ch.js)
 //      already ran, say so and stop: no monitor, window.CyborgHunter untouched;
 //   2. config (tag data-* attributes over window.CyborgHunterConfig);
-//   3. participant id (warns when it has to fall back to a random id);
+//   3. participant id (warns when it has to fall back to a random id). The
+//      id is kept for the tab in sessionStorage, so a later page without an
+//      id of its own reuses the first page's random id (source 'session')
+//      and continues its session; a URL, attribute or config id still wins;
 //   4. a monitor (its session starts at step 6);
 //   5. host: 'jspsych' when initJsPsych is already defined, else 'vanilla'
 //      (the host adapters install their hooks into ctx.handlers). The vanilla
@@ -41,8 +44,8 @@
 // The sentinel is set only after a successful boot, so a later
 // cyborg-hunter.min.js still works if ch.js failed. The exception is a
 // failure at the deferred session start (step 6, ch.js in <head>): boot has
-// returned by then, so the namespace and the sentinel stay and the error is
-// only logged.
+// returned by then, so the namespace and the sentinel stay, and what can
+// still be saved is marked (failDeferred below).
 
 import { init } from '../core/monitor.js';
 import { createSegmentDiffer } from './segment-diff.js';
@@ -54,6 +57,15 @@ import { buildPublicApi } from './api.js';
 import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, watchHostPlacement } from './adapters/jspsych.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
+
+var PID_KEY = 'cyborg-hunter:oneliner:participantId';
+
+function sessionGet(win, key) {
+  try { return win.sessionStorage.getItem(key); } catch (_) { return null; }
+}
+function sessionSet(win, key, value) {
+  try { win.sessionStorage.setItem(key, value); } catch (_) { /* blocked: the id is per page then */ }
+}
 
 export function boot(opts) {
   var win = opts.win;
@@ -76,7 +88,12 @@ export function boot(opts) {
       params: opts.participantParams || DEFAULT_PARAMS,
       random: function () { return randomParticipantId(win.crypto || globalThis.crypto); }
     });
-    if (pid.source === 'random') console.warn(MESSAGES.randomId(pid.id));
+    if (pid.source === 'random') {
+      var kept = sessionGet(win, PID_KEY);
+      if (kept) pid = { id: kept, source: 'session' };
+      else console.warn(MESSAGES.randomId(pid.id));
+    }
+    sessionSet(win, PID_KEY, pid.id);
 
     monitor = monitorFactory(Object.assign({}, config.monitor, { participantId: pid.id, preset: config.preset }));
     var differ = createSegmentDiffer(monitor);
@@ -103,14 +120,14 @@ export function boot(opts) {
     // with ch.js in <head> it waits for DOMContentLoaded; everything else,
     // including the initJsPsych wrap the experiment code may call before
     // DOMContentLoaded, is in place at once.
+    var adapter = null;   // the jsPsych adapter, set below
     if (win.document.body) startMonitoring(ctx);
     else {
       win.document.addEventListener('DOMContentLoaded', function () {
-        try { startMonitoring(ctx); } catch (e) { fail(ctx, e); }
+        try { startMonitoring(ctx); } catch (e) { failDeferred(ctx, adapter, e); }
       }, { once: true });
     }
 
-    var adapter = null;
     if (host === 'vanilla') startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
     else adapter = installJsPsychAdapter({ win: win, ctx: ctx });
     watchHostPlacement({
@@ -140,6 +157,34 @@ function startMonitoring(ctx) {
   ctx.monitor.startSession();
   var started = ctx.segmenter.start();
   if (started && started.error) throw new Error('could not open the first trial: ' + started.error);
+}
+
+// The deferred session start failed. The monitor is destroyed and the
+// failure logged once; ctx.bootError keeps the placement check from taking
+// the page for one ch.js could not hook. Then:
+//   vanilla  the adapter stays (cut() does nothing without an open span), so
+//            data(), the form's hidden input and the next page still carry
+//            the earlier pages, with a cyborgHunterError note;
+//   jsPsych  the initJsPsych wrap is removed, so a later initJsPsych() runs
+//            jsPsych as if ch.js were absent. An instance created before
+//            DOMContentLoaded keeps the extensions already injected (they
+//            stand down on ctx.bootError) and gets cyborgHunterError on every
+//            row.
+function failDeferred(ctx, adapter, e) {
+  var msg = String((e && e.message) || e);
+  ctx.bootError = msg;
+  try { ctx.monitor.destroy(); } catch (_) { /* already failing */ }
+  console.error(MESSAGES.bootFailed(msg));
+  try {
+    if (ctx.vanilla) {
+      var page = ctx.vanilla.blob().cyborgHunterOneLiner.pageCount;
+      ctx.vanilla.noteError('Cyborg Hunter did not start on page ' + page + ': ' + msg);
+    }
+    if (adapter) {
+      adapter.restore();
+      if (ctx.jsPsych) ctx.jsPsych.data.addProperties({ cyborgHunterError: 'Cyborg Hunter did not start: ' + msg });
+    }
+  } catch (_) { /* the failure is logged above */ }
 }
 
 function fail(ctx, e) {
