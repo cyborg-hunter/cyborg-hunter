@@ -83,7 +83,7 @@ export function dedupeExtensions(list) {
 // Rules: (a) a trial already listing a cyborg-hunter entry keeps it and gets
 // no second one for that name; (b) an object reached twice (the same trial in
 // two places) is handled once; a non-array `extensions` is left alone with a
-// warning.
+// warning. A cyborg-hunter entry with null/undefined params gets `params: {}`.
 //
 // Each trial gets its own shallow copy of an entry and of its params:
 // OneLinerExtension ties an on_load to its trial by the params object (see
@@ -129,6 +129,16 @@ export function injectExtensions(timeline, entries, seen) {
     if (node.data && node.data.trial_type_label === ENTRY_TRIAL_LABEL) result.entryTrialFound = true;
 
     list = list || [];
+    // A researcher's own cyborg-hunter entry written without params (the
+    // manual docs' per-trial loop) would reach on_start and on_load as
+    // `undefined` on every trial, so a late load callback could pass for this
+    // trial's own. Give it a params object; params a researcher wrote are
+    // never touched. A frozen entry stays as it is (the write would throw and
+    // leave the rest of the timeline unmonitored).
+    list.forEach(function (e) {
+      if (!e || !isChType(e.type) || e.params != null) return;
+      try { e.params = {}; } catch (err) { /* frozen or sealed: left params-less */ }
+    });
     var present = list.map(nameOf);
     // Counted only for a researcher's own entry, not one of ours already
     // pushed into an extensions array that several trials share.

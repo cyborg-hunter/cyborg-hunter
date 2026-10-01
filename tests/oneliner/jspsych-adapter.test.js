@@ -72,6 +72,38 @@ describe('injectExtensions: dedupe rules (a) and (b)', () => {
     assert.notStrictEqual(got[1].params, got[2].params);
   });
 
+  // Same reason: a researcher's CH entry without params would reach
+  // on_start and on_load as `undefined` for every trial.
+  it('a researcher CH entry without params gets its own {}; existing params are kept as they are', () => {
+    const bare = { type: OldCh }, nulled = { type: OldCh, params: null };
+    const p = { trialId: 'x' }, withParams = { type: OldCh, params: p };
+    const inherited = { type: OldCh };
+    const leaf = { type: 'kb' };
+    const r = injectExtensions([
+      { type: 'kb', extensions: [bare] },
+      { type: 'kb', extensions: [nulled] },
+      { type: 'kb', extensions: [withParams] },
+      { timeline: [leaf], extensions: [inherited] }
+    ], [CH]);
+    assert.deepStrictEqual(bare.params, {});
+    assert.deepStrictEqual(nulled.params, {});
+    assert.notStrictEqual(bare.params, nulled.params);
+    assert.strictEqual(withParams.params, p);
+    assert.deepStrictEqual(p, { trialId: 'x' });
+    assert.deepStrictEqual(inherited.params, {});
+    assert.equal(r.skippedOwnEntry, 4);
+    assert.ok(!Object.hasOwn(leaf, 'extensions'), 'the inheriting child gets no list of its own');
+  });
+
+  it('a frozen params-less CH entry is left as it is and the rest of the timeline is still instrumented', () => {
+    const frozen = Object.freeze({ type: OldCh });
+    const later = { type: 'kb' };
+    const r = injectExtensions([{ type: 'kb', extensions: [frozen] }, later], [CH]);
+    assert.equal(frozen.params, undefined);
+    assert.deepStrictEqual(names(later.extensions), ['cyborg-hunter']);
+    assert.equal(r.trials, 2);
+  });
+
   it('an extensions array shared by two trials gets one copy and no own-entry count', () => {
     const list = [{ type: Mouse }];
     const r = injectExtensions([{ type: 'kb', extensions: list }, { type: 'kb', extensions: list }], [CH]);

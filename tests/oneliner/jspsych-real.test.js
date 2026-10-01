@@ -218,6 +218,28 @@ describe('ch.js on real jsPsych: a synchronous trial before a promise-returning 
         'anchor ' + t.integrity.trialStart_perfNow + ' precedes the plugin\'s on_load at ' + beforeLoad[0]);
       assert.deepStrictEqual(errors, []);
     });
+
+    // A half-migrated page: ch.js is loaded, but the manual docs' per-trial
+    // loop is still there and adds a cyborg-hunter entry with no params.
+    // jsPsych then hands on_start and on_load `undefined` for every trial.
+    it(`a researcher's params-less per-trial entry anchors at its own on_load (${label})`, async () => {
+      bootCh();
+      const jsPsych = win.initJsPsych({});
+      const cf = callFunction();
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const tl = [{ type: Timer }, cf, { type: PromiseLoad }];
+      tl.forEach((t) => { t.extensions = (t.extensions || []).concat([{ type: CyborgHunterExtension }]); });
+      beforeLoad.length = 0;
+      const rows = await runTimeline(jsPsych, tl);
+      assert.equal(rows.length, 3);
+      assert.equal(beforeLoad.length, 1);
+      const t = rows[2];
+      assert.ok(!('cyborgHunterError' in t), JSON.stringify(t.cyborgHunterError));
+      assert.equal(typeof t.integrity.trialStart_perfNow, 'number');
+      assert.ok(t.integrity.trialStart_perfNow >= beforeLoad[0],
+        'anchor ' + t.integrity.trialStart_perfNow + ' precedes the plugin\'s on_load at ' + beforeLoad[0]);
+      assert.deepStrictEqual(errors, []);
+    });
   }
 });
 
