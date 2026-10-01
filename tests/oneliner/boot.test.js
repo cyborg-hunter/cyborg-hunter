@@ -58,6 +58,27 @@ function paste(text) {
 }
 
 describe('boot', () => {
+  it('data-debug shows the badge and logs one summary; the id source is the resolved parameter name', () => {
+    const infos = [];
+    console.info = (m) => infos.push(String(m));
+    win.history.pushState({}, '', '/study.html?workerId=W1');
+    ctx = boot({ script: script({ debug: '', guards: 'none' }), win, participantParams: ['workerId'] });
+    assert.strictEqual(infos.length, 1);
+    assert.match(infos[0], /^Cyborg Hunter active · vanilla mode · 0 mark elements · ID from workerId · honeypot off · friction off$/);
+    assert.strictEqual(win.document.getElementById('ch-debug-badge').textContent, infos[0]);
+    assert.strictEqual(typeof win.__cyborgHunterDebug.stats().segmentWriteMs.push, 'function');
+  });
+
+  it('without data-debug there is no badge, no log, no global and no ctx.debug', () => {
+    const infos = [];
+    console.info = (m) => infos.push(String(m));
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(win.document.getElementById('ch-debug-badge'), null);
+    assert.strictEqual(win.__cyborgHunterDebug, undefined);
+    assert.strictEqual(ctx.debug, undefined);
+    assert.deepStrictEqual(infos, []);
+  });
+
   it('captures the ch.js tag\'s nonce for the replay script', () => {
     ctx = boot({ script: Object.assign(script({ participantId: 'P1', guards: 'none' }), { nonce: 'xyz' }), win });
     assert.strictEqual(ctx.scriptNonce, 'xyz');

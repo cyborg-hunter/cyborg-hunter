@@ -123,7 +123,8 @@ export class OneLinerExtension {
     this._loadArmed = false;
     this._armedParams = undefined;
     if (!ctx || ctx.bootError || (ctx.jspsych && ctx.jspsych.finalized)) return {};
-    var t0 = performance.now();
+    // Timed only under data-debug: no clock reads otherwise.
+    var t0 = ctx.debug ? performance.now() : 0;
     var out;
     try {
       var idx = this.jsPsych.getProgress().current_trial_global;

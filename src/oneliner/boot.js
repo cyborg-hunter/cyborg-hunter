@@ -34,7 +34,9 @@
 //      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla host (and
 //      on the not-hookable fallback) the standalone recorder, started after
 //      DOMContentLoaded. CyborgHunter.replay() is wired either way;
-//   9. window.CyborgHunter = the one-liner namespace, then the sentinel.
+//   9. window.CyborgHunter = the one-liner namespace, then the sentinel;
+//  10. data-debug only (debug.js): the badge and the console summary, shown
+//      once now and again when the jsPsych timeline is walked.
 //
 // boot({ script, win, monitorFactory?, participantParams? }) → ctx | null
 //   script:            the ch.js <script> element (document.currentScript), or null
@@ -43,7 +45,8 @@
 //   participantParams: URL parameter names for the participant id, in order
 // ctx = { config, participantId, participantIdSource, monitor, differ,
 //         segmenter, host, scriptSrc, handlers, win, api, vanilla?,
-//         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle) }
+//         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
+//         debug? (data-debug) }
 //
 // boot never throws into the page: any failure is logged as bootFailed, a
 // monitor created before the failure is destroyed, and boot returns null.
@@ -64,6 +67,7 @@ import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, watchHostPlacement } from './adapters/jspsych.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
 import { installReplay } from './replay-loader.js';
+import { createDebug } from './debug.js';
 
 // Not under the session prefix (adapters/vanilla.js, cyborg-hunter:oneliner:
 // session:<id>), so no participant id can collide with it.
@@ -124,6 +128,11 @@ export function boot(opts) {
       api: null
     };
     ctx.api = buildPublicApi(ctx);
+    // data-debug only: the badge, the console summary and the perf counters.
+    if (config.debug) {
+      ctx.debug = createDebug({ doc: win.document, ctx: ctx });
+      win.__cyborgHunterDebug = { stats: ctx.debug.stats };
+    }
     var replay = installReplay({ win: win, ctx: ctx });
     if (host === 'vanilla') ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });
 
@@ -157,6 +166,7 @@ export function boot(opts) {
     });
     win.CyborgHunter = ctx.api;
     win.__cyborgHunterLoaded = 'ch.js';
+    if (ctx.debug) ctx.debug.update();
     return ctx;
   } catch (e) {
     fail(ctx || { monitor: monitor }, e);
