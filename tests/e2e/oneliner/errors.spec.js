@@ -46,6 +46,20 @@ test('not hookable (ch.js above jspsych.js): loud error with fix + link, vanilla
   expect(out.summaryCsv[0].totalPasteEvents).toBe('1');
 });
 
+test('bundled jsPsych (no global initJsPsych): one notHookable error once jsPsych starts', async ({ page }) => {
+  const log = collectConsole(page);
+  await page.goto(FIX + 'jspsych-bundled.html');
+  await page.getByText('Only question').waitFor();
+  await page.click('#jspsych-survey-text-next');
+  await page.waitForFunction(() => typeof window.__csv === 'string');
+
+  expect(chErrors(log)).toEqual([MESSAGES.notHookable()]);
+  expect(await page.evaluate(() => window.CyborgHunter.data().cyborgHunterOneLiner.host)).toBe('vanilla');
+  const rows = parseCsv(await page.evaluate(() => window.__csv));
+  expect(rows).toHaveLength(1);
+  expect(rows[0].integritySegment ?? '').toBe('');
+});
+
 test('double load (ch.js then cyborg-hunter.min.js and the guard bundles): loud errors, first monitor intact', async ({ page }) => {
   const log = collectConsole(page);
   await page.goto(FIX + 'jspsych-double-load.html');

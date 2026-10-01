@@ -635,6 +635,41 @@ describe('host diagnosis', () => {
     assert.strictEqual(ctx.host, 'vanilla');
   });
 
+  // A bundler or ES-module build of jsPsych never defines window.initJsPsych,
+  // so boot picks the vanilla host; jsPsych starting is still visible as the
+  // <html jspsych> attribute.
+  it('bundled jsPsych (no global initJsPsych): one notHookable error when jsPsych starts', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'vanilla');
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    win.document.documentElement.setAttribute('jspsych', 'present-again');
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.notHookable()]);
+    assert.strictEqual(ctx.host, 'vanilla');
+  });
+
+  it('loaded above jspsych.js: jsPsych starting later adds no second error', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.initJsPsych = function () {};
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.loadedAboveJsPsych()]);
+  });
+
+  it('bundled jsPsych after a boot failure: no placement error', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    ctx.bootError = 'simulated';
+    win.document.documentElement.setAttribute('jspsych', 'present');
+    await tick();
+    assert.deepStrictEqual(errors, []);
+  });
+
   it('a page without jsPsych stays quiet', async () => {
     loading();
     ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });

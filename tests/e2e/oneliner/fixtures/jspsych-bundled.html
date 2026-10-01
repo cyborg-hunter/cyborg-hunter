@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: bundled jsPsych (no global initJsPsych)</title>
+  <!-- Fixture for tests/e2e/oneliner/errors.spec.js. Stands in for a bundler
+       or ES-module build: jspsych.js is loaded, then initJsPsych is moved off
+       window before ch.js runs, so ch.js sees no global initJsPsych, boots on
+       the vanilla host, and only notices jsPsych when it starts running.
+       One trial:
+         q (survey-text)                                            1 row -->
+  <script src="/tests/fixtures/jspsych-7.3.1/jspsych.js"></script>
+  <script src="/tests/fixtures/jspsych-7.3.1/plugin-survey-text.js"></script>
+  <script>
+    // jspsych.js declares initJsPsych with var (not deletable), so it is
+    // cleared instead.
+    window.bundledInit = window.initJsPsych;
+    window.initJsPsych = undefined;
+  </script>
+  <script src="/dist/ch.js" data-participant-id="E2E-BUNDLED-1"></script>
+</head>
+<body>
+  <script>
+    var jsPsych = bundledInit({
+      on_finish: function () { window.__csv = jsPsych.data.get().csv(); }
+    });
+    jsPsych.run([{
+      type: jsPsychSurveyText,
+      questions: [{ prompt: 'Only question', name: 'q' }],
+      data: { name: 'q' }
+    }]);
+  </script>
+</body>
+</html>

@@ -414,7 +414,10 @@ export function installJsPsychAdapter(opts) {
 //     wrapper is removed, ctx.host becomes 'vanilla' and onVanilla() (from
 //     boot) starts the guards and the vanilla adapter.
 //   vanilla host: if initJsPsych appears by DOMContentLoaded, ch.js was
-//     loaded above jspsych.js. ctx.host stays 'vanilla'.
+//     loaded above jspsych.js. Otherwise, if jsPsych starts running anyway
+//     (the same attribute), the page built jsPsych from a bundler or ES
+//     module, which never defines window.initJsPsych: notHookable, once.
+//     ctx.host stays 'vanilla' either way.
 export function watchHostPlacement(opts) {
   var win = opts.win, doc = opts.doc, ctx = opts.ctx, adapter = opts.adapter;
   var onVanilla = opts.onVanilla;
@@ -437,9 +440,28 @@ export function watchHostPlacement(opts) {
       notHookable();
     });
     mo.observe(root, { attributes: true, attributeFilter: ['jspsych'] });
-  } else if (doc.readyState === 'loading') {
-    doc.addEventListener('DOMContentLoaded', function () {
-      if (typeof win.initJsPsych === 'function') console.error(MESSAGES.loadedAboveJsPsych());
-    }, { once: true });
+  } else {
+    var reported = false;
+    if (doc.readyState === 'loading') {
+      doc.addEventListener('DOMContentLoaded', function () {
+        if (reported || typeof win.initJsPsych !== 'function') return;
+        reported = true;
+        console.error(MESSAGES.loadedAboveJsPsych());
+      }, { once: true });
+    }
+    var vroot = doc.documentElement;
+    var bundled = function () {
+      if (reported || ctx.bootError || ctx.host === 'manual') return;
+      reported = true;
+      console.error(MESSAGES.notHookable());
+    };
+    if (vroot.hasAttribute('jspsych')) { bundled(); return; }
+    if (typeof win.MutationObserver !== 'function') return;
+    var vmo = new win.MutationObserver(function () {
+      if (!vroot.hasAttribute('jspsych')) return;
+      vmo.disconnect();
+      bundled();
+    });
+    vmo.observe(vroot, { attributes: true, attributeFilter: ['jspsych'] });
   }
 }
