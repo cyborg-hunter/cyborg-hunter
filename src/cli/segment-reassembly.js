@@ -114,8 +114,9 @@ export function collectSegments(raw) {
 // config } — score fields and libraryVersion are NOT in the session (finalize()
 // stores them separately). Returns { session, score, pageOrigins } or null for
 // no segments. Segments from a later page (different pageOrigin) have their
-// times re-based to the first page's origin. The score is the last segment's,
-// i.e. the last page's monitor only (a score cannot be summed across pages).
+// times re-based to the first page's origin. Counters and score add up the
+// pages (pageTotals below); single-page data keeps the last segment's score
+// object as it is.
 export function reassembleSegments(segments) {
   if (!Array.isArray(segments) || segments.length === 0) return null;
   const sorted = segments.slice().sort((a, b) => a.segmentIndex - b.segmentIndex);
@@ -139,20 +140,65 @@ export function reassembleSegments(segments) {
     session[alias] = session[canonical];   // same array, as in the monitor
   }
 
-  // Counters are cumulative per monitor, and every page load runs a new
-  // monitor: the session total is the sum of each page's last counters (a page
-  // is a run of consecutive segments with one pageOrigin). `?? 0` matches
-  // finalize()'s destructuring defaults.
-  const last = sorted[sorted.length - 1];
-  for (const k of ['pasteCount', 'copyCount', 'dropCount']) session[k] = 0;
-  sorted.forEach((s, i) => {
-    const next = sorted[i + 1];
-    if (next && next.pageOrigin === s.pageOrigin) return;
-    const counters = s.counters || {};
-    for (const k of ['pasteCount', 'copyCount', 'dropCount']) session[k] += counters[k] ?? 0;
-  });
+  // Counters and score are cumulative per monitor, and every page load runs a
+  // new monitor: the session total is the sum over pages of each page's last
+  // segment. `?? 0` matches finalize()'s destructuring defaults.
+  const lasts = pageLasts(sorted);
+  for (const k of ['pasteCount', 'copyCount', 'dropCount']) {
+    session[k] = lasts.reduce((sum, s) => sum + ((s.counters || {})[k] ?? 0), 0);
+  }
   const withConfig = sorted.find(s => s.config);
   session.config = withConfig ? withConfig.config : undefined;
 
-  return { session, score: last.score ?? null, pageOrigins };
+  return { session, score: sessionScore(lasts), pageOrigins };
+}
+
+// The last segment of each page, in page order. A page is identified by its
+// pageOrigin, not by a run of consecutive segments: a page shown again from
+// the back/forward cache keeps its origin and its monitor, so its last
+// segment already holds everything that monitor counted, earlier visit
+// included (summing per run would count the first visit twice).
+function pageLasts(sorted) {
+  const byOrigin = new Map();
+  for (const s of sorted) byOrigin.set(s.pageOrigin, s);   // sorted: the last one wins
+  return [...byOrigin.values()].sort((a, b) => a.segmentIndex - b.segmentIndex);
+}
+
+// One page: that segment's score object, untouched. Several pages: the same
+// shape as the monitor's (src/core/scoring.js:130-139, monitor.js:413-420),
+// added up. Each hard signal's count is the sum of the pages' counts, its
+// threshold the last page's, triggered = count >= threshold; softScore and
+// trialsCompleted are sums; softScoreThreshold is the last page's.
+function sessionScore(lasts) {
+  const scored = lasts.filter(s => s.score && typeof s.score === 'object');
+  if (scored.length === 0) return lasts[lasts.length - 1].score ?? null;
+  const last = scored[scored.length - 1].score;
+  if (lasts.length === 1) return last;
+
+  const hardScore = {};
+  let softScore = 0;
+  let trialsCompleted = 0;
+  for (const { score } of scored) {
+    for (const [k, h] of Object.entries(score.hardScore || {})) {
+      if (!h || typeof h !== 'object') continue;
+      if (!hardScore[k]) hardScore[k] = { count: 0, threshold: undefined, triggered: false };
+      hardScore[k].count += h.count ?? 0;
+      if (h.threshold !== undefined) hardScore[k].threshold = h.threshold;
+    }
+    softScore += score.softScore ?? 0;
+    trialsCompleted += score.trialsCompleted ?? 0;
+  }
+  for (const k of Object.keys(hardScore)) {
+    const lastThreshold = last.hardScore?.[k]?.threshold;
+    if (lastThreshold !== undefined) hardScore[k].threshold = lastThreshold;
+    hardScore[k].triggered = typeof hardScore[k].threshold === 'number' && hardScore[k].count >= hardScore[k].threshold;
+  }
+  return {
+    ...last,
+    hardScore,
+    softScore,
+    softScoreThreshold: last.softScoreThreshold,
+    anyHardTriggered: Object.values(hardScore).some(h => h.triggered),
+    trialsCompleted
+  };
 }

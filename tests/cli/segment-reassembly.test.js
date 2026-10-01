@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { collectSegments, reassembleSegments, rebaseTimes, ALIAS_KEYS } from '../../src/cli/segment-reassembly.js';
 import { ALIAS_KEYS as DIFFER_ALIAS_KEYS } from '../../src/oneliner/segment-diff.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { computeParticipantSummary } from '../../src/cli/analyzers/summary.js';
 import { ingest } from '../../src/cli/ingest.js';
 import Papa from 'papaparse';
 import { mkdtempSync, writeFileSync, rmSync } from 'fs';
@@ -38,6 +39,64 @@ describe('reassembleSegments', () => {
     const v = { t: 1, start: 2, startTime: 3, trialStart_perfNow: 4, duration_ms: 9, timestamp: 'x', nested: [{ t: 5 }] };
     assert.strictEqual(rebaseTimes(v, 0), v);
     assert.deepStrictEqual(rebaseTimes(v, 10), { t: 11, start: 12, startTime: 13, trialStart_perfNow: 14, duration_ms: 9, timestamp: 'x', nested: [{ t: 15 }] });
+  });
+});
+
+// Every page load runs a new monitor, so its score covers that page only.
+// The session score adds the pages up (src/core/scoring.js's hardScore shape).
+describe('multi-page score', () => {
+  const hard = (n, th = 2) => ({ paste: { count: n, threshold: th, triggered: n >= th } });
+  // One segment per page; `pastes` is the page monitor's cumulative paste count.
+  const page = (i, origin, pastes, soft, extra = {}) => ({
+    segmentIndex: i, source: 'page', trialId: 'span-' + i, pageOrigin: origin,
+    deltas: { pasteEvents: Array.from({ length: pastes }, (_, k) => ({ t: 10 + k })), tabAwaySums: [], tabAwayEvents: [], sidebarEvents: [], viewportWidthShifts: [] },
+    counters: { pasteCount: pastes, copyCount: 0, dropCount: 0 },
+    score: { hardScore: hard(pastes), softScore: soft, softScoreThreshold: 6, anyHardTriggered: pastes >= 2, trialsCompleted: 1 },
+    ...extra });
+  const row = s => ({ trialId: s.trialId, integrity: { trialId: s.trialId, startTime: 5, pasteEvents: s.deltas.pasteEvents }, integritySegment: s });
+
+  it('two pastes on page 1 and a clean page 2: hard-triggered (the last page alone is clean)', () => {
+    const { score } = reassembleSegments([page(0, 1000, 2, 4), page(1, 9000, 0, 0)]);
+    assert.deepStrictEqual(score.hardScore, { paste: { count: 2, threshold: 2, triggered: true } });
+    assert.equal(score.anyHardTriggered, true);
+    assert.equal(score.softScore, 4);
+    assert.equal(score.trialsCompleted, 2);
+    assert.equal(score.softScoreThreshold, 6);
+    const p = extractIntegrityData({ participantId: 'P', trials: [page(0, 1000, 2, 4), page(1, 9000, 0, 0)].map(row) }, {});
+    const s = computeParticipantSummary(p, {});
+    assert.equal(s.hardTriggered, true);
+    assert.equal(s.authoritativeSoftScore, 4);
+  });
+  it('one paste on each page with threshold 2: the session crosses it although no page did', () => {
+    const { score } = reassembleSegments([page(0, 1000, 1, 1), page(1, 9000, 1, 1)]);
+    assert.deepStrictEqual(score.hardScore.paste, { count: 2, threshold: 2, triggered: true });
+    assert.equal(score.anyHardTriggered, true);
+    assert.equal(score.softScore, 2);
+    const p = extractIntegrityData({ participantId: 'Q', trials: [page(0, 1000, 1, 1), page(1, 9000, 1, 1)].map(row) }, {});
+    assert.equal(computeParticipantSummary(p, {}).hardTriggered, true);
+  });
+  it('takes the thresholds from the last page', () => {
+    const last = page(1, 9000, 0, 0);
+    last.score.hardScore.paste.threshold = 5;
+    last.score.softScoreThreshold = 9;
+    const { score } = reassembleSegments([page(0, 1000, 2, 4), last]);
+    assert.deepStrictEqual(score.hardScore.paste, { count: 2, threshold: 5, triggered: false });
+    assert.equal(score.anyHardTriggered, false);
+    assert.equal(score.softScoreThreshold, 9);
+  });
+  it('single-page data: the score is the last segment\'s, unchanged', () => {
+    const s0 = page(0, 1000, 1, 1); const s1 = page(1, 1000, 3, 2);
+    assert.strictEqual(reassembleSegments([s0, s1]).score, s1.score);
+  });
+  it('a page shown again from the back/forward cache counts its monitor once', () => {
+    // Page A (origin 1000) → page B (9000) → back to A: A's monitor kept
+    // counting, so its last segment already holds A's whole total.
+    const segs = [page(0, 1000, 1, 1), page(1, 9000, 1, 1), page(2, 1000, 2, 3)];
+    const { session, score } = reassembleSegments(segs);
+    assert.equal(session.pasteCount, 2 + 1);
+    assert.equal(score.hardScore.paste.count, 3);
+    assert.equal(score.softScore, 3 + 1);
+    assert.equal(score.trialsCompleted, 2);
   });
 });
 
@@ -144,8 +203,9 @@ describe('rolling segments through a jsPsych-style CSV', () => {
       assert.equal(participants.length, 1);
       const p = participants[0];
       assert.deepStrictEqual(p.session.sidebarEvents, [{ t: 1 }, { t: 5002 }], 'second page re-based by its pageOrigin');
-      assert.equal(p.score.softScore, 1, 'score from the last segment');
-      assert.equal(p.score.trialsCompleted, 2);
+      // Two pages (origins 0 and 5000): soft score and trial counts add up.
+      assert.equal(p.score.softScore, 0 + 1);
+      assert.equal(p.score.trialsCompleted, 1 + 2);
       assert.equal(p.trials[1].startTime, 5010, "second trial's anchor re-based");
       assert.equal(p.trials[0].startTime, 10);
     } finally {
