@@ -15,6 +15,9 @@
 // is what this entry point bundles instead.
 
 export { renderIndexHtml } from './renderers/html-index-core.js';
+// The replay viewer's CSS, shared with the demo's replay-host iframe so it
+// no longer keeps its own hand-synced copy (results.js passes it down).
+export { REPLAY_STYLES_CSS } from './renderers/replay-styles.js';
 export { computeSummary } from './analyzers/summary.js';
 export { detectEdgeExits } from './analyzers/edge-exit.js';
 export { rankTriage } from './analyzers/triage.js';
