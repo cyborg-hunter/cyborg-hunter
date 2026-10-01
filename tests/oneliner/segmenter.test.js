@@ -185,7 +185,7 @@ describe('segmenter', () => {
     assert.equal(again.segment.segmentIndex, 0);
   });
 
-  // ── fix round 1: partial failures keep data and resync ──
+  // ── partial failures keep data and resync ──
 
   it('a startTrial throw after a successful cut still returns the segment, with the error', () => {
     const seg = setup(startThrowsAfter(0));

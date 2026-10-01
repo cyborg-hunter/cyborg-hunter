@@ -138,7 +138,7 @@ describe('injectExtensions: dedupe rules (a) and (b)', () => {
 // own keys, minus the timeline-only ones, onto each child with a shallow
 // Object.assign; a node without `timeline` is a trial. So only trial objects
 // are touched, never wrapped (a wrapper node would shift internal_node_id).
-describe('injectExtensions: timeline shapes (D17)', () => {
+describe('injectExtensions: timeline shapes', () => {
   it('recurses into nested timelines, timeline_variables, conditional and loop nodes without wrapping', () => {
     const inner = { type: 'kb' };
     const tl = [{ timeline: [{ timeline: [inner] }], timeline_variables: [{ a: 1 }], conditional_function: () => true, loop_function: () => false }];
@@ -211,7 +211,7 @@ describe('injectExtensions: timeline shapes (D17)', () => {
   });
 });
 
-describe('dedupeExtensions (rule c) and manual mode (D19)', () => {
+describe('dedupeExtensions (rule c) and manual mode', () => {
   it('keeps the first entry per name', () => {
     const out = dedupeExtensions([{ type: OldCh, params: { a: 1 } }, { type: OldCh, params: { a: 2 } }, { type: Mouse }]);
     assert.equal(out.length, 2); assert.equal(out[0].params.a, 1);
