@@ -43,6 +43,16 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
+
+// Synthetic replays for the viewer checks below are the repo's own
+// SessionRecording v2 conformance fixtures, turned into viewer models by the
+// real buildViewerModel (the same conversion the demo runs in-browser). The
+// viewer has been v2-only since 0.8.0; the earlier hand-written v1-shaped
+// models (`trials`, `kind: 'keydown'`) mounted as "no segments".
+import { buildViewerModel } from '../../src/replay/viewer-model.js';
+const V2_FIXTURES = resolve(__dirname, '..', '..', 'tests', 'replay', 'schema-v2', 'fixtures');
+const viewerModelFromFixture = (name) =>
+  buildViewerModel(JSON.parse(readFileSync(join(V2_FIXTURES, name + '.json'), 'utf8')));
 const ANSWER = 'Canberra';
 const AUTOTYPE_TEXT = 'No one is typing this. It is being inserted.';
 
@@ -693,63 +703,38 @@ test('replay: keycast overlay shows a chip during typed playback; DOM-tier recon
   const reconstructedAnswer = replayHostFrame(page).frameLocator('.replay-frame').locator('textarea');
   await expect(reconstructedAnswer).toHaveValue('Canberra', { timeout: 5000 });
 
-  // Redacted keystroke: synthetic model (the demo's own recording never
-  // touches a redacted field), mounted directly in the host frame's
+  // Redacted keystroke: the v2 `redacted` fixture (the demo's own recording
+  // never touches a redacted field), mounted directly in the host frame's
   // document — the same document the real model above already loaded
-  // window.initChReplayViewer into.
-  const redactedModel = {
-    tier: 'dom', legacy: false, scoring: null, captureStopped: false, markerAttr: null,
-    scrollbar: { w: 0, h: 0 }, stylesheets: [],
-    trials: [{
-      index: 0, id: 'synthetic-redacted', durMs: 1000,
-      initialDom: '<p>synthetic</p>',
-      camera: { x: 0, y: 0, w: 800, h: 600, cw: 800, ch: 600, source: 'view_state' },
-      events: [
-        { t: 100, kind: 'keydown', redacted: true },
-        { t: 250, kind: 'keyup', redacted: true },
-      ],
-    }],
-  };
-  const redactedChipShown = await replayHostFrame(page).locator('body').evaluate((bodyEl, model) => {
+  // window.initChReplayViewer into. Seeked to the first redacted key.down.
+  const redactedModel = viewerModelFromFixture('redacted');
+  const firstRedactedDown = redactedModel.segments[0].events.find((e) => e.type === 'key.down' && e.redacted).t;
+  const redactedChipShown = await replayHostFrame(page).locator('body').evaluate((bodyEl, [model, t]) => {
     const testMount = document.createElement('div');
     bodyEl.appendChild(testMount);
     window.initChReplayViewer(testMount, model);
-    testMount._chReplayDebug.seek(150); // between the redacted keydown and keyup
+    testMount._chReplayDebug.seek(t + 1); // just after the redacted key.down, before its key.up
     return !!testMount.querySelector('.replay-key-chip--redacted');
-  }, redactedModel);
+  }, [redactedModel, firstRedactedDown]);
   expect(redactedChipShown).toBe(true);
 });
 
 // ---------------------------------------------------------------------------
-// 9. Replay viewer: self-explanatory buffer-cap chip (walkthrough item 9).
-// The demo's own recording never crosses the cap, so this drives a synthetic
-// model with a ch:capture_stopped marker through the same direct-mount path
-// as the redacted-keystroke check above.
+// 9. Replay viewer: self-explanatory buffer-cap note (walkthrough item 9).
+// The demo's own recording never crosses the cap, so this mounts the v2
+// `truncated` fixture (a `recording.capture_stopped` event that states its
+// own cap, limit_events: 12) through the same direct-mount path as the
+// redacted-keystroke check above, in the same-origin viewer host.
 // ---------------------------------------------------------------------------
 test('replay: buffer-cap note explains itself when captureStopped is set', async ({ page }) => {
   test.setTimeout(60000);
   await reachResultsWithSignals(page);
-  const frame = resultsFrame(page);
-  const participantId = await pid(page);
-  const visitorRow = frame.locator(`.cohort-row[data-pid="${participantId}"]`);
-  const visitorSanitized = await visitorRow.getAttribute('data-sanitized');
-  await visitorRow.click();
-  const visitorPane = frame.locator(`#p-${visitorSanitized}`);
+  const hostMount = replayHostFrame(page).locator('#ch-replay-mount');
+  await hostMount.locator('.replay-stage').waitFor({ timeout: 5000 });
 
-  const capModel = {
-    tier: 'dom', legacy: false, scoring: null, captureStopped: true, markerAttr: null,
-    scrollbar: { w: 0, h: 0 }, stylesheets: [],
-    trials: [{
-      index: 0, id: 'synthetic-cap', durMs: 500,
-      initialDom: '<p>synthetic</p>',
-      camera: { x: 0, y: 0, w: 800, h: 600, cw: 800, ch: 600, source: 'view_state' },
-      events: [{ t: 10, kind: 'ch:capture_stopped', limit: 50000 }],
-    }],
-  };
-
-  const result = await visitorPane.evaluate((paneEl, model) => {
+  const result = await replayHostFrame(page).locator('body').evaluate((bodyEl, model) => {
     const mount = document.createElement('div');
-    paneEl.appendChild(mount);
+    bodyEl.appendChild(mount);
     window.initChReplayViewer(mount, model);
     const details = mount.querySelector('[data-ch-cap-note]');
     return {
@@ -757,65 +742,51 @@ test('replay: buffer-cap note explains itself when captureStopped is set', async
       initiallyOpen: details ? details.hasAttribute('open') : null,
       text: details ? details.textContent : null,
     };
-  }, capModel);
+  }, viewerModelFromFixture('truncated'));
 
   expect(result.found).toBe(true);
   expect(result.initiallyOpen).toBe(false); // collapsed by default, expandable on click
-  expect(result.text).toContain('50,000'); // the recording's own configured cap, not a hardcoded default
-  expect(result.text).toMatch(/configurable/i);
-  expect(result.text).toMatch(/next trial starts capturing fresh|later trial/i); // per-trial, not session-wide
-  expect(result.text).toMatch(/do not bound the whole session|does not bound/i); // no "files stay small" overclaim
+  expect(result.text).toContain('12 events'); // the recording's own stated cap, not a hardcoded default
+  expect(result.text).toMatch(/buffer/i); // the stated reason, in the summary
+  expect(result.text).toMatch(/Absence of evidence after this point is not evidence of absence/); // no "nothing happened" overclaim
 });
 
 // ---------------------------------------------------------------------------
 // 10. Replay viewer: continuous whole-session playback, default ON
-// (walkthrough item 10). A synthetic 2-trial trace-tier model keeps this
-// fast and deterministic (trace tier skips the async iframe-reconstruction
-// path entirely, so trial loads are synchronous).
+// (walkthrough item 10). The v2 `segment-bounds` fixture has two short
+// segments (480ms, 400ms), so a play from segment 1 reaches segment 2 well
+// inside the timeout. Mounted in the same-origin viewer host, where DOM-tier
+// reconstruction works (the opaque report iframe would freeze it).
 // ---------------------------------------------------------------------------
 test('replay: continuous playback crosses trial boundaries by default; the pause toggle restores per-trial stopping', async ({ page }) => {
   test.setTimeout(60000);
   await reachResultsWithSignals(page);
-  const frame = resultsFrame(page);
-  const participantId = await pid(page);
-  const visitorRow = frame.locator(`.cohort-row[data-pid="${participantId}"]`);
-  const visitorSanitized = await visitorRow.getAttribute('data-sanitized');
-  await visitorRow.click();
-  const visitorPane = frame.locator(`#p-${visitorSanitized}`);
+  const host = replayHostFrame(page);
+  await host.locator('#ch-replay-mount .replay-stage').waitFor({ timeout: 5000 });
 
-  const twoTrialModel = {
-    tier: 'trace', legacy: false, scoring: null, captureStopped: false, markerAttr: null,
-    scrollbar: { w: 0, h: 0 }, stylesheets: [],
-    trials: [
-      { index: 0, id: 'trial-a', durMs: 250, initialDom: '',
-        camera: { x: 0, y: 0, w: 800, h: 600, cw: 800, ch: 600, source: 'view_state' }, events: [] },
-      { index: 1, id: 'trial-b', durMs: 250, initialDom: '',
-        camera: { x: 0, y: 0, w: 800, h: 600, cw: 800, ch: 600, source: 'view_state' }, events: [] },
-    ],
-  };
-  await visitorPane.evaluate((paneEl, model) => {
+  await host.locator('body').evaluate((bodyEl, model) => {
     const mount = document.createElement('div');
     mount.setAttribute('data-testid', 'ch-multitrial-mount');
-    paneEl.appendChild(mount);
+    bodyEl.appendChild(mount);
     window.initChReplayViewer(mount, model);
-  }, twoTrialModel);
-  const mount = visitorPane.locator('[data-testid="ch-multitrial-mount"]');
+  }, viewerModelFromFixture('segment-bounds'));
+  const mount = host.locator('[data-testid="ch-multitrial-mount"]');
 
-  await expect(mount.locator('.replay-session-pos')).toHaveText('Trial 1 of 2');
+  await expect(mount.locator('.replay-session-pos')).toHaveText('Segment 1 of 2');
 
   // Default: continuous ON (pause-at-boundaries toggle unchecked).
   await expect(mount.locator('.replay-pause-checkbox')).not.toBeChecked();
   await mount.locator('.replay-play').click();
-  await expect(mount.locator('.replay-session-pos')).toHaveText('Trial 2 of 2', { timeout: 3000 });
-  await expect(mount.locator('.replay-play')).toHaveAttribute('aria-label', 'Pause'); // still playing
-  await mount.locator('.replay-play').click(); // stop
+  await expect(mount.locator('.replay-session-pos')).toHaveText('Segment 2 of 2', { timeout: 3000 });
+  await mount.locator('.replay-play').click(); // stop (if still playing) or no-op restart guard below
+  await mount.evaluate((m) => { m._chReplayDebug.selectSegment(0); });
 
-  // Pause-at-boundaries ON: restores per-trial stopping (original behavior).
-  await mount.evaluate((m) => { m._chReplayDebug.selectTrial(0); });
+  // Pause-at-boundaries ON: restores per-segment stopping (original behavior).
   await mount.locator('.replay-pause-checkbox').check();
+  await expect(mount.locator('.replay-play')).toHaveAttribute('aria-label', 'Play');
   await mount.locator('.replay-play').click();
   await expect(mount.locator('.replay-play')).toHaveAttribute('aria-label', 'Play', { timeout: 3000 }); // stopped itself
-  await expect(mount.locator('.replay-session-pos')).toHaveText('Trial 1 of 2'); // did not advance
+  await expect(mount.locator('.replay-session-pos')).toHaveText('Segment 1 of 2'); // did not advance
 });
 
 // ---------------------------------------------------------------------------
