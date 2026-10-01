@@ -39,7 +39,10 @@
 // boot never throws into the page: any failure is logged as bootFailed, a
 // monitor created before the failure is destroyed, and boot returns null.
 // The sentinel is set only after a successful boot, so a later
-// cyborg-hunter.min.js still works if ch.js failed.
+// cyborg-hunter.min.js still works if ch.js failed. The exception is a
+// failure at the deferred session start (step 6, ch.js in <head>): boot has
+// returned by then, so the namespace and the sentinel stay and the error is
+// only logged.
 
 import { init } from '../core/monitor.js';
 import { createSegmentDiffer } from './segment-diff.js';
