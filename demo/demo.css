@@ -1,4 +1,17 @@
-/* demo/demo.css — "Lifted Console" (spec §9, approved 2026-07-31).
+/* demo/demo.css — the tour in the report's own aesthetic (2026-10 reshape,
+ * docs/plans/2026-09-30-report-reshape.md Part B), superseding "Lifted
+ * Console" (spec §9, 2026-07-31). The demo wraps the report, so it reads as
+ * the same product: the report's six typefaces in matching roles (titles
+ * Space Grotesk, prose Recursive, labels Sofia Sans, notes Tomorrow, numbers
+ * Sora; code and the event stream stay system mono), its high-contrast
+ * neutrals, square boxes with a line and a soft shadow, 4px controls,
+ * segmented tabs with ink active states, and a double rule under the header.
+ * Teal survives only as the live-recording cue (REC); reds/greens stay
+ * semantic (lamps, hard rows, tiers) and match the report's tier colours.
+ * Fonts load from assets/fonts/, copied from src/cli/renderers/fonts/ by
+ * tools/assemble-demo-site.mjs.
+ *
+ * Earlier header, kept for the class-inventory notes below:
  * Light-only. Elevation instead of borders; borders survive only on text
  * inputs and small chip outlines. Serif for step titles only. Teal is the
  * single accent (act pill, active tab, focus, live emphasis); reds/greens
@@ -12,35 +25,59 @@
  * home in this design.
  */
 
+/* The report's typefaces (same files, weight ranges from FONTS_MANIFEST.json;
+ * the variable fonts need theirs declared, or Recursive renders at its
+ * default 300). swap: this page fetches them, so text shows meanwhile. */
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;font-display:swap;src:url('assets/fonts/spacegrotesk/spacegrotesk-300-700.woff2') format("woff2");}
+@font-face{font-family:"Tomorrow";font-style:normal;font-weight:400;font-display:swap;src:url('assets/fonts/tomorrow/tomorrow-400.woff2') format("woff2");}
+@font-face{font-family:"Sofia Sans";font-style:normal;font-weight:1 1000;font-display:swap;src:url('assets/fonts/sofiasans/sofiasans-1-1000.woff2') format("woff2");}
+@font-face{font-family:"Sora";font-style:normal;font-weight:100 800;font-display:swap;src:url('assets/fonts/sora/sora-100-800.woff2') format("woff2");}
+@font-face{font-family:"Recursive";font-style:normal;font-weight:300 1000;font-display:swap;src:url('assets/fonts/recursive/recursive-300-1000.woff2') format("woff2");}
+@font-face{font-family:"Major Mono Display";font-style:normal;font-weight:400;font-display:swap;src:url('assets/fonts/majormonodisplay/majormonodisplay-400.woff2') format("woff2");}
+
 :root{
-  --ground:#F6F8FA; --panel:#FFFFFF; --ink:#1B232C; --dim:#5F6B77; --line:#E6EBF0;
+  --ground:#fafafa; --panel:#ffffff; --ink:#0f0f0f; --dim:#4f4a40; --line:#b9b2a2;
+  /* The report's former line: for dense rules (stream rows, lamp rings)
+   * where the high-contrast line would read as ruled paper. */
+  --line-soft:#e2ddd1;
   --live:#0E7490; --live-bg:#EDF6F8;
-  --hard:#C62828; --hard-bg:#FBEFEF; --soft:#D97706; --soft-bg:#FBF1E3;
-  --clean:#2E7D32; --clean-bg:#E9F3EA;
-  --shadow:0 1px 2px rgba(27,35,44,.06),0 2px 8px rgba(27,35,44,.05);
-  --serif:'Iowan Old Style',Georgia,'Times New Roman',serif;
+  --hard:#d32f2f; --hard-bg:#fbeeee; --soft:#f57c00; --soft-bg:#fef3e6;
+  --clean:#388e3c; --clean-bg:#edf5ed;
+  --shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05);
   --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-  --code-bg:#141A20; --code-ink:#D7E0E8;
+  --ff-space:"Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-tomorrow:"Tomorrow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-sofia:"Sofia Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-sora:"Sora",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --ff-recursive:"Recursive",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --code-bg:#171717; --code-ink:#dcd8cf;
 }
 
 /* Matches the approved prototype's reset (margin:0 on everything, opted
  * back in per-component below) rather than v1's box-sizing-only reset. */
 *{box-sizing:border-box;margin:0}
 body{background:var(--ground);color:var(--ink);
-  font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  font:15px/1.62 var(--ff-recursive);}
 code, pre{font-family:var(--mono);}
 
 /* ---------------------------------------------------------------------
  * Topbar — floats on the ground, no bar chrome. Constrained to the same
  * max-width/gutters as .cols so the brand lines up with the content column.
  * --------------------------------------------------------------------- */
+/* The report's double header rule, spanning exactly the content column:
+ * the bar's gutters are margins (not padding) so the rule stops where the
+ * cards below start (.cols: 1150px including 32px gutters). */
 .topbar{display:flex;gap:20px;align-items:baseline;flex-wrap:wrap;
-  max-width:1150px;margin:0 auto;padding:22px 32px 8px;font-size:13px;}
-.topbar .brand{font-weight:700;color:var(--ink);}
-.topbar .pid{font-family:var(--mono);font-size:13px;color:var(--dim);}
-.topbar .act{margin-left:auto;font-size:12.5px;color:var(--live);
-  background:var(--live-bg);border-radius:99px;padding:3px 14px;}
-.rec{font-family:var(--mono);font-size:12px;color:var(--dim);}
+  max-width:1086px;width:calc(100% - 64px);margin:0 auto;padding:22px 0 12px;font-size:13px;
+  border-bottom:3px double var(--ink);}
+.topbar .brand{font-family:var(--ff-space);font-weight:550;letter-spacing:.01em;
+  font-size:17px;color:var(--ink);}
+.topbar .pid{font-family:var(--ff-sora);font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim);}
+/* Step counter: navigation, not a live cue — an ink-outline square tag. */
+.topbar .act{margin-left:auto;font-size:12.5px;color:var(--ink);
+  background:transparent;border:1px solid var(--line);border-radius:2px;padding:2px 12px;}
+/* REC is the one live-recording cue, so it keeps the teal. */
+.rec{font-family:var(--ff-sora);font-size:12px;color:var(--live);}
 .rec .dot{display:inline-block;width:7px;height:7px;border-radius:50%;
   background:var(--hard);margin-right:5px;vertical-align:1px;animation:pulse 1.6s infinite;}
 @keyframes pulse{50%{opacity:.25}}
@@ -66,15 +103,15 @@ code, pre{font-family:var(--mono);}
 /* ---------------------------------------------------------------------
  * Step card — one elevated panel holds the whole step. Serif titles only.
  * --------------------------------------------------------------------- */
-.stepcard{background:var(--panel);border-radius:8px;box-shadow:var(--shadow);
-  padding:32px 36px;}
+.stepcard{background:var(--panel);border-radius:0;border:1px solid var(--line);
+  box-shadow:var(--shadow);padding:32px 36px;}
 /* B4 may title the step with <h1> or class="title"; main's bare <h2> is a
  * transitional fallback for the current (pre-B4) engine — see the plan's
  * note that demo.js is mid-rewrite and still renders the old step markup. */
-.stepcard h1, .stepcard .title, main h2{font-family:var(--serif);font-weight:600;
-  font-size:29px;line-height:1.22;margin:0 0 14px;text-wrap:balance;}
+.stepcard h1, .stepcard .title, main h2{font-family:var(--ff-space);font-weight:550;
+  letter-spacing:.01em;font-size:29px;line-height:1.22;margin:0 0 14px;text-wrap:balance;}
 
-.eyebrow{font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+.eyebrow{font-family:var(--ff-sofia);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);margin:0 0 12px;}
 .eyebrow .act2{color:var(--hard);font-weight:600;}
 
@@ -94,44 +131,54 @@ code, pre{font-family:var(--mono);}
 /* ---------------------------------------------------------------------
  * Task panel — recessed ground-colored inset, no border.
  * --------------------------------------------------------------------- */
-.task{background:var(--ground);border-radius:6px;padding:22px 24px;margin:0 0 18px;}
-.task .label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+.task{background:var(--ground);border-radius:0;padding:22px 24px;margin:0 0 18px;}
+.task .label{font-family:var(--ff-sofia);font-size:11px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--dim);margin:0 0 14px;}
+/* The playground panel's heading has no rule of its own otherwise. */
+.task.playground h3{font-family:var(--ff-sofia);font-weight:600;}
 .question{font-size:17px;font-weight:600;margin:0 0 16px;}
 
 .answerchip{display:flex;align-items:center;gap:10px;background:var(--panel);
-  border-radius:6px;box-shadow:inset 0 0 0 1px var(--line);padding:10px 14px;
+  border-radius:4px;box-shadow:inset 0 0 0 1px var(--line);padding:10px 14px;
   margin:0 0 16px;max-width:340px;}
 .answerchip code{font-family:var(--mono);font-size:14px;}
 .answerchip .hint{margin-left:auto;}
 
 textarea, input[type="text"]{width:100%;font:inherit;padding:10px 12px;
-  border:1px solid var(--line);border-radius:6px;background:var(--panel);
+  border:1px solid var(--line);border-radius:4px;background:var(--panel);
   color:var(--ink);resize:vertical;}
 textarea{min-height:74px;}
 input[type="text"]{max-width:440px;}
-textarea:focus, input[type="text"]:focus{outline:2px solid var(--live);outline-offset:-1px;}
+/* Number inputs and selects (the scoring playground) otherwise take the UA
+ * form-control font. */
+input[type="number"], select{font:inherit;}
+textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-offset:-1px;}
 
 /* Step 6 autotype: field visually "disables" while characters are inserted
  * programmatically (the real disabled/readonly state is set in JS — this
  * just matches the visual language a disabled control already has). */
 .autotype-field.busy{background:var(--panel);color:var(--dim);cursor:not-allowed;}
 
-.hint{font-size:12px;color:var(--dim);}
+.hint{font-family:var(--ff-tomorrow);font-size:12px;color:var(--dim);}
 
-.rule{padding:14px 16px;border-left:3px solid var(--soft);background:var(--soft-bg);
-  border-radius:0 6px 6px 0;margin:0 0 14px;font-size:15px;}
+/* A one-line rule statement: the report's hairline note box, keeping a 3px
+ * --soft left edge so its "rule" meaning survives. */
+.rule{padding:14px 16px;background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--soft);border-radius:4px;margin:0 0 14px;
+  font-family:var(--ff-tomorrow);font-size:15px;}
 .rule.fallback-note{border-left-color:var(--soft);}
 
 /* ---------------------------------------------------------------------
  * Buttons
  * --------------------------------------------------------------------- */
 .btnrow{display:flex;gap:14px;align-items:center;margin-top:20px;flex-wrap:wrap;}
-.btn{font:inherit;font-weight:600;padding:10px 22px;border-radius:6px;
+/* font-family AFTER font:inherit: the download buttons sit inside the mono
+ * .file card and would otherwise inherit its monospace. */
+.btn{font:inherit;font-family:var(--ff-recursive);font-weight:600;padding:10px 22px;border-radius:4px;
   border:none;background:var(--ink);color:#fff;cursor:pointer;}
-.btn:hover{background:#2C3947;}
+.btn:hover{background:#2b2b2b;}
 .btn:focus-visible, button:focus-visible, a:focus-visible{
-  outline:2px solid var(--live);outline-offset:2px;}
+  outline:2px solid var(--ink);outline-offset:2px;}
 
 .secondary{margin-top:14px;font-size:13.5px;}
 .secondary a{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
@@ -145,17 +192,17 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--live);outline-o
 
 /* Guard entry screen (step 8): the library's own entry message, rendered
  * verbatim, in a recessed inset matching .task. */
-.entrybox{background:var(--ground);border-radius:6px;padding:22px 24px;margin:0 0 18px;}
+.entrybox{background:var(--ground);border-radius:0;padding:22px 24px;margin:0 0 18px;}
 
 /* End-guard button (step 9): rendered as a sibling OUTSIDE the scramble
  * wrapper, so its legibility can never depend on panel/blur context — a
  * standalone rule rather than composing with .btn keeps that true even if
  * .btn's cascade changes later. */
-.endguard{display:inline-block;font:inherit;font-weight:600;padding:10px 22px;
-  border-radius:6px;border:none;background:var(--ink);color:#fff;cursor:pointer;
+.endguard{display:inline-block;font:inherit;font-family:var(--ff-recursive);font-weight:600;padding:10px 22px;
+  border-radius:4px;border:none;background:var(--ink);color:#fff;cursor:pointer;
   margin-top:14px;}
-.endguard:hover{background:#2C3947;}
-.endguard:focus-visible{outline:2px solid var(--live);outline-offset:2px;}
+.endguard:hover{background:#2b2b2b;}
+.endguard:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
 /* No-trap guarantee (spec §6 step 9): while a guard violation is active,
  * demo.js reparents the button to <body> AFTER the violation overlay and
  * adds this class — same z-index as the overlay (2147483647, int max);
@@ -171,36 +218,44 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--live);outline-o
  * .lp-json (below) is a <pre> too and overrides this via higher specificity.
  * --------------------------------------------------------------------- */
 pre{background:var(--code-bg);color:var(--code-ink);padding:14px 16px;
-  border-radius:6px;overflow-x:auto;font:12.5px/1.5 var(--mono);margin:0 0 18px;}
+  border-radius:0;overflow-x:auto;font:12.5px/1.5 var(--mono);margin:0 0 18px;}
 pre code{background:none;padding:0;}
 
-.code-tabs{display:flex;gap:6px;margin:2px 0 10px;}
-.code-tab{font:12px var(--mono);padding:4px 12px;border:none;border-radius:99px;
-  background:var(--ground);color:var(--dim);cursor:pointer;}
-.code-tab.active{background:var(--live-bg);color:var(--live);font-weight:700;}
+/* Segmented control, as the report's filter chips: joined, outer corners
+ * 4px, ink active state, no weight change on toggle (a joined control would
+ * visibly jump). Two tabs only, so no wrapping. */
+.code-tabs{display:flex;gap:0;margin:2px 0 10px;}
+.code-tab{font:12px var(--ff-recursive);padding:4px 12px;border:1px solid var(--line);border-radius:0;
+  margin-left:-1px;background:var(--panel);color:var(--ink);cursor:pointer;}
+.code-tab:first-child{border-radius:4px 0 0 4px;margin-left:0;}
+.code-tab:last-child{border-radius:0 4px 4px 0;}
+.code-tab.active{background:var(--ink);color:var(--panel);border-color:var(--ink);
+  position:relative;z-index:1;}
 
 /* ---------------------------------------------------------------------
  * Act 2 guard visuals — violation chips + scramble banner.
  * --------------------------------------------------------------------- */
 .violations{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
-.chip{font-size:12px;padding:4px 10px;border-radius:99px;
+/* Square tags, like the report's tier badges. */
+.chip{font-family:var(--ff-sora);font-size:12px;padding:4px 10px;border-radius:0;
   box-shadow:inset 0 0 0 1px var(--line);color:var(--dim);}
 .chip.hot{background:var(--hard-bg);color:var(--hard);box-shadow:none;}
 
 .scramble{position:relative;user-select:none;}
 .scramble .content{filter:blur(6px);opacity:.7;}
 .scramble .banner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
-.scramble .banner span{background:var(--hard);color:#fff;font:700 12px/1 var(--mono);
-  letter-spacing:.12em;padding:8px 14px;border-radius:6px;}
+.scramble .banner span{background:var(--hard);color:#fff;font:700 12px/1 var(--ff-sora);
+  letter-spacing:.12em;padding:8px 14px;border-radius:0;}
 
 /* ---------------------------------------------------------------------
  * Instrument column — rail card + live-record card, one card family.
  * --------------------------------------------------------------------- */
 .instrument{display:flex;flex-direction:column;gap:16px;position:sticky;top:22px;}
-.card{background:var(--panel);border-radius:8px;box-shadow:var(--shadow);padding:18px 20px;}
-.card h3, .lp-title{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;
+.card{background:var(--panel);border-radius:0;border:1px solid var(--line);
+  box-shadow:var(--shadow);padding:18px 20px;}
+.card h3, .lp-title{font-family:var(--ff-sofia);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--dim);font-weight:600;margin:0 0 4px;}
-.card .sub{font-size:12px;color:var(--dim);line-height:1.5;margin:0 0 10px;}
+.card .sub{font-family:var(--ff-tomorrow);font-size:12px;color:var(--dim);line-height:1.5;margin:0 0 10px;}
 
 /* Rail (rail.js): checklist of tracked signals. */
 .check{list-style:none;margin:0;padding:0;font-size:12.5px;
@@ -209,12 +264,14 @@ pre code{background:none;padding:0;}
 .check li.lit{color:var(--ink);}
 .check li.lit .lamp{background:var(--clean);border-color:var(--clean);}
 .check li.lit.hardlit .lamp{background:var(--hard);border-color:var(--hard);}
-.check li.always .lamp{background:var(--line);border-color:var(--line);}
-.check li .n{margin-left:auto;font-family:var(--mono);font-size:11.5px;}
-.check .hint, .check li.grouphead{padding-top:12px;font-size:10.5px;
+.check li.always .lamp{background:var(--line-soft);border-color:var(--line-soft);}
+.check li .n{margin-left:auto;font-family:var(--ff-sora);font-variant-numeric:tabular-nums;font-size:11.5px;}
+.check .hint, .check li.grouphead{font-family:var(--ff-sofia);padding-top:12px;font-size:10.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--dim);}
 .check.awaiting li:not(.hint):not(.grouphead){opacity:.55;}
-.lamp{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--line);
+/* Unlit lamps keep the soft line: with the high-contrast --line an empty
+ * ring would read as lit. */
+.lamp{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--line-soft);
   background:transparent;}
 body[data-view="act2"] .check li.guardrow{color:var(--hard);}
 body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-color:var(--hard);}
@@ -231,10 +288,14 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 
 /* Live session record (live-pane.js): pill tabs + stream/raw-JSON views. */
 .lp-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px;}
-.lp-tabs{display:flex;gap:6px;}
-.lp-tab{font:12px var(--mono);padding:4px 12px;border:none;border-radius:99px;
-  background:var(--ground);color:var(--dim);cursor:pointer;}
-.lp-tab.active{background:var(--live-bg);color:var(--live);font-weight:700;}
+/* Segmented, as .code-tabs above. */
+.lp-tabs{display:flex;gap:0;}
+.lp-tab{font:12px var(--ff-recursive);padding:4px 8px;border:1px solid var(--line);border-radius:0;
+  margin-left:-1px;background:var(--panel);color:var(--ink);cursor:pointer;white-space:nowrap;}
+.lp-tab:first-child{border-radius:4px 0 0 4px;margin-left:0;}
+.lp-tab:last-child{border-radius:0 4px 4px 0;}
+.lp-tab.active{background:var(--ink);color:var(--panel);border-color:var(--ink);
+  position:relative;z-index:1;}
 
 /* Per-trial tab rail: a two-column grid, rail + views. The aside is 312px
  * (.cols above) minus .card's 18px/20px padding = a 272px content box, so an
@@ -245,14 +306,15 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
  * drop the clamp and show them whole. */
 .lp-body{display:grid;grid-template-columns:80px minmax(0,1fr);gap:8px;}
 .lp-trials{display:flex;flex-direction:column;gap:4px;min-width:0;flex:none;
-  border-right:1px solid var(--line);padding-right:8px;
+  border-right:1px solid var(--line-soft);padding-right:8px;
   max-height:290px;overflow-y:auto;} /* matches .lp-stream: the rail scrolls rather than growing the card */
 .lp-trial-tab{font-family:inherit;font-size:11px;line-height:1.35;text-align:left;
-  padding:4px 6px;border:none;border-radius:5px;background:var(--ground);
+  padding:4px 6px;border:none;border-radius:4px;background:var(--ground);
   color:var(--dim);cursor:pointer;flex:none;
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;
   max-height:calc(3 * 1.35em + 8px);} /* three lines fits every heading whole at this width */
-.lp-trial-tab[aria-pressed="true"]{background:var(--live-bg);color:var(--live);font-weight:700;}
+/* Selected = a 2px inset ink outline, like the report's selected row. */
+.lp-trial-tab[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink);}
 
 .lp-views{min-width:0;}
 /* 11px in the aside (the rail costs the stream ~76px), back to 11.8px in the
@@ -280,12 +342,14 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
  * from trial_end at a glance. The two wide states below undo all of it. */
 .lp-cols, .lp-row{display:grid;gap:6px;
   grid-template-columns:37px minmax(0,.7fr) minmax(0,1.15fr) minmax(0,1.5fr);
-  padding:4px 0;border-top:1px solid var(--line);}
+  padding:4px 0;border-top:1px solid var(--line-soft);}
 .lp-trial, .lp-event{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lp-detail{overflow-wrap:anywhere;}
-.lp-cols{color:var(--dim);font-size:10px;text-transform:uppercase;
+.lp-cols{font-family:var(--ff-sofia);color:var(--dim);font-size:10px;text-transform:uppercase;
   letter-spacing:.06em;border-top:none;}
-.lp-t{color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
+/* Stays system mono on purpose: Major Mono Display needs ~49px for "0:00.1"
+ * at 11px, and these tracks are 37/44px. */
+.lp-t{font-family:var(--mono);color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
 .lp-trial{color:var(--dim);}
 .lp-event{font-weight:600;}
 .lp-detail{color:var(--dim);}
@@ -340,7 +404,7 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .lp-json{background:none;color:var(--ink);margin:0;padding:0;border-radius:0;
   max-height:290px;overflow:auto;font:11.8px/1.6 var(--mono);}
 
-.lp-caption{margin:10px 0 0;font-size:11.5px;color:var(--dim);line-height:1.5;}
+.lp-caption{font-family:var(--ff-recursive);margin:10px 0 0;font-size:11.5px;color:var(--dim);line-height:1.5;}
 .lp-caption code{font-family:var(--mono);font-size:11px;}
 
 /* ---------------------------------------------------------------------
@@ -348,20 +412,21 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
  * --------------------------------------------------------------------- */
 .files{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px;}
 .file{display:flex;flex-direction:column;gap:10px;min-width:190px;
-  background:var(--panel);box-shadow:var(--shadow);border-radius:6px;padding:10px 14px;
+  background:var(--panel);box-shadow:var(--shadow);border:1px solid var(--line);border-radius:0;padding:10px 14px;
   font:13px/1.4 var(--mono);}
 .file-info{display:flex;flex-direction:column;gap:2px;}
-.file small{display:block;color:var(--dim);font-size:11px;}
-.file .file-desc{display:block;color:var(--dim);font-size:11px;}
+/* 11px reading text: Recursive, not the display-ish Tomorrow (12px floor). */
+.file small{display:block;font-family:var(--ff-recursive);color:var(--dim);font-size:11px;}
+.file .file-desc{display:block;font-family:var(--ff-recursive);color:var(--dim);font-size:11px;}
 .file .file-actions{display:flex;gap:12px;align-items:center;}
-.file .file-actions a{color:var(--live);font-size:12px;}
-.file .file-caveat{color:var(--dim);font-size:11px;font-style:italic;
+.file .file-actions a{color:var(--ink);font-size:12px;text-decoration:underline;text-underline-offset:3px;}
+.file .file-caveat{font-family:var(--ff-recursive);color:var(--dim);font-size:11px;font-style:italic;
   max-width:220px;margin:0;}
 
-.filetext-dialog{max-width:640px;width:90vw;padding:18px;border:none;
-  border-radius:8px;box-shadow:var(--shadow);background:var(--panel);color:var(--ink);}
-.filetext-dialog::backdrop{background:rgba(27,35,44,.4);}
-.filetext-dialog h3{margin:0 0 10px;font:600 13px/1 var(--mono);}
+.filetext-dialog{max-width:640px;width:90vw;padding:18px;border:1px solid var(--line);
+  border-radius:0;box-shadow:var(--shadow);background:var(--panel);color:var(--ink);}
+.filetext-dialog::backdrop{background:rgba(0,0,0,.4);}
+.filetext-dialog h3{margin:0 0 10px;font:600 13px/1 var(--ff-sofia);}
 .filetext-dialog pre{max-height:60vh;overflow:auto;user-select:text;margin:0 0 14px;}
 
 /* ---------------------------------------------------------------------
@@ -376,7 +441,7 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 /* Replicate-locally walkthrough (step 13) — numbered sections. .replicate
  * pre inherits the global `pre` rule above (background/padding/radius/
  * overflow/margin) unchanged — nothing extra needed there. */
-.replicate h3{font-size:15px;font-weight:600;margin:18px 0 8px;}
+.replicate h3{font-family:var(--ff-sofia);font-size:15px;font-weight:600;margin:18px 0 8px;}
 .replicate h3:first-child{margin-top:0;}
 
 /* ---------------------------------------------------------------------
@@ -388,21 +453,25 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
  * whole grid rather than sit in the 1fr track, matching the report frame
  * above it and giving the record's own columns room to breathe. */
 .results-mode .instrument{grid-column:1 / -1;}
-.yourreport{border-left:3px solid var(--live);padding:2px 0 2px 16px;margin:0 0 18px;}
-.yourreport h3{font-size:20px;margin:0 0 8px;}
+/* "Your report" walkthrough: the report's hairline note box, read as prose
+ * (Recursive, inherited from body). */
+.yourreport{background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:16px 20px;margin:0 0 18px;}
+.yourreport h3{font-family:var(--ff-space);font-weight:550;letter-spacing:.01em;font-size:20px;margin:0 0 8px;}
 .yourreport li{margin:0 0 8px;max-width:60ch;}
+.yourreport .t-hard, .yourreport .t-soft, .yourreport .t-clean{font-family:var(--ff-sora);}
 .yourreport .t-hard{color:var(--hard);font-weight:700;}
 .yourreport .t-soft{color:var(--soft);font-weight:700;}
 .yourreport .t-clean{color:var(--clean);font-weight:700;}
-.results-frame{width:100%;min-height:900px;border:0;border-radius:8px;
+.results-frame{width:100%;min-height:900px;border:1px solid var(--line);border-radius:0;
   box-shadow:var(--shadow);background:var(--panel);}
 
 /* Session-replay viewer-host card (item 12) — a sibling of .results-frame,
  * not inside it. The INNER replay CSS (.replay-*) lives inside the host
  * iframe's own Blob document (demo/replay-host.js), not here — this only
  * styles the outer card + frame chrome from the results screen's side. */
-.replay-host-card{background:var(--panel);border-radius:8px;box-shadow:var(--shadow);
-  padding:20px 24px;margin:18px 0 0;}
-.replay-host-card h3{font-size:15px;font-weight:600;margin:0 0 6px;}
+.replay-host-card{background:var(--panel);border:1px solid var(--line);border-radius:0;
+  box-shadow:var(--shadow);padding:20px 24px;margin:18px 0 0;}
+.replay-host-card h3{font-family:var(--ff-sofia);font-size:15px;font-weight:600;margin:0 0 6px;}
 .replay-host-card .hint{margin:0 0 14px;}
-.replay-host-frame{width:100%;min-height:520px;border:0;border-radius:6px;}
+.replay-host-frame{width:100%;min-height:520px;border:0;border-radius:0;}
