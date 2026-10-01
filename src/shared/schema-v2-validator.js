@@ -1,6 +1,11 @@
+// GENERATED from packages/sessionrecording-conformance/src/validator.js — do not edit; run npm run sync:conformance
+//
+// The conformance package is the source of truth. CH ships this copy so the
+// published tarball can validate without resolving a workspace package.
+
 // SessionRecording v2 validator — dual profiles per spec §11.
-// Zero dependencies. Lifted from tests/replay/schema-v2/ into shipped code (A3 fix
-// round): ingest strict-validates converted recordings in-process (spec §11 A2 —
+// Zero dependencies. Lifted from tests/replay/schema-v2/ into shipped code:
+// ingest strict-validates converted recordings in-process (spec §11 A2 —
 // warn, never refuse), so the validator is a runtime dependency of the CLI.
 
 // Gzip magic bytes (RFC 1952): 0x1f 0x8b.
@@ -50,8 +55,8 @@ export function validateTolerant(input) {
   }
   if (errors.length) return { ok: false, recording: null, errors, warnings };
   for (const k of ADVISORY_TOP) if (!(k in obj)) warnings.push(`missing advisory field: ${k}`);
-  // WARN ON MALFORMED KNOWN FIELDS — WARN, NEVER COERCE (T7 settles this; it
-  // was parked from two reviews). Before this, a present-but-malformed known
+  // WARN ON MALFORMED KNOWN FIELDS — WARN, NEVER COERCE (settled here after
+  // being parked from two reviews). Before this, a present-but-malformed known
   // field (`stylesheets: null`, `truncated: "yes"`) passed through in total
   // silence: defaults fill ABSENT keys only, and the analyst opening the file
   // got no signal at all. Coercing is the wrong repair — overwriting
@@ -253,8 +258,8 @@ export function validateStrict(input) {
     errors.push('end_reason must be "finished" | "aborted" | "unload" | null');
   }
   if (typeof r.truncated !== 'boolean') errors.push('truncated must be a boolean');
-  // `host` appeared ONCE in this file before T7 — in TOP_DEFAULTS — so
-  // `host: {name: 42}` was strict-valid (T3 Task-7).
+  // `host` used to appear ONCE in this file — in TOP_DEFAULTS — so
+  // `host: {name: 42}` was strict-valid.
   if (r.host !== null && !(isPlainObject(r.host)
       && typeof r.host.name === 'string' && typeof r.host.version === 'string')) {
     errors.push('host must be {name, version} strings or null');
@@ -383,7 +388,7 @@ export const REDACTABLE_TYPES = new Set([
   'clipboard.copy', 'clipboard.cut', 'clipboard.paste', 'clipboard.drop',
 ]);
 
-// ── §5.3 clipboard: REQUIRED-BUT-NULLABLE, settled here (T7) ───────────────
+// ── §5.3 clipboard: REQUIRED-BUT-NULLABLE, settled here ────────────────────
 // The parked question was whether §5.3's four fields are required-but-nullable
 // or typed-only-if-present. Settled as REQUIRED, for one reason that is not
 // about strictness for its own sake: §5.3 defines its TWO PRODUCER MODES by
@@ -484,8 +489,8 @@ function checkSegmentsStrict(r, errors) {
     if (s.initial_dom != null && !isKeyframe) {
       errors.push(`${at}.initial_dom must be a DomNode object or null`);
     }
-    // The keyframe tree itself, recursively (spec §4). Until T7 the validator
-    // stopped at "is an object": a keyframe whose children were strings, or
+    // The keyframe tree itself, recursively (spec §4). The validator used to
+    // stop at "is an object": a keyframe whose children were strings, or
     // whose ids were absent, was strict-valid and only failed inside a player.
     if (isKeyframe) checkDomNode(s.initial_dom, `${at}.initial_dom`, errors, 1);
     if (isKeyframe) sawKeyframe = true;

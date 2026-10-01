@@ -1,6 +1,9 @@
 {
   "name": "cyborg-hunter",
   "version": "0.9.1",
+  "workspaces": [
+    "packages/*"
+  ],
   "description": "Detect LLM-assisted 'cyborg' behavior in online behavioral experiments",
   "main": "dist/cyborg-hunter.min.js",
   "module": "dist/cyborg-hunter.esm.js",
@@ -9,15 +12,20 @@
   },
   "scripts": {
     "build": "node build.js",
+    "sync:conformance": "node scripts/sync-conformance.mjs",
+    "pretest": "node scripts/sync-conformance.mjs --check",
+    "prepack": "node scripts/sync-conformance.mjs",
+    "test:pack-smoke": "node scripts/pack-smoke.mjs",
     "demo:preview": "node tools/build-preview-core.mjs",
     "test:cli": "node --test tests/cli/*.test.js",
     "test:core": "node --test tests/core/*.test.js",
     "test:jspsych": "node --test tests/jspsych/*.test.js",
     "test:tools": "node --test tests/tools/*.test.js",
     "test:demo": "node --test tests/demo/*.test.js",
-    "test": "npm run test:core && npm run test:replay && npm run test:cli && npm run test:jspsych && npm run test:tools && npm run test:demo && npm run test:schema",
+    "test": "npm run test:core && npm run test:replay && npm run test:cli && npm run test:jspsych && npm run test:tools && npm run test:demo && npm run test:schema && npm run test:package",
     "test:replay": "node --test tests/replay/*.test.js",
     "test:schema": "node --test tests/replay/schema-v2/*.test.js",
+    "test:package": "npm test --workspace @cyborg-hunter/sessionrecording-conformance",
     "test:browser:replay": "node tests/browser/replay/run-replay-tests.mjs",
     "test:browser:e2e": "node tests/browser/replay/e2e-dogfood.mjs",
     "test:browser:alignment": "node tests/browser/replay/cursor-alignment.battery.mjs",

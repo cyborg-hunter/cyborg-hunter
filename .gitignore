@@ -37,3 +37,6 @@ CLAUDE.md
 docs/plans/
 test-data/
 scratch/
+
+# Local agent working notes: never part of the tree
+.superpowers/

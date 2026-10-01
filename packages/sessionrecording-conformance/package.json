@@ -1,0 +1,62 @@
+{
+  "name": "@cyborg-hunter/sessionrecording-conformance",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SessionRecording v2 conformance: corpus, dual-profile validator, whole-recording invariants, pipeline and checkpoint executor \u2014 runnable by any player or producer",
+  "type": "module",
+  "license": "MIT",
+  "author": "Can Konuk",
+  "exports": {
+    ".": "./src/index.js",
+    "./validator": "./src/validator.js",
+    "./invariants": "./src/invariants.js",
+    "./corpus": "./src/corpus.js",
+    "./pipeline": "./src/pipeline.js",
+    "./suite": "./src/suite.js",
+    "./checkpoints": "./src/checkpoints.js",
+    "./adapter": "./src/adapter.js",
+    "./schema": "./schema/session-recording-v2.schema.json",
+    "./types": "./types/session-recording-v2.d.ts",
+    "./fuzz/dom-player": "./src/fuzz/dom-player.js",
+    "./fuzz/mutation-fuzz": "./src/fuzz/mutation-fuzz.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "src-conformance": "./bin/src-conformance.mjs"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "fixtures/",
+    "expectations/",
+    "schema/",
+    "types/",
+    "README.md",
+    ".github/workflows/conformance.yml"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "happy-dom": ">=15"
+  },
+  "peerDependenciesMeta": {
+    "happy-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "happy-dom": "^20.9.0"
+  },
+  "keywords": [
+    "session-replay",
+    "conformance",
+    "jspsych",
+    "cyborg-hunter",
+    "schema"
+  ]
+}

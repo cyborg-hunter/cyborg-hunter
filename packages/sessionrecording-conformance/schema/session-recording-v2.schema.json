@@ -1,0 +1,553 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyborg-hunter.github.io/schema/session-recording-v2.schema.json",
+  "title": "SessionRecording v2",
+  "description": "Hand-authored from docs/session-recording-v2.md §2–§7. It states the SHAPE half of §11's strict profile — the half a field walk can see. Four strict rules are order or cross-element properties that JSON Schema cannot express (segment index vs array position, segment non-overlap, time-sortedness, and the first-keyframe-before-dom-events rule); test/schema-equivalence.test.js names each one with the corpus fixture that witnesses it, and asserts that list is exactly the set of disagreements with the validator. No `additionalProperties: false` appears anywhere on purpose: §11's preservation rule makes unknown fields legal at every level, and a closed schema would reject the forward-compat fixture the spec was written to admit.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "recorder",
+    "segments",
+    "recording_started_at",
+    "recording_started_at_perf",
+    "user_agent",
+    "viewport"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "recorder": { "$ref": "#/$defs/NameVersion" },
+    "host": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/NameVersion" }] },
+    "participant_id": { "type": ["string", "null"] },
+    "recording_started_at": { "type": "string" },
+    "recording_started_at_perf": { "type": "number" },
+    "user_agent": { "type": "string" },
+    "viewport": { "$ref": "#/$defs/ViewportState" },
+    "observed_root": { "type": ["string", "null"] },
+    "stylesheets": { "type": "array", "items": { "$ref": "#/$defs/StylesheetSnapshot" } },
+    "stylesheet_events": { "type": "array", "items": { "$ref": "#/$defs/StylesheetEvent" } },
+    "segments": { "type": "array", "items": { "$ref": "#/$defs/SegmentRecording" } },
+    "viewport_changes": { "type": "array", "items": { "$ref": "#/$defs/ViewportChange" } },
+    "rng": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/Rng" }] },
+    "rng_calls": { "type": ["array", "null"], "items": { "$ref": "#/$defs/RngCall" } },
+    "ended_at_perf": { "type": ["number", "null"] },
+    "end_reason": { "enum": ["finished", "aborted", "unload", null] },
+    "truncated": { "type": "boolean" },
+    "extensions": { "$ref": "#/$defs/Extensions" }
+  },
+  "allOf": [
+    {
+      "$comment": "§7: rng_calls is non-null iff rng is non-null. Absent counts as null, which is why the first branch types both rather than merely allowing them: an absent `rng` beside a populated `rng_calls` fails the null type on the second key.",
+      "anyOf": [
+        {
+          "properties": { "rng": { "type": "null" }, "rng_calls": { "type": "null" } }
+        },
+        {
+          "required": ["rng", "rng_calls"],
+          "properties": { "rng": { "type": "object" }, "rng_calls": { "type": "array" } }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "NameVersion": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": { "name": { "type": "string" }, "version": { "type": "string" } }
+    },
+    "Extensions": {
+      "$comment": "§9: vendor keys are lowercase slugs. The namespace only works as an ignore-list if the names are predictable.",
+      "type": ["object", "null"],
+      "propertyNames": { "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+    },
+    "ViewportState": {
+      "type": "object",
+      "required": ["w", "h", "dpr", "scale", "offset_x", "offset_y"],
+      "properties": {
+        "w": { "type": "number" }, "h": { "type": "number" }, "dpr": { "type": "number" },
+        "scale": { "type": "number" }, "offset_x": { "type": "number" }, "offset_y": { "type": "number" }
+      }
+    },
+    "ViewportChange": {
+      "allOf": [
+        { "$ref": "#/$defs/ViewportState" },
+        { "type": "object", "required": ["t"], "properties": { "t": { "type": "number" } } }
+      ]
+    },
+    "Rng": {
+      "type": "object",
+      "required": ["math_random_patched"],
+      "properties": {
+        "seed": { "type": ["string", "null"] },
+        "math_random_patched": { "type": "boolean" }
+      }
+    },
+    "RngCall": {
+      "$comment": "§2 types args/result as JsonValue — anything JSON can hold — so only the two identifying fields are typed.",
+      "type": "object",
+      "required": ["t", "fn"],
+      "properties": { "t": { "type": "number" }, "fn": { "type": "string" } }
+    },
+
+    "StylesheetSnapshot": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": { "id": { "type": "number" }, "media": { "type": ["string", "null"] } },
+      "anyOf": [
+        {
+          "properties": { "kind": { "const": "inline" }, "css": { "type": "string" } },
+          "required": ["css"]
+        },
+        {
+          "properties": {
+            "kind": { "const": "link" },
+            "href": { "type": "string" },
+            "css": { "type": ["string", "null"] }
+          },
+          "required": ["href"]
+        }
+      ]
+    },
+    "StylesheetEvent": {
+      "type": "object",
+      "required": ["t", "type"],
+      "properties": { "t": { "type": "number" } },
+      "anyOf": [
+        {
+          "properties": { "type": { "const": "stylesheet.add" }, "sheet": { "$ref": "#/$defs/StylesheetSnapshot" } },
+          "required": ["sheet"]
+        },
+        {
+          "properties": { "type": { "const": "stylesheet.remove" }, "id": { "type": "number" } },
+          "required": ["id"]
+        },
+        {
+          "properties": {
+            "type": { "const": "stylesheet.update" },
+            "id": { "type": "number" },
+            "css": { "type": "string" }
+          },
+          "required": ["id", "css"]
+        }
+      ]
+    },
+
+    "DomNode": {
+      "$comment": "§4. The element branch checks attrs and children as a PAIR: both present is a normal element, both absent is the §4 exclusion placeholder, and exactly one is a producer that half-built or half-stripped the other — the shape a player's instantiate crashes on.",
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": { "id": { "type": "integer" } },
+      "anyOf": [
+        {
+          "properties": { "kind": { "enum": ["text", "comment"] }, "text": { "type": "string" } },
+          "required": ["text"]
+        },
+        {
+          "required": ["tag"],
+          "properties": {
+            "kind": { "const": "element" },
+            "tag": { "type": "string" },
+            "attrs": { "type": "object", "additionalProperties": { "type": "string" } },
+            "children": { "type": "array", "items": { "$ref": "#/$defs/DomNode" } },
+            "canvas_size": {
+              "type": "object",
+              "required": ["w", "h"],
+              "properties": { "w": { "type": "number" }, "h": { "type": "number" } }
+            },
+            "media_src": { "type": "string" }
+          },
+          "anyOf": [
+            { "required": ["attrs", "children"] },
+            { "not": { "anyOf": [{ "required": ["attrs"] }, { "required": ["children"] }] } }
+          ]
+        }
+      ]
+    },
+
+    "InitialState": {
+      "type": ["object", "null"],
+      "required": ["scroll", "element_scroll", "media", "form"],
+      "properties": {
+        "scroll": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+        },
+        "element_scroll": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["node", "x", "y"],
+            "properties": { "node": { "type": "number" }, "x": { "type": "number" }, "y": { "type": "number" } }
+          }
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["node", "current_time", "paused"],
+            "properties": {
+              "node": { "type": "number" },
+              "current_time": { "type": "number" },
+              "paused": { "type": "boolean" }
+            }
+          }
+        },
+        "form": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["node"],
+            "properties": {
+              "node": { "type": "number" },
+              "value": { "type": "string" },
+              "checked": { "type": "boolean" },
+              "selected": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+
+    "SegmentRecording": {
+      "type": "object",
+      "required": ["index", "events"],
+      "properties": {
+        "index": { "type": "integer" },
+        "label": { "type": ["string", "null"] },
+        "plugin": { "type": ["string", "null"] },
+        "t_start": { "type": ["number", "null"] },
+        "t_dom_ready": { "type": ["number", "null"] },
+        "t_load": { "type": ["number", "null"] },
+        "t_end": { "type": ["number", "null"] },
+        "initial_dom": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/DomNode" }] },
+        "initial_state": { "$ref": "#/$defs/InitialState" },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/RecordedEvent" } },
+        "extensions": { "$ref": "#/$defs/Extensions" }
+      }
+    },
+
+    "Camera": {
+      "$comment": "§6: each anchored event carries complete blocks or none, so a half-filled camera is a producer bug rather than a cheaper event.",
+      "type": "object",
+      "required": [
+        "scroll_x", "scroll_y", "viewport_w", "viewport_h",
+        "client_w", "client_h", "dpr", "vv_scale", "vv_offset_x", "vv_offset_y"
+      ],
+      "properties": {
+        "scroll_x": { "type": "number" }, "scroll_y": { "type": "number" },
+        "viewport_w": { "type": "number" }, "viewport_h": { "type": "number" },
+        "client_w": { "type": "number" }, "client_h": { "type": "number" },
+        "dpr": { "type": "number" }, "vv_scale": { "type": "number" },
+        "vv_offset_x": { "type": "number" }, "vv_offset_y": { "type": "number" }
+      }
+    },
+    "Anchor": {
+      "$comment": "`id` may be ABSENT rather than null: §8 has anchors on redacted targets omit identity, and an explicit `id: null` is the different claim that the element had no id. `rect` is typed when present rather than required — a producer whose getBoundingClientRect was unavailable omits it, and the alignment check has a branch for that state (routed to spec r3).",
+      "type": "object",
+      "required": ["tag"],
+      "properties": {
+        "tag": { "type": "string" },
+        "id": { "type": ["string", "null"] },
+        "rect": {
+          "type": "object",
+          "required": ["x", "y", "w", "h"],
+          "properties": {
+            "x": { "type": "number" }, "y": { "type": "number" },
+            "w": { "type": "number" }, "h": { "type": "number" }
+          }
+        },
+        "node": { "type": ["number", "null"] }
+      }
+    },
+
+    "RecordedEvent": {
+      "allOf": [
+        { "$ref": "#/$defs/EventCommon" },
+        {
+          "anyOf": [
+            { "$ref": "#/$defs/DomAdd" },
+            { "$ref": "#/$defs/DomRemove" },
+            { "$ref": "#/$defs/DomAttr" },
+            { "$ref": "#/$defs/DomText" },
+            { "$ref": "#/$defs/MouseMove" },
+            { "$ref": "#/$defs/MouseButton" },
+            { "$ref": "#/$defs/Touch" },
+            { "$ref": "#/$defs/KeyPlain" },
+            { "$ref": "#/$defs/KeyRedacted" },
+            { "$ref": "#/$defs/InputValuePlain" },
+            { "$ref": "#/$defs/InputValueRedacted" },
+            { "$ref": "#/$defs/InputChecked" },
+            { "$ref": "#/$defs/InputSelect" },
+            { "$ref": "#/$defs/ScrollWindow" },
+            { "$ref": "#/$defs/ScrollElement" },
+            { "$ref": "#/$defs/Bare" },
+            { "$ref": "#/$defs/Clipboard" },
+            { "$ref": "#/$defs/Media" },
+            { "$ref": "#/$defs/CanvasSnapshot" },
+            { "$ref": "#/$defs/CaptureStopped" }
+          ]
+        }
+      ]
+    },
+
+    "EventCommon": {
+      "type": "object",
+      "required": ["type", "t"],
+      "properties": {
+        "type": { "type": "string" },
+        "t": { "type": "number" },
+        "extensions": { "$ref": "#/$defs/Extensions" },
+        "camera": { "$ref": "#/$defs/Camera" },
+        "anchor": { "$ref": "#/$defs/Anchor" }
+      },
+      "allOf": [
+        {
+          "$comment": "`redacted` is a variant marker, not a toggle: a truthy non-boolean would fall through to the plaintext branch and license exactly the content the redaction removed. `false` is rejected too — absence is how a non-redacted event says so. And the marker may only appear on the types §5.2 gives a redacted variant; elsewhere it is a claim nothing enforces.",
+          "if": { "required": ["redacted"] },
+          "then": {
+            "properties": {
+              "redacted": { "const": true },
+              "type": {
+                "enum": [
+                  "key.down", "key.up", "input.value",
+                  "clipboard.copy", "clipboard.cut", "clipboard.paste", "clipboard.drop"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "$comment": "§6: alignment fields never ride mouse.move.",
+          "if": { "required": ["type"], "properties": { "type": { "const": "mouse.move" } } },
+          "then": {
+            "not": { "anyOf": [{ "required": ["camera"] }, { "required": ["anchor"] }] }
+          }
+        }
+      ]
+    },
+
+    "DomAdd": {
+      "type": "object",
+      "required": ["type", "parent", "before", "node"],
+      "properties": {
+        "type": { "const": "dom.add" },
+        "parent": { "type": "number" },
+        "before": { "type": ["number", "null"] },
+        "node": { "$ref": "#/$defs/DomNode" }
+      }
+    },
+    "DomRemove": {
+      "type": "object",
+      "required": ["type", "node"],
+      "properties": { "type": { "const": "dom.remove" }, "node": { "type": "number" } }
+    },
+    "DomAttr": {
+      "type": "object",
+      "required": ["type", "node", "name", "value"],
+      "properties": {
+        "type": { "const": "dom.attr" },
+        "node": { "type": "number" },
+        "name": { "type": "string" },
+        "value": { "type": ["string", "null"] }
+      }
+    },
+    "DomText": {
+      "type": "object",
+      "required": ["type", "node", "text"],
+      "properties": {
+        "type": { "const": "dom.text" },
+        "node": { "type": "number" },
+        "text": { "type": "string" }
+      }
+    },
+    "MouseMove": {
+      "type": "object",
+      "required": ["type", "x", "y"],
+      "properties": {
+        "type": { "const": "mouse.move" },
+        "x": { "type": "number" }, "y": { "type": "number" }
+      }
+    },
+    "MouseButton": {
+      "$comment": "§7: `target` is required-but-nullable, because its three readings (null = no applicable target, a placeholder id = excluded, a live id with an identity-less anchor = redacted) are distinguishable only if the key is actually there. An absent key is a fourth state the spec does not define.",
+      "type": "object",
+      "required": ["type", "x", "y", "button", "target"],
+      "properties": {
+        "type": { "enum": ["mouse.down", "mouse.up", "mouse.click"] },
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "button": { "type": "number" },
+        "target": { "type": ["number", "null"] }
+      }
+    },
+    "Touch": {
+      "type": "object",
+      "required": ["type", "touches"],
+      "properties": {
+        "type": { "enum": ["touch.start", "touch.move", "touch.end"] },
+        "touches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "x", "y"],
+            "properties": {
+              "id": { "type": "number" }, "x": { "type": "number" }, "y": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "KeyPlain": {
+      "type": "object",
+      "required": ["type", "key", "code", "mods", "repeat", "target"],
+      "properties": {
+        "type": { "enum": ["key.down", "key.up"] },
+        "key": { "type": "string" },
+        "code": { "type": "string" },
+        "mods": { "type": "object" },
+        "repeat": { "type": "boolean" },
+        "target": { "type": ["number", "null"] }
+      }
+    },
+    "KeyRedacted": {
+      "$comment": "§5.2/§8: the redacted variant is {t, type, redacted} and nothing else. Named as a refusal of identity fields rather than a closed object, because §11 keeps unknown fields legal everywhere.",
+      "type": "object",
+      "required": ["type", "redacted"],
+      "properties": {
+        "type": { "enum": ["key.down", "key.up"] },
+        "redacted": { "const": true }
+      },
+      "not": {
+        "anyOf": [
+          { "required": ["key"] }, { "required": ["code"] }, { "required": ["mods"] },
+          { "required": ["repeat"] }, { "required": ["target"] }
+        ]
+      }
+    },
+    "InputValuePlain": {
+      "type": "object",
+      "required": ["type", "node", "value"],
+      "properties": {
+        "type": { "const": "input.value" },
+        "node": { "type": "number" },
+        "value": { "type": "string" }
+      },
+      "not": { "required": ["redacted"] }
+    },
+    "InputValueRedacted": {
+      "$comment": "The variant is {t, node, redacted, value_len}. A surviving `value` is the plaintext the redaction removed, so it is refused rather than ignored.",
+      "type": "object",
+      "required": ["type", "node", "redacted", "value_len"],
+      "properties": {
+        "type": { "const": "input.value" },
+        "node": { "type": "number" },
+        "redacted": { "const": true },
+        "value_len": { "type": "number" }
+      },
+      "not": { "required": ["value"] }
+    },
+    "InputChecked": {
+      "type": "object",
+      "required": ["type", "node", "checked"],
+      "properties": {
+        "type": { "const": "input.checked" },
+        "node": { "type": "number" },
+        "checked": { "type": "boolean" }
+      }
+    },
+    "InputSelect": {
+      "$comment": "`values` is string[] in §5.2. An untyped array let a <select multiple> ship option objects, which no player can set back onto the control.",
+      "type": "object",
+      "required": ["type", "node", "values"],
+      "properties": {
+        "type": { "const": "input.select" },
+        "node": { "type": "number" },
+        "values": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "ScrollWindow": {
+      "type": "object",
+      "required": ["type", "x", "y"],
+      "properties": {
+        "type": { "const": "scroll.window" },
+        "x": { "type": "number" }, "y": { "type": "number" }
+      }
+    },
+    "ScrollElement": {
+      "type": "object",
+      "required": ["type", "node", "x", "y"],
+      "properties": {
+        "type": { "const": "scroll.element" },
+        "node": { "type": "number" },
+        "x": { "type": "number" }, "y": { "type": "number" }
+      }
+    },
+    "Bare": {
+      "$comment": "§5.5: the events that carry nothing but their type and t.",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": [
+            "focus", "blur", "fullscreen.enter", "fullscreen.exit",
+            "visibility.hidden", "visibility.visible"
+          ]
+        }
+      }
+    },
+    "Clipboard": {
+      "$comment": "§5.3's four fields are required-but-nullable: the two producer modes (content vs length-only) are DEFINED by which of them are null, so an absent key is silence rather than a claim and a player cannot tell a withheld payload from a forgotten one.",
+      "type": "object",
+      "required": ["type", "target", "text", "html", "len"],
+      "properties": {
+        "type": { "enum": ["clipboard.copy", "clipboard.cut", "clipboard.paste", "clipboard.drop"] },
+        "target": { "type": ["number", "null"] },
+        "text": { "type": ["string", "null"] },
+        "html": { "type": ["string", "null"] },
+        "len": { "type": ["number", "null"] }
+      },
+      "allOf": [
+        {
+          "$comment": "A redacted clipboard event nulls both text and html; len may stay.",
+          "if": { "required": ["redacted"], "properties": { "redacted": { "const": true } } },
+          "then": { "properties": { "text": { "type": "null" }, "html": { "type": "null" } } }
+        }
+      ]
+    },
+    "Media": {
+      "type": "object",
+      "required": ["type", "node", "current_time"],
+      "properties": {
+        "type": {
+          "enum": ["media.play", "media.pause", "media.ended", "media.seeked", "media.time"]
+        },
+        "node": { "type": "number" },
+        "current_time": { "type": "number" }
+      }
+    },
+    "CanvasSnapshot": {
+      "type": "object",
+      "required": ["type", "node", "data_url"],
+      "properties": {
+        "type": { "const": "canvas.snapshot" },
+        "node": { "type": "number" },
+        "data_url": { "type": "string" },
+        "region": {
+          "type": "object",
+          "required": ["x", "y", "w", "h"],
+          "properties": {
+            "x": { "type": "number" }, "y": { "type": "number" },
+            "w": { "type": "number" }, "h": { "type": "number" }
+          }
+        }
+      }
+    },
+    "CaptureStopped": {
+      "type": "object",
+      "required": ["type", "reason"],
+      "properties": {
+        "type": { "const": "recording.capture_stopped" },
+        "reason": { "enum": ["buffer_limit", "error"] }
+      }
+    }
+  }
+}

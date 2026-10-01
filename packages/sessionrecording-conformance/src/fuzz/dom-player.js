@@ -1,4 +1,4 @@
-// tests/replay/support/dom-player.js
+// packages/sessionrecording-conformance/src/fuzz/dom-player.js
 // A spec §5.1 player for tests: applies `dom.*` patches to a real DOM and says
 // what tree it ended up holding. Not a test file (it lives outside the
 // `tests/replay/*.test.js` glob); shared by mutations.test.js and

@@ -1,4 +1,4 @@
-// tests/replay/schema-v2/corpus-invariants.js
+// packages/sessionrecording-conformance/src/invariants.js
 // Whole-recording properties the per-field validator cannot see.
 //
 // WHY THIS IS NOT validator.js. `validateStrict` walks the file field by field

@@ -35,7 +35,7 @@ import { readFileSync } from 'fs';
 import { buildViewerModel } from '../../src/cli/renderers/replay-assets.js';
 import { boot, withProto } from './support/viewer-harness.js';
 
-const FIXTURES = new URL('./schema-v2/fixtures/', import.meta.url);
+import { FIXTURES_URL as FIXTURES } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 const fixture = (name) =>
   JSON.parse(readFileSync(new URL(name + '.json', FIXTURES), 'utf8'));
 

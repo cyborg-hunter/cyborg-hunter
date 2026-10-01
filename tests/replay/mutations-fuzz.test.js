@@ -22,11 +22,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createPlayer } from './support/dom-player.js';
-import { MIXES, SEEDS, generateSession } from './support/mutation-fuzz.js';
+import { createPlayer } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
+import { MIXES, SEEDS, generateSession } from '@cyborg-hunter/sessionrecording-conformance/fuzz/mutation-fuzz';
+import { CH_CAPTURE } from './support/ch-capture.js';
 
 function runSession(mixName, seed) {
-  const session = generateSession({ mix: mixName, seed });
+  const session = generateSession({ mix: mixName, seed, capture: CH_CAPTURE });
   const player = createPlayer(session.keyframe);
 
   for (const batch of session.batches) {

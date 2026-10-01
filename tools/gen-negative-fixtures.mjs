@@ -25,13 +25,13 @@ import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { INVARIANT_NAMES } from '../tests/replay/schema-v2/corpus-invariants.js';
+import { INVARIANT_NAMES } from '@cyborg-hunter/sessionrecording-conformance/invariants';
 import { countsOf } from './gen-expectations-counts.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
-const FIX = join(ROOT, 'tests', 'replay', 'schema-v2', 'fixtures');
-const EXP = join(ROOT, 'tests', 'replay', 'schema-v2', 'expectations');
+const FIX = join(ROOT, 'packages', 'sessionrecording-conformance', 'fixtures');
+const EXP = join(ROOT, 'packages', 'sessionrecording-conformance', 'expectations');
 
 // ── the base every entry deviates from ─────────────────────────────────────
 // Minimal, strict-valid, and boring on purpose: whatever a given entry fails

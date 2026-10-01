@@ -14,7 +14,7 @@
 // rather than as a fixture that certifies itself.
 //
 // Usage:
-//   node tools/gen-expectations-counts.mjs tests/replay/schema-v2/fixtures/jspsych-full.json
+//   node tools/gen-expectations-counts.mjs packages/sessionrecording-conformance/fixtures/jspsych-full.json
 //     → the counts block on stdout, the authoring inventory on stderr
 //   node tools/gen-expectations-counts.mjs <fixture> --inventory
 //     → inventory only, on stdout

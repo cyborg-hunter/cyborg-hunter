@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { detectGzip, validateTolerant, validateStrict } from '../../../src/shared/schema-v2-validator.js';
+import { join } from 'node:path';
+import { detectGzip, validateTolerant, validateStrict } from '@cyborg-hunter/sessionrecording-conformance/validator';
+import { FIXTURES_DIR } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 
 test('detectGzip: true for gzipped bytes, false for JSON text and short input', () => {
   const gz = gzipSync(Buffer.from('{"schema_version":2}'));
@@ -650,10 +650,9 @@ test('strict: segments must not overlap (§3), measured against the next segment
     { t_start: 500, t_end: 1000 })).errors, []);
 });
 
-const HERE = dirname(fileURLToPath(import.meta.url));
 
 test('canonical-core fixture is strict-valid', () => {
-  const raw = readFileSync(join(HERE, 'fixtures', 'canonical-core.json'), 'utf8');
+  const raw = readFileSync(join(FIXTURES_DIR, 'canonical-core.json'), 'utf8');
   const res = validateStrict(raw);
   assert.deepEqual(res.errors, []);
   assert.equal(res.ok, true);

@@ -228,7 +228,7 @@ mkdirSync(artifactsDir, { recursive: true });
 
 const FROZEN_FIXTURE = join(here, 'fixtures', 'alignment-v2-frozen.json');
 const V1_REPORT_PATH = '/tests/browser/replay/fixtures/v0.7.1-report/index.html';
-const JSPSYCH_FULL = join(repoRoot, 'tests', 'replay', 'schema-v2', 'fixtures', 'jspsych-full.json');
+const JSPSYCH_FULL = join(repoRoot, 'packages', 'sessionrecording-conformance', 'fixtures', 'jspsych-full.json');
 
 let failures = 0;
 let engineTag = '';

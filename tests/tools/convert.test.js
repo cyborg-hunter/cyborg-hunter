@@ -507,7 +507,7 @@ test('the CLI refuses to emit output that fails strict validation', () => {
 //
 // tests/tools/fixtures/jspsych-v1-full.json is the raw v1 recording the
 // Playwright harness cut (14 trials, 909 events, 1.2MB), and
-// tests/replay/schema-v2/fixtures/jspsych-full.json is what this converter made
+// packages/sessionrecording-conformance/fixtures/jspsych-full.json is what this converter made
 // of it. The conformance runner checks the SECOND file; nothing checked the
 // first, so a corrupted or truncated capture would sit in the tree unnoticed
 // until someone tried to regenerate from it — precisely when the regeneration
@@ -517,7 +517,7 @@ test('the CLI refuses to emit output that fails strict validation', () => {
 // that only appears at scale (a trial shape the minimal object does not have, a
 // 470KB stylesheet, a 189K-char canvas data URL) has no other tripwire.
 const RAW_FULL_PATH = 'tests/tools/fixtures/jspsych-v1-full.json';
-const FULL_FIXTURE_PATH = 'tests/replay/schema-v2/fixtures/jspsych-full.json';
+const FULL_FIXTURE_PATH = 'packages/sessionrecording-conformance/fixtures/jspsych-full.json';
 // The digest the fixture's expectations quote as the raw-capture → fixture link
 // (extensions["cyborg-hunter"].converter.source_sha256). Written out here as
 // well as compared through the fixture, so a mismatch reads as "the capture

@@ -636,7 +636,7 @@ async function runEngine(name) {
     // `attr:autofocus` reads — so the right answer is to name the error, not to
     // strip the attribute. (T5.4 finding (a).)
     const rec2 = JSON.parse(readFileSync(
-      join(repoRoot, 'tests', 'replay', 'schema-v2', 'fixtures', 'jspsych-full.json'), 'utf8'));
+      join(repoRoot, 'packages', 'sessionrecording-conformance', 'fixtures', 'jspsych-full.json'), 'utf8'));
     const autofocusSeg = rec2.segments.findIndex((s) => /"autofocus"/.test(JSON.stringify(s.initial_dom || null)));
     check(autofocusSeg === 12,
       `the corpus fixture carries an autofocus attribute, in segment ${autofocusSeg}'s keyframe`);

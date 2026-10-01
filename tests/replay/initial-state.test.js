@@ -15,8 +15,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { Window } from 'happy-dom';
 
 import { buildInitialState } from '../../src/replay/initial-state.js';
@@ -26,9 +25,9 @@ import { markRedacted } from '../../src/replay/redaction.js';
 import { createRecorder } from '../../src/replay/recorder.js';
 import { attachTraceCapture } from '../../src/replay/capture-trace.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+import { FIXTURES_DIR } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 const canonical = JSON.parse(
-  readFileSync(join(HERE, 'schema-v2', 'fixtures', 'canonical-core.json'), 'utf8'));
+  readFileSync(join(FIXTURES_DIR, 'canonical-core.json'), 'utf8'));
 
 // One-line HTML only: the parser keeps inter-tag whitespace as real text nodes,
 // which get ids and shift the numbering.

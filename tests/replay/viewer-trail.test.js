@@ -10,9 +10,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'fs';
+import { FIXTURES_URL } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 import { boot } from './support/viewer-harness.js';
 
-const rec = JSON.parse(readFileSync(new URL('./schema-v2/fixtures/jspsych-full.json', import.meta.url), 'utf8'));
+const rec = JSON.parse(readFileSync(new URL('jspsych-full.json', FIXTURES_URL), 'utf8'));
 
 // The free-sort segment (91 pointer moves), at its end: a long live trail.
 function lastOverlayFrame() {

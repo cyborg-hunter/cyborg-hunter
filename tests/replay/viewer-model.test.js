@@ -17,7 +17,7 @@ import { buildViewerModel } from '../../src/replay/viewer-model.js';
 // are compared by machine rather than by prose (review I-1).
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 
-const FIXTURES = new URL('./schema-v2/fixtures/', import.meta.url);
+import { FIXTURES_URL as FIXTURES } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 const fixture = (name) =>
   JSON.parse(readFileSync(new URL(name + '.json', FIXTURES), 'utf8'));
 

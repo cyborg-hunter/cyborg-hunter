@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
-const OUT = join(ROOT, 'tests', 'replay', 'schema-v2', 'fixtures');
+const OUT = join(ROOT, 'packages', 'sessionrecording-conformance', 'fixtures');
 const DIST = join(ROOT, 'dist', 'cyborg-hunter-replay.js');
 
 function resolvePlaywright() {

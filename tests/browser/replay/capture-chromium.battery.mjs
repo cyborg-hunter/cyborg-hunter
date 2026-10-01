@@ -23,7 +23,7 @@
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { createPlayer } from '../../replay/support/dom-player.js';
+import { createPlayer } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
 
 function resolvePlaywright() {
   const candidates = [

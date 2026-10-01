@@ -11,19 +11,18 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { Window } from 'happy-dom';
 
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
-import { createPlayer } from './support/dom-player.js';
+import { createPlayer } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
 import { mapMutations, MUTATION_OBSERVER_INIT } from '../../src/replay/mutations.js';
 import { serializeTree, nearestEmittedAncestor } from '../../src/replay/snapshot.js';
 import { createSpan } from '../../src/replay/span.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+import { FIXTURES_DIR } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 const canonical = JSON.parse(
-  readFileSync(join(HERE, 'schema-v2', 'fixtures', 'canonical-core.json'), 'utf8'));
+  readFileSync(join(FIXTURES_DIR, 'canonical-core.json'), 'utf8'));
 
 // A capture in miniature: keyframe (serializeTree numbers the observed root),
 // then batches of mutations mapped at observer-callback time. One-line HTML

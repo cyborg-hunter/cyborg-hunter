@@ -23,9 +23,9 @@ import { readFileSync } from 'fs';
 import { Window } from 'happy-dom';
 
 import { instantiateTree, mountTree } from '../../src/replay/dom-instantiate.js';
-import { createPlayer, readTree, asPlayerTree } from './support/dom-player.js';
+import { createPlayer, readTree, asPlayerTree } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
 
-const FIXTURES = new URL('./schema-v2/fixtures/', import.meta.url);
+import { FIXTURES_URL as FIXTURES } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 const fixture = (name) =>
   JSON.parse(readFileSync(new URL(name + '.json', FIXTURES), 'utf8'));
 

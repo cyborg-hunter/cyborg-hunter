@@ -31,11 +31,11 @@ import { Window } from 'happy-dom';
 import {
   instantiateTree, mountTree, applyPatch, applyPatches,
 } from '../../src/replay/dom-instantiate.js';
-import { createPlayer, readTree, asPlayerTree } from './support/dom-player.js';
-import { MIXES, SEEDS, generateSession } from './support/mutation-fuzz.js';
+import { createPlayer, readTree, asPlayerTree } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
+import { MIXES, SEEDS, generateSession } from '@cyborg-hunter/sessionrecording-conformance/fuzz/mutation-fuzz';
+import { CH_CAPTURE } from './support/ch-capture.js';
 
-const FIXTURES = new URL('./schema-v2/fixtures/', import.meta.url);
-const EXPECTATIONS = new URL('./schema-v2/expectations/', import.meta.url);
+import { FIXTURES_URL as FIXTURES, EXPECTATIONS_URL as EXPECTATIONS } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 const fixture = (name) =>
   JSON.parse(readFileSync(new URL(name + '.json', FIXTURES), 'utf8'));
 const expectations = (name) =>
@@ -870,7 +870,7 @@ describe('differential — the same patches through the viewer and the strict pl
   for (const mixName of Object.keys(MIXES)) {
     it('agrees with the strict player under random batches: ' + mixName, () => {
       for (const seed of SEEDS) {
-        const session = generateSession({ mix: mixName, seed });
+        const session = generateSession({ mix: mixName, seed, capture: CH_CAPTURE });
         const player = createPlayer(session.keyframe);
         const mount = instantiateTree(session.keyframe, freshDoc());
 

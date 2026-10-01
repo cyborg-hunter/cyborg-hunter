@@ -1,30 +1,47 @@
-// tests/replay/support/mutation-fuzz.js
 // The random DOM-batch generator behind the differential suites: it drives a
-// live happy-dom tree through seeded op mixes, runs the real capture path over
-// each batch (`mapMutations`), and hands back the emitted `dom.*` events plus
-// the capture-side oracle — what a fresh `serializeTree` of the same DOM says
-// right now.
+// live happy-dom tree through seeded op mixes, runs a PRODUCER's capture path
+// over each batch, and hands back the emitted `dom.*` events plus the
+// capture-side oracle — what a fresh serialization of the same DOM says right
+// now.
 //
-// EXTRACTED from `mutations-fuzz.test.js` (T5 Task 3), which still drives it,
-// so that the viewer's applier (`src/replay/dom-instantiate.js`) and the strict
-// test player (`support/dom-player.js`) can be run over the SAME generated
-// batches. Copying the generator into the second suite would have put two
-// readings of "what a batch means" in the repo, which is the failure this
-// migration exists to remove — the same argument that made `readTree` shared
-// rather than mirrored.
+// EXTRACTED from `mutations-fuzz.test.js` so that the viewer's
+// applier and the strict test player (`dom-player.js`) can be run over the SAME
+// generated batches. Copying the generator into the second suite would have put
+// two readings of "what a batch means" in the repo, which is the failure that
+// migration existed to remove.
+//
+// THE CAPTURE PATH IS INJECTED. This file used to import CH's recorder
+// modules directly, which is what kept it inside CH's test tree: a generator
+// that hard-codes one producer's capture path cannot be a producer-agnostic
+// conformance tool. `generateSession` now takes a `capture` object supplying the
+// five symbols it needs, so any recorder can be fuzzed through it — CH passes
+// its own in `tests/replay/support/ch-capture.js`, and the same seam is what a
+// jsPsych-side recorder would bind. Nothing else about the generator changed:
+// the seeds, the mixes, the op set and the oracle are as they were, so a seed
+// that reproduced a failure before reproduces it now.
 //
 // DETERMINISTIC by construction: a seeded PRNG, fixed seed lists, fixed op
 // mixes. A failure prints the seed, the op log and the batch index, and
-// re-running reproduces it exactly. Not a test file — it lives outside the
-// `tests/replay/*.test.js` glob.
+// re-running reproduces it exactly.
 
 import { Window } from 'happy-dom';
 
-import { mapMutations, MUTATION_OBSERVER_INIT } from '../../../src/replay/mutations.js';
-import { serializeTree } from '../../../src/replay/snapshot.js';
-import { createSpan } from '../../../src/replay/span.js';
-import { createDelivery } from '../../../src/replay/delivery.js';
 import { asPlayerTree } from './dom-player.js';
+
+// The producer-side symbols the generator drives. Named here rather than left
+// to a duck-typed destructure so a caller that forgets one is told which.
+const CAPTURE_SYMBOLS = ['mapMutations', 'MUTATION_OBSERVER_INIT', 'serializeTree', 'createSpan', 'createDelivery'];
+
+function checkCapture(capture) {
+  if (capture == null || typeof capture !== 'object') {
+    throw new TypeError('generateSession: `capture` is required — the producer capture path to fuzz, ' +
+      `supplying { ${CAPTURE_SYMBOLS.join(', ')} }`);
+  }
+  const missing = CAPTURE_SYMBOLS.filter((k) => capture[k] == null);
+  if (missing.length) {
+    throw new TypeError(`generateSession: \`capture\` is missing ${missing.join(', ')}`);
+  }
+}
 
 // mulberry32: 32-bit state, uniform enough for op selection and short enough
 // to read. The point is reproducibility, not statistical quality.
@@ -186,7 +203,7 @@ export const OPS_PER_BATCH = 6;
 // recording already assigned, and takes its OWN delivery, because that model
 // is the thing under test: writing into it between batches would re-sync it to
 // the live DOM and repair exactly the drift these suites exist to catch.
-function oracleSpan(span) {
+function oracleSpan(span, createDelivery) {
   return { registry: span.registry, delivery: createDelivery(), reset() {} };
 }
 
@@ -196,13 +213,17 @@ function oracleSpan(span) {
  * @param {object} opts
  * @param {string} opts.mix   a key of `MIXES`
  * @param {number} opts.seed  any integer; the same seed replays exactly
+ * @param {object} opts.capture  the producer's capture path:
+ *   `{ mapMutations, MUTATION_OBSERVER_INIT, serializeTree, createSpan, createDelivery }`
  * @returns {{keyframe: object, batches: {events, expected, log, where}[]}}
  *   `keyframe` is the spec §4 tree a player instantiates; per batch, `events`
  *   are the emitted `dom.*` patches, `expected` is the capture-side oracle
  *   (`asPlayerTree` of a fresh serialization of the live DOM), and `where` is a
  *   ready-made failure locator carrying the mix, the seed and the op log.
  */
-export function generateSession({ mix, seed, batches = BATCHES, opsPerBatch = OPS_PER_BATCH }) {
+export function generateSession({ mix, seed, capture, batches = BATCHES, opsPerBatch = OPS_PER_BATCH }) {
+  checkCapture(capture);
+  const { mapMutations, MUTATION_OBSERVER_INIT, serializeTree, createSpan, createDelivery } = capture;
   const rng = mulberry32(seed);
   const win = new Window({ url: 'https://example.org/exp/' });
   const doc = win.document;
@@ -233,7 +254,7 @@ export function generateSession({ mix, seed, batches = BATCHES, opsPerBatch = OP
     // quietly repair the drift these suites exist to catch. Ids still line up,
     // since the recording's span assigned them and a second walk of the same
     // nodes only re-reads what it already knows.
-    const expected = asPlayerTree(serializeTree(root, oracleSpan(span), {}));
+    const expected = asPlayerTree(serializeTree(root, oracleSpan(span, createDelivery), {}));
     out.push({ events, expected, log: log.slice(), where });
   }
 

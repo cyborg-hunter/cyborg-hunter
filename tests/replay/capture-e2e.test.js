@@ -23,7 +23,8 @@ import { Window } from 'happy-dom';
 
 import * as CHReplay from '../../src/replay/index.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
-import { createPlayer } from './support/dom-player.js';
+import { createPlayer } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
+import { FIXTURES_URL } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 
 // ONE SENTINEL PER CHANNEL. Spec §8 names the channels it closes — initial_dom
 // attributes, initial_state.form, dom.text/dom.attr, key identity, clipboard,
@@ -304,7 +305,7 @@ describe('end-to-end capture → v2 recording', () => {
     // and a continuation's key set is the same key set as a keyframe's, which is
     // what stops "continuation" from becoming a differently-shaped segment.
     const canonical = JSON.parse(readFileSync(
-      new URL('./schema-v2/fixtures/canonical-core.json', import.meta.url), 'utf8'));
+      new URL('canonical-core.json', FIXTURES_URL), 'utf8'));
     const kinds = (r) => r.segments.map(s => [
       s.initial_dom == null ? 'continuation' : 'keyframe',
       s.initial_state == null ? 'no-seed' : 'seeded',

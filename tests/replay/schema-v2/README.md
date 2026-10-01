@@ -1,15 +1,20 @@
-# schema-v2 — SessionRecording v2 validator + conformance fixtures
+# schema-v2 — CH's answer to the SessionRecording v2 conformance corpus
 
-Package-shaped: this directory is the future shared schema package's root
-(spec: docs/plans/2026-08-09-session-recording-v2-spec-draft.md, r2). Until
-then, CH's CI runs it via `npm run test:schema`.
+The lift happened. What used to be "package-shaped" is a package:
+`packages/sessionrecording-conformance` holds the validator (`src/validator.js`,
+dual profiles, spec §11), the whole-recording invariants (`src/invariants.js`),
+the corpus itself (`fixtures/`, `expectations/`) and the differential fuzz
+oracle (`src/fuzz/`). CH imports it by name, like any other consumer would.
 
-Layout: `validator.js` (dual profiles, spec §11) · `corpus-invariants.js`
-(whole-recording properties a field walk cannot see) · `fixtures/` (the corpus)
-· `expectations/` (per-fixture assertions) · `conformance.test.js` (wire-level
-runner) · `checkpoints.test.js` (reconstruction-level runner) ·
-`validator.test.js` and `corpus-invariants.test.js` (each layer's own reject
-direction, on synthetic input).
+What stays HERE is CH's side of the contract — the suites that answer the corpus
+as one implementation among several: `conformance.test.js` (wire-level runner)
+and `checkpoints.test.js` (reconstruction-level runner, the one that needs a
+player). Each layer's own reject direction on synthetic input moved with the
+code it guards: `validator.test.js` and `corpus-invariants.test.js` now live in
+`packages/sessionrecording-conformance/test/`, so a regression in the validator
+is red in the package's own `npm test` and not only in CH's. CH's CI runs this
+directory via `npm run test:schema` and the package's suites via
+`npm run test:package`, which the root `npm test` chains.
 
 Hand-authored canonical fixtures are the consumer contract; producer recordings
 answer it. Both halves are needed and neither substitutes: a hand-authored

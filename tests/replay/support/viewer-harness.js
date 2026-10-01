@@ -27,11 +27,12 @@ import { Window } from 'happy-dom';
 
 import { readReplayClientSrc } from '../../../src/cli/renderers/replay-client-source.js';
 import { buildViewerModel } from '../../../src/replay/viewer-model.js';
+import { FIXTURES_URL } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 
 export const CLIENT_SRC = readReplayClientSrc();
 
 export const fixture = (name) => JSON.parse(readFileSync(
-  new URL(`../schema-v2/fixtures/${name}.json`, import.meta.url), 'utf8'));
+  new URL(`${name}.json`, FIXTURES_URL), 'utf8'));
 
 // Node identity assertions go through this: a failing `assert.equal` on two
 // happy-dom nodes renders both with `util.inspect`, which walks
@@ -172,4 +173,71 @@ export function segment(over) {
     initial_dom: null, initial_state: null, events: [],
     host_data: null, extensions: null,
   }, over);
+}
+
+// ── the conformance adapter ────────────────────────────────────────────────
+// CH's side of `@cyborg-hunter/sessionrecording-conformance`'s player contract
+// (that package's `src/adapter.js`). It is a translation layer and nothing
+// more: the reconstruction is the shipped viewer, booted exactly as `boot`
+// boots it, and every method below forwards to the viewer's own debug surface.
+//
+// The three props that need a DOM realm are the adapter's, because `instanceof`
+// has to resolve against the FRAME's window — a parent-realm constructor
+// answers false. Everything else about a checkpoint (the prop vocabulary, the
+// refusals, the bounds, the conversion, the comparison) belongs to the package,
+// so CH cannot vary it.
+
+export function asConformanceAdapter(bootFn = boot) {
+  return {
+    boot(recording) {
+      const v = bootFn(recording);
+      return {
+        // The §3 reading is the viewer model's, not a second one made here: a
+        // guard carrying its own copy of the origin chain green-lights exactly
+        // the placements the viewer misplaces.
+        segments: v.model.segments,
+        selectSegment: (i) => { v.dbg.selectSegment(i); },
+        seekTo: (tRel) => { v.dbg.seek(tRel); },
+        getSegment: () => v.dbg.getSegment(),
+        getPlayhead: () => v.dbg.getPlayhead(),
+        // Tolerant by design (the viewer is an analyst tool): an id the span
+        // never bound comes back undefined. The package supplies the loudness.
+        resolveNode: (id) => v.dbg.getNode(id) ?? null,
+        isConnected: (node) => node.isConnected === true,
+        readProp: (node, prop, id) => readProp(v, node, prop, id),
+        dispose: () => {},
+        // Kept for the CH-only tests that assert on the model directly.
+        viewer: v,
+      };
+    },
+  };
+}
+
+function readProp(v, node, prop, id) {
+  if (prop === 'text') {
+    // Text and comment nodes carry their content in nodeValue; elements answer
+    // for their subtree. Same split as the fork's reader.
+    return (node.nodeType === 3 || node.nodeType === 8) ? node.nodeValue : node.textContent;
+  }
+
+  // The reconstruction lives in the frame's realm, so `instanceof` has to
+  // resolve against ITS window — a parent-realm constructor answers false.
+  const doc = v.doc();
+  const W = doc && doc.defaultView;
+  if (!W) throw new Error('the reconstruction frame has no window');
+
+  if (prop === 'value') {
+    if (node instanceof W.HTMLInputElement || node instanceof W.HTMLTextAreaElement
+      || node instanceof W.HTMLSelectElement) {
+      return node.value;
+    }
+    throw new Error(`node ${id} is a <${node.nodeName.toLowerCase()}>, ` +
+      `not a form control — prop "value" has nothing to read`);
+  }
+
+  const name = prop.slice('attr:'.length);
+  if (!(node instanceof W.Element)) {
+    throw new Error(`node ${id} is not an element — prop "${prop}" has nothing to read`);
+  }
+  return node.getAttribute(name);
 }

@@ -27,7 +27,7 @@ import {
 } from '../../src/replay/capture-dom.js';
 import { createRecorder } from '../../src/replay/recorder.js';
 import { createSpan } from '../../src/replay/span.js';
-import { createPlayer } from './support/dom-player.js';
+import { createPlayer } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
 
 // A recorder with tier-2 capture attached to a real (happy-dom) document.
 // The MutationObserver is injected so batches flush synchronously: a real

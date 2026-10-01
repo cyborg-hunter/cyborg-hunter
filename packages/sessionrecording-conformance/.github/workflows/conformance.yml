@@ -1,0 +1,69 @@
+# SessionRecording v2 conformance — a template to copy into YOUR repository.
+#
+# Copy this file to `.github/workflows/conformance.yml` in the repo whose player
+# or recorder you want held to the spec, then do one of two things:
+#
+#   - a PLAYER: write an adapter module (see the package README's contract) and
+#     point ADAPTER at it. Both halves of the corpus run — the wire-level
+#     battery, and the `checkpoints` arrays your player has to reconstruct.
+#   - a PRODUCER with no player: leave ADAPTER empty. The wire-level battery
+#     runs on its own, and you additionally check YOUR OWN recordings with
+#     `src-conformance check`, which is what the second job shows.
+#
+# The corpus travels with the package, so nothing here fetches fixtures.
+
+name: SessionRecording v2 conformance
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  corpus:
+    name: conformance corpus
+    runs-on: ubuntu-latest
+    env:
+      # Path or specifier of your adapter module. Leave empty to run the
+      # wire-level half only.
+      ADAPTER: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+
+      - name: Run the corpus
+        run: |
+          if [ -n "$ADAPTER" ]; then
+            npx src-conformance corpus --adapter "$ADAPTER"
+          else
+            npx src-conformance corpus
+          fi
+
+  recordings:
+    name: check recorded artifacts
+    runs-on: ubuntu-latest
+    # Producers only: point this at recordings your recorder emits in CI. Delete
+    # the job if you have none — a job that globs an empty directory passes
+    # while checking nothing, which is worse than not having it.
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - name: Check every recording under artifacts/
+        run: |
+          found=0
+          for f in artifacts/*.json artifacts/*.json.gz; do
+            [ -e "$f" ] || continue
+            found=1
+            echo "── $f"
+            npx src-conformance check "$f"
+          done
+          if [ "$found" = 0 ]; then
+            echo "no recordings found under artifacts/ — this job would pass vacuously" >&2
+            exit 1
+          fi

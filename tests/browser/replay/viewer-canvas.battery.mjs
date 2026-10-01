@@ -154,7 +154,7 @@ const near = (p, want, tol) => Math.abs(p[0] - want[0]) <= tol && Math.abs(p[1] 
 // ── the recording ──────────────────────────────────────────────────────────
 
 const RECORDING = JSON.parse(readFileSync(
-  join(repoRoot, 'tests', 'replay', 'schema-v2', 'fixtures', 'jspsych-full.json'), 'utf8'));
+  join(repoRoot, 'packages', 'sessionrecording-conformance', 'fixtures', 'jspsych-full.json'), 'utf8'));
 
 // Both canvas segments tear down inside their own span (segment 8 removes the
 // canvas's parent at tRel 263.4; segment 9 removes the canvas at 1505.1, and

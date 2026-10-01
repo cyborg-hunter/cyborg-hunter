@@ -70,7 +70,7 @@ const viewerSrc = readReplayClientSrc();
 // fixture is untouched: segment 0's keyframe is what must survive the rewrite.
 function externalSheetModel() {
   const rec = JSON.parse(readFileSync(
-    join(repoRoot, 'tests', 'replay', 'schema-v2', 'fixtures', 'canonical-core.json'), 'utf8'));
+    join(repoRoot, 'packages', 'sessionrecording-conformance', 'fixtures', 'canonical-core.json'), 'utf8'));
   rec.stylesheets = [{ id: 1, kind: 'link', href: 'https://example.test/a.css', css: null, media: null }];
   return buildViewerModel(rec);
 }

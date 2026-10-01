@@ -12,8 +12,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import { serialize } from '../../src/replay/serializer.js';
 import { createRecorder } from '../../src/replay/recorder.js';
@@ -21,9 +20,9 @@ import { buildViewerModel } from '../../src/replay/viewer-model.js';
 import { VERSION } from '../../src/shared/constants.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+import { FIXTURES_DIR } from '@cyborg-hunter/sessionrecording-conformance/corpus';
 const canonical = JSON.parse(readFileSync(
-  join(HERE, 'schema-v2', 'fixtures', 'canonical-core.json'), 'utf8'));
+  join(FIXTURES_DIR, 'canonical-core.json'), 'utf8'));
 
 // Assert-and-return: every test serializes through here, so no test can quietly
 // skip the machine check.
