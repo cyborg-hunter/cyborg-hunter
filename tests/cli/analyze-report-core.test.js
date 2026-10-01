@@ -2,10 +2,9 @@
 // renderInPageHtml turns the same PNG bytes into data URIs for the browser.
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
 import { ingest } from '../../src/cli/ingest.js';
 import { buildReport, renderInPageHtml, REPORT_FILES } from '../../src/cli/report-core.js';
-import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv.js';
+import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
 import { makeRecordingCanvasFactory } from './recording-canvas.js';
 import { mergeConfig } from '../../src/cli/config-core.js';
 

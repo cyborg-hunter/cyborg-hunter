@@ -22,15 +22,15 @@ import { detectEdgeExits } from './analyzers/edge-exit.js';
 import { rankTriage } from './analyzers/triage.js';
 import { resolveScoreWeights, formulaText } from './analyzers/score-weights.js';
 import { applyPhaseScope, describePhaseScope, findUnmatchedPhaseScopePhases } from './analyzers/phase-scope.js';
-import { buildSummaryCsv } from './renderers/summary-csv.js';
-import { buildScoreWeightsJson } from './renderers/score-weights.js';
-import { buildTriageMd } from './renderers/triage-md.js';
-import { buildEventLogCsv } from './renderers/event-log.js';
-import { buildExtensionsCsv } from './renderers/extensions.js';
+import { buildSummaryCsv } from './renderers/summary-csv-core.js';
+import { buildScoreWeightsJson } from './renderers/score-weights-core.js';
+import { buildTriageMd } from './renderers/triage-md-core.js';
+import { buildEventLogCsv } from './renderers/event-log-core.js';
+import { buildExtensionsCsv } from './renderers/extensions-core.js';
 import { drawTrajectoryGrid, sanitize as sanitizeTrajectory } from './renderers/trajectories-core.js';
 import { drawSessionTimeline, sanitize as sanitizeTimeline, shortId } from './renderers/session-timeline-core.js';
 import { drawTypingProfile, sanitize as sanitizeTyping } from './renderers/typing-profile-core.js';
-import { buildReplayAssets } from './renderers/replay-assets.js';
+import { buildReplayAssets } from './renderers/replay-assets-core.js';
 import { renderIndexHtml } from './renderers/html-index-core.js';
 
 // The text files every report contains, in write order (images/ and replay/
