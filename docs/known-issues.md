@@ -17,8 +17,8 @@ Every console error from `ch.js` links here or to the page that explains its fix
 
 Known limits of the one-line setup:
 
-- **Bundled jsPsych cannot be hooked.** A build that calls `jsPsychModule.initJsPsych` or `new JsPsych` directly (npm, ES modules) never goes through `window.initJsPsych`. ch.js logs the placement error and records the page as one without jsPsych. Use [manual mode](advanced-integration.md#manual-mode). jsPsych 8 is not supported yet.
-- **`<head>` placement misses the first moments.** With ch.js in `<head>`, monitoring starts at `DOMContentLoaded`, so a paste before then is not recorded.
+- **Bundled jsPsych cannot be hooked.** A build that calls `jsPsychModule.initJsPsych` or `new JsPsych` directly (npm, ES modules) never goes through `window.initJsPsych`. ch.js logs the placement error when jsPsych starts and records the page as one without jsPsych. Use [manual mode](advanced-integration.md#manual-mode) with `cyborg-hunter.min.js`. jsPsych 8 is not supported yet.
+- **`<head>` placement misses the first moments.** With ch.js in `<head>`, monitoring and the first segment start at `DOMContentLoaded`, so a paste before then is not recorded and a mark before then writes nothing.
 - **Some programmatic submits are not covered.** `form.submit()` on a form inside another frame, or through a reference taken before ch.js ran, does not get the `cyborgHunterData` field. GET forms never get it.
 - **A save trial cannot hold the end of the session.** A save-as-a-trial plugin (DataPipe) saves before the session ends, so that file has no `integritySegmentFinal` and nothing from the save trial itself ([loss bound](advanced-integration.md#data-format-the-rolling-snapshot)).
 

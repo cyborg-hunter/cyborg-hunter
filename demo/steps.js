@@ -441,7 +441,7 @@ export const FINISH_VARIANTS = {
     bullets: [
       'Your tier and the reason for it: the pasted text that decided it is in the row detail.',
       'The session timeline: your tab-aways as marked spans with exact durations.',
-      'Curious what the guard would have logged? docs/using-cyborg-hunter.md covers guard-friction.',
+      'Curious what the guard would have logged? docs/advanced-integration.md covers friction.',
     ],
   },
   zeroLamp: {

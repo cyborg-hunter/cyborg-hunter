@@ -32,14 +32,7 @@ To name a trial's segment or pass trial-level options, give the trial its own en
 | `decoyAnswer` | string | A "honeytoken" string injected into the DOM (off-screen by default) for a trial, framed per `decoyFraming`. An AI tool scraping the page may surface it; a human reader never sees it. The library records the injected text in the trial's `decoy` metadata — it does **not** auto-match it against paste/typed text. Cross-reference the decoy string with `event-log.csv` paste/typed content downstream to flag hits. |
 | `experimentContainer` | string \| Element | Selector or DOM element bounding the response area. Used for the foreign-input detector — typing outside this region is flagged. |
 
-Extension-level, manual mode only (passed to `initJsPsych` once, applies to all trials). Under the one-line setup, use `data-participant-id` and `data-preset` on the tag instead; `excludeTrialTypes` and `autoMonitor` do not apply, because ch.js monitors every trial.
-
-| Param | Type | Purpose |
-|---|---|---|
-| `participantId` | string | Tagged onto every trial report. |
-| `preset` | `'permissive' \| 'standard' \| 'strict'` | Threshold preset. See `docs/signals-reference.md`. |
-| `excludeTrialTypes` | string[] | Plugin type names to skip (e.g. `['html-keyboard-response', 'instructions']`). |
-| `autoMonitor` | boolean | Default `true`. Set `false` to require an explicit `trialId` per-trial as the opt-in signal. |
+Extension-level settings (`participantId`, `preset`, `excludeTrialTypes`, `autoMonitor`) are set once per page, not per trial: see [advanced-integration.md → Configuration beyond data-*](advanced-integration.md#configuration-beyond-data-).
 
 ## Session replay
 
@@ -82,9 +75,9 @@ const jsPsych = initJsPsych({
 });
 ```
 
-Replay finalizes **last** so it can fold CH's finalized session report into
-`extensions["cyborg-hunter"]`. Add the extension to your timeline trials the same way as
-the others. After `finalize()` the jsPsych data carries an
+Why this order, and how it changes with a save trial such as DataPipe's:
+[advanced-integration.md → Call `finalize()` before saving](advanced-integration.md#3-call-finalize-before-saving).
+Add the extension to your timeline trials the same way as the others. After `finalize()` the jsPsych data carries an
 `integrityReplayMeta` column ({schema_version, tier, bytes_uncompressed,
 saved_to, capture_failures, capture_stopped}) — enough to tell from the CSV alone
 whether an artifact exists and where it went.
@@ -365,7 +358,7 @@ Unknown flags now exit with an error rather than silently falling back to the co
 
 **"on_start is not a function" crash mid-experiment.** You're on a pre-0.3.0 version of the wrapper. Update — `on_start` was added in 0.3.0.
 
-**`integritySession` cell is empty / missing on last trial (manual mode).** Under the one-line setup there is no `integritySession` cell: the session travels as `integritySegment` cells instead. In manual mode, either you forgot `jsPsych.extensions['cyborg-hunter'].finalize()`, or you call it from the experiment-level `on_finish` but save with DataPipe (`jsPsychPipe`) / another save-as-a-trial plugin — in which case the save snapshots the data *before* `on_finish` runs, so `finalize()` is too late. Move `finalize()` into the save trial's `data_string` or a trial that precedes it. See [advanced-integration.md → Call `finalize()` before saving](advanced-integration.md#3-call-finalize-before-saving).
+**`integritySession` cell is empty / missing on last trial (manual mode).** Under the one-line setup there is no `integritySession` cell (the session travels as `integritySegment` cells). In manual mode, `finalize()` was not called or ran after a save trial: see [advanced-integration.md → Call `finalize()` before saving](advanced-integration.md#3-call-finalize-before-saving).
 
 **Badge still visible to participants.** Remove `data-debug` from the ch.js tag before launch. The badge it adds is visible to everyone who takes the study.
 

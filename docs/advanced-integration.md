@@ -8,7 +8,7 @@ In manual mode you load `cyborg-hunter.min.js` and `extension-cyborg-hunter.js` 
 
 Three things to know before the step-by-step below:
 
-- **ch.js can stand in for `cyborg-hunter.min.js`.** Load `ch.js` and then `extension-cyborg-hunter.js`, and list `jsPsychCyborgHunter` in `initJsPsych` as below. ch.js sees the extension, injects nothing (no monitoring extension, no guards) and writes nothing. The console says `manual mode: initJsPsych lists a cyborg-hunter extension, so ch.js injects nothing; finalize() is still required.` ch.js already defines `jsPsychGuardFriction` and `jsPsychGuardHoneypot`, so list those yourself if you want them, but do not load `extension-guard-friction.js` or `extension-guard-honeypot.js` next to ch.js ([Double load](#double-load)).
+- **ch.js can stand in for `cyborg-hunter.min.js`.** Load `ch.js` and then `extension-cyborg-hunter.js`, and list `jsPsychCyborgHunter` in `initJsPsych` as below. ch.js sees the extension, injects nothing (no monitoring extension, no guards) and writes nothing. The console says `manual mode: initJsPsych lists a cyborg-hunter extension, so ch.js injects nothing; finalize() is still required.` ch.js already defines `jsPsychGuardFriction` and `jsPsychGuardHoneypot`, so list those yourself if you want them, but do not load `extension-guard-friction.js` or `extension-guard-honeypot.js` next to ch.js ([Double load](#double-load)). This works only with a jsPsych that defines `window.initJsPsych` (the `jspsych.js` script); for a bundled or ES-module jsPsych, use `cyborg-hunter.min.js` instead of ch.js.
 - **One jsPsych instance per page.** The one-line setup records one session per page and ends it when the first instance finishes. A second `initJsPsych()` gets a console warning, and trials that run after the first instance finishes are not monitored. For several instances on one page, use manual mode with `cyborg-hunter.min.js`.
 - **Manual mode is detected by the extension's class, not its name.** It applies when `initJsPsych` lists the class from `extension-cyborg-hunter.js`. With that file removed, `jsPsychCyborgHunter` is ch.js's own class, and a leftover entry is treated as the one-line setup ([Switching to the one-liner](#switching-to-the-one-liner)).
 
@@ -53,13 +53,18 @@ This is the most common cause of "session data missing." jsPsych 7's extension A
 ```javascript
 const jsPsych = initJsPsych({
   ...
-  on_finish: function () {
+  on_finish: async function () {
+    jsPsych.extensions['guard-friction'].finalize();   // the guards first, if you listed them
+    jsPsych.extensions['guard-honeypot'].finalize();
     jsPsych.extensions['cyborg-hunter'].finalize();
+    await jsPsych.extensions['cyborg-hunter-replay'].finalize();   // replay LAST, if you listed it
     jsPsych.data.get().localSave('csv', 'data.csv');
     // or: SaveData('your-experiment', subject.id, jsPsych.data.get().csv());
   }
 });
 ```
+
+The order matters: the guards' `finalize()` first, then `cyborg-hunter`'s, then the replay recorder's last. Replay's is async, so `await` it (the `on_finish` must be `async`); it folds the finalized cyborg-hunter report into the recording. Call only the ones whose extensions you listed.
 
 `finalize()` attaches:
 
@@ -123,19 +128,7 @@ timeline.forEach(t => {
 jsPsych.run(timeline);
 ```
 
-**Per-trial opt-in** (when you want to monitor only some trials and pass per-trial parameters like `trialId`, `phase`, or `decoyAnswer`):
-
-```javascript
-const myTrial = {
-  type: jsPsychSurvey,
-  questions: [...],
-  extensions: [
-    { type: jsPsychCyborgHunter, params: { trialId: 'memory-recall-1', phase: 'test' } }
-  ]
-};
-```
-
-The wrapper falls back to `trial-{index}` if you don't provide a `trialId`.
+**Per-trial opt-in** (when you want to monitor only some trials and pass per-trial parameters like `trialId`, `phase`, or `decoyAnswer`): give each of those trials its own entry, as in [using-cyborg-hunter.md → Per-trial parameters](using-cyborg-hunter.md#per-trial-parameters). The wrapper falls back to `trial-{index}` if you don't provide a `trialId`.
 
 #### 5. Verify
 
@@ -192,24 +185,27 @@ To move a manual-mode experiment to `ch.js`:
 
    For production studies pin an exact version (see [README § Install](../README.md#install)).
 3. In `initJsPsych`, delete the `extensions:` entries for `jsPsychCyborgHunter`, `jsPsychGuardFriction`, `jsPsychGuardHoneypot` and `jsPsychCyborgHunterReplay`. The guards are `data-guards` on the tag; replay is `data-replay` ([Replay with the one-liner](#replay-with-the-one-liner)).
-4. Delete the per-trial `forEach` that adds the extensions to every trial. ch.js walks the whole timeline itself, nested timelines included. A per-trial entry with params (`{ type: jsPsychCyborgHunter, params: { trialId: 'recall-1' } }`) can stay: ch.js uses its params and adds no second entry.
+4. Delete the per-trial `forEach` that adds the extensions to every trial. ch.js walks the whole timeline itself, nested timelines included. A per-trial entry with params ([Per-trial parameters](using-cyborg-hunter.md#per-trial-parameters)) can stay: ch.js uses its params and adds no second entry.
 5. Delete every `finalize()` call: in `on_finish`, in a save trial's `data_string`, in a bookkeeping trial.
 6. Keep your own save code: `localSave`, DataPipe's `data_string`, your `fetch`. ch.js writes into the data that code already saves.
 7. Move the participant ID and the preset to the tag (`data-participant-id`, `data-preset`), or let ch.js read the ID from the study URL ([quickstart § Participant ID](quickstart.md#participant-id)).
 8. With friction, add `data-guards="honeypot,friction"` and keep the entry trial (`jsPsychGuardFriction.entryTrial()` and `CyborgHunter.frictionEntryTrial()` build the same trial; see [Friction](#friction)).
+9. On a page without jsPsych ([Standalone usage](#standalone-non-jspsych-usage)), delete `CyborgHunter.init()` and every call on the monitor it returned (`monitor.startSession()`, `startTrial()`, `endTrial()`, `getSessionReport()`, `destroy()`). Under ch.js, `init()` returns an inert object, so those calls record nothing and the saved reports come out empty. Mark trial boundaries with `CyborgHunter.mark('rule-3')` (or `data-ch-trial`) instead, and where you saved the trial and session reports, save `CyborgHunter.data()`: each of its rows carries that trial's report in `integrity` ([Vanilla segmentation reference](#vanilla-segmentation-reference)).
 
-Leftovers do no harm, and each one says so in the console:
+Delete the guard and replay `finalize()` calls without fail: `jsPsych.extensions['guard-friction']`, `['guard-honeypot']` and `['cyborg-hunter-replay']`. When that guard or replay is off, the extension does not exist on the page, the call throws a `TypeError`, and your save code after it never runs.
 
-- A `finalize()` call left in `on_finish` warns once (`finalize() is not needed with ch.js`) and does nothing. Your save code after it still runs.
+The other leftovers are harmless, and each one says so in the console:
+
+- A `jsPsych.extensions['cyborg-hunter'].finalize()` call left in `on_finish` warns once (`finalize() is not needed with ch.js`) and does nothing. Your save code after it still runs.
 - `participantId` or `preset` left in an `initJsPsych` entry's params warn once and are ignored. ch.js reads both from its tag.
-- `CyborgHunter.init()` left from standalone code logs an error and returns a no-op object shaped like a monitor (`startSession`, `startTrial`, `endTrial`, `getSessionReport`, …), so the old code runs without throwing. It does not start a second monitor. In manual mode it returns a real core monitor.
+- `CyborgHunter.init()` left from standalone code logs an error and returns a no-op object shaped like a monitor (`startSession`, `startTrial`, `endTrial`, `getSessionReport`, …), so the old code runs without throwing, but its calls record nothing (step 9). It does not start a second monitor. In manual mode it returns a real core monitor.
 - If `extension-cyborg-hunter.js` is still loaded and listed in `initJsPsych`, ch.js detects manual mode and injects nothing (see [Manual mode](#manual-mode)). The console says so.
 
 Your existing data still reads in the CLI. Files saved in manual mode are unchanged, and the one-line setup's rolling snapshot ([Data format](#data-format-the-rolling-snapshot)) is a fifth session-lookup convention next to the four the CLI already reads. A file that has both (a dumped `integritySession` and `integritySegment` rows, from a page that mixed the two setups) makes the CLI warn and use the dumped `integritySession`.
 
 ## Double load
 
-`ch.js` contains the monitor and both guards. A page needs `ch.js` alone, or manual mode's files without `ch.js`. When both are on the page, the later one logs an error in the console:
+`ch.js` contains the monitor and both guards, so it never shares a page with `cyborg-hunter.min.js` or the guard files. A page loads `ch.js` (plus `extension-cyborg-hunter.js` in [manual mode](#manual-mode)), or manual mode's files without `ch.js`. When both are on the page, the later one logs an error in the console:
 
 ```
 [cyborg-hunter] Not starting a second monitor: cyborg-hunter.min.js was loaded after ch.js. Fix: load only one of ch.js and cyborg-hunter.min.js (the one-liner already contains the monitor). …#double-load
@@ -218,7 +214,7 @@ Your existing data still reads in the CLI. Files saved in manual mode are unchan
 | The page loads | What happens | Remove |
 |---|---|---|
 | `ch.js`, then `cyborg-hunter.min.js` | One error. ch.js keeps monitoring, and `CyborgHunter` and `IntegrityMonitor` still point at ch.js's namespace. | the `cyborg-hunter.min.js` tag |
-| `cyborg-hunter.min.js`, then `ch.js` | One error. ch.js stands down: no monitor, nothing injected; `cyborg-hunter.min.js` keeps the namespace for your manual wiring. | the `ch.js` tag to stay in manual mode; the old tags and the manual wiring to switch ([Switching to the one-liner](#switching-to-the-one-liner)) |
+| `cyborg-hunter.min.js`, then `ch.js` | One error. ch.js stands down: nothing is monitored; `cyborg-hunter.min.js` keeps the namespace for your manual wiring. | the `ch.js` tag to stay in manual mode; the old tags and the manual wiring to switch ([Switching to the one-liner](#switching-to-the-one-liner)) |
 | `ch.js`, then `extension-guard-friction.js` or `extension-guard-honeypot.js` | `Not redefining GuardFriction` / `Not redefining GuardHoneypot`; ch.js's copy stays. | the guard tags |
 | `cyborg-hunter.min.js` twice | `cyborg-hunter.min.js is loaded twice`. | one of the two tags |
 | `ch.js` twice | `ch.js was loaded after ch.js`; the first copy keeps monitoring. | one of the two tags |
@@ -269,7 +265,7 @@ If the timeline has an entry trial (or the page has a friction start) but `data-
 On a page without jsPsych, ch.js cuts the session into segments at two kinds of boundary. Manual marks take precedence over page loads:
 
 - **Boot.** The first segment, `span-0`, opens when the page loads. Unnamed segments are called `span-<index>`.
-- **Manual marks.** A click on (or inside) an element with `data-ch-trial="q1"` closes the current segment as a `manual` one and opens the next, named `q1`. `CyborgHunter.mark('q1')` does the same from code; `CyborgHunter.mark()` opens an unnamed one. `CyborgHunter.startTrial({ trialId })` and `CyborgHunter.endTrial()` are aliases of `mark(trialId)` and `mark()`, so standalone code that calls them keeps working.
+- **Manual marks.** A click on (or inside) an element with `data-ch-trial="q1"` closes the current segment as a `manual` one and opens the next, named `q1`. `CyborgHunter.mark('q1')` does the same from code; `CyborgHunter.mark()` opens an unnamed one. `CyborgHunter.startTrial({ trialId })` and `CyborgHunter.endTrial()` are aliases of `mark(trialId)` and `mark()`, so calls on the `CyborgHunter` namespace keep working. Calls on the monitor `CyborgHunter.init()` returned do not ([Switching to the one-liner](#switching-to-the-one-liner), step 9).
 - **Page loads.** A `<form>` submit and `pagehide` close the current segment as a `page` one.
 
 `CyborgHunter.data()` closes the current segment and returns the whole session so far (every page), ready for `JSON.stringify`. Save it with your own code:
@@ -288,7 +284,7 @@ fetch('/save', { method: 'POST', body: JSON.stringify(CyborgHunter.data()) });
 
 **Size.** Browsers cap `sessionStorage` at about 5 MB per origin. Above 4 MB ch.js warns once. Set `CyborgHunterConfig = { collectForPostHoc: { rawMouseTrack: false } }` to drop the raw mouse trace; the derived mouse metrics stay. If storage fails, ch.js logs an error. The current page's form and `CyborgHunter.data()` still carry everything, and the next page's object records the gap in `cyborgHunterError`.
 
-**`<head>` placement.** With ch.js in `<head>`, monitoring starts at `DOMContentLoaded`, so a paste before then is not recorded. Mark clicks and form submits are caught from the start.
+**`<head>` placement.** With ch.js in `<head>`, monitoring and the first segment start at `DOMContentLoaded`. A paste before then is not recorded, and a mark before then (a `data-ch-trial` click or `CyborgHunter.mark()`) writes nothing.
 
 The saved object:
 
@@ -339,7 +335,7 @@ The recorder stops there, so the save trial itself is not in the recording. The 
 
 **Recorder autoSave (jsPsych only).** `window.CyborgHunterConfig = { replay: { tier: 'dom', autoSave: { mode: 'datapipe', experimentId: 'ABC123' } } }` lets the recorder save itself to DataPipe when the session ends. ch.js waits up to 15 s for that save before your `on_finish` runs. On pages without jsPsych, `autoSave` is ignored with a warning: save `CyborgHunter.replay()` yourself.
 
-**Segment names.** On jsPsych the recording's trials are labelled `trial-<n>` (jsPsych's trial index) by the replay extension. They are not joined by name to the integrity segments, which take a `trialId` you set in the per-trial params. On pages without jsPsych the recorder's trials follow the integrity segments (`span-<n>` and your marks).
+**Segment names.** On jsPsych the recording's trials are labelled `trial-<n>` (jsPsych's trial index), the name an integrity segment also gets by default. They differ when you set `trialId` in a trial's params: the integrity segment takes it, while the recording keeps `trial-<n>`, because ch.js does not pass `trialId` to the recorder. The CLI does not join the two by name. On pages without jsPsych the recorder's trials follow the integrity segments (`span-<n>` and your marks).
 
 **One recording per page (no jsPsych).** The recorder starts when the page loads and stops at `pagehide`. Call `CyborgHunter.replay()` and save what it returns before the participant leaves each page, for example in your submit handler. Otherwise that page's replay is lost.
 
@@ -364,6 +360,15 @@ For production studies pin an exact version (see [README § Install](../README.m
 - The one-line setup's own keys: `guards` (`'honeypot,friction'` or an array), `replay` (`true`, `'trace'`, `'dom'`, or `{ tier, autoSave }`), `replaySrc`, `debug`.
 - A tag attribute wins over the same key here.
 - Two keys are ignored with a warning, because the one-line setup monitors every trial: `autoMonitor` and `excludeTrialTypes`.
+
+In manual mode these four keys go in the `jsPsychCyborgHunter` entry in `initJsPsych` (once, for all trials):
+
+| Param | Type | Purpose |
+|---|---|---|
+| `participantId` | string | Tagged onto every trial report. |
+| `preset` | `'permissive' \| 'standard' \| 'strict'` | Threshold preset. See `docs/signals-reference.md`. |
+| `excludeTrialTypes` | string[] | Plugin type names to skip (e.g. `['html-keyboard-response', 'instructions']`). |
+| `autoMonitor` | boolean | Default `true`. Set `false` to require an explicit `trialId` per-trial as the opt-in signal. |
 
 ## Data format: the rolling snapshot
 

@@ -581,7 +581,7 @@ test('act2-skip path: fullscreen failure falls back, skip lands on "From signals
 
   await primaryButton(page).click(); // -> results
   await expect(page.locator('.yourreport h3')).toHaveText('Reading your report (Act 1 only)', { timeout: 8000 });
-  await expect(page.locator('.yourreport')).toContainText('docs/using-cyborg-hunter.md');
+  await expect(page.locator('.yourreport')).toContainText('docs/advanced-integration.md');
 });
 
 // ---------------------------------------------------------------------------

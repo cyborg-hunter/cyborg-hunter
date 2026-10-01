@@ -37,7 +37,7 @@ ch.js has to wrap `initJsPsych` before your code calls it, so the tag goes after
 | Console error | Cause | Fix |
 |---|---|---|
 | `Not monitoring jsPsych trials: ch.js was loaded before jspsych.js` | the tag is above `jspsych.js` | move it below `jspsych.js` and above your experiment code |
-| `Not monitoring jsPsych trials: ch.js loaded after initJsPsych() ran, or the page calls jsPsychModule.initJsPsych / new JsPsych directly` | the tag is below your experiment code, or jsPsych is bundled (npm, ES modules) and never goes through `window.initJsPsych` | move the tag above your experiment code; a bundled build cannot be hooked, so use [manual mode](advanced-integration.md#manual-mode) |
+| `Not monitoring jsPsych trials: ch.js loaded after initJsPsych() ran, or the page calls jsPsychModule.initJsPsych / new JsPsych directly` | the tag is below your experiment code, or jsPsych is bundled (npm, ES modules) and never goes through `window.initJsPsych`; for a bundled build the error appears when jsPsych starts | move the tag above your experiment code; a bundled build cannot be hooked, so use [manual mode](advanced-integration.md#manual-mode) with `cyborg-hunter.min.js` |
 
 After either error ch.js runs as it would on a page without jsPsych. It still records the session, but writes nothing into the jsPsych data.
 

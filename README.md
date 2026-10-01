@@ -2,7 +2,7 @@
 
 Detects AI-tool use during browser-based behavioral experiments. Captures paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that compromise data quality on Prolific / MTurk / classroom studies. Produces a triage report ranking participants by suspiciousness.
 
-Optional companion deterrence modules (`extension-guard-friction.js`, `extension-guard-honeypot.js`) ship in the same package: friction enforces fullscreen + blocks sidebars + scrambles content during violations + asks cooperative LLMs to refuse; honeypot exposes both hidden and visible bait fields that AI agents fill while human participants don't see them.
+Optional companion deterrence modules ship in the same package (`ch.js` bundles both; the separate `extension-guard-friction.js` and `extension-guard-honeypot.js` files are for manual mode): friction enforces fullscreen + blocks sidebars + scrambles content during violations + asks cooperative LLMs to refuse; honeypot exposes both hidden and visible bait fields that AI agents fill while human participants don't see them.
 
 **[Try the live demo →](https://cyborg-hunter.github.io/cyborg-hunter/)** — run the tour in your browser; nothing leaves your machine.
 
@@ -42,7 +42,7 @@ CLI (analysis):
 npm install -g cyborg-hunter
 ```
 
-Browser (experiment page): one tag, below `jspsych.js` and above your experiment code (on a page without jsPsych, anywhere in the page):
+Browser (experiment page): one tag, below `jspsych.js` and above your experiment code (on a page without jsPsych, anywhere in the page; in `<head>`, recording starts at `DOMContentLoaded`):
 
 ```html
 <script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
@@ -69,11 +69,12 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 
 ```html
 <script src="jspsych/jspsych.js"></script>
-<script src="https://unpkg.com/cyborg-hunter/dist/ch.js" data-participant-id="P001"></script>
+<script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
 <script src="experiment.js"></script>
 ```
 
-- `data-guards`: the honeypot is on by default (read the [ethics and IRB note](docs/advanced-integration.md#honeypot-ethics-and-irb-note)); `data-guards="honeypot,friction"` adds friction, `data-guards="none"` turns both off.
+- Participant ID: ch.js reads it from the study URL or `data-participant-id`; see [docs/quickstart.md § Participant ID](docs/quickstart.md#participant-id).
+- `data-guards`: the honeypot is on by default (read the [ethics and IRB note](docs/advanced-integration.md#honeypot-ethics-and-irb-note)); `data-guards="honeypot,friction"` adds friction, which enforces only after a start mark (`CyborgHunter.frictionEntryTrial()` in the timeline, or `data-ch-friction-start`) and otherwise just observes ([Friction](docs/advanced-integration.md#friction)); `data-guards="none"` turns both off.
 - `data-replay`: records a session replay; save `CyborgHunter.replay()` in your save code.
 - `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
 - Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (a POST form gets it as a hidden `cyborgHunterData` field).
@@ -109,7 +110,8 @@ Releases before 0.8.0 recorded the earlier v1 shape.
 With the one-line setup, add `data-replay` to the tag and save `CyborgHunter.replay()` in your save code ([details](docs/advanced-integration.md#replay-with-the-one-liner)). Manual mode wires the recorder itself:
 
 ```javascript
-// jsPsych: one more extension (declare anywhere; finalize LAST)
+// jsPsych: one more extension (declare anywhere; finalize LAST, see
+// docs/advanced-integration.md#3-call-finalize-before-saving)
 { type: jsPsychCyborgHunterReplay, params: {
     participantId: participant_id,
     tier: 'dom',                                          // 'trace' (default) | 'dom'
