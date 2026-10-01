@@ -105,7 +105,7 @@ mkdirSync(artifactsDir, { recursive: true });
 mkdirSync(fixturesDir, { recursive: true });
 
 const FROZEN_FIXTURE = join(fixturesDir, 'alignment-v2-frozen.json');
-const FROZEN_REPORT = join(here, 'archive', 'v0.7.1-report', 'index.html');
+const FROZEN_REPORT = join(fixturesDir, 'v0.7.1-report', 'index.html');
 const batteryPageUrl = 'file://' + join(here, 'battery-page.html');
 
 let failures = 0;

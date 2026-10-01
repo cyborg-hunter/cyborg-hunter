@@ -63,8 +63,8 @@
 //          snapshots) and 8 (the 189,322-char full baseline). Every one of its
 //          14 segments is a keyframe, so a canvas seek there restores ONE
 //          segment: canvas depth and span depth cannot compose in the corpus.
-//   WORST  the composite worst case, SYNTHESIZED — `deep-span-model.mjs`,
-//          shared verbatim with Task 0's harness. jspsych-full segment 11's
+//   WORST  the composite worst case, SYNTHESIZED — `support/seek-support.mjs`,
+//          copied verbatim from Task 0's harness. jspsych-full segment 11's
 //          real 535-node tree, 10 segments x 100 events at 20% anchored, real
 //          `canvas.snapshot` payloads. Task 0 fed these segments to a model of
 //          the restore; this feeds the same segments to the real one.
@@ -77,7 +77,7 @@
 //   Task 0's control drove the then-shipped v1 viewer over SMOKE-19NRQR.
 //   `buildViewerModel` is v2-only since Task 1 and the client is v2-only since
 //   Task 4, so that arm went dark. It is re-homed to the committed frozen
-//   artifact `archive/v0.7.1-report/index.html`, which inlines its OWN 0.7.x
+//   artifact `fixtures/v0.7.1-report/index.html`, which inlines its OWN 0.7.x
 //   viewer and its OWN built model — the whole v1 stack as a unit, immune to
 //   anything in the tree. It is INTERLEAVED with the v2 cells (one v1 sample
 //   per v2 sample) so machine-load drift lands on both arms.
@@ -120,8 +120,10 @@ import { readReplayClientSrc } from '../../../src/cli/renderers/replay-client-so
 // reason `performance.now()` here has 0.005 ms granularity instead of 0.1 ms,
 // which at case-(ii) magnitudes is the difference between a measurement and a
 // quantisation grid.
-import { serveFiles, median, p95, minOf, fixed } from '../../../tools/investigate/probe-support.mjs';
-import { buildDeepSpanModel, realCanvasSnapshots, countNodes } from '../../../tools/investigate/deep-span-model.mjs';
+import {
+  serveFiles, median, p95, minOf, fixed,
+  buildDeepSpanModel, realCanvasSnapshots, countNodes,
+} from './support/seek-support.mjs';
 import { inlineSafeJson, inlineSafeSrc } from '../../../src/shared/inline-safe.js';
 
 const argv = process.argv.slice(2);
@@ -225,7 +227,7 @@ const artifactsDir = join(here, 'artifacts');
 mkdirSync(artifactsDir, { recursive: true });
 
 const FROZEN_FIXTURE = join(here, 'fixtures', 'alignment-v2-frozen.json');
-const V1_REPORT_PATH = '/tests/browser/replay/archive/v0.7.1-report/index.html';
+const V1_REPORT_PATH = '/tests/browser/replay/fixtures/v0.7.1-report/index.html';
 const JSPSYCH_FULL = join(repoRoot, 'tests', 'replay', 'schema-v2', 'fixtures', 'jspsych-full.json');
 
 let failures = 0;
