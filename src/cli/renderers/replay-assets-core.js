@@ -13,6 +13,7 @@
 import { sanitizeId as sanitize } from '../../shared/constants.js';
 import { buildViewerModel } from '../../replay/viewer-model.js';
 import { inlineSafeJson } from '../../shared/inline-safe.js';
+import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.js';
 
 /**
  * Builds replay/<sanitizedPid>.replay.js for every participant with an
@@ -49,7 +50,8 @@ import { inlineSafeJson } from '../../shared/inline-safe.js';
  * M-5. One caller today (`report-core.js`), which renders the index from the
  * same array; replay-assets.js's renderReplayAssets is its fs form.
  *
- * `assetMap` (styled-replay assets) is accepted but not applied yet.
+ * `assetMap` (asset-match.js's styled-replay assets, or null) is applied to
+ * each model, and `p.replay.assetNote` records what matched for the report.
  */
 export function buildReplayAssets(participants, { sink, assetMap = null }) {
   let count = 0;
@@ -84,6 +86,12 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
       skipped.push({ participantId: p.participantId, file: p.replay.file || null, reason });
       p.replay = { error: 'unloadable', reason, file: p.replay.file || null };
       continue;
+    }
+    // Summary FIRST: the model aliases the recording's sheets and DOM, so
+    // after the apply a matched sheet no longer looks external.
+    if (assetMap) {
+      p.replay.assetNote = assetNoteText(assetMatchSummary(p.replay.recording, assetMap));
+      model = applyAssetMap(model, assetMap);
     }
     // The store is keyed by the RAW participant id (what the report's
     // loader passes); the filename uses the sanitized form.

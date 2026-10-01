@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { build } from 'esbuild';
 
-const CORES = ['src/cli/report-core.js', 'src/cli/config-core.js', 'src/cli/ingest-core.js'];
+const CORES = ['src/cli/report-core.js', 'src/cli/config-core.js', 'src/cli/ingest-core.js', 'src/cli/asset-match.js'];
 
 describe('browser bundle of the CLI cores', () => {
   for (const entry of CORES) {

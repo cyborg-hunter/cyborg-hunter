@@ -1,0 +1,157 @@
+// One matcher for dropped experiment folders (browser page) and assetsDir (CLI).
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { collectAssetUrls, matchAssets, buildAssetMap, applyAssetMap, assetMatchSummary, assetNoteText, contentTypeFor } from '../../src/cli/asset-match.js';
+import { buildViewerModel } from '../../src/replay/viewer-model.js';
+
+const bytes = (s) => new TextEncoder().encode(s);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+function recording() {
+  return {
+    schema_version: 2, recorder: { name: 'cyborg-hunter-replay', version: '0.9.1' }, participant_id: 'P1',
+    recording_started_at: '2026-01-01T00:00:00.000Z', recording_started_at_perf: 0,
+    user_agent: 'x', viewport: { w: 800, h: 600 }, observed_root: '#root',
+    stylesheets: [
+      { id: 1, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null },
+      { id: 2, kind: 'link', href: 'https://exp.example.org/study/css/fonts.css', css: null, media: null },
+      { id: 3, kind: 'inline', href: null, css: 'body{color:red}', media: null },
+      { id: 4, kind: 'link', href: 'https://exp.example.org/study/css/bg.css', css: '.a{background:url("../img/bg.png")}', media: null },
+    ],
+    stylesheet_events: [], viewport_changes: [], rng: null, rng_calls: null, ended_at_perf: 10, end_reason: 'end', truncated: false,
+    extensions: { 'cyborg-hunter': { tier: 'dom' } },
+    segments: [{
+      index: 0, label: null, plugin: null, t_start: 0, t_dom_ready: 0, t_load: null, t_end: 10,
+      initial_dom: { id: 1, kind: 'element', tag: 'body', attrs: {}, children: [
+        { id: 2, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/study/img/stim-1.png', alt: 'a' }, children: [] },
+        { id: 3, kind: 'element', tag: 'video', attrs: { poster: 'https://exp.example.org/study/img/poster.jpg' }, children: [], media_src: 'https://exp.example.org/study/clip.webm' },
+        { id: 4, kind: 'text', text: 'https://exp.example.org/study/img/not-an-asset.png' },
+        { id: 6, kind: 'element', tag: 'img', attrs: { src: 'data:image/png;base64,AAAA' }, children: [] },
+      ] },
+      initial_state: null,
+      events: [
+        { type: 'dom.add', t: 1, parent: 1, before: null, node: { id: 5, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/study/img/stim-2.png' }, children: [] } },
+        { type: 'dom.attr', t: 2, node: 2, name: 'src', value: 'https://exp.example.org/study/img/stim-3.png' },
+        { type: 'dom.attr', t: 3, node: 2, name: 'alt', value: 'https://exp.example.org/study/img/stim-1.png' },
+      ],
+      host_data: null, extensions: null,
+    }],
+  };
+}
+
+describe('collectAssetUrls', () => {
+  it('lists href-only sheets, image sources in the DOM and in mutations, and url() refs resolved against the sheet', () => {
+    const u = collectAssetUrls(recording());
+    assert.deepStrictEqual(u.stylesheets, ['https://exp.example.org/study/css/style.css', 'https://exp.example.org/study/css/fonts.css']);
+    assert.deepStrictEqual(u.images, [
+      'https://exp.example.org/study/img/bg.png',
+      'https://exp.example.org/study/img/stim-1.png',
+      'https://exp.example.org/study/img/poster.jpg',
+      'https://exp.example.org/study/clip.webm',
+      'https://exp.example.org/study/img/stim-2.png',
+      'https://exp.example.org/study/img/stim-3.png',
+    ], 'an inline data: image is not an asset');
+  });
+});
+
+describe('matchAssets', () => {
+  const urls = ['https://exp.example.org/study/css/style.css', 'https://exp.example.org/study/css/fonts.css', 'https://exp.example.org/study/img/stim-1.png', 'https://exp.example.org/study/img/dup.png'];
+  it('matches by path suffix, falls back to the filename, lists ambiguity and misses', () => {
+    const r = matchAssets(urls, ['experiment/css/style.css', 'stim-1.png', 'a/img/dup.png', 'b/img/dup.png']);
+    assert.strictEqual(r.matched.get(urls[0]), 'experiment/css/style.css');
+    assert.strictEqual(r.matched.get(urls[2]), 'stim-1.png');
+    assert.deepStrictEqual(r.missing, [urls[1]]);
+    assert.deepStrictEqual(r.ambiguous, [{ url: urls[3], candidates: ['a/img/dup.png', 'b/img/dup.png'] }]);
+  });
+  it('a suffix match beats a filename-only match and strips ./ and leading /', () => {
+    const r = matchAssets(['https://h/x/css/style.css'], ['./css/style.css', 'other/style.css']);
+    assert.strictEqual(r.matched.get('https://h/x/css/style.css'), 'css/style.css');
+  });
+  it('tolerates a URL that does not parse', () => {
+    const r = matchAssets(['not a url/style.css'], ['style.css']);
+    assert.strictEqual(r.matched.get('not a url/style.css'), 'style.css');
+  });
+});
+
+describe('buildAssetMap + applyAssetMap', () => {
+  const dropped = [
+    { path: 'study/css/style.css', read: async () => bytes('p{margin:0}') },
+    { path: 'study/img/stim-1.png', read: async () => PNG },
+    { path: 'study/img/bg.png', read: async () => PNG },
+  ];
+  it('reads each matched file once and inlines sheets and images into the viewer model', async () => {
+    let reads = 0;
+    const counted = dropped.map((d) => ({ path: d.path, read: async () => { reads++; return d.read(); } }));
+    const { assetMap, report } = await buildAssetMap([recording(), recording()], counted);
+    assert.strictEqual(reads, 3, 'two recordings, three files, each read once');
+    assert.deepStrictEqual(report.matched.map((m) => m.path).sort(), ['study/css/style.css', 'study/img/bg.png', 'study/img/stim-1.png']);
+    assert.ok(report.missing.includes('https://exp.example.org/study/css/fonts.css'));
+    const model = applyAssetMap(buildViewerModel(recording()), assetMap);
+    assert.strictEqual(model.stylesheets[0].css, 'p{margin:0}');
+    assert.strictEqual(model.stylesheets[1].css, null, 'unmatched stays href-only');
+    assert.match(model.stylesheets[3].css, /url\("data:image\/png;base64,iVBORw=="\)/);
+    const body = model.segments[0].initialDom;
+    assert.strictEqual(body.children[0].attrs.src, 'data:image/png;base64,iVBORw==');
+    assert.strictEqual(body.children[0].attrs.alt, 'a');
+    assert.strictEqual(body.children[2].text, 'https://exp.example.org/study/img/not-an-asset.png', 'text nodes are never rewritten');
+    assert.strictEqual(model.segments[0].events[2].value, 'https://exp.example.org/study/img/stim-1.png', 'only src/poster attrs are rewritten');
+    assert.strictEqual(body.children[3].attrs.src, 'data:image/png;base64,AAAA', 'inline data: images untouched');
+  });
+  it('rewrites the recording too (the model aliases it), so the summary must be taken first', async () => {
+    const { assetMap } = await buildAssetMap([recording()], dropped);
+    const rec = recording();
+    const before = assetMatchSummary(rec, assetMap);
+    applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(rec.stylesheets[0].css, 'p{margin:0}', 'the recording\'s sheet object is the model\'s');
+    assert.strictEqual(before.stylesheets.matched, 1);
+    assert.strictEqual(assetMatchSummary(rec, assetMap).stylesheets.total, 1, 'after the apply, the matched sheet no longer counts as external');
+  });
+  it('is a no-op on an empty map', () => {
+    const before = JSON.stringify(buildViewerModel(recording()));
+    assert.strictEqual(JSON.stringify(applyAssetMap(buildViewerModel(recording()), new Map())), before);
+  });
+  it('summarises per recording and words the report note', async () => {
+    const { assetMap } = await buildAssetMap([recording()], dropped);
+    const s = assetMatchSummary(recording(), assetMap);
+    assert.deepStrictEqual(s.stylesheets, { matched: 1, total: 2, missing: ['fonts.css'] });
+    assert.strictEqual(s.images.total, 6);
+    assert.strictEqual(s.images.matched, 2);
+    assert.strictEqual(assetNoteText(s), 'Experiment assets: 1 of 2 stylesheets matched (missing: fonts.css); 2 of 6 images matched (missing: poster.jpg, clip.webm, stim-2.png, stim-3.png).');
+    assert.strictEqual(assetNoteText(assetMatchSummary({ stylesheets: [], segments: [] }, assetMap)), null);
+  });
+  it('contentTypeFor knows the asset extensions', () => {
+    assert.strictEqual(contentTypeFor('a/b.CSS'), 'text/css');
+    assert.strictEqual(contentTypeFor('x.woff2'), 'font/woff2');
+    assert.strictEqual(contentTypeFor('x.bin'), 'application/octet-stream');
+  });
+});
+
+describe('CLI assetsDir', () => {
+  it('inlines a matched stylesheet into replay/*.replay.js and notes it in index.html', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    process.env.NO_UPDATE_NOTIFIER = '1';
+    const tmp = mkdtempSync(join(tmpdir(), 'ch-assets-'));
+    try {
+      const data = join(tmp, 'data'); mkdirSync(data);
+      cpSync('tests/fixtures/demo/DEMO-FIXT.json', join(data, 'DEMO-FIXT.json'));
+      // The demo recording inlined its one sheet; make it href-only so there is something to match.
+      const rec = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT-replay-1785352263344.json', 'utf8'));
+      rec.stylesheets[0].css = null;
+      writeFileSync(join(data, 'DEMO-FIXT-replay-1785352263344.json'), JSON.stringify(rec));
+      mkdirSync(join(tmp, 'exp')); writeFileSync(join(tmp, 'exp', 'demo.css'), 'body{outline:1px solid lime}');
+      writeFileSync(join(tmp, 'config.json'), JSON.stringify({ dataDir: data, filePattern: 'DEMO-*.json', participantIdField: 'participantId', assetsDir: join(tmp, 'exp') }));
+      const { run } = await import('../../src/cli/report.js');
+      const origLog = console.log; console.log = () => {};
+      try { await run(['report', '--config', join(tmp, 'config.json'), '--output', join(tmp, 'out'), '--no-visuals']); }
+      finally { console.log = origLog; }
+      const asset = readFileSync(join(tmp, 'out', 'replay', 'DEMO-FIXT.replay.js'), 'utf8');
+      assert.ok(asset.includes('body{outline:1px solid lime}'), 'sheet text inlined into the model');
+      const index = readFileSync(join(tmp, 'out', 'index.html'), 'utf8');
+      assert.ok(index.includes('Experiment assets: 1 of 1 stylesheets matched.'));
+      assert.ok(!index.includes('also fetch'), 'nothing left to fetch');
+    } finally { rmSync(tmp, { recursive: true, force: true }); }
+  });
+});

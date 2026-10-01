@@ -54,6 +54,33 @@ export async function run(args) {
     participants.map(p => p.libraryVersion), VERSION);
   if (collectedNotice) console.log(collectedNotice);
 
+  // assetsDir: the experiment's own stylesheets/images, matched to the URLs
+  // the recordings reference (asset-match.js) and inlined into the replays —
+  // for archives whose experiment server is gone. Same matcher as the
+  // browser page; a missing directory is a config error, not a silent skip.
+  let assetMap = null;
+  if (config.assetsDir) {
+    const { readdirSync } = await import('fs');
+    const { relative } = await import('path');
+    const { buildAssetMap, ASSET_EXTENSIONS } = await import('./asset-match.js');
+    const { fsReader } = await import('./ingest.js');
+    const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]);
+    let paths;
+    try { paths = walk(config.assetsDir); } catch (e) {
+      console.error(`[cyborg-hunter] assetsDir not readable: ${e.message}`);
+      process.exit(1);
+    }
+    const files = paths.filter((p) => ASSET_EXTENSIONS.includes(p.slice(p.lastIndexOf('.')).toLowerCase()))
+      .map((p) => ({ path: relative(config.assetsDir, p), read: fsReader(p).read }));
+    const recordings = participants.filter((p) => p.replay && p.replay.recording).map((p) => p.replay.recording);
+    const built = await buildAssetMap(recordings, files);
+    assetMap = built.assetMap;
+    console.log(`\nExperiment assets (${config.assetsDir}): ${built.report.matched.length} matched, ` +
+      `${built.report.missing.length} missing, ${built.report.ambiguous.length} ambiguous`);
+    for (const a of built.report.ambiguous) console.warn(`[cyborg-hunter] ${a.url} matches several files: ${a.candidates.join(', ')} — not inlined`);
+  }
+
   // 3+4. Analyze and render, through the pure core (report-core.js) with a
   // disk sink. The console lines are the core's; the shell only prints them.
   const { mkdirSync, writeFileSync } = await import('fs');
@@ -96,7 +123,7 @@ export async function run(args) {
   const { buildFontFaceCss } = await import('./renderers/report-fonts.js');
   await buildReport(participants, config, {
     sink, log: console.log, warn: console.warn, createCanvas, encodePng,
-    replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss(), assetMap: null,
+    replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss(), assetMap,
   });
 
   console.log(`\nReport written to ${config.outputDir}/`);

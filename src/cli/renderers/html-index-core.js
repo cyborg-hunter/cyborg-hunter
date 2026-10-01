@@ -1104,9 +1104,13 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
       ? `
         <label class="replay-fetch-css-label"><input type="checkbox" class="replay-fetch-css" checked> also fetch ${externalSheets} external stylesheet${externalSheets === 1 ? '' : 's'} from ${externalSheets === 1 ? 'its origin' : 'their origins'} (needed for a styled, aligned replay)</label>`
       : '';
+    // What the experiment's own files (assetsDir / dropped folder) supplied;
+    // absent unless an asset map was applied, so the markup is otherwise unchanged.
+    const assetNote = replay && replay.assetNote ? `
+      <p class="replay-note">${esc(replay.assetNote)}</p>` : '';
     return `<div class="image-block replay-block" data-pid="${esc(participant.participantId)}"
          ${demoModel ? 'data-replay-preloaded="true"' : `data-replay-src="${esc(assetPath)}"`}>
-      <h4 class="section-heading">Session replay <span class="replay-note">(${esc(tier)} tier)</span></h4>
+      <h4 class="section-heading">Session replay <span class="replay-note">(${esc(tier)} tier)</span></h4>${assetNote}
       <div class="replay-mount">
         <button class="replay-load-btn" type="button">Load replay</button>${fetchCssLabel}
       </div>
