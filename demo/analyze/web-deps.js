@@ -6,36 +6,68 @@
 // `crypto` arrives in Node 19, so tests on Node 18 install it from
 // node:crypto first).
 //
-// No Blob is read on the way to a result that has another route: in WebKit a
-// worker started from a file:// page cannot read any Blob ("The I/O read
-// operation failed."), so the offline single file would fail at gunzip and at
-// the report's images. Chromium and Firefox, and every engine over http, keep
-// the browser's own paths.
-import { gunzipSync } from 'fflate';
+// gunzip reads no Blob, and the canvas's PNG Blob is read only with a
+// fallback: in WebKit a worker started from a file:// page cannot read any
+// Blob ("The I/O read operation failed."), so the offline single file would
+// fail at gunzip and at the report's images. Chromium and Firefox, and every
+// engine over http, keep the browser's own PNG encoding.
+import { Gunzip } from 'fflate';
 import { encodePng } from './png-encode.js';
 
-// The browser's DecompressionStream over a stream built from the bytes (not
-// from a Blob), read chunk by chunk. If that fails, fflate inflates the same
-// bytes to the same output; if fflate fails too, the input is not gzip and
-// the stream's error is the one reported.
+// The browser's DecompressionStream does the inflating and every check:
+// CRC-32, ISIZE, bytes after a member, truncation, the same set node:zlib
+// rejects (the CLI's gunzip), so the page rejects the corrupt files the CLI
+// rejects. It reads no Blob: the stream is built from the bytes, which works
+// in a WebKit worker of a file:// page too.
+//
+// One gap: browsers reject a file of several gzip members (cat a.gz b.gz),
+// which node:zlib reads as their concatenation. When the whole file fails,
+// fflate finds where each member starts (it inflates to locate the ends,
+// validating nothing, its output discarded) and, if there are several, each
+// member goes through the browser's stream on its own. A corrupt member
+// still fails there; one member or no members found means the first error
+// stands.
 export async function webGunzip(bytes) {
   try {
-    return await streamGunzip(bytes);
+    return await inflateMember(bytes);
   } catch (e) {
-    try { return gunzipSync(bytes); } catch (ignored) { throw e; }
+    var starts = memberStarts(bytes);
+    if (starts.length < 2) throw e;
+    var parts = [];
+    for (var i = 0; i < starts.length; i++) parts.push(await inflateMember(bytes.subarray(starts[i], i + 1 < starts.length ? starts[i + 1] : bytes.length)));
+    return concat(parts);
   }
 }
-async function streamGunzip(bytes) {
+
+async function inflateMember(bytes) {
   var source = new ReadableStream({ start: function (c) { c.enqueue(bytes); c.close(); } });
   var reader = source.pipeThrough(new DecompressionStream('gzip')).getReader();
-  var parts = [], total = 0;
+  var parts = [];
   for (;;) {
     var step = await reader.read();
     if (step.done) break;
-    parts.push(step.value); total += step.value.length;
+    parts.push(step.value);
   }
+  return concat(parts);
+}
+
+// The offset of every member, or [] when fflate cannot walk the file.
+function memberStarts(bytes) {
+  var starts = [0];
+  try {
+    var walker = new Gunzip();
+    walker.ondata = function () {};
+    walker.onmember = function (offset) { starts.push(offset); };
+    walker.push(bytes, true);
+  } catch (e) { return []; }
+  return starts;
+}
+
+function concat(parts) {
+  var total = 0;
+  for (var i = 0; i < parts.length; i++) total += parts[i].length;
   var out = new Uint8Array(total);
-  for (var o = 0, i = 0; i < parts.length; o += parts[i].length, i++) out.set(parts[i], o);
+  for (var o = 0, j = 0; j < parts.length; o += parts[j].length, j++) out.set(parts[j], o);
   return out;
 }
 
