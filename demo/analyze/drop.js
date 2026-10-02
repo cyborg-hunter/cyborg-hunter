@@ -4,7 +4,9 @@
 // Entries API. EVERY webkitGetAsEntry() call happens synchronously inside
 // the drop handler, before the first await: DataTransfer items are gone once
 // the event handler yields. A synthetic drop (tests) has no entries and
-// falls back to dataTransfer.files.
+// falls back to dataTransfer.files. A file item without an entry, beside
+// items that have one, is taken as a plain file (getAsFile(), also before
+// the first await).
 
 // readEntries() hands a directory's children over in batches; an empty batch
 // means there are no more.
@@ -35,10 +37,13 @@ async function walkEntry(entry, prefix, out) {
 
 export async function collectDropped(dataTransfer) {
   var entries = [];
+  var loose = [];
   var items = dataTransfer.items || [];
   for (var i = 0; i < items.length; i++) {          // synchronous: no await in this loop
     var e = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
-    if (e) entries.push(e);
+    if (e) { entries.push(e); continue; }
+    var f = items[i].kind === 'file' && items[i].getAsFile ? items[i].getAsFile() : null;
+    if (f) loose.push(f);
   }
   var out = [];
   if (entries.length === 0) {
@@ -47,6 +52,7 @@ export async function collectDropped(dataTransfer) {
     return out;
   }
   for (var k = 0; k < entries.length; k++) await walkEntry(entries[k], '', out);
+  for (var m = 0; m < loose.length; m++) out.push({ path: loose[m].name, file: loose[m] });
   return out;
 }
 
