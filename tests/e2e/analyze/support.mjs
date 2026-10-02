@@ -17,10 +17,13 @@
 //     in Firefox and WebKit not the record either), so every frame that runs
 //     scripts records its securitypolicyviolation events. A violation means
 //     the page tried to load something, and fails the test. The viewer's
-//     reconstruction frame runs no scripts and is the one frame without this
-//     recorder: a recorded external image refused there is the viewer's own
-//     policy working, and the styled-replay spec checks it with a sentinel
-//     server instead (startSentinel). Not observable in any engine: a load
+//     reconstruction frame (about:srcdoc) runs no scripts and is the one
+//     frame where a refused load is not an attempt: a recorded external
+//     image refused there is the policy the frame inherits from the page
+//     doing its job, and the replay specs check it with a sentinel server
+//     instead (startSentinel). That frame may lack the recorder; where an
+//     engine records there anyway (Firefox does), its violations are exempt
+//     like Chromium's refused requests there. Not observable in any engine: a load
 //     the policy refuses inside the worker (no document to listen on, no
 //     request reported); a worker request that does go out is in the record.
 //
@@ -117,14 +120,16 @@ export async function settleRequests(seen, allow) {
   await Promise.all(open.map((r) => Promise.race([r.response().catch(() => null), new Promise((ok) => setTimeout(ok, 2000))])));
 }
 
-// The policy violations recorded in every frame still attached. Only the
-// viewer's reconstruction frame (about:srcdoc, no scripts) may lack the
-// recorder; any other frame without it fails the check.
+// The policy violations recorded in every frame still attached, less the
+// viewer's reconstruction frame (about:srcdoc, no scripts): its refused loads
+// are exempt (the header), and it may lack the recorder. Any other frame
+// without the recorder fails the check.
 async function cspViolations(page) {
   const all = [];
   for (const frame of page.frames()) {
+    if (frame.url() === 'about:srcdoc') continue;
     const list = await frame.evaluate(() => window.__cspViolations || null).catch(() => null);
-    if (list === null) { if (frame.url() !== 'about:srcdoc') all.push(frame.url() + ': no violation recorder in this frame'); continue; }
+    if (list === null) { all.push(frame.url() + ': no violation recorder in this frame'); continue; }
     for (const v of list) all.push(frame.url() + ': ' + v);
   }
   return all;

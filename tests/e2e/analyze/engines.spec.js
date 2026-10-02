@@ -4,7 +4,7 @@
 // the same for the offline single file opened from disk, through dropped
 // files, which requests nothing but itself.
 import { pathToFileURL } from 'node:url';
-import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportSelected, downloadZip, pilotFiles, makeReplayCohort, PILOT_ORDER, OFFLINE_FILE } from './support.mjs';
+import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportSelected, downloadZip, pilotFiles, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, OFFLINE_FILE } from './support.mjs';
 
 test('the page makes no request beyond its own files, sample → report → zip', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -40,12 +40,16 @@ test('the offline single file works from file:// and makes no request at all', a
   await assertOnlyAllowed(page, seen, allow);
 });
 
-test('the offline single file reads a gzipped recording and plays it', async ({ page }) => {
-  // No recorded external image here: the styled-replay spec covers that
-  // policy; this one is about the recording's way in, gunzip included: the
-  // check step peeks every JSON file, the gzipped recordings too (4 files),
-  // and the recordings are two gzip members each.
-  const cohort = makeReplayCohort(null, { gzip: true });
+test('the offline single file reads a gzipped recording and plays it; the recorded external image is never requested', async ({ page }) => {
+  // The recording's way in, gunzip included: the check step peeks every JSON
+  // file, the gzipped recordings too (4 files), and the recordings are two
+  // gzip members each. The recording also holds an image from a sentinel
+  // server. The viewer's own policy allows any image; what refuses it is the
+  // page's policy, inherited from the page into the blob: replay host and
+  // from there into the viewer's srcdoc frame. The sentinel is the ground
+  // truth that every engine does inherit it.
+  const sentinel = await startSentinel();
+  const cohort = makeReplayCohort(sentinel.url, { gzip: true });
   const url = pathToFileURL(OFFLINE_FILE).href;
   const allow = [url];
   const seen = await guardNetwork(page, allow, { route: false });
@@ -72,6 +76,12 @@ test('the offline single file reads a gzipped recording and plays it', async ({ 
     const sheet = host.frameLocator('iframe.replay-frame').locator('style[data-ch-sheet="1"]');
     await expect(sheet).toHaveCount(1, { timeout: 30000 });
     expect(await sheet.evaluate((el) => el.textContent)).toContain('outline:3px solid lime');
+    const img = host.frameLocator('iframe.replay-frame').locator('img[src="' + sentinel.url + '/blocked.png"]');
+    await expect(img).toHaveCount(1);
+    await expect.poll(() => img.evaluate((el) => el.complete)).toBe(true);   // settled: refused, or loaded
+    expect(sentinel.hits).toEqual([]);
+    await settleRequests(seen, allow);
+    expect(requested(seen).filter((u) => u.startsWith(sentinel.url))).toEqual([]);
     await assertOnlyAllowed(page, seen, allow);
-  } finally { cohort.cleanup(); }
+  } finally { cohort.cleanup(); await sentinel.close(); }
 });
