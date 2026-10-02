@@ -22,6 +22,7 @@
 // supplied become absolute URLs so they resolve where they did on the
 // experiment's server. One level only: an @import'ed sheet's own references
 // are made absolute but not followed.
+import { bytesToBase64 } from '../shared/base64.js';
 
 const MIME = {
   '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
@@ -236,17 +237,11 @@ export async function buildAssetMap(recordings, droppedFiles) {
   return { assetMap, report };
 }
 
-function base64(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
 export function applyAssetMap(model, assetMap) {
   if (!assetMap || assetMap.size === 0) return model;
   const uris = new Map();
   const dataUri = (url) => {
-    if (!uris.has(url)) { const e = supplied(assetMap, url); uris.set(url, 'data:' + e.type + ';base64,' + base64(e.bytes)); }
+    if (!uris.has(url)) { const e = supplied(assetMap, url); uris.set(url, 'data:' + e.type + ';base64,' + bytesToBase64(e.bytes)); }
     return uris.get(url);
   };
   // A supplied @import is spliced in place of the statement (inside @media

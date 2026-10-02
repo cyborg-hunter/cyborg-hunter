@@ -85,15 +85,8 @@ export async function webSha256(text) {
   return out;
 }
 
-// Bytes → base64 in chunks (String.fromCharCode on a whole PNG or font would
-// blow the argument limit). Same loop as demo/results.js's toBase64.
-export function bytesToBase64(bytes) {
-  var s = '';
-  for (var i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(s);
-}
+// Bytes → base64 in chunks, shared with the report and the asset matcher.
+export { bytesToBase64 } from '../../src/shared/base64.js';
 
 // OffscreenCanvas is the worker's canvas; the plot cores only need getContext('2d').
 export function offscreenCreateCanvas(w, h) { return new OffscreenCanvas(w, h); }
