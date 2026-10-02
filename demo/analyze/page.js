@@ -43,6 +43,9 @@ export function createPage(root, worker, opts) {
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
   var reportUrl = null;
+  // True from a run's results until the new report's first selection message:
+  // that one is the report's own load-time pick of its first row.
+  var reportFirstSelection = false;
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
 
@@ -237,6 +240,7 @@ export function createPage(root, worker, opts) {
       });
     }
     replayCard.setParticipants(done.participants);
+    reportFirstSelection = true;
   }
 
   function reset() {
@@ -305,7 +309,14 @@ export function createPage(root, worker, opts) {
     var pid = e.data.participantId;
     var known = typeof pid === 'string' && state.result.participants.some(function (p) { return p.participantId === pid; });
     if (!known) return;
-    state.selected = pid; replayCard.select(pid);
+    state.selected = pid;
+    // The report's load-time pick must not undo a replay the analyst chose
+    // (or loaded) while the report frame was still loading; every later
+    // message is a row click and moves the dropdown.
+    var first = reportFirstSelection;
+    reportFirstSelection = false;
+    if (first && replayCard.userChose()) return;
+    replayCard.select(pid);
   });
 
   return { state: state, setFiles: setFiles, loadSample: loadSample, run: run, reset: reset,

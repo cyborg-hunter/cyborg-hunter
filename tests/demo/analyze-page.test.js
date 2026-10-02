@@ -351,6 +351,48 @@ test('a selection message counts only from the report frame, and only for a know
   assert.equal(t.page.state.selected, 'A');
 });
 
+// The report selects its first row on load and posts it; that message can
+// arrive after the analyst has already picked a replay.
+async function toResultsWithReplays(t) {
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, participants: [{ participantId: 'A', hasReplay: true, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: null }] });
+  await tick();
+  const frame = document.querySelector('iframe.analyze-report');
+  return (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+}
+const replaySelect = () => document.querySelector('[data-role="replay-select"]');
+
+test('the report\'s load-time selection does not undo a replay the analyst already chose', async () => {
+  const t = boot();
+  const post = await toResultsWithReplays(t);
+  replaySelect().value = 'B';
+  replaySelect().dispatchEvent(new win.Event('change'));
+  post('A');                                   // the report's first message: its own pick of row 1
+  assert.equal(t.page.state.selected, 'A', 'the page still knows what the report shows');
+  assert.equal(replaySelect().value, 'B', 'the analyst\'s choice stands');
+  post('A');                                   // a row click afterwards syncs as before
+  assert.equal(replaySelect().value, 'A');
+});
+
+test('the report\'s load-time selection moves the replay dropdown when the analyst has not chosen', async () => {
+  const t = boot();
+  const post = await toResultsWithReplays(t);
+  assert.equal(replaySelect().value, 'A');
+  post('B');
+  assert.equal(replaySelect().value, 'B');
+});
+
+test('a Load click counts as a choice the load-time selection leaves alone', async () => {
+  const t = boot();
+  const post = await toResultsWithReplays(t);
+  action('load-replay').click();
+  post('B');
+  assert.equal(replaySelect().value, 'A');
+  assert.equal(t.sent.filter((m) => m.type === 'replay').length, 1);
+});
+
 test('after a worker failure the page retries on a fresh worker from the factory, and the retry completes', async () => {
   document.head.innerHTML = '';
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));

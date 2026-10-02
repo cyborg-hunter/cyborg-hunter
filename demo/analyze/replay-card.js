@@ -23,6 +23,9 @@ export function createReplayCard(container, assets, requestModel) {
   // Bumped by every teardown: a model that arrives after the selection moved
   // on (or after another load started) belongs to a viewer nobody wants.
   var generation = 0;
+  // Whether the analyst has picked or loaded a replay since this run's list
+  // arrived (the page then ignores the report's load-time selection).
+  var chosen = false;
 
   function current() { return participants.find(function (p) { return p.participantId === select.value; }) || null; }
   function teardown() { generation++; teardownReplayHost(mount); }
@@ -47,13 +50,14 @@ export function createReplayCard(container, assets, requestModel) {
     showNote();
   }
 
-  select.addEventListener('change', function () { teardown(); showNote(); });
+  select.addEventListener('change', function () { chosen = true; teardown(); showNote(); });
   // A failed load is reported by the page (the worker's error message); the
   // card only has to not mount anything.
-  loadButton.addEventListener('click', function () { api.load().catch(function () {}); });
+  loadButton.addEventListener('click', function () { chosen = true; api.load().catch(function () {}); });
 
   var api = {
-    setParticipants: function (list) { participants = list; teardown(); render(); },
+    setParticipants: function (list) { participants = list; chosen = false; teardown(); render(); },
+    userChose: function () { return chosen; },
     select: function (pid) {
       var p = participants.find(function (x) { return x.participantId === pid; });
       if (!p || !p.hasReplay || select.value === pid) return;
