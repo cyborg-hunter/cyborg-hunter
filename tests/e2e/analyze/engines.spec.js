@@ -42,7 +42,9 @@ test('the offline single file works from file:// and makes no request at all', a
 
 test('the offline single file reads a gzipped recording and plays it', async ({ page }) => {
   // No recorded external image here: the styled-replay spec covers that
-  // policy; this one is about the recording's way in, gunzip included.
+  // policy; this one is about the recording's way in, gunzip included: the
+  // check step peeks every JSON file, the gzipped recordings too (4 files),
+  // and the recordings are two gzip members each.
   const cohort = makeReplayCohort(null, { gzip: true });
   const url = pathToFileURL(OFFLINE_FILE).href;
   const allow = [url];
@@ -52,6 +54,8 @@ test('the offline single file reads a gzipped recording and plays it', async ({ 
     await waitReady(page);
     await page.setInputFiles('[data-role="file-input"]', cohort.files);
     await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment assets');
+    await expect(page.locator('[data-role="id-reason"]')).toHaveText('4 file(s) inspected');
+    await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
     await buildReport(page);
     const zip = await downloadZip(page);
     expect(zip.names).toContain('replay/DEMO-FIXT.replay.js');

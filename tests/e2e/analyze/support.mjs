@@ -193,8 +193,11 @@ export async function startSentinel() {
 // made href-only (so a dropped demo.css styles it), a recorded image is
 // injected from imageOrigin (so the viewer's policy has something to block;
 // a sentinel's url, or an unreachable origin by default; null injects none),
-// and a second participant is a renamed copy. Written to a temp dir; opts.gzip writes the recordings as
-// .json.gz, as a researcher's compressed export would arrive.
+// and a second participant is a renamed copy. Written to a temp dir.
+// opts.gzip writes each recording as a .json.gz of two gzip members (what
+// appending to a gzip log gives; browsers' own gunzip rejects that, the
+// page must not), and a config that does not name the id field, so the
+// page's suggestion has to come from peeking the files, gzipped ones too.
 export function makeReplayCohort(imageOrigin, opts) {
   const dir = mkdtempSync(join(tmpdir(), 'ch-e2e-cohort-'));
   const raw = readFileSync(join(ROOT, 'tests', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8');
@@ -205,11 +208,12 @@ export function makeReplayCohort(imageOrigin, opts) {
   const write = (pid) => {
     writeFileSync(join(dir, pid + '.json'), raw.split('DEMO-FIXT').join(pid));
     const recording = JSON.stringify({ ...rec, participant_id: pid });
-    if (opts && opts.gzip) writeFileSync(join(dir, pid + '-replay-1785352263344.json.gz'), gzipSync(recording));
+    const half = recording.length >> 1;
+    if (opts && opts.gzip) writeFileSync(join(dir, pid + '-replay-1785352263344.json.gz'), Buffer.concat([gzipSync(recording.slice(0, half)), gzipSync(recording.slice(half))]));
     else writeFileSync(join(dir, pid + '-replay-1785352263344.json'), recording);
   };
   write('DEMO-FIXT'); write('DEMO-FIXT-B');
-  writeFileSync(join(dir, 'cyborg-hunter.config.json'), JSON.stringify({ filePattern: 'DEMO-*.json', participantIdField: 'participantId' }));
+  writeFileSync(join(dir, 'cyborg-hunter.config.json'), JSON.stringify(opts && opts.gzip ? { filePattern: 'DEMO-*.json' } : { filePattern: 'DEMO-*.json', participantIdField: 'participantId' }));
   mkdirSync(join(dir, 'exp'));
   writeFileSync(join(dir, 'exp', 'demo.css'), 'body{outline:3px solid lime}');
   const files = readdirSync(dir).filter((f) => statSync(join(dir, f)).isFile()).map((f) => join(dir, f)).concat([join(dir, 'exp', 'demo.css')]);
