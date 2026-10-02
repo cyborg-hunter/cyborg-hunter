@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src 'self' blob: data:; font-src data:; frame-src blob:; worker-src blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>cyborg-hunter — analyze your data in the browser</title>
+<style>
+/* Same palette and faces as the report; fonts arrive as data URIs from the bundle (see page.js). */
+:root{ --bg:#fafafa; --surface:#fff; --ink:#0f0f0f; --dim:#4f4a40; --line:#b9b2a2; --hard:#d32f2f;
+  --ff-space:"Space Grotesk",system-ui,sans-serif; --ff-sora:"Sora",system-ui,sans-serif; --ff-recursive:"Recursive",system-ui,sans-serif; }
+*{ box-sizing:border-box } html,body{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 var(--ff-sora) }
+.topbar{ display:flex; flex-wrap:wrap; gap:4px 16px; align-items:baseline; padding:12px 20px; border-bottom:3px double var(--ink); font-family:var(--ff-space) }
+.topbar .brand{ font-weight:700 } .topbar a{ color:var(--ink) }
+main{ max-width:1100px; margin:0 auto; padding:20px }
+section.step{ border:1px solid var(--line); background:var(--surface); padding:16px 20px; margin:0 0 16px }
+section.step[hidden]{ display:none } h2{ font:600 18px var(--ff-space); margin:0 0 8px } h3{ font:600 15px var(--ff-space); margin:0 0 6px } .hint{ color:var(--dim); font-size:13px }
+code{ overflow-wrap:anywhere }
+.dropzone{ border:2px dashed var(--line); padding:28px; text-align:center; margin:12px 0 } .dropzone.over{ border-color:var(--ink); background:var(--bg) }
+button{ font:600 13px var(--ff-recursive); padding:6px 12px; border:1px solid var(--ink); background:var(--ink); color:var(--surface); cursor:pointer }
+button.secondary{ background:var(--surface); color:var(--ink) } button:disabled{ opacity:.5; cursor:default }
+select{ font:13px var(--ff-recursive); padding:4px 8px; max-width:100% }
+.counts{ display:flex; gap:16px; flex-wrap:wrap } .counts span b{ font-family:var(--ff-space) }
+.warnings{ max-height:180px; overflow:auto; font-size:12px; color:var(--dim) } .warnings li{ margin:2px 0 }
+.policy{ border-left:3px solid var(--ink); padding:8px 12px; margin:12px 0; font-size:13px }
+iframe.analyze-report{ width:100%; height:min(80vh,900px); border:1px solid var(--line); background:var(--surface) }
+.replay-card{ margin-top:16px } .replay-host-card iframe{ width:100%; height:640px; border:1px solid var(--line); background:var(--surface) }
+.downloads{ display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 } progress{ width:100% }
+.error{ color:var(--hard) }
+</style>
+</head>
+<body>
+<div class="topbar"><span class="brand">cyborg-hunter · analyze</span><a href="../">live demo</a><a href="https://github.com/cyborg-hunter/cyborg-hunter#readme">docs</a><span class="hint" data-role="requirements">Needs a 2023-or-later browser. Tested up to <b data-role="tested-size">…</b> participants; larger cohorts: use the CLI.</span></div>
+<main>
+<section class="step" data-step="drop">
+  <h2>1. Drop your data</h2>
+  <p>Participant files (jsPsych CSV or JSON), replay recordings (<code>&lt;id&gt;-replay-&lt;epoch&gt;.json[.gz]</code>), your <code>cyborg-hunter.config.json</code> if you have one, and the experiment's own CSS and image files for styled replays. Folders are fine.</p>
+  <div class="dropzone" data-role="dropzone">Drop files or folders here, or
+    <label><input type="file" multiple data-role="file-input"> choose files</label> /
+    <label><input type="file" webkitdirectory data-role="dir-input"> choose a folder</label>
+  </div>
+  <p><button class="secondary" data-action="sample">Load sample data</button> <span class="hint">— three synthetic participants (no real person behind them), so you can see the whole report before trusting this page with real data.</span></p>
+  <div class="policy"><b>Nothing leaves your browser.</b> This page declares a security policy the browser enforces: no data requests (<code>connect-src 'none'</code>), no form submissions (<code>form-action 'none'</code>), no redirection of links (<code>base-uri 'none'</code>). Once the page's own files have loaded, the browser refuses any attempt to send or fetch anything; an automated test fails the build if the page ever makes a request. The only entries in your browser's Network tab are this page's own files and <code>blob:</code> URLs. Consequence: replays cannot fetch an experiment's external stylesheets or images from the web — drop them alongside the data to get styled replays, or use the CLI. <a href="./cyborg-hunter-analyze.html" download>Download this page as a single offline file</a>.</div>
+</section>
+<section class="step" data-step="check" hidden>
+  <h2>2. Check</h2>
+  <div class="counts" data-role="counts"></div>
+  <p>Participant ID field: <select data-role="id-field"></select> <span class="hint" data-role="id-reason"></span></p>
+  <ul class="warnings" data-role="check-warnings"></ul>
+  <p><button data-action="run">Build the report</button> <button class="secondary" data-action="reset">Start over</button></p>
+</section>
+<section class="step" data-step="run" hidden>
+  <h2>3. Building…</h2>
+  <progress data-role="progress" max="1" value="0"></progress>
+  <p class="hint" data-role="progress-label"></p>
+</section>
+<section class="step" data-step="results" hidden>
+  <h2>4. Results</h2>
+  <p class="hint" data-role="summary"></p>
+  <div class="downloads">
+    <button data-action="download-zip">Download all (.zip)</button>
+    <button class="secondary" data-action="download" data-file="summary.csv">summary.csv</button>
+    <button class="secondary" data-action="download" data-file="triage.md">triage.md</button>
+    <button class="secondary" data-action="download" data-file="event-log.csv">event-log.csv</button>
+    <button class="secondary" data-action="export-config">Export config</button>
+    <button class="secondary" data-action="reset">Start over</button>
+  </div>
+  <ul class="warnings" data-role="run-warnings"></ul>
+  <div data-role="report"></div>
+  <div data-role="replay"></div>
+</section>
+<p class="error" data-role="error" hidden></p>
+</main>
+<script type="module" src="./analyze.bundle.js"></script>
+</body>
+</html>

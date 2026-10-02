@@ -24,7 +24,7 @@
 //
 // Fallback to a CLI-instructions card on ANY failure — the pipeline erroring
 // or exceeding PIPELINE_TIMEOUT_MS, OR the iframe itself firing `error` or
-// never firing `load` within its own IFRAME_LOAD_TIMEOUT_MS watchdog — so
+// never firing `load` within its own watchdog (report-frame.js) — so
 // the payoff is never a blank screen or a silently broken frame.
 //
 // .results-mode (full-width) is toggled by demo.js's goTo(), not here — this
@@ -34,6 +34,7 @@ import { makePlotAdapter } from './plot-adapter.js';
 import { FINISH_VARIANTS, REPLICATE } from './steps.js';
 import { escHtml } from './util.js';
 import { mountReplayHost, teardownReplayHost } from './replay-host.js';
+import { swapIframe } from './report-frame.js';
 
 // Re-exported so demo.js's goTo() can tear down the viewer-host iframe
 // (item 12) through the SAME cached results.js import it already uses for
@@ -41,7 +42,6 @@ import { mountReplayHost, teardownReplayHost } from './replay-host.js';
 export { teardownReplayHost };
 
 var PIPELINE_TIMEOUT_MS = 8000;    // preview-core load + fetches + full pipeline run
-var IFRAME_LOAD_TIMEOUT_MS = 5000; // per swap: the blob iframe actually rendering
 
 // Pure: build the participant payload list + demo renderer opts. Visitor
 // first (its detail pane is the one defaultVisible shows), examples appended
@@ -149,7 +149,7 @@ export async function buildReportHtml(core, state, examples, replayModel, replay
   }
   // inlineReplayModels deliberately NOT forwarded (walkthrough item 12): the
   // report iframe is sandbox="allow-scripts" (opaque origin — see
-  // swapIframe's docblock below), and the replay viewer's inner
+  // swapIframe's docblock in report-frame.js), and the replay viewer's inner
   // reconstruction iframe needs same-origin contentDocument access that a
   // nested-sandbox intersection blocks, so DOM-tier reconstruction froze at
   // the first frame there. The demo instead builds the replay in its own
@@ -213,56 +213,10 @@ function toBase64(bytes) {
   return btoa(s);
 }
 
-// Swaps the report iframe to freshly-built HTML via a Blob URL. The OLD url
-// is revoked only once the NEW document's `load` fires — a visible frame
-// never points at a revoked url (spec §7.3). Any failure — the iframe firing
-// `error`, or `load` never firing within IFRAME_LOAD_TIMEOUT_MS — revokes
-// the FRESH url instead (the old one, if any, is left alone and still
-// showing) and calls onFail rather than onload.
-export function swapIframe(container, html, prevUrl, onload, onFail) {
-  var iframe = container.querySelector('iframe.results-frame');
-  if (!iframe) {
-    iframe = document.createElement('iframe');
-    iframe.className = 'results-frame';
-    // allow-scripts only (no allow-same-origin): opaque origin. Scripts run,
-    // so the report's own row-click/legend/replay JS works now that there
-    // are multiple participants (only the first is visible by default) —
-    // but the frame can't reach this page, storage, or the network, and the
-    // report string embeds arbitrary visitor-triggered text (pasted content
-    // etc.), so the most restrictive sandbox that still runs the report is
-    // the right default.
-    iframe.setAttribute('sandbox', 'allow-scripts');
-    iframe.title = 'Your cyborg-hunter report';
-    container.appendChild(iframe);
-  }
-  var url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-  var settled = false;
-  function finish(fn) {
-    if (settled) return;
-    settled = true;
-    iframe.removeEventListener('load', onLoad);
-    iframe.removeEventListener('error', onError);
-    clearTimeout(watchdogId);
-    fn();
-  }
-  function onLoad() {
-    finish(function () {
-      if (prevUrl) URL.revokeObjectURL(prevUrl);
-      if (onload) onload();
-    });
-  }
-  function onError(err) {
-    finish(function () {
-      URL.revokeObjectURL(url);
-      if (onFail) onFail(err);
-    });
-  }
-  var watchdogId = setTimeout(function () { onError(new Error('report iframe: load timed out')); }, IFRAME_LOAD_TIMEOUT_MS);
-  iframe.addEventListener('load', onLoad);
-  iframe.addEventListener('error', onError);
-  iframe.src = url;
-  return url;
-}
+// swapIframe (the Blob-URL report swap with its load watchdog) lives in
+// report-frame.js, shared with the analyze page; re-exported here for the
+// demo's existing importers.
+export { swapIframe };
 
 // Resolves the args for buildResults's very FIRST run() call: the
 // caller-supplied `initial` (buildResults's optional 5th param — demo.js's
