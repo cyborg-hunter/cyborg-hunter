@@ -1,4 +1,4 @@
-// F10: GuardHoneypot.init()
+// GuardHoneypot.init()
 // re-injected the DOM and re-subscribed to friction idempotently, but did NOT
 // reset the accumulated forensic state (violations, currentViolation,
 // trialViolationStartIdx) or the bait-field values. A second init() in the
@@ -38,7 +38,7 @@ function fakeFriction() {
   };
 }
 
-describe('F10 — honeypot re-init clears prior-run state', () => {
+describe('honeypot re-init clears prior-run state', () => {
   it('a fresh init() does not inherit the previous run\'s violations', () => {
     const friction = fakeFriction();
 

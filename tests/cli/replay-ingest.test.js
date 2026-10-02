@@ -45,9 +45,9 @@ function recording(pid, startEpoch) {
   };
 }
 
-// SessionRecording v2 (spec r2) — what the recorder has emitted since T3.
+// SessionRecording v2 (spec r2) — what the recorder emits.
 // The content sniff has to recognise it or a fresh capture is parsed as a
-// participant file and never reaches the viewer (T5 Task 10).
+// participant file and never reaches the viewer.
 function recordingV2(pid, startEpoch) {
   return {
     schema_version: 2,
@@ -162,7 +162,7 @@ describe('replay artifact ingest', () => {
     assert.ok(warnings.some(w => String(w.warnings).match(/schema_version/)));
   });
 
-  // ── SessionRecording v2 (T5 Task 10) ──────────────────────────────────────
+  // ── SessionRecording v2 ──────────────────────────────────────
   // The sniff keyed on v1's `metadata.recorder` / v1 `trials[]`, so a v2
   // artifact matched neither: it was routed into the PARTICIPANT pass as
   // "contains participant data" and p.replay stayed null. Nothing downstream
@@ -192,8 +192,8 @@ describe('replay artifact ingest', () => {
   // the sniff recognise v2 without these would hand a v2 artifact to the
   // OWNERLESS branch, which verifies by filename alone — so a file recorded
   // for 'a/b' and named for the sanitized 'a_b' would attach to the wrong
-  // participant, the one case the mismatch check exists for. (Commit-hook
-  // finding on the first Task 10 commit; the mis-assignment half was real.)
+  // participant, the one case the mismatch check exists for. (A review flagged
+  // this; the mis-assignment half was real.)
   it('rejects a v2 artifact whose top-level participant_id mismatches', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ch-replay-v2own-'));
     try {
@@ -231,7 +231,6 @@ describe('replay artifact ingest', () => {
   // Reading it in preference to the authoritative top-level field would let
   // that junk decide ownership, which is a cross-participant attachment.
   // Selection is therefore VERSION-AWARE, not a fallback chain.
-  // (Second commit-hook finding on the Task 10 fix round.)
   it('ignores a stray v1 metadata block on a v2 artifact when deciding ownership', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ch-replay-v2junk-'));
     try {
@@ -307,7 +306,7 @@ describe('replay artifact ingest', () => {
       // `Found N participants (M files had warnings)` — the warning text
       // surfaces on the no-valid-participants path (report.js:43-49). What
       // tells them at the console is renderReplayAssets' skip line, which
-      // carries the §11 reason (T5 Task 10 review M-3).
+      // carries the §11 reason.
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
@@ -555,7 +554,7 @@ describe('replay artifact ingest', () => {
     } finally { rmSync(replayDir, { recursive: true, force: true }); }
   });
 
-  // ── The .json.gz spurious warning (T5 Task 10 review M-4) ─────────────────
+  // ── The .json.gz spurious warning ─────────────────
   // The participant-pass exclusion block read the gzip bytes as utf8 and
   // JSON.parse'd them, so every compressed artifact looked like a truncated
   // upload. The artifact still attached (the attach pass gunzips), which is
@@ -586,15 +585,15 @@ describe('replay artifact ingest', () => {
 // A3 — v2 from ANY producer, and jsPsych v1 BY CONVERSION
 // ══════════════════════════════════════════════════════════════════════════
 //
-// Task 10 taught the content sniff to recognise v2 and taught ownership and
-// the session pick to read v2's own identity fields, but DISCOVERY was still
+// The content sniff recognises v2, and ownership and
+// the session pick read v2's own identity fields, but DISCOVERY was still
 // CH's filename convention (`<sanitizedPid>-replay-<epoch>.json[.gz]`). v2 is
 // producer-agnostic by construction (spec §14), so a conforming recording can
 // arrive named anything at all — `session.json`, a download stamped with a
 // date, whatever the producing tool writes. Those files are found by CONTENT
 // and attached by IDENTITY: the embedded `participant_id` must name a
 // participant in the dataset. Filename luck attaches nothing, which is what
-// keeps Task 10's ownership defense whole for producers whose names CH cannot
+// keeps the ownership defense whole for producers whose names CH cannot
 // read.
 
 const jspsychV1 = () => JSON.parse(readFileSync(
@@ -741,7 +740,7 @@ describe('replay ingest — jsPsych v1 by conversion (A3)', () => {
 
   // The converter's refusal semantics ARE the contract (it never guesses at a
   // missing field and never renumbers a trial). A refusal therefore has to
-  // reach a human with its own words, on the surface Task 10 built for
+  // reach a human with its own words, on the surface built for
   // "attached, readable, and still not playable".
   it('surfaces a converter refusal on the participant-visible error path', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ch-a3-refuse-'));
@@ -819,12 +818,11 @@ describe('replay ingest — jsPsych v1 by conversion (A3)', () => {
   });
 });
 
-// ── A3 external-review fix round (2026-09-02) ──────────────────────────────
-// Seven findings from the Codex review of the A3 diff, each reproduced against
-// the real ingest() before a line of the fix was written. Numbering follows
-// the review; 5 (report-surface visibility of refusals) is a follow-up, not
-// fixed here.
-describe('A3 review fixes', () => {
+// ── Regressions found by an external review of v2 ingest ───────────────────
+// Seven findings, each reproduced against the real ingest() before a line of
+// the fix was written. Report-surface visibility of refusals is a follow-up,
+// not covered here.
+describe('external-review regressions', () => {
   let dir;
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ch-a3-fix-')); });
   afterEach(() => { rmSync(dir, { recursive: true, force: true }); });

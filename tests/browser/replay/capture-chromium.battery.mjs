@@ -1,15 +1,15 @@
 // tests/browser/replay/capture-chromium.battery.mjs
-// The Chromium-only capture battery (T3 Task 9c).
+// The Chromium-only capture battery.
 //
 // WHY A BROWSER SUITE. Every case here asserts capture-side behaviour the unit
-// suites CANNOT express, and each one is a bug the reviews found or a
+// suites CANNOT express, and each one is a bug a review found or a
 // divergence they had to work around:
 //
 //   * happy-dom reports `oldValue: null` for an empty-valued attribute where
 //     Chromium reports `""`, so the whole exclusion-toggle family is untestable
-//     at unit level (task-3-review I3, which routed eight cases here);
+//     at unit level;
 //   * happy-dom leaves `option.defaultSelected` and `select.size` unusable and
-//     never synthesizes `C:\fakepath\…` for a file input (task-4-review F8);
+//     never synthesizes `C:\fakepath\…` for a file input;
 //   * Chromium decides for itself how many MutationRecords a task produces and
 //     in what order — the mapper's batch pre-scan rests on that shape.
 //
@@ -57,7 +57,7 @@ function check(cond, label) {
 const browser = await chromium.launch({ headless: true });
 
 // Each case gets a FRESH PAGE: the redaction taint and the honeypot/friction
-// globals are page-lifetime by design (Task 6 M-4), so sharing one page would
+// globals are page-lifetime by design, so sharing one page would
 // let an earlier case decide a later one's behaviour.
 async function withPage(name, fn) {
   caseCount++;
@@ -218,7 +218,7 @@ await withPage('populate-then-reveal adds each child exactly once, in order', as
 
 // 6. Batched moves: append + move-to-end, then insert-before-a-node-that-
 //    moves-in-later. The assertion is on the PLAYER's applied DOM, not the
-//    event list (task-3-review C3).
+//    event list.
 await withPage('batched append + move keeps player order equal to DOM order', async (page) => {
   const { keyframe } = await start(page,
     '<div id="box"><span id="s1">1</span><span id="s2">2</span><span id="s3">3</span></div>');
@@ -297,7 +297,7 @@ await withPage('Chromium reports oldValue "" for an empty-valued attribute', asy
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FORM SEMANTICS (task-4-review F8: the select/file battery that happy-dom
+// FORM SEMANTICS (the select/file battery that happy-dom
 // cannot express). initial_state is seeded at a KEYFRAME, so each case
 // changes state and then opens a new segment with keyframeEvery: 1.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -338,7 +338,7 @@ await withPage('real selectOption gesture reaches initial_state', async (page) =
 });
 
 // 12. An untouched <select size="3"> selects NOTHING in a browser, so it must
-//     seed nothing — the F3 bug, whose fix rests on a display-size reading
+//     seed nothing — a bug whose fix rests on a display-size reading
 //     happy-dom reports differently.
 await withPage('untouched select size=3 seeds nothing', async (page) => {
   await start(page,

@@ -8,7 +8,7 @@
 //
 // Steps:
 //   1. `node build.js` -> dist/ (skipped if dist/ is newer than every file
-//      under src/ — "if stale" per the plan).
+//      under src/ — "if stale").
 //   2. `node tools/build-preview-core.mjs` -> demo/preview-core.js.
 //   2b. `node tools/build-analyze.mjs` -> demo/analyze/analyze.bundle.js.
 //   3. Copy demo/* (excluding demo/tests/ — Playwright specs must not ship
@@ -18,7 +18,7 @@
 //      demo/results.js fetches it as text to embed in the in-browser
 //      report, and it must be the same assembly html-index.js inlines into
 //      the CLI report: the client alone is missing the §4 instantiation
-//      module it calls into (T5 Task 2's concatenation decision).
+//      module it calls into (the build's concatenation decision).
 //   5. Write the analyze page as one offline file,
 //      .demo-site/analyze/cyborg-hunter-analyze.html (bundle inlined, policy
 //      without 'self'; see tools/offline-analyze.mjs).

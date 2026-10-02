@@ -1,14 +1,14 @@
 // tests/replay/viewer-client.test.js
-// The shipped report viewer, driven headlessly over v2 models (T5 Task 4).
+// The shipped report viewer, driven headlessly over v2 models.
 //
 // The boot harness (`boot`, `stubCanvas`, `withProto`, the recording builders)
-// moved to `tests/replay/support/viewer-harness.js` at T5.6, unchanged, so the
+// moved to `tests/replay/support/viewer-harness.js`, unchanged, so the
 // alignment suite boots the same viewer the same way; its header carries the
 // realm notes (assembled script, synchronous `srcdoc`, no layout engine).
 //
 // This file asserts STATE (reconstruction, seeds, ordering, counters, chips).
-// Geometry belongs to the Playwright battery (Task 8), and the five alignment
-// predicates to `alignment-viewer-model.test.js` (Task 6).
+// Geometry belongs to the Playwright battery, and the five alignment
+// predicates to `alignment-viewer-model.test.js`.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
@@ -37,7 +37,7 @@ function offscreenCalls(v) {
 
 // ── the span restore ───────────────────────────────────────────────────────
 
-describe('T5.4 — span restore over the committed canonical fixture', () => {
+describe('span restore over the committed canonical fixture', () => {
   // Session t=4100 lands in segment 2, whose origin is t_load 3510, so the
   // segment-relative seek is 590 — past the input.value at wire 4000 (tRel
   // 490). The plan states the seek in SESSION time; the viewer's playhead is
@@ -126,7 +126,7 @@ describe('T5.4 — span restore over the committed canonical fixture', () => {
   });
 });
 
-describe('T5.4 — forward walk vs backward restore', () => {
+describe('forward walk vs backward restore', () => {
   it('a forward seek continues incrementally; a backward seek remounts', () => {
     const v = boot(fixture('canonical-core'));
     v.dbg.selectSegment(1);
@@ -171,7 +171,7 @@ describe('T5.4 — forward walk vs backward restore', () => {
   });
 });
 
-describe('T5.4 — deep spans', () => {
+describe('deep spans', () => {
   // The §5 worst case: keyframeEvery 10, so the deepest continuation sits nine
   // segments after its keyframe and a restore into it replays ten segments.
   function tenSegmentSpan() {
@@ -215,7 +215,7 @@ describe('T5.4 — deep spans', () => {
   });
 });
 
-describe('T5.4 — stylesheet derivation and the §7 tie precedence', () => {
+describe('stylesheet derivation and the §7 tie precedence', () => {
   function sheetRecording() {
     return baseRecording({
       stylesheets: [{ id: 1, kind: 'inline', css: '#p{color:red}', media: null }],
@@ -294,7 +294,7 @@ describe('T5.4 — stylesheet derivation and the §7 tie precedence', () => {
   });
 });
 
-describe('T5.4 — the data-ch-* family is viewer-owned, both verbs', () => {
+describe('the data-ch-* family is viewer-owned, both verbs', () => {
   const iframeKeyframe = () => bodyKeyframe([
     { id: 2, kind: 'element', tag: 'iframe', attrs: { src: 'https://evil.test/x', id: 'f' }, children: [] },
     { id: 3, kind: 'element', tag: 'div', attrs: { id: 'host', 'data-ch-shadow': '' }, children: [] },
@@ -389,7 +389,7 @@ describe('T5.4 — the data-ch-* family is viewer-owned, both verbs', () => {
   });
 
   // `data-ch-sheet` is the THIRD name the viewer stamps onto live nodes, and
-  // the first Task-4 draft missed it: the scoping argument counted the names
+  // the first draft missed it: the scoping argument counted the names
   // the viewer stamps as two. The set that needs protecting is the names the
   // viewer stamps AND READS BACK, and the read-backs were document-wide.
   // Recorded content mounts into <body> and sheets live in <head>, so scoping
@@ -474,7 +474,7 @@ describe('T5.4 — the data-ch-* family is viewer-owned, both verbs', () => {
   });
 });
 
-describe('T5.4 — counters, chips and defects', () => {
+describe('counters, chips and defects', () => {
   it('folds skipped and patchFailures into one chip with two counters', () => {
     const v = boot(baseRecording({
       segments: [segment({
@@ -525,13 +525,13 @@ describe('T5.4 — counters, chips and defects', () => {
   });
 });
 
-describe('T5.4 — the alignment check is wired to §6, not dead', () => {
+describe('the alignment check is wired to §6, not dead', () => {
   // TASK 6 owns the five predicates, the client-box chain and the three
   // anchor outcomes. What this pins is only that the re-point is LIVE: the
   // walk still offers anchored events to the check, the check still resolves
   // `anchor.node` through the span id map, and an event carrying no §6 blocks
   // still produces no check at all. Without it the whole surface could go
-  // quiet between here and Task 6 and nothing would notice.
+  // quiet between here and the alignment suite and nothing would notice.
   it('checks an anchored event and skips an unanchored one', () => {
     const v = boot(fixture('canonical-core'));
     v.dbg.seek(1000);
@@ -562,7 +562,7 @@ describe('T5.4 — the alignment check is wired to §6, not dead', () => {
     assert.equal(checks.length, 1);
     assert.equal(checks[0].type, 'key.down');
     assert.equal(checks[0].status, 'redacted');
-    // T5.6 gave the chip a fourth bucket to name, so the wording counts the
+    // The chip has a fourth bucket to name, so the wording counts the
     // redacted interactions instead of gesturing at them; the property this
     // pins — an event-level redacted event reads as UNVERIFIED, never as
     // verified and never as a warning — is unchanged.
@@ -611,7 +611,7 @@ describe('T5.4 — the alignment check is wired to §6, not dead', () => {
     // because the absolute number differs by one between realms: happy-dom's
     // synchronous srcdoc parse lets the boot restore run before
     // `selectSegment(0)` does its own, where a browser defers the first one to
-    // `onload`. Task 8 should read deltas for the same reason.
+    // `onload`. The browser battery should read deltas for the same reason.
     const before = v.dbg.getStats().mounts;
     v.dbg.selectSegment(0);
     assert.equal(v.dbg.getStats().mounts, before + 1);
@@ -628,7 +628,7 @@ describe('T5.4 — the alignment check is wired to §6, not dead', () => {
   });
 });
 
-describe('T5.4 — the foreign fixture plays', () => {
+describe('the foreign fixture plays', () => {
   it('mounts every jspsych-full segment and applies its patches', () => {
     const v = boot(fixture('jspsych-full'));
     assert.equal(v.model.foreign, true);
@@ -640,7 +640,7 @@ describe('T5.4 — the foreign fixture plays', () => {
     }
     const c = v.dbg.getCounters();
     // Segment 10 carries jsPsych 8.2.3's free-sort node with an attribute
-    // literally named `<` — the one skip the corpus holds (Task 2's pin).
+    // literally named `<` — the one skip the corpus holds.
     assert.equal(c.patchFailures, 0, 'no reference the span could not honour');
     assert.equal(c.skipped, 0, 'segment 13 holds no malformed name');
   });
@@ -652,7 +652,7 @@ describe('T5.4 — the foreign fixture plays', () => {
   });
 });
 
-// ── T5.5: the adopted vocabulary ───────────────────────────────────────────
+// ── the adopted vocabulary ─────────────────────────────────────────────────
 
 const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
@@ -662,8 +662,8 @@ const canvasKeyframe = (id, w, h, attrs) => bodyKeyframe([{
 
 // The helper's own contract, pinned: a patch must survive an `await` inside the
 // body. Without this, `withProto` is a trap handed to three later tasks. It
-// lives in the shared harness now (T5.6) and this is still its only pin.
-describe('T5.5 — the prototype-patch helper', () => {
+// lives in the shared harness now and this is still its only pin.
+describe('the prototype-patch helper', () => {
   it('keeps the patch installed across an await inside the body', async () => {
     const { Window } = await import('happy-dom');
     const win = new Window({ url: 'https://report.test/' });
@@ -686,7 +686,7 @@ describe('T5.5 — the prototype-patch helper', () => {
 const SEG8_LIVE = 100;      // after the baseline at 3.9, before the removes
 const SEG9_LIVE = 1000;     // after the 9th snapshot at 936, before the removes
 
-describe('T5.5 — canvas.snapshot composites in the parent, presented through a head rule', () => {
+describe('canvas.snapshot composites in the parent, presented through a head rule', () => {
   it('presents the segment-8 full baseline through a viewer-owned shell-head rule', async () => {
     const v = boot(fixture('jspsych-full'));
     v.dbg.selectSegment(8);
@@ -777,10 +777,10 @@ describe('T5.5 — canvas.snapshot composites in the parent, presented through a
     v.dbg.seek(SEG9_LIVE);
     await v.dbg.canvasSettled();
     assert.equal(v.win.__encodes, 1,
-      'nine composites, ONE presentation — the re-encode is the cost (Task 0)');
+      'nine composites, ONE presentation — the re-encode is the cost');
 
     // A further forward seek touches no canvas, so nothing is re-encoded: the
-    // cheap follow-on Task 0's measurement points at.
+    // cheap follow-on the measurement points at.
     v.dbg.seek(SEG9_LIVE + 100);
     await v.dbg.canvasSettled();
     assert.equal(v.win.__encodes, 1, 'no snapshot in this batch ⇒ no re-encode');
@@ -822,7 +822,7 @@ describe('T5.5 — canvas.snapshot composites in the parent, presented through a
 
     // Per CSSOM a `style` write replaces the whole inline declaration block, so
     // a viewer presenting INTO that block loses the composite. The invariant is
-    // asserted, not the route (design §3.1's Task-0 amendment).
+    // asserted, not the route (design §3.1).
     v.dbg.seek(25);
     await v.dbg.canvasSettled();
     assert.equal(v.dbg.getNode(2).getAttribute('data-ch-canvas'), '2', 'the stamp survived the style write');
@@ -977,7 +977,7 @@ describe('T5.5 — canvas.snapshot composites in the parent, presented through a
 
   it('a throwing presentation does not poison the canvas chain', async () => {
     // A rejected chain is permanent: every later composite for that canvas is
-    // skipped and `canvasSettled()` — the one call Task 7's executor awaits —
+    // skipped and `canvasSettled()` — the one call a checkpoint executor awaits —
     // rejects. So both links have to end resolved whatever they throw.
     const rec = baseRecording({
       segments: [segment({
@@ -1032,7 +1032,7 @@ describe('T5.5 — canvas.snapshot composites in the parent, presented through a
   });
 });
 
-describe('T5.5 — media is state, never playback', () => {
+describe('media is state, never playback', () => {
   const mediaRecording = (events, initialState) => baseRecording({
     segments: [segment({
       initial_dom: bodyKeyframe([
@@ -1083,7 +1083,7 @@ describe('T5.5 — media is state, never playback', () => {
   });
 });
 
-describe('T5.5 — clipboard renders in both producer modes and redacted', () => {
+describe('clipboard renders in both producer modes and redacted', () => {
   const clip = (over) => baseRecording({
     segments: [segment({
       initial_dom: bodyKeyframe([]),
@@ -1119,7 +1119,7 @@ describe('T5.5 — clipboard renders in both producer modes and redacted', () =>
   });
 });
 
-describe('T5.5 — fullscreen, focus and visibility are lane events', () => {
+describe('fullscreen, focus and visibility are lane events', () => {
   it('marks fullscreen.enter/exit in the lane and names them in the ticker', () => {
     const v = boot(fixture('jspsych-full'));
     v.dbg.selectSegment(1);            // carries fullscreen.enter
@@ -1134,7 +1134,7 @@ describe('T5.5 — fullscreen, focus and visibility are lane events', () => {
   });
 });
 
-describe('T5.5 — §5.8 unknown event types', () => {
+describe('§5.8 unknown event types', () => {
   it('skips an unrecognised type, counts it once, warns once, and keeps walking', () => {
     const rec = baseRecording({
       segments: [segment({
@@ -1230,7 +1230,7 @@ describe('T5.5 — §5.8 unknown event types', () => {
   });
 });
 
-describe('T5.5 — §5.7 truncation and the capture-failure surface', () => {
+describe('§5.7 truncation and the capture-failure surface', () => {
   const stopped = (stopEvent, over) => baseRecording(Object.assign({
     truncated: true,
     segments: [segment({
@@ -1343,7 +1343,7 @@ describe('T5.5 — §5.7 truncation and the capture-failure surface', () => {
   });
 });
 
-// ── the participant's own view state (T5.8) ────────────────────────────────
+// ── the participant's own view state ────────────────────────────────
 // `dpr`, `vv_scale` and `vv_offset_*` are three §6 camera fields that had NO
 // reader anywhere: `foldEventCamera` read six of ten and stopped, and the DPR
 // advisory read the SEGMENT SEED, so an interaction recorded mid-pinch or
@@ -1353,7 +1353,7 @@ describe('T5.5 — §5.7 truncation and the capture-failure surface', () => {
 // playhead-scoped because a zoom is a moment inside a segment, not a property
 // of one. Geometry across a real pinch is the Playwright battery's
 // (`cursor-alignment.battery.mjs`, B-pinch); this file pins the state machine.
-describe('T5.8 — per-event dpr / vv_scale / vv_offset_* drive a playhead-scoped advisory', () => {
+describe('per-event dpr / vv_scale / vv_offset_* drive a playhead-scoped advisory', () => {
   const camera = (over) => Object.assign({
     scroll_x: 0, scroll_y: 0, viewport_w: 1000, viewport_h: 800,
     client_w: 1000, client_h: 800, dpr: 1, vv_scale: 1, vv_offset_x: 0, vv_offset_y: 0,
@@ -1427,8 +1427,8 @@ describe('T5.8 — per-event dpr / vv_scale / vv_offset_* drive a playhead-scope
   });
 });
 
-// ── the §13 placeholder latch cannot depend on sample timing (T5.8) ────────
-describe('T5.8 — a placeholder removed at tRel 0 still latches its chip', () => {
+// ── the §13 placeholder latch cannot depend on sample timing ────────
+describe('a placeholder removed at tRel 0 still latches its chip', () => {
   it('latches from the span keyframe, before the walk applies anything', () => {
     // FOUND BY THE PLAYWRIGHT BATTERY, on WebKit: its timer granularity is
     // 1 ms, so a removal in the same millisecond as the segment origin rounds
@@ -1453,8 +1453,8 @@ describe('T5.8 — a placeholder removed at tRel 0 still latches its chip', () =
   });
 });
 
-// ── the view-state fallback is symmetric (T5.8 fix, review M-3) ────────────
-describe('T5.8 fix — a partial camera block cannot cancel half the view state', () => {
+// ── the view-state fallback is symmetric ────────────
+describe('a partial camera block cannot cancel half the view state', () => {
   it('inherits vv_scale the same way it inherits dpr', () => {
     // §6 says complete blocks or none, so this is a FOREIGN-file shape — and
     // the viewer plays foreign files by design. With an asymmetric fallback

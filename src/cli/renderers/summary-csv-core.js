@@ -30,7 +30,7 @@ const COLUMNS = [
   ['totalForeignInputEvents', (s, t) => s.totalForeignInputEvents],
   ['totalSoftScore', (s, t) => s.totalSoftScore],
   ['edgeExitCount', (s, t) => t.edgeExitCount],
-  // Session-level signals (Task 4) — drop legacy sidebarDetected/extensionsDetected
+  // Session-level signals — drop legacy sidebarDetected/extensionsDetected
   // columns in favour of richer session-authoritative counts.
   ['sidebar_event_count', (s, t) => s.sidebarEventCount ?? 0],
   ['ai_extensions', (s, t) => {

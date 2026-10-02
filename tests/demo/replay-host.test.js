@@ -11,9 +11,9 @@ import { inlineSafeJson, inlineSafeSrc } from '../../src/shared/inline-safe.js';
 import { REPLAY_STYLES_CSS } from '../../src/cli/renderers/replay-styles.js';
 
 // The model shape is a v2 VIEWER MODEL (design §9): `segments`, not `trials`.
-// Re-pointed in T5 Task 10 — the demo host is the A6 regeneration path's
+// The demo host is the demo-regeneration path's
 // consumer, and it must not be pinned against a shape buildViewerModel
-// stopped producing at Task 1.
+// no longer produces.
 test('buildReplayHostHtml embeds the mount div, the client source, and the initChReplayViewer bootstrap call', () => {
   const html = buildReplayHostHtml({ segments: [] }, 'window.initChReplayViewer = function () {};');
   assert.match(html, /<div id="ch-replay-mount"><\/div>/);
@@ -41,7 +41,7 @@ test('buildReplayHostHtml escapes every < in visitor-controlled model data', () 
 });
 
 test('a model whose text opens script-data-escaped state cannot reach the parser', () => {
-  // T5 Task 10 review I-2, reproduced there in a real browser: with the
+  // Reproduced in a real browser: with the
   // end-tag rule the host document below stayed double-escaped to EOF, so its
   // own </script> never closed the element, the replay card silently never
   // appeared, and no error was raised. No `</script` is needed for it.

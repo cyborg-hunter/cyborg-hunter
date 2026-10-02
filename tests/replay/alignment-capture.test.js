@@ -7,7 +7,7 @@
 // coordinates, `camera`/`anchor` blocks, integer node ids.
 //   - The v1 sections (HTML-string DOM capture: nonce markers, iframe span
 //     placeholders, `mutation` patches, the v1 serializer's
-//     `view_state`/`marker_attr`) were deleted at the T3.6 switchover, when
+//     `view_state`/`marker_attr`) were deleted at the v2 switchover, when
 //     the code they tested stopped existing. Banners in place of each record
 //     what died and which suite carries the behaviour now.
 //

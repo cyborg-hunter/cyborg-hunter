@@ -2,7 +2,7 @@
 // SessionRecording v2 keyframe (a DomNode tree, spec §4) → real DOM inside the
 // reconstruction frame, plus the `Map<number, Node>` every `dom.*` patch
 // (§5.1), every event `target`, and every `anchor.node` (§6) resolves through —
-// and, since T5 Task 3, the application of those four patches through that map.
+// and the application of those four patches through that map.
 //
 // Instantiation and patching live together because they are ONE READING OF §4.
 // `dom.add` instantiates a subtree into the same id map, reverse index and
@@ -34,7 +34,7 @@
 // at the bottom — exactly one line of ESM syntax. The report's viewer client
 // (`src/cli/renderers/replay-viewer.client.js`) is a plain IIFE inlined
 // verbatim into the report and cannot `import`, so the build CONCATENATES this
-// module ahead of it with that one line stripped (T5 Task 2's recorded
+// module ahead of it with that one line stripped (a recorded build
 // decision; `tests/replay/dom-instantiate.test.js` machine-checks that the
 // source stays concatenable and strict-safe). The alternative — the client
 // carrying its own copy — would put two readings of §4 in the repo, which is
@@ -70,7 +70,7 @@ var URL_ATTRS = {
 // this file must survive concatenation as a plain script (header). It gates
 // both attribute names and element tags.
 //
-// WHY IT IS HERE, corrected in fix round 1 after measurement. The first version
+// WHY IT IS HERE, corrected after measurement. The first version
 // of this comment said a real browser's `setAttribute` throws
 // `InvalidCharacterError` on a name outside this production. It does not:
 // chromium, firefox and webkit all accept `setAttribute('<', 'v')`, and all
@@ -78,7 +78,7 @@ var URL_ATTRS = {
 // 20.9.0 is the realm that throws on it. Three reasons survive, and they are
 // the reasons the filter stays:
 //   1. REALM DETERMINISM. The reconstruction runs in happy-dom under `npm
-//      test`, in three browser engines under the Task-8 battery, and in the
+//      test`, in three browser engines under the browser battery, and in the
 //      analyst's browser in production. A viewer whose tree depends on which
 //      one is executing cannot be a conformance player. Filtering by a fixed
 //      predicate gives one answer everywhere; deferring to the host gives
@@ -191,7 +191,7 @@ var CANVAS_RULE_ATTR = 'data-ch-canvas-rule';
 // `data-ch-decoy` are page-authored too. Dropping those would delete
 // attributes the page really had and silently break any CSS keyed on them.
 //
-// The canvas pair joined the set in T5.5 for a reason with more teeth than the
+// The canvas pair joined the set for a reason with more teeth than the
 // chips': `data-ch-canvas` is the SELECTOR the presented composite is keyed on,
 // so a recording that could strip it would blank a canvas the analyst is
 // looking at, and one that could forge it would paint another element with a
@@ -249,7 +249,7 @@ function isSafeUrl(value) {
  * not neutralised: a `javascript:` href rewritten to `#` would claim the page
  * had a link it did not have.
  *
- * TWO refusal classes, counted differently (fix round 1, review I-4 — the first
+ * TWO refusal classes, counted differently (the first
  * version of this counted neither, on an argument that only holds for one of
  * them):
  *
@@ -260,8 +260,8 @@ function isSafeUrl(value) {
  *     a filter worked.
  *   - **name token** — a name outside the XML `Name` production. Those are page
  *     state that is LOST: chromium, firefox and webkit all accept `@click`,
- *     `[ngModel]`, `(click)`, `*ngIf`, `1x`, `café` and `<` (Task 2's
- *     tri-engine table), and this module drops them anyway, for the
+ *     `[ngModel]`, `(click)`, `*ngIf`, `1x`, `café` and `<` (measured in
+ *     all three engines), and this module drops them anyway, for the
  *     realm-determinism reasons in the header. That loss gets a surface —
  *     `skipped`, the counter for "the file said something no DOM here could
  *     hold" — rather than only a comment.
@@ -376,7 +376,7 @@ function instantiateElement(domNode, ctx, tag, parentNs) {
   // rendered as badges and lane markers rather than played (design §7); this
   // is only so the element has its shape.
   //
-  // It obeys the SAME skip set as the recorded attributes (fix round 1). Until
+  // It obeys the SAME skip set as the recorded attributes. Until
   // it did, a `media_src` on an iframe node reached the live DOM as `src` and
   // chromium issued the request whenever the shell CSP was absent — measured.
   // §12's network policy is supposed to hold STRUCTURALLY here, with nothing to
@@ -406,7 +406,7 @@ function instantiateElement(domNode, ctx, tag, parentNs) {
   // hand.
   //
   // The delete is not redundant with the set. `dom.add` OVERWRITES an id
-  // binding, because a remove+add pair carrying one id is a MOVE (pin M5), and
+  // binding, because a remove+add pair carrying one id is a MOVE (the move carve-out), and
   // this map is keyed by the same ids — so an id re-bound to a node with NO
   // `canvas_size` would keep the previous node's bitmap size, and the viewer
   // would size an offscreen canvas for an element that is not a canvas.
@@ -452,7 +452,7 @@ function result(ctx, root) {
 /**
  * Bind an id to a node, overwriting whatever either side held.
  *
- * The overwrite IS the contract (design §4, T3 Task 3 pin M5): a `dom.remove` +
+ * The overwrite IS the contract (design §4, the move carve-out): a `dom.remove` +
  * `dom.add` pair carrying the same id is a MOVE, and treating the second
  * binding as a duplicate loses the node. Both directions are cleared first, so
  * the two maps stay exact inverses of each other — the property the subtree
@@ -462,11 +462,11 @@ function result(ctx, root) {
  * for it to be detached and inventing a detach would be the viewer editing the
  * reconstruction.
  *
- * ONE EXCEPTION, added in fix round 1 (review I-1): the id the mount bound to
+ * ONE EXCEPTION: the id the mount bound to
  * the reconstruction ROOT is not movable. A `dom.add` carrying it — at the
  * subtree's own root or buried in its children — otherwise pointed the root id
- * at an attacker-chosen element with nothing counted, which decides what Task
- * 7's `exists`/`attr:<name>` read, what an `anchor.node` naming the root
+ * at an attacker-chosen element with nothing counted, which decides what the checkpoint
+ * executor's `exists`/`attr:<name>` read, what an `anchor.node` naming the root
  * resolves to, and what the §8 camera chain measures; and it dropped
  * `mount.root` out of `idOf`, so every reader that walks from the root threw
  * one layer up. Unreachable from CH capture, reachable from any foreign file.
@@ -502,7 +502,7 @@ function purgeSubtree(ctx, node) {
     // dead weight on a healthy map and the whole point on a broken one: without
     // it, a node whose reverse entry disagrees takes an innocent node's binding
     // down with it, turning a loud inconsistency into a quiet one. Pinned by
-    // injection rather than left as a defensive line (review I-2, H3).
+    // injection rather than left as a defensive line.
     if (ctx.idMap.get(id) === node) {
       ctx.idMap.delete(id);
       ctx.canvases.delete(id);
@@ -620,8 +620,8 @@ function mountTree(domNode, body, doc) {
 // throws on the same input: the test player's job is to catch mapper bugs, the
 // viewer's job is to show an analyst as much of an unrepeatable session as
 // survives. The consequence is recorded and routed — a tolerant viewer cannot
-// detect a producer emitting dangling references, which is why T7 owes a
-// dangling-reference negative fixture (design §14 risk 2).
+// detect a producer emitting dangling references, which is why the conformance corpus owes
+// a dangling-reference negative fixture (design §14 risk 2).
 //
 // What is NOT counted: an attribute refused by the §12 filters. Instantiation
 // drops the same names silently, so counting them here would light up the
@@ -708,9 +708,9 @@ function applyAttr(patch, mount) {
     // path uses. `removeAttribute` validates nothing — browsers by spec,
     // happy-dom measured — so removing a name this module would never have SET
     // is a harmless no-op and needs no guard; what DOES need one is the
-    // viewer's own flags, which a recording can strip as well as forge. Task 3
-    // left this line to Task 4 because the detector that reads the flags back
-    // lands there.
+    // viewer's own flags, which a recording can strip as well as forge. The
+    // guard sits here because the detector that reads the flags back
+    // lives in the viewer.
     if (isViewerOwnedAttr(name)) return;
     el.removeAttribute(name);
     return;

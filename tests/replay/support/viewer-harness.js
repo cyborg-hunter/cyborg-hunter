@@ -1,10 +1,10 @@
 // tests/replay/support/viewer-harness.js
 // Booting the SHIPPED report viewer headlessly over a v2 model.
 //
-// Extracted from `viewer-client.test.js` at T5.6, unchanged in behaviour, so
+// Extracted from `viewer-client.test.js`, unchanged in behaviour, so
 // the alignment suite and the vocabulary suite boot the viewer the same way.
 // Two copies of a boot harness are two readings of what "the viewer" is, and
-// this migration exists to remove exactly that class of duplication (Task 2's
+// this migration exists to remove exactly that class of duplication (the
 // `readTree` extraction set the precedent).
 //
 // It runs the ASSEMBLED script — `dom-instantiate.js` concatenated ahead of the
@@ -37,7 +37,7 @@ export const fixture = (name) => JSON.parse(readFileSync(
 // Node identity assertions go through this: a failing `assert.equal` on two
 // happy-dom nodes renders both with `util.inspect`, which walks
 // ownerDocument → defaultView → … until the runner is OOM-killed with no
-// per-test output (Task 2's SIGKILL finding).
+// per-test output (a SIGKILL once found the hard way).
 export const same = (a, b, msg) => assert.ok(a === b, msg);
 
 // ── prototype patching ─────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ export async function withProto(win, ctor, name, descriptor, body) {
 
 // ── canvas ─────────────────────────────────────────────────────────────────
 // happy-dom has no 2D context; the viewer draws the cursor overlay, the marker
-// lane AND (from T5.5) the offscreen canvas composites through one. A recorder
+// lane AND the offscreen canvas composites through one. A recorder
 // stands in so drawing is exercised (a throw here would be a real defect)
 // without asserting pixels.
 //
@@ -74,7 +74,7 @@ export async function withProto(win, ctor, name, descriptor, body) {
 // whose payload counts the draws behind it, so a test can tell one composite
 // from another and can count RE-ENCODES (the cost design §3.1 defers to once
 // per batch). Presented PIXELS are the Playwright battery's business — this
-// realm has no painting at all, which is exactly the trap the plan forbids
+// realm has no painting at all, which is exactly the trap the design forbids
 // asserting into (`viewer-canvas.battery.mjs`).
 export function stubCanvas(win) {
   win.__canvases = [];

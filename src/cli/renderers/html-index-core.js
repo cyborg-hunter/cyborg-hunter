@@ -9,12 +9,12 @@
 // both caller-supplied via `opts` (see renderIndexHtml below) rather than
 // read from disk or hardcoded, so this module has no filesystem dependency.
 //
-// Layout (Task 3 — left rail filled in; Tasks 4-7 will fill the detail pane):
+// Layout:
 //   - Two-column grid: 360px sidebar rail + flexible detail pane
 //   - Both columns scroll independently; full-viewport height
 //   - Topbar carries title, "{N} participants · v{VERSION}" metadata, Legend button
 //   - Left rail: search, filter chips, sort selector, scrolling cohort rows,
-//     sticky totals footer (interactivity is wired in Tasks 9–10)
+//     sticky totals footer (interactivity is wired in the client script)
 //   - Empty placeholders for: legend modal, lightbox, IIFE script
 //
 // References linked images in images/ (not base64-embedded). Works offline.
@@ -43,7 +43,7 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // script-end-tag breakouts — two of the v2 replay modules have one —
   // truncates the whole viewer and the report boots with a SyntaxError. This
   // was hand-rolled in nine places and missing from exactly this one, which is
-  // why the rule now lives in one module (T5 Task 10 + its fix round 3).
+  // why the rule now lives in one module.
   const replayClientSrc = inlineSafeSrc(opts.replayClientSrc);
   // @font-face rules for the report's typefaces (report-fonts.js builds them
   // as base64 data URIs for the CLI). Absent → no faces, and every role
@@ -102,7 +102,7 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   const railHtml = renderCohortList(triage, cohortCounts);
 
   // Detail panes: one <section class="participant"> per triage entry. Only the
-  // first is visible by default; Tasks 9–11 wire row clicks to toggle the
+  // first is visible by default; the client script wires row clicks to toggle the
   // `hidden` attribute on the others. Each pane carries its own
   // `visualsRendered=false` fallback note inline (see renderDetail), so we no
   // longer need a top-level swap — the per-participant fallback is the contract
@@ -418,7 +418,7 @@ ${fontFaceCss}    :root {
       word-break: break-word; white-space: pre-wrap;
       flex: 1; min-width: 0;  /* allow flex item to shrink and wrap correctly */
     }
-    /* When expanded by Task 11's JS: hide preview, show full text */
+    /* When expanded by the client script: hide preview, show full text */
     .paste-entry.expanded .paste-preview { display: none; }
     .paste-entry:not(.expanded) .paste-full { display: none; }
     .paste-overflow { font-family: var(--ff-tomorrow); font-size: 12px; margin-top: 4px; }
@@ -443,7 +443,7 @@ ${fontFaceCss}    :root {
     }
     .zoomable:hover img { opacity: 0.92; }
 
-    /* Lightbox overlay — hidden by default; Task 11's JS adds .open to show it. */
+    /* Lightbox overlay — hidden by default; the client script adds .open to show it. */
     .lightbox-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       z-index: 1000; display: none;
@@ -462,7 +462,7 @@ ${fontFaceCss}    :root {
       display: flex; align-items: center; justify-content: center; line-height: 1;
     }
 
-    /* Legend modal — opens via Task 11's JS by removing the [hidden] attribute. */
+    /* Legend modal — opens via the client script by removing the [hidden] attribute. */
     #legend-modal {
       position: fixed; inset: 0; z-index: 900;
     }
@@ -558,7 +558,7 @@ ${fontFaceCss}    :root {
   </div>
 
   <script>
-    // Tasks 4-7 will wire interactivity (cohort selection, lightbox, legend modal).
+    // Wires interactivity (cohort selection, lightbox, legend modal).
     (function() {
       // DOM refs — captured once on load. Cohort rows and detail panes were emitted
       // server-side, so these collections stay valid for the page's lifetime.
@@ -567,7 +567,7 @@ ${fontFaceCss}    :root {
       const rows   = [...document.querySelectorAll('.cohort-row')];
       const panes  = [...document.querySelectorAll('.participant')];
 
-      // --- Modal & lightbox refs (Task 11) ---
+      // --- Modal & lightbox refs ---
       const legend     = document.getElementById('legend-modal');
       const legendBtn  = document.querySelector('.legend-btn');
       const legendClose = legend.querySelector('.modal-close');
@@ -575,7 +575,7 @@ ${fontFaceCss}    :root {
       const overlay     = document.getElementById('lightbox');
       const overlayImg  = document.getElementById('lightbox-img');
 
-      // Module-scoped current selection, indexed by participantId. Tasks 10/11 read it.
+      // Module-scoped current selection, indexed by participantId. The handlers below read it.
       let currentId = null;
 
       function isVisible(row) {
@@ -628,7 +628,7 @@ ${fontFaceCss}    :root {
         }${selectionPostLine}
       }
 
-      // --- Overlay open/close helpers (Task 11) ---
+      // --- Overlay open/close helpers ---
       function openLegend()    { legend.removeAttribute('hidden'); }
       function closeLegend()   { legend.setAttribute('hidden', ''); }
       function closeLightbox() { overlay.classList.remove('open'); overlayImg.src = ''; }
@@ -702,7 +702,7 @@ ${fontFaceCss}    :root {
       searchEl.addEventListener('input', () => {
         const q = searchEl.value.trim().toLowerCase();
         for (const r of rows) {
-          // data-pid is mixed case; data-reason is pre-lowercased server-side (Task 3).
+          // data-pid is mixed case; data-reason is pre-lowercased server-side.
           const hit = !q
             || r.dataset.pid.toLowerCase().includes(q)
             || r.dataset.reason.includes(q);
@@ -912,7 +912,7 @@ function renderSignalGrid(summary, triageRow) {
 
 // Build the entire left rail HTML: top band (search/filters/sort), scrolling
 // list of cohort rows, and the sticky cohort totals footer. Rendering is
-// pure HTML — no client-side handlers here; Tasks 9–10 wire up interactivity.
+// pure HTML — no client-side handlers here; the client script wires up interactivity.
 function renderCohortList(triage, cohortCounts) {
   const rowsHtml = triage.map(renderCohortRow).join('');
 
@@ -949,8 +949,8 @@ function renderCohortList(triage, cohortCounts) {
 </div>`;
 }
 
-// Single cohort row. The data-* attributes are the contract Tasks 9–10 read
-// from the client-side JS to filter/sort/search — don't omit any.
+// Single cohort row. The data-* attributes are the contract the client-side JS reads
+// to filter/sort/search — don't omit any.
 //   data-pid:       full participant id (raw, esc'd for HTML)
 //   data-sanitized: filename-safe id (used to look up image filenames)
 //   data-tier:      'hard' | 'soft' | 'clean'
@@ -995,9 +995,9 @@ function sanitize(name) {
   return String(name || '').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
 }
 
-// Renders a single participant detail pane. For Task 4 this is just the header
-// strip + score breakdown — Tasks 5-7 will append reason pull-quote, session
-// signals, paste evidence, and images. The `hidden` attribute is omitted on the
+// Renders a single participant detail pane. The pane holds the header strip and
+// score breakdown, then the reason pull-quote, session signals, paste evidence,
+// and images. The `hidden` attribute is omitted on the
 // first pane so the report has a default selection on load; client JS toggles
 // `hidden` on the others when the user clicks a different cohort row.
 function renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, defaultVisible, imageSources, inlineReplayModels, replayShownExternally) {
@@ -1310,7 +1310,7 @@ function formatDuration(ms) {
 // trial. Pulls from participant.trials[*].pasteEvents — same source the CSV
 // renderer uses. Returns '' when there are no pastes so we don't emit an empty
 // heading. Long pastes are previewed with an ellipsis and a ▸ toggle that
-// Task 11's client JS will wire up to swap the preview for the full text.
+// the client JS wires up to swap the preview for the full text.
 function renderPasteEvidence(participant) {
   // Flatten across trials, keeping [trialId] context for each paste. Match the
   // event-log.csv convention: prefer trialId, fall back to ruleId (Shape-2
@@ -1332,7 +1332,7 @@ function renderPasteEvidence(participant) {
   const items = shown.map(p => {
     const isLong = p.text.length > PREVIEW_LEN;
     const preview = isLong ? p.text.slice(0, PREVIEW_LEN) + '…' : p.text;
-    // Glyph: ▸ (collapsed) toggles to ▾ (expanded) via Task 11's JS.
+    // Glyph: ▸ (collapsed) toggles to ▾ (expanded) via the client JS.
     // For short pastes we render a static · marker — nothing to expand.
     const toggleGlyph = isLong ? '▸' : '·';
     const toggleAttr = isLong ? '' : ' disabled aria-label="No expansion needed"';

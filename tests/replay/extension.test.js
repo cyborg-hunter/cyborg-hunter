@@ -55,7 +55,7 @@ describe('CyborgHunterReplay.attach', () => {
   });
 
   it('a misconfigured capture root reaches the meta pointer as a capture failure', async () => {
-    // The live half of the golden's `observed_root` row. Task 6's I-1 fix made
+    // The live half of the golden's `observed_root` row. a later fix made
     // a root selector that matches nothing say so twice — `observed_root: null`
     // (spec §2's spelling for document.body, which is what was actually
     // observed) plus a capture failure naming the channel — and persistence.js

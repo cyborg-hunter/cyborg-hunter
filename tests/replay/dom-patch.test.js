@@ -1,12 +1,12 @@
 // tests/replay/dom-patch.test.js
-// T5 Task 3 — the spec §5.1 patch applier: `dom.add`/`dom.remove`/`dom.attr`/
+// The spec §5.1 patch applier: `dom.add`/`dom.remove`/`dom.attr`/
 // `dom.text` applied to a mounted keyframe through the integer-ID map.
 //
 // The applier ships in `src/replay/dom-instantiate.js` beside the instantiation
-// it depends on (Task 2's recorded build-concatenation decision: one module,
+// it depends on (the build concatenates the module into the viewer: one module,
 // one reading of §4, no imports, one strippable export line). It gets its own
-// test file because the two halves are separately interesting and Task 2's file
-// is already long.
+// test file because the two halves are separately interesting and the
+// instantiation test file is already long.
 //
 // TWO POSTURES, both deliberate, and this file pins the difference. The viewer
 // is TOLERANT (design §4): a patch naming an id the map does not hold is
@@ -14,11 +14,11 @@
 // unrepeatable session is better served by as much of it as survives than by a
 // blank stage. `packages/sessionrecording-conformance/src/fuzz/dom-player.js` is STRICT: it throws,
 // because its job is to catch mapper bugs. The consequence — a tolerant viewer
-// cannot detect a producer emitting dangling references, which is why T7 owes a
+// cannot detect a producer emitting dangling references, which is why the conformance corpus owes a
 // dangling-reference negative fixture — is design §14 risk 2, and the two
 // postures are asserted against each other here rather than described.
 //
-// Node IDENTITY goes through `same()` for the reason Task 2 found the hard way:
+// Node IDENTITY goes through `same()` for a reason found the hard way:
 // a failing `assert.equal` on two happy-dom nodes renders both with
 // `util.inspect`, which walks `ownerDocument → defaultView → …` until the
 // runner is SIGKILLed with no per-test output.
@@ -58,7 +58,7 @@ function invert(idMap) {
 
 // The §5 restore walk's time filter, reduced to what this task owns: the
 // patches of one segment up to a time. Interleaving with the session streams
-// and the `initial_state` seed is Task 4's.
+// and the `initial_state` seed belongs to the viewer.
 function patchesUpTo(segment, t) {
   return segment.events.filter((e) => e.t <= t);
 }
@@ -81,7 +81,7 @@ describe('applyPatches — the canonical continuation reaches its checkpoints', 
   // checkpoint entries are read from the expectations file and their shape is
   // asserted, so a fixture edit fails here instead of leaving this test quietly
   // asserting something the fixture no longer claims. EXECUTING them (bounds
-  // checks, prop dispatch, the fork cross-verification) is Task 7's.
+  // checks, prop dispatch, the fork cross-verification) belongs to the checkpoint executor.
   const rec = fixture('canonical-core');
   const checkpoints = expectations('canonical-core').checkpoints;
   const at = (t) => checkpoints.find((c) => c.t === t);
@@ -140,7 +140,7 @@ describe('applyPatches — the canonical continuation reaches its checkpoints', 
 
   it('non-dom events in the same array are left to the vocabulary dispatch', () => {
     // Segment 1 also carries scroll.window and two visibility events. The
-    // applier reports "not mine" and counts nothing — Task 5 owns those.
+    // applier reports "not mine" and counts nothing — the vocabulary dispatch owns those.
     const { mount } = spanZero();
     const others = rec.segments[1].events.filter((e) => !/^dom\./.test(e.type));
     assert.equal(others.length, 3);
@@ -150,7 +150,7 @@ describe('applyPatches — the canonical continuation reaches its checkpoints', 
   });
 });
 
-describe('moves and re-binding (T3 Task 3 pin M5)', () => {
+describe('moves and re-binding', () => {
   it('remove + add of the same id is a MOVE: one node, the map on the new one', () => {
     const { doc, mount } = stage();
     const before = mount.idMap.get(2);
@@ -185,8 +185,8 @@ describe('moves and re-binding (T3 Task 3 pin M5)', () => {
     // must not leave two nodes claiming one id in the map. Treating the second
     // binding as a duplicate loses the node (design §4).
     //
-    // What "never a duplicate" does NOT claim, pinned here after review M-7
-    // read the phrase as a DOM-level guarantee: the old subtree stays in the
+    // What "never a duplicate" does NOT claim, pinned here because the phrase was
+    // read as a DOM-level guarantee: the old subtree stays in the
     // DOCUMENT. Nothing asked for it to be removed — a bare re-add with no
     // preceding `dom.remove` is a non-conforming shape capture never emits, and
     // inventing a detach would be the viewer editing the reconstruction. The
@@ -221,7 +221,7 @@ describe('moves and re-binding (T3 Task 3 pin M5)', () => {
   });
 
   it('inserts at every position of a multi-child parent, in the recorded order', () => {
-    // Review M-6: all 101 `dom.add` events in both fixtures carry
+    // All 101 `dom.add` events in both fixtures carry
     // `before: null`, so the corpus pin certifies nothing about positional
     // insertion — the differential is the only other thing that does, and it is
     // generated. One constructed case with a real middle position, asserted as
@@ -245,7 +245,7 @@ describe('moves and re-binding (T3 Task 3 pin M5)', () => {
   });
 
   it('a dom.add with no `before` key at all appends, and counts nothing', () => {
-    // Guard pin (review I-2, H5): the `undefined` half of the `before` test.
+    // Guard pin: the `undefined` half of the `before` test.
     // Every corpus `dom.add` states `before: null` explicitly, but §5.1's shape
     // is what a producer must emit, not what a hand-edited file will carry, and
     // without the `undefined` half a missing key counts a spurious failure.
@@ -256,15 +256,15 @@ describe('moves and re-binding (T3 Task 3 pin M5)', () => {
   });
 });
 
-describe('the reconstruction root is not re-bindable (review I-1)', () => {
-  // `bind()` overwrites both directions by design (§4's MOVE rule), and fix
-  // round 1 is where that rule learns its one exception. A `dom.add` carrying
+describe('the reconstruction root is not re-bindable', () => {
+  // `bind()` overwrites both directions by design (§4's MOVE rule), and this
+  // is where that rule learns its one exception. A `dom.add` carrying
   // the id the mount bound to the root moved the binding onto an
   // attacker-chosen element with ZERO counted failures: the root id then
-  // answered about the impostor for Task 7's `exists`/`attr:<name>`, for every
+  // answered about the impostor for the checkpoint executor's `exists`/`attr:<name>`, for every
   // `anchor.node` naming it and for the §8 camera chain, and `mount.root` fell
-  // out of `idOf` so `readTree` — the shared reader the differential and Task
-  // 7's harness walk — threw one layer up. Unreachable from CH capture
+  // out of `idOf` so `readTree` — the shared reader the differential and the checkpoint
+  // harness walk — threw one layer up. Unreachable from CH capture
   // (`pullForwardMoves` keeps a move's remove ahead of its add, and the
   // observed root is never re-added) and absent from both fixtures; reachable
   // from any foreign or hand-edited file, which is the population §12's player
@@ -341,7 +341,7 @@ describe('the reconstruction root is not re-bindable (review I-1)', () => {
   });
 
   it('a dom.remove naming the mounted root is refused for both root shapes', () => {
-    // The same invariant under the other verb. The body-root case is M-7 (a
+    // The same invariant under the other verb. The body-root case (a
     // blind `.remove()` detaches the frame's own <body>); the non-body case is
     // the reader's, and the two are now ONE predicate — `node === mount.root` —
     // rather than a list of frame parts, so every disjunct is pinned.
@@ -476,7 +476,7 @@ describe('tolerant posture — unresolvable references are counted, never thrown
   });
 
   it('a dom.add whose own node is malformed inserts nothing and counts a skip', () => {
-    // Guard pin (review I-2, H7a): the `if (!node) return` after
+    // Guard pin: the `if (!node) return` after
     // `instantiateNode`. Without it the applier hands `null` to `insertBefore`,
     // which the host refuses, so the failure reads as a hierarchy error and
     // counts a `patchFailures` on top of the skip — two counters moving for one
@@ -519,7 +519,7 @@ describe('tolerant posture — unresolvable references are counted, never thrown
   });
 
   it('a dom.attr with no `value` key removes, as a null value does', () => {
-    // Guard pin (review I-2, H4): the `undefined` half of the removal test.
+    // Guard pin: the `undefined` half of the removal test.
     // JSON cannot express `undefined`, so only a hand-constructed or
     // programmatically built patch reaches it — and the tolerant reading is
     // that an absent value is an absent attribute, not an empty one. Without
@@ -556,10 +556,10 @@ describe('spec §12 filters on the patch path', () => {
   });
 
   it('a NAME-TOKEN refusal is counted, because the page really had it', () => {
-    // Review I-4: the same predicate covers two refusal classes with opposite
+    // The same predicate covers two refusal classes with opposite
     // consequences. `isNameToken` also drops names all three engines ACCEPT —
-    // `@click`, `[ngModel]`, `(click)`, `*ngIf`, `1x`, `café`, `<` (Task 2's
-    // tri-engine table) — which are page state the analyst loses to a
+    // `@click`, `[ngModel]`, `(click)`, `*ngIf`, `1x`, `café`, `<` (measured in
+    // all three engines) — which are page state the analyst loses to a
     // realm-determinism decision. Those move `skipped`, the counter the report
     // defines as "the file said something no DOM here could hold", so the loss
     // has a surface instead of only a comment in the module header.
@@ -630,9 +630,9 @@ describe('spec §12 filters on the patch path', () => {
   });
 });
 
-describe('carried duties from Task 2', () => {
+describe('duties carried by the instantiation module', () => {
   it('a dom.add subtree merges BOTH maps — idMap and canvases', () => {
-    // Task-2 review M-3, which has NO corpus instance: 0 `canvas_size` and 0
+    // A review-found gap with NO corpus instance: 0 `canvas_size` and 0
     // `media_src` inside any of the 100 `dom.add` subtrees in either fixture,
     // so a merge that forgot `canvases` would break design §3.1/§3.3 for a
     // canvas added mid-segment and be discovered by an analyst, not by a test.
@@ -677,10 +677,10 @@ describe('carried duties from Task 2', () => {
   });
 
   it('re-binding an id to a node with no canvas_size clears the stale entry', () => {
-    // T5.4 review M-8. `dom.add` OVERWRITES an id binding (a move, T3 pin M5),
+    // `dom.add` OVERWRITES an id binding (a move, the move carve-out),
     // and `canvases` is keyed by the same ids — so a re-bind whose new node
     // carries no `canvas_size` left the PREVIOUS node's bitmap size behind, and
-    // Task 5 would size an offscreen canvas for a node that is not one.
+    // the canvas compositor would size an offscreen canvas for a node that is not one.
     const { mount } = stage();
     applyPatches([
       { type: 'dom.add', t: 1, parent: 1, before: null,
@@ -695,10 +695,10 @@ describe('carried duties from Task 2', () => {
     assert.equal(mount.canvases.has(9), false, 'and took its stale bitmap size with it');
   });
 
-  it('a dom.remove naming the body-root id is skipped and counted (M-7)', () => {
+  it('a dom.remove naming the body-root id is skipped and counted', () => {
     // `mountTree` binds a `body` root to the frame's OWN <body>, so a blind
     // `.remove()` here detaches the element every later mount and patch depends
-    // on. Pinned in Task 2's `mountTree` docblock; enforced here.
+    // on. Pinned in the `mountTree` docblock; enforced here.
     const doc = freshDoc();
     const dom = el(1, 'body', { class: 'jspsych' }, [el(2, 'div', { id: 'display' }, [])]);
     const mount = mountTree(dom, doc.body, doc);
@@ -725,7 +725,7 @@ describe('carried duties from Task 2', () => {
   });
 
   it('reserved xml:/xmlns: tag prefixes are skipped, not thrown on', () => {
-    // Task-2 review residual, re-measured here tri-engine (playwright-core
+    // A residual from the instantiation review, re-measured here tri-engine (playwright-core
     // 1.62.1): `createElementNS(<any ns>, 'xml:foo' | 'xmlns:foo' | 'xmlns')`
     // throws NamespaceError on chromium, firefox and webkit, while happy-dom
     // accepts all three — so an unguarded foreign subtree aborts the mount in a
@@ -760,8 +760,8 @@ describe('carried duties from Task 2', () => {
   });
 
   it('the shipped reverse index is the exact inversion of the id map', () => {
-    // Task 2 left `idOf` as the test file's own inversion helper and routed the
-    // decision here. It ships now, because `dom.remove`'s subtree purge needs
+    // `idOf` began as the test file's own inversion helper. It ships now, because
+    // `dom.remove`'s subtree purge needs
     // node → id and rebuilding it per patch is O(tree) per removal. The pin is
     // that the two never drift.
     for (const name of ['canonical-core', 'jspsych-full']) {
@@ -777,7 +777,7 @@ describe('carried duties from Task 2', () => {
   });
 
   it('the purge deletes only the binding the node actually owns', () => {
-    // Guard pin (review I-2, H3), the one survivor with teeth rather than
+    // Guard pin, the one survivor with teeth rather than
     // redundancy. Given the inversion the test above pins, `idMap.get(id) ===
     // node` is always true — so the guard's only effect is on a map that is
     // ALREADY broken, where deleting by id alone would unbind an innocent node
@@ -841,7 +841,7 @@ describe('namespace inheritance on dom.add', () => {
 
   it('the strict test player infers the same namespaces on dom.add', () => {
     // The oracle has to carry the rule or the differential agrees about a tree
-    // neither player can render — the failure mode Task 2's review found when
+    // neither player can render — the failure mode a review found when
     // both sides shared `createElement`.
     const player = createPlayer(el(1, 'div', {}, [
       el(2, 'svg', {}, [el(3, 'foreignobject', {}, [])]),
@@ -863,7 +863,7 @@ describe('differential — the same patches through the viewer and the strict pl
   // vocabulary is the exact failure this migration exists to remove, and a
   // second generator would be a second reading of what a batch means.
   //
-  // Each batch is compared three ways: viewer vs strict player (the plan's
+  // Each batch is compared three ways: viewer vs strict player (the design's
   // contract), and both against the capture-side oracle — what a fresh
   // `serializeTree` of the live DOM says right now — so a drift that moved both
   // players together would still fail.
@@ -920,9 +920,9 @@ describe('the real corpus — every committed segment applies its own patches', 
         const doms = seg.events.filter((e) => /^dom\./.test(e.type));
         applyPatches(seg.events, mount);
         assert.equal(mount.patchFailures, 0, name + ' segment ' + seg.index);
-        // Since fix round 1 a name-token refusal moves `skipped` (review I-4),
+        // A name-token refusal moves `skipped`,
         // so the corpus's one malformed attribute — jsPsych 8.2.3's free-sort
-        // arena, the `<` Task 2 found — now reports itself on mount instead of
+        // arena, the `<` — now reports itself on mount instead of
         // vanishing. Everything else is still zero, and the exception is tied
         // to its segment so a second one cannot hide behind it.
         assert.equal(mount.skipped, name === 'jspsych-full' && seg.index === 10 ? 1 : 0,
@@ -944,7 +944,7 @@ describe('the real corpus — every committed segment applies its own patches', 
     // Segment 10 is the exception, and it is a REALM divergence rather than a
     // disagreement: happy-dom refuses `setAttribute('<', …)`, so the strict
     // player cannot instantiate jsPsych's free-sort arena in this realm at all
-    // (Task 2 I-2 — browsers accept it). The viewer's name filter drops the
+    // (browsers accept it). The viewer's name filter drops the
     // attribute and plays the segment, which is the whole point of filtering by
     // a fixed predicate instead of deferring to the host.
     let compared = 0;

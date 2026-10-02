@@ -1,12 +1,12 @@
 // Node-side tests for two 0.6.2 hardening fixes:
 //
-//   F6 — a nested typo in a scoring override (e.g. `countThreshhold`) used to
+//   - a nested typo in a scoring override (e.g. `countThreshhold`) used to
 //        silently disable a hard screenout rule with no warning, because the
 //        rule object is merged wholesale and validation only checked top-level
 //        keys. init() now emits a warning when a merged hard rule has no
 //        numeric countThreshold (or a soft rule no numeric weight).
 //
-//   F9 — a `cut` event is documented as equivalent to `copy` ("text leaving the
+//   - a `cut` event is documented as equivalent to `copy` ("text leaving the
 //        page") and is counted in the soft-copy score and the per-trial hard
 //        `trialHits`, but it never incremented sessionData.copyCount, so the
 //        hard-copy screenout could never trigger on cuts. Cut now counts.
@@ -47,7 +47,7 @@ function captureWarnings(fn) {
   return warnings;
 }
 
-describe('F6 — nested scoring typo must not silently disable a hard rule', () => {
+describe('nested scoring typo must not silently disable a hard rule', () => {
   it('warns when a hard rule override drops its countThreshold via a typo', () => {
     const warnings = captureWarnings(() => {
       monitor = init({
@@ -86,7 +86,7 @@ describe('F6 — nested scoring typo must not silently disable a hard rule', () 
       `expected a warning about soft.tabAway missing weight, got:\n${warnings.join('\n')}`);
   });
 
-  // Re-review (round 4): typeof NaN === 'number', so a NaN/Infinity threshold
+  // Regression: typeof NaN === 'number', so a NaN/Infinity threshold
   // slipped past the shape check while still disabling detection.
   it('warns on a NaN hard countThreshold (not just a missing one)', () => {
     const warnings = captureWarnings(() => {
@@ -104,7 +104,7 @@ describe('F6 — nested scoring typo must not silently disable a hard rule', () 
       `Infinity weight must warn, got:\n${warnings.join('\n')}`);
   });
 
-  // Round-5 re-review: the warning string must not itself throw on a value that
+  // The warning string must not itself throw on a value that
   // can't be coerced to a string (e.g. a Symbol), which template interpolation
   // does. init() must warn, not crash.
   it('does not throw when an invalid threshold is a non-stringifiable value (Symbol)', () => {
@@ -119,7 +119,7 @@ describe('F6 — nested scoring typo must not silently disable a hard rule', () 
   });
 });
 
-describe('F9 — cut counts toward the hard-copy screenout', () => {
+describe('cut counts toward the hard-copy screenout', () => {
   it('two cut events trigger the strict-preset hard-copy rule', () => {
     // strict preset: hard.copy.countThreshold = 2, signals.copy = true.
     monitor = init({ participantId: 'F9', preset: 'strict' });

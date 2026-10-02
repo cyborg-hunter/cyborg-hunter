@@ -142,7 +142,7 @@ describe('ingest', () => {
     assert.equal(result.score.hardScore.paste.triggered, true);
   });
 
-  // T1 — CSV adapter. jsPsych's default save format unparses each trial as a
+  // CSV adapter. jsPsych's default save format unparses each trial as a
   // row, with nested objects (the integrity report, integritySession,
   // integrityScore) JSON-stringified into single cells. The CSV branch in
   // ingest() uses Papa Parse + a JSON-cell unwrap pass so the same downstream
@@ -567,7 +567,7 @@ describe('ingest 0.6.1 — dot-paths', () => {
     assert.deepEqual(result.session.tabAwaySums, [500]);
   });
 
-  // Regression for dossier finding F1: sessionIntegrityPath used to accept
+  // Regression: sessionIntegrityPath used to accept
   // ANY object (typeof === 'object'), so a near-miss path landing one level
   // above the real session object silently won, shadowing the real data at
   // the built-in metadata.integritySession location and zeroing every

@@ -20,7 +20,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 /**
  * Serve `files` (a Map of path -> string) plus, as a fallback, files under
  * repoRoot. `isolate` adds COOP+COEP so the renderer is crossOriginIsolated
- * and performance.now() loses its 100 us Spectre clamp (T3's trick).
+ * and performance.now() loses its 100 us Spectre clamp (a standard trick).
  */
 export async function serveFiles(files, { isolate = true } = {}) {
   const server = http.createServer(async (req, res) => {
@@ -84,8 +84,7 @@ function collectElementIds(dom, out = []) {
  * Text-node ids. §5.1's dom.text addresses TEXT and COMMENT nodes, so aiming
  * it at element ids both misstates the vocabulary and no-ops on any element
  * without a text first child — 78 of jspsych-full segment 11's 215 elements,
- * 36%, which is a third of the model's patches dirtying nothing (Task-0 review
- * M-6b).
+ * 36%, which is a third of the model's patches dirtying nothing.
  */
 function collectTextIds(dom, out = []) {
   if (!dom) return out;
@@ -120,7 +119,7 @@ export function realCanvasSnapshots(recording) {
  * The EVEN split between add and remove is a modelling choice: at the
  * fixture's 1.36:1 remove:add ratio a 10-segment span empties the tree by
  * segment 9, and removes that resolve nothing measure nothing, which is the
- * bias this mix exists to remove (Task-0 review C-2).
+ * bias this mix exists to remove.
  */
 const NON_ANCHORED_MIX = [
   'dom.remove', 'dom.attr', 'dom.add', 'dom.text', 'mouse.move',
@@ -150,8 +149,8 @@ export function buildDeepSpanModel({ tree, segments, eventsPerSegment, anchoredF
   // Removable pool: LEAF elements only (no element children). dom.remove purges
   // the node and its whole subtree from the id map, so a pool of arbitrary
   // elements makes later patches on purged descendants unresolvable — and an
-  // unresolvable patch costs nothing, which is the exact bias review C-2 is
-  // about. Leaves purge only themselves and their text, their parents survive,
+  // unresolvable patch costs nothing, which is the exact bias this pool exists
+  // to remove. Leaves purge only themselves and their text, their parents survive,
   // so the paired dom.add always re-attaches. On jspsych-full segment 11 this
   // gives 76 removable leaves, 139 stable elements and 306 stable text nodes.
   const hasElementChild = new Set();
@@ -210,12 +209,12 @@ export function buildDeepSpanModel({ tree, segments, eventsPerSegment, anchoredF
         events.push({
           type: i % 3 === 0 ? 'mouse.click' : (i % 3 === 1 ? 'mouse.down' : 'key.down'),
           t, x: 40 + (i % 300), y: 40 + (i % 200), button: 0,
-          // 1280x1000 is the frame Task 0's measurement model laid out in. A
+          // 1280x1000 is the frame the baseline measurement model laid out in. A
           // real player sizes its frame from these fields, so leaving them at
           // some other box would make the real viewer force layout over a
-          // SMALLER area than the model did and quietly flatter it (T5.9: the
-          // first pass used 800x600 and read ~15% under the model). Inert for
-          // Task 0's harness, which never reads the camera block.
+          // SMALLER area than the model did and quietly flatter it (a first pass
+          // used 800x600 and read ~15% under the model). Inert for
+          // the baseline harness, which never reads the camera block.
           camera: { scroll_x: 0, scroll_y: 0, client_w: 1280, client_h: 1000, w: 1280, h: 1000, dpr: 1, vv_scale: 1, vv_offset_x: 0, vv_offset_y: 0 },
           anchor: { tag: 'div', id: null, node: target, rect: { x: 10, y: 10, w: 50, h: 20 } },
         });
@@ -248,14 +247,14 @@ export function buildDeepSpanModel({ tree, segments, eventsPerSegment, anchoredF
       index: s,
       t_start: s * eventsPerSegment * 5,
       // +10 ms of tail, so the segment WINDOW ends strictly after its last
-      // event (the canvas.snapshot at `t + 1`). Task 0's measurement model
+      // event (the canvas.snapshot at `t + 1`). The baseline measurement model
       // applies every event of every segment unconditionally and never reads
       // `t_end`, so this is inert there; a real player does not. It bounds
       // `durMs`, and a backward seek can only replay events at or before its
       // target, so with `durMs === lastEventT` the deepest backward seek this
       // fixture can express is a no-op — which is fast, silent, and exactly the
       // "measured nothing" failure the coverage assertions exist to catch.
-      // (T5.9: they caught it.)
+      // (They caught it.)
       t_end: (s + 1) * eventsPerSegment * 5 + 10,
       initial_dom: s === 0 ? (canvas ? withCanvas : tree) : null,
       initial_state: null, events,

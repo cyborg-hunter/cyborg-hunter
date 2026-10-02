@@ -80,7 +80,7 @@ const marker = () => true;   // reached only when already truthy
 const REDACTED_KEY_EVENT = { allowed: { type: isStr, t: isNum, redacted: marker } };
 const REDACTED_CLIPBOARD = {
   // `len` is numOrNull, not isNum. FOUND WHILE SETTLING THE §5.3 STRICTNESS
-  // QUESTION (T7): copy and cut carry `len: null` by construction — the
+  // QUESTION: copy and cut carry `len: null` by construction — the
   // clipboard is not populated when they fire, so any number read there would
   // be a fiction about the selection — and a redacted copy/cut is therefore a
   // conforming event with a null length. Typing this as isNum made the privacy
@@ -256,7 +256,7 @@ export const INVARIANT_CHECKS = {
     return null;
   },
 
-  // T3 Task-1 carry. Strict validation number-checks `node`/`parent`/`before`,
+  // Dangling references. Strict validation number-checks `node`/`parent`/`before`,
   // so a reference to an id no keyframe and no dom.add ever emitted is a
   // well-typed dangling pointer: the player resolves nothing and, being
   // tolerant by design, says nothing. Checked in TIME ORDER within the span
@@ -297,14 +297,14 @@ export const INVARIANT_CHECKS = {
     return null;
   },
 
-  // Duplicate node ids, WITH THE M5 CARVE-OUT (T3 Task-3 review). A move
+  // Duplicate node ids, WITH THE MOVE CARVE-OUT. A move
   // legally encodes as dom.remove + dom.add carrying the SAME id inside one
   // span, so "this id was seen twice" is not a violation — "two nodes hold this
   // id at the same time" is. The tree is tracked as a live id set: remove takes
   // an id (and its subtree) out, add puts one back, and a collision is only
   // reported against ids currently live.
   //
-  // The keyframe case is the one r3 is owed an answer on (T5 Task-3 fix round):
+  // The keyframe case is the one r3 is owed an answer on:
   // a keyframe TREE carrying the same id twice is undefended on the viewer's
   // non-body mount path, where the root binds last, so the two players disagree
   // about which node keeps the id. This corpus refuses the file rather than
@@ -363,7 +363,7 @@ export const INVARIANT_CHECKS = {
     return null;
   },
 
-  // T3 Task-6 carry: which clock `ended_at_perf` is on.
+  // Which clock `ended_at_perf` is on.
   //
   // Spec §7 puts every event `t` on the wire clock (ms since
   // `recording_started_at_perf`) and says nothing about `ended_at_perf`, whose
@@ -373,8 +373,8 @@ export const INVARIANT_CHECKS = {
   // the converter verbatim, states it on the wire clock instead. Both files are
   // strict-valid; a consumer computing a duration gets two different answers.
   //
-  // A recording whose origin is 0 cannot tell the two apart (T3 Task-6 verified
-  // this by flipping canonical-core to relative and watching it deep-equal), so
+  // A recording whose origin is 0 cannot tell the two apart (verified
+  // by flipping canonical-core to relative and watching it deep-equal), so
   // the third value is not a hedge: it is the finding, stated where a reader
   // will look for it. The expectations file DECLARES the frame and this check
   // holds the arithmetic to the declaration, which is what makes a fixture with

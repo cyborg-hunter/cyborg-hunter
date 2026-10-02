@@ -39,7 +39,7 @@ export function createRegistry() {
   // NOT the way to resolve an event target or anchor: use peekId there. A
   // target outside the observed root must resolve to null (design §2), and
   // minting an id for it would put a number in the file that names nothing in
-  // the player's tree. dom.remove (Task 3) and anchors (Task 5) are peekId
+  // the player's tree. dom.remove and anchors are peekId
   // callers for the same reason.
   //
   // ids.set BEFORE the counter advances, so a call that throws (a non-object
@@ -57,7 +57,7 @@ export function createRegistry() {
   //
   // Boundary: the registry numbers whatever tree it is handed. Exclusion
   // (data-record-exclude placeholders) and redaction filtering are the
-  // SERIALIZER's concern (Task 2); an excluded element still occupies its
+  // SERIALIZER's concern; an excluded element still occupies its
   // position and still needs an id, and the serializer decides what of the
   // subtree reaches the file. Keeping the walk unconditional means ids stay
   // stable regardless of what the serializer later chooses to emit.

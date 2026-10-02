@@ -1,7 +1,7 @@
 // tests/browser/replay/seek-budget.battery.mjs
-// The seek-latency BUDGET GATE — design §11, T5 (A2) Task 9.
+// The seek-latency BUDGET GATE — design §11.
 //
-// Task 0 measured a MODEL of the restore and reported. This measures the REAL
+// An earlier baseline measured a MODEL of the restore and reported. This measures the REAL
 // shipped viewer and GATES: a cell over its ceiling, or a ratio over its band,
 // is a non-zero exit code. Nothing here is product code; nothing here reaches
 // `src/`.
@@ -14,11 +14,11 @@
 //              (= mount + ten segments' events)                median <= 300 ms
 //   ratio      case(iii)/case(ii) on canvas=off/checks=on/SYNC     <= 8.0x
 //
-// ── THE FIVE RULES THE GATE FOLLOWS (Task-0 amendment, plan Task 9) ───────
+// ── THE FIVE RULES THE GATE FOLLOWS ───────────────────────────────────────
 //   1. THE RATIO IS GATED ON ONE CELL, `canvas=off / checks=on / sync`, and is
-//      RE-DERIVED here on this task's own fixtures. Task 0's 4.99x and Task
-//      1's 4.84x are both inherited by NOTHING: the band is stated in the plan
-//      (<= 8x) and the value is measured fresh, over --runs samples, on two
+//      RE-DERIVED here on this gate's own fixtures. The baseline model's 4.99x
+//      and an independent 4.84x are both inherited by NOTHING: the band is stated
+//      in the design (<= 8x) and the value is measured fresh, over --runs samples, on two
 //      fixtures whose mount:events split is printed beside it. checks-off sits
 //      at the mount-dominated pole and canvas-on settled cells are dominated
 //      by a fixed presentation charge both cases pay, so a ratio there
@@ -34,7 +34,8 @@
 //      settledMs's freedom from the frame is ASSERTED (the FRAME FREEDOM block
 //      at the end of every engine, and `--inject=frame-in-settled` is its
 //      biting test) — the first version of this file claimed the assertion in
-//      this comment and never made it, which is T5.0's C-1 class exactly.
+//      this comment and never made it, which is exactly the class of unasserted claim the gate
+//      exists to prevent.
 //   3. NO SETTLED-TIME GATE ON WEBKIT. Headless WebKit's animation frame is
 //      ~32.4 ms, above most restores measured anywhere, so a gate over a
 //      frame-carrying number passes nearly anything there. `settledFrameMs` is
@@ -45,7 +46,7 @@
 //      inside `page.evaluate`; a Node-side wrapper costs 0.2-0.4 ms, which is
 //      a large fraction of a case-(ii) restore. The page is served over HTTP
 //      with COOP+COEP so `performance.now()` loses its 100 us Spectre clamp.
-//   5. THIS IS THE REAL-IMPLEMENTATION RE-BASELINE. Task 0's model did not
+//   5. THIS IS THE REAL-IMPLEMENTATION RE-BASELINE. The baseline model did not
 //      carry `input.*`, `scroll.*`, `stylesheet.*`, `fullscreen.*`,
 //      `visibility.*`, `focus`/`blur`, `clipboard.*`, `initial_state` seeding,
 //      `stylesheet_events` replay, §12 instantiation filters, the placeholder
@@ -56,27 +57,28 @@
 // ── FIXTURES ──────────────────────────────────────────────────────────────
 //   REAL   `fixtures/alignment-v2-frozen.json` — a CH-recorded TWO-SPAN
 //          session (18 segments, `keyframeEvery: 10`, 54 anchored events,
-//          real `viewport_changes`), frozen by Task 8. This is the
-//          keyframe-continuation session plan Task 9 asks for; Task 0 declined
-//          to cut one and Task 8 cut it for other reasons.
+//          real `viewport_changes`), frozen with the alignment
+//          battery. This is the keyframe-continuation session the gate needs;
+//          the baseline model had none and the alignment fixture was cut for
+//          other reasons.
 //   CANVAS `jspsych-full` segments 9 (the sketchpad, ten real region
 //          snapshots) and 8 (the 189,322-char full baseline). Every one of its
 //          14 segments is a keyframe, so a canvas seek there restores ONE
 //          segment: canvas depth and span depth cannot compose in the corpus.
 //   WORST  the composite worst case, SYNTHESIZED — `support/seek-support.mjs`,
-//          copied verbatim from Task 0's harness. jspsych-full segment 11's
+//          copied verbatim from the baseline model's harness. jspsych-full segment 11's
 //          real 535-node tree, 10 segments x 100 events at 20% anchored, real
-//          `canvas.snapshot` payloads. Task 0 fed these segments to a model of
+//          `canvas.snapshot` payloads. The baseline fed these segments to a model of
 //          the restore; this feeds the same segments to the real one.
 //
 //   checks=off is produced by STRIPPING the §6 `camera`/`anchor` blocks, which
 //   is what a recording that omits them looks like (§8's MAY-omit rule: no
 //   blocks means no check). It is not a viewer switch — the viewer has none.
 //
-// ── THE V1 CONTROL, RE-HOMED (T5.1's declared casualty, routed here) ──────
-//   Task 0's control drove the then-shipped v1 viewer over SMOKE-19NRQR.
-//   `buildViewerModel` is v2-only since Task 1 and the client is v2-only since
-//   Task 4, so that arm went dark. It is re-homed to the committed frozen
+// ── THE V1 CONTROL, RE-HOMED ──────────────────────────────────────────────
+//   The baseline's control drove the then-shipped v1 viewer over SMOKE-19NRQR.
+//   `buildViewerModel` is v2-only and so is the client, so that arm went dark.
+//   It is re-homed to the committed frozen
 //   artifact `fixtures/v0.7.1-report/index.html`, which inlines its OWN 0.7.x
 //   viewer and its OWN built model — the whole v1 stack as a unit, immune to
 //   anything in the tree. It is INTERLEAVED with the v2 cells (one v1 sample
@@ -90,7 +92,7 @@
 //       times) and, for the forward cells, the WALK WITNESS
 //       `ci.applied > mountOnly.applied` — `mountsDelta === 0` is satisfied by
 //       a seek that did nothing, which is the hole `--inject=dead-forward`
-//       reproduces and the T5.9 review found.
+//       reproduces.
 //     AFTER THE FACT  segments replayed (10 for case (iii), 1 for case (ii)),
 //       entries applied, frame element count, alignment checks > 0 when checks
 //       are on and EXACTLY 0 when they are off, composited canvas rules and
@@ -98,8 +100,8 @@
 //   Plus the FRAME FREEDOM assertion (rule 3) and, after the run, the CHANNEL
 //   COVERAGE sweep, computed over the spans the gated cells actually replayed
 //   and enumerated against the client's own `KNOWN_TYPES` so a vocabulary
-//   addition cannot escape into neither list. Task 0's harness carries the same
-//   discipline and it caught a real defect there; so did this one, twice.
+//   addition cannot escape into neither list. The baseline harness carries the
+//   same discipline and it caught a real defect there; so did this one, twice.
 //
 // Run:  npm run build && npm run test:browser:seek
 //       PLAYWRIGHT_CORE_DIR=/opt/homebrew/lib/node_modules/ \
@@ -115,7 +117,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 
 import { buildViewerModel } from '../../../src/cli/renderers/replay-assets.js';
 import { readReplayClientSrc } from '../../../src/cli/renderers/replay-client-source.js';
-// The probe apparatus Task 0 committed: one reading of how these harnesses
+// The probe apparatus the baseline committed: one reading of how these harnesses
 // resolve a browser and serve an isolated origin. The COOP+COEP server is the
 // reason `performance.now()` here has 0.005 ms granularity instead of 0.1 ms,
 // which at case-(ii) magnitudes is the difference between a measurement and a
@@ -141,7 +143,7 @@ const EVENTS_PER_SEGMENT = Number(opt('events-per-segment', 100));
 const ANCHORED_FRAC = Number(opt('anchored-frac', 0.20));
 
 // ── FAULT INJECTION — the gate's own teeth ────────────────────────────────
-// A gate whose failure path is never exercised is a claim. Task 0's canvas
+// A gate whose failure path is never exercised is a claim. The baseline's canvas
 // probe set the precedent (`--inject=…`, each fault exiting as documented) and
 // this file follows it. Each injection must make the run exit non-zero, and
 // the named assertion must be the one that fires.
@@ -159,8 +161,8 @@ const ANCHORED_FRAC = Number(opt('anchored-frac', 0.20));
 //   no-canvas       the canvas=ON arm loses its canvas.snapshot events. The
 //                   "presented a composite" assertion must fire.
 //   dead-forward    ONLY the forward (expectMount: 0) samples seek to the
-//                   playhead they are already at. This is the hole the T5.9
-//                   review found: `mountsDelta === 0` is satisfied by a seek
+//                   playhead they are already at. This is the hole
+//                   a review found: `mountsDelta === 0` is satisfied by a seek
 //                   that did nothing, so the six cells measuring design §5's
 //                   incremental walk — the ONE path no other cell exercises —
 //                   had no witness at all, and the published mount:events split
@@ -175,28 +177,28 @@ const INJECT = String(opt('inject', '') || '');
 const injected = (name) => INJECT === name;
 if (INJECT) console.log(`!! FAULT INJECTED: --inject=${INJECT} — this run is EXPECTED to fail`);
 
-// Design §11's ceilings, and the plan's Task-0-derived ratio band.
+// Design §11's ceilings, and the ratio band derived from the baseline.
 const SCALE = injected('tight-ceilings') ? 0.01 : 1;
 const CEILING = { i: 100 * SCALE, ii: 100 * SCALE, iii: 300 * SCALE };
 const RATIO_BAND = 8.0 * SCALE;
 
-// ── M-5: the composite worst case's defining parameters are asserted ──────
+// ── the composite worst case's defining parameters are asserted ───────────
 // `--span-segments`, `--events-per-segment` and `--anchored-frac` all reach the
 // generator, and the scale-dependent coverage assertions scale WITH them, so
 // they cannot notice: `--events-per-segment=1` returned 43/43 with the "worst
 // case" reduced to ten events. A committed gate has to refuse to run
 // under-parameterized, or "129/129" has no fixed meaning.
 // The floors are the design's own worst case: `keyframeEvery: 10` (design §5),
-// 100 events/segment and the 20% anchored density Task 0 chose (above
-// SMOKE-19NRQR's busiest real trial, 16.0%). Larger is allowed — the reviewer's
-// density sweep runs to 1.00 — smaller is not.
+// 100 events/segment and the 20% anchored density the baseline chose (above
+// SMOKE-19NRQR's busiest real trial, 16.0%). Larger is allowed — a density
+// sweep runs to 1.00 — smaller is not.
 const PARAM_FLOOR = { spanSegments: 10, eventsPerSegment: 100, anchoredFrac: 0.20 };
 if (SPAN_SEGMENTS < PARAM_FLOOR.spanSegments || EVENTS_PER_SEGMENT < PARAM_FLOOR.eventsPerSegment
     || ANCHORED_FRAC < PARAM_FLOOR.anchoredFrac) {
   console.error('REFUSING TO RUN: the composite worst case is under-parameterized.');
   console.error(`  --span-segments=${SPAN_SEGMENTS} (>= ${PARAM_FLOOR.spanSegments} required — design §5's keyframeEvery)`);
   console.error(`  --events-per-segment=${EVENTS_PER_SEGMENT} (>= ${PARAM_FLOOR.eventsPerSegment} required)`);
-  console.error(`  --anchored-frac=${ANCHORED_FRAC} (>= ${PARAM_FLOOR.anchoredFrac} required — Task 0's density, above the busiest real trial)`);
+  console.error(`  --anchored-frac=${ANCHORED_FRAC} (>= ${PARAM_FLOOR.anchoredFrac} required — the baseline's density, above the busiest real trial)`);
   console.error('  A pass under smaller parameters is not the gate this file is named for.');
   process.exit(1);
 }
@@ -240,7 +242,7 @@ function note(label) { console.log('    · ' + label); }
 
 // The alignment battery's one declared console whitelist applies here too:
 // jspsych-full segment 12's keyframe carries `autofocus`, and a script-less
-// sandbox refusing the focus steal is the CORRECT outcome (T5.4 finding (a)).
+// sandbox refusing the focus steal is the CORRECT outcome.
 const CONSOLE_WHITELIST = [/Blocked autofocusing/i];
 function watchPage(page, tag) {
   const seen = { __tag: tag, pageErrors: [], consoleErrors: [], whitelisted: 0 };
@@ -435,7 +437,7 @@ async function openViewer(browser, origin, model, tag) {
 }
 
 // ── the v1 control (the frozen v0.7.1 report) ──────────────────────────────
-const V1_TRIAL = 2;      // 368 events, 16.9 s — the busiest, as Task 0 used
+const V1_TRIAL = 2;      // 368 events, 16.9 s — the busiest, as the baseline used
 const V1_LO = 2000;
 const V1_HI = 14000;
 
@@ -453,7 +455,7 @@ async function openV1(browser, origin) {
     // v1's BACKWARD seek is ASYNCHRONOUS: seek() calls rebuildFrame(), which
     // rewrites iframe.srcdoc and finishes in an onload handler. Timing the
     // RETURN of seek() reports a full frame rebuild as ~0.3 ms — the 51x error
-    // Task 0's baseline exists to expose. Both numbers come back, and
+    // the baseline exists to expose. Both numbers come back, and
     // `wentAsync` says which one is the real answer.
     window.__v1 = {
       selectTrial: function (i) { d.selectTrial(i); },
@@ -569,8 +571,8 @@ function worstCaseRecording(canvas) {
     canvasId: built.canvasId,
     recording: {
       schema_version: 2,
-      recorder: { name: 'cyborg-hunter-replay', version: '0.0.0-t5.9-synthetic' },
-      participant_id: 'T5.9-WORST-CASE',
+      recorder: { name: 'cyborg-hunter-replay', version: '0.0.0-synthetic' },
+      participant_id: 'WORST-CASE',
       recording_started_at: new Date(0).toISOString(),
       recording_started_at_perf: 0,
       end_reason: 'finished',
@@ -607,7 +609,7 @@ const out = {
 const gateRows = [];
 
 /**
- * THE SEGMENTS A GATED CELL ACTUALLY REPLAYS (T5.9 review I-3).
+ * THE SEGMENTS A GATED CELL ACTUALLY REPLAYS.
  * The first version unioned event types over WHOLE recordings and then called
  * the union "inside a gated number". Every `jspsych-full` segment is its own
  * keyframe and only segments 9 and 8 are gated, so three channels were credited
@@ -757,7 +759,7 @@ async function runEngine(name, browser, origin) {
       check(ciii.probe.applied > cii.probe.applied, `[${tag}] case iii applies strictly more entries than case ii (${ciii.probe.applied} > ${cii.probe.applied})`);
       check(mountOnly.probe.applied === 0 || mountOnly.probe.applied < cii.probe.applied,
         `[${tag}] the mount-only cell applied ${mountOnly.probe.applied} entries — it measures the mount, not the walk`);
-      // THE FORWARD-WALK WITNESS (T5.9 review I-1). `mountsDelta === 0` says a
+      // THE FORWARD-WALK WITNESS. `mountsDelta === 0` says a
       // forward seek did not restore; it cannot say it did anything. Case (i) is
       // the ONLY cell in this battery that exercises design §5's incremental
       // walk — every other gated cell restores — so without this the one path
@@ -792,7 +794,7 @@ async function runEngine(name, browser, origin) {
       // gated number. Span 1's keyframe carries none; segment 10's carries a
       // window scroll (0, 1916) AND an element scroll (node 12), so a restore
       // there replays both as synthetic t=0 events through the real handlers.
-      // Task 0's model set `initial_state: null` on every segment and named the
+      // The baseline model set `initial_state: null` on every segment and named the
       // omission; this is where it stops being an omission.
       if (checksOn) {
         const kf2 = 10, deep2 = model.segments.length - 1;   // span 2 = segments 10..17
@@ -838,14 +840,14 @@ async function runEngine(name, browser, origin) {
     // property of the fixture rather than a convenience. Both sketchpad
     // segments TEAR DOWN their canvas before the segment ends: segment 9
     // removes node 8 at tRel 1505.1 (and then snapshots it — the
-    // snapshot-after-remove specimen, T5.5 finding (a)), and segment 8 removes
+    // snapshot-after-remove specimen), and segment 8 removes
     // the canvas's parent at 263.4. A seek past either point leaves the viewer
     // correctly presenting NOTHING, so a canvas cell aimed there would measure
     // a canvas-free restore while calling itself canvas-heavy. These targets
     // are the LAST playhead at which the canvas is still live, i.e. the most
     // composite work the fixture can be asked for.
     // The seg-9 cell also carries §5 step 2 for real, and the two session
-    // `stylesheet_events` reach it by DIFFERENT routes (T5.9 review M-7):
+    // `stylesheet_events` reach it by DIFFERENT routes:
     // `stylesheet.add` at t = 3592.0999 precedes segment 9's origin (3592.1999)
     // so `deriveSheets` replays it on every restore, while `stylesheet.remove`
     // at 5097.0999 falls inside the walked window (tRel 1504.9 <= the 1505.0
@@ -855,7 +857,7 @@ async function runEngine(name, browser, origin) {
       { seg: 9, target: 1505.0, why: 'nine real region snapshots, all composited; node 8 is removed at 1505.1' },
       { seg: 8, target: 263.3, why: 'the 189,322-char full baseline; the canvas parent is removed at 263.4' },
     ];
-    // M-8: the REAL and WORST blocks declare `durMs > lastT`; these cells
+    // The REAL and WORST blocks declare `durMs > lastT`; these cells
     // deliberately CANNOT, and the asymmetry is the point. `jspsych-full`
     // segment 9 has `durMs === lastT === 1506`, so its last event is
     // unreachable by any backward seek — which is why `--inject=no-canvas`,
@@ -969,7 +971,7 @@ async function runEngine(name, browser, origin) {
           `[${tag}] case iii replayed ${ciii.probe.segmentsApplied} segments and case ii replayed ${cii.probe.segmentsApplied}`);
         check(ciii.probe.applied > cii.probe.applied * 5,
           `[${tag}] case iii applies ~10x case ii's entries (${ciii.probe.applied} vs ${cii.probe.applied})`);
-        // The forward-walk witness (T5.9 review I-1) — see the REAL block.
+        // The forward-walk witness — see the REAL block.
         check(ci.probe.applied > mountOnly.probe.applied,
           `[${tag}] case i actually walked forward: ${ci.probe.applied} entries applied at its target vs ${mountOnly.probe.applied} at its start`);
         check(ciii.probe.counters.patchFailures === 0,
@@ -1045,12 +1047,12 @@ async function runEngine(name, browser, origin) {
   }
   {
     const gated = res.ratios['WORST canvas=off/checks=on/sync'];
-    console.log('  the ONE gated cell (design §11 amendment 1, Task-0 rule 1): canvas=off / checks=on / sync');
+    console.log('  the ONE gated cell (design §11, ratio rule 1): canvas=off / checks=on / sync');
     gate({ cell: 'WORST canvas=off/checks=on', caseName: 'iii/ii', metric: 'ratio', value: gated, limit: RATIO_BAND, unit: 'x' });
-    note(`inherited nothing: Task 0 measured 4.99x and Task 1's reviewer 4.84x on a MODEL; this is ${fixed(gated, 2)}x on the real viewer over ${RUNS} samples`);
+    note(`inherited nothing: the baseline measured 4.99x and an independent run 4.84x on a MODEL; this is ${fixed(gated, 2)}x on the real viewer over ${RUNS} samples`);
   }
 
-  // ── O(n²) — continuous playback across a span (Task-4 amendment) ────────
+  // ── O(n²) — continuous playback across a span ────────────────────────────
   // Cases (i)-(iii) all measure SEEKS, so none of them sees this: `loadSegment`
   // resets the playhead and calls `restore`, so continuous playback across a
   // 10-segment span costs ten restores, the tenth replaying ten segments'
@@ -1151,7 +1153,7 @@ async function runEngine(name, browser, origin) {
     ];
     res.v1Comparison = { v1BackwardSettledFrame: v1back, frameFloor: res.floor.rafFrame.median, rows: {} };
     console.log(`    v1 backward settledFrame = ${fixed(v1back)} ms; v2 numbers below carry the SAME animation frame`);
-    // M-3: `settledFrameMs` = settled + time-to-next-frame, and that addend is a
+    // `settledFrameMs` = settled + time-to-next-frame, and that addend is a
     // SESSION-LEVEL constant somewhere in [0, one frame] — tight within a run,
     // arbitrary between them. On a 32.7 ms frame that is most of the number, so
     // the min is printed beside the median and the rows are read as bounded, not
@@ -1184,10 +1186,10 @@ if (!existsSync(FROZEN_FIXTURE)) { console.error('missing frozen fixture ' + FRO
 }
 
 // ── CHANNEL COVERAGE — computed AFTER the run, from the spans the gated cells
-// actually replayed. See `recordGatedSpan`. (T5.9 review I-3/I-4.)
+// actually replayed. See `recordGatedSpan`.
 function reportChannelCoverage() {
   // The vocabulary is DERIVED from the shipped client, never hand-copied: the
-  // first version anchored the sweep to Task 0's 20-entry omission list, so
+  // first version anchored the sweep to the baseline's 20-entry omission list, so
   // `touch.start`/`touch.move`/`touch.end` fell out of BOTH the covered list
   // and the named-gap list — and `touch.start`/`touch.end` sit in capture's
   // `withAlignment` set, i.e. they fire the §8 check, which is this gate's own
@@ -1238,11 +1240,11 @@ function reportChannelCoverage() {
   console.log(`    ${gaps.sort().join(' ')}`);
   console.log('  §12 instantiation filters run on every mount by construction (the real mountTree).');
 
-  // Cross-reference against Task 0's own list of omissions, because rule 5 is
+  // Cross-reference against the baseline's own list of omissions, because rule 5 is
   // phrased against it. This list is a HISTORICAL reference only — the sweep
   // above is derived from the client — and it is printed so the two counts
-  // cannot be confused: 21 of the client's 35 types are ungated, while of Task
-  // 0's 20 named omissions only three are inside a gated cell.
+  // cannot be confused: 21 of the client's 35 types are ungated, while of the
+  // baseline's 20 named omissions only three are inside a gated cell.
   const T0_OMISSIONS = [
     'input.value', 'input.checked', 'input.select', 'scroll.window', 'scroll.element',
     'clipboard.copy', 'clipboard.cut', 'clipboard.paste', 'clipboard.drop',
@@ -1251,10 +1253,10 @@ function reportChannelCoverage() {
     'fullscreen.enter', 'fullscreen.exit',
   ];
   const t0In = T0_OMISSIONS.filter((t) => covered.has(t));
-  console.log(`  cross-reference — of Task 0's ${T0_OMISSIONS.length} named omissions, ${t0In.length} are inside a gated cell ` +
-    `(${t0In.join(' ')}); the rest are in the gap list above, together with touch.* which was in NEITHER list before this fix round.`);
+  console.log(`  cross-reference — of the baseline's ${T0_OMISSIONS.length} named omissions, ${t0In.length} are inside a gated cell ` +
+    `(${t0In.join(' ')}); the rest are in the gap list above, together with touch.* which was in NEITHER list before the sweep was derived from the client.`);
   check(T0_OMISSIONS.every((t) => known.includes(t)),
-    `Task 0's omission list is a subset of the client's vocabulary — the cross-reference cannot drift into naming a type the viewer does not have`);
+    `the baseline's omission list is a subset of the client's vocabulary — the cross-reference cannot drift into naming a type the viewer does not have`);
 
   // Mechanical completeness: every type the viewer knows is in exactly one list.
   const accounted = new Set([...inside, ...gaps]);

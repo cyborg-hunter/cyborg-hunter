@@ -10,7 +10,7 @@
 // in the other, and that what comes out the far end is a v2 recording rather
 // than a collection of individually valid parts.
 //
-// Two machine checks stand in for a reviewer reading the JSON:
+// Two machine checks stand in for a person reading the JSON:
 //   - validateStrict on the serialized output (spec §11's producer profile);
 //   - a LEAK SENTINEL: distinctive strings typed into a redacted field and
 //     into an excluded one appear NOWHERE in the file (spec §8's conformance
@@ -128,8 +128,7 @@ function restoreWindow() {
 // no-rAF FALLBACK plus that delivery — a wall-clock budget, and the only one in
 // the replay suite. `node --test` runs the suite's files in parallel, so on a
 // loaded machine 40 ms is a race rather than a margin, and it is the leading
-// candidate for the single unreproduced failure in T5.8's run. (T5.8 fix,
-// review M-7.)
+// candidate for the single unreproduced failure seen in a full run.
 //
 // So the frames are OURS: `installWindow` gives the module a queueing
 // `requestAnimationFrame`, and this DRAINS it — repeatedly, because a flush can
@@ -451,12 +450,12 @@ describe('end-to-end capture → v2 recording', () => {
   });
 
   it('a conforming player resolves every patch, and deletes only what the page deleted', () => {
-    // The assertion class that would have caught C-1 end to end: replay the
+    // The assertion class that would have caught the re-entrant-segment defect end to end: replay the
     // whole recording the way §3 says a player must — re-instantiate at a
     // keyframe, carry on through a continuation — with a player that throws on
     // any id it was never sent (packages/sessionrecording-conformance/src/fuzz/dom-player.js).
     //
-    // It does not BITE C-1 on this session, because every mutation here is
+    // It does not BITE that defect on this session, because every mutation here is
     // bracketed inside an explicit trial and no implicit segment forms. It is
     // the net: any future cadence or wiring change that lets a patch address a
     // span the file no longer describes fails here rather than in the fork.
@@ -605,7 +604,7 @@ describe('assembly wiring (index.js)', () => {
   });
 
   it('an unbracketed CLICK still names the node the player holds (capture-trace)', async () => {
-    // C-1's other exposure, and the one the observer-shaped reproduction hides:
+    // The re-entrant defect's other exposure, and the one the observer-shaped reproduction hides:
     // capture-trace resolves `target` and `anchor.node` through the span at
     // DISPATCH, then pushes. If that push is what opens the segment, a keyframe
     // taken inside it renumbers everything the record already named — and the
@@ -675,7 +674,7 @@ describe('assembly wiring (index.js)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAINT SCOPE: one subtree, one verdict (T3 final review, F-1)
+// TAINT SCOPE: one subtree, one verdict
 //
 // The taint set is what keeps redacted content withheld after the page moves
 // it out of the container that redacted it. Its SCOPE used to disagree across
@@ -687,7 +686,7 @@ describe('assembly wiring (index.js)', () => {
 // nodes — one file holding two verdicts about one subtree, and the weaker one
 // arriving first.
 //
-// The scenario below is the reviewer's probe. Each sentinel travels a different
+// The scenario below is a review probe. Each sentinel travels a different
 // channel, so reverting any one of the three fixed sites turns exactly its own
 // assertion red.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -839,7 +838,7 @@ describe('taint scope: content created inside a moved-out redacted container', (
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TEARDOWN: the last thing the participant did (T3 final review, F-5)
+// TEARDOWN: the last thing the participant did
 //
 // A MutationObserver callback is a microtask. DOM changes made in the same task
 // as stopSession() — which is exactly where a trial's final state change lands

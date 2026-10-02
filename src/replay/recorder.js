@@ -73,7 +73,7 @@ export const REPLAY_DEFAULTS = {
   // tree. `maxCharsPerTrial` bounds each tree, nothing bounded how many.
   //
   // 40 entries = 20 start/end episodes, so at most ~20 trees. A v2 keyframe
-  // measures ~3.4x its v1 HTML (Task 2's measurement: 951 -> ~3.2 KB on the
+  // measures ~3.4x its v1 HTML (measured: 951 -> ~3.2 KB on the
   // demo page, and a mid-sized experiment DOM lands nearer 50 KB), which puts
   // the realistic ceiling around 1 MB of vendor payload — the same order the
   // viewport cap allows, and reached only by a session that left fullscreen
@@ -195,8 +195,8 @@ export function createRecorder(userConfig) {
       // literally, and it breaks the viewer materially: the §3 origin is what
       // every player rebases segment-relative times by, so this segment's
       // playhead ran on the session clock while every other segment's ran on
-      // its own. Found by T7's segment non-overlap check, which is the first
-      // thing in the repo that compared one segment's end against the next
+      // its own. Found by the conformance corpus's segment non-overlap check, which is
+      // the first thing in the repo that compared one segment's end against the next
       // one's stated origin.
       tLoad: (implicit && trialCounter === 1) ? session.sessionStart : performance.now(),
       tStart: (opts && opts.tStart) != null ? opts.tStart : null,
@@ -399,7 +399,7 @@ export function createRecorder(userConfig) {
 
     stopSession: function (reason) {
       // BEFORE anything closes: a channel holding undelivered state gets to
-      // deliver it into the still-open trial (F-5).
+      // deliver it into the still-open trial.
       runPreCloseFlushes();
       if (state === 'trial') {
         state = 'session';
@@ -542,7 +542,7 @@ export function createRecorder(userConfig) {
     // last thing a trial does before ending — sit in the observer's queue when
     // the recording closes, and disconnecting drops them with no trace. A
     // `takeRecords()` through the mapper turns that silent loss into the
-    // patches the participant actually caused (T3 final review, F-5).
+    // patches the participant actually caused.
     //
     // Runs before the state transition in `stopSession` (so the events are
     // still accepted) and at the top of `destroy` (for a caller that tears down
@@ -568,7 +568,7 @@ export function createRecorder(userConfig) {
       if (state === 'destroyed') return;
       // A caller that tears down without stopping still gets its pending
       // batch: the buffer survives destroy() by contract, so the patches are
-      // readable afterwards (F-5). A no-op after stopSession, which drained it.
+      // readable afterwards. A no-op after stopSession, which drained it.
       runPreCloseFlushes();
       transition('destroyed');
       listeners.forEach(function (l) {

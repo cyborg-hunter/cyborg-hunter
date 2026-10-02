@@ -262,7 +262,7 @@ test('strict: media, canvas, and clipboard event checks', () => {
   assert.ok(res.errors.some(e => e.includes('events[5]') && e.includes('canvas.snapshot')));
 });
 
-// ── §5.3 clipboard strictness: SETTLED as required-but-nullable (T7) ───────
+// ── §5.3 clipboard strictness: SETTLED as required-but-nullable ───────
 
 test('strict: clipboard fields are required-but-nullable, not typed-only-if-present', () => {
   // The parked design question, decided and pinned. §5.3 defines its two
@@ -307,7 +307,7 @@ test('strict: redaction violations say a field must be REMOVED, not added', () =
 test('strict: hintFor names real fields for every event type it covers', () => {
   // The hint is the only guidance a producer gets on a boolean-false check, and
   // an event type with no entry got "see spec §5" — which is where they already
-  // were. Media, canvas and clipboard were the three families the review named.
+  // were. Media, canvas and clipboard were the three families affected.
   const r = strictBase();
   r.segments = [seg({ events: [
     { type: 'media.seeked', t: 1, node: 1 },
@@ -325,7 +325,7 @@ test('strict: hintFor names real fields for every event type it covers', () => {
 // ── tolerant profile: warn on malformed known fields, never coerce ─────────
 
 test('tolerant: a present-but-malformed known field warns and is kept as-is', () => {
-  // Settled here (T7). Before this, `stylesheets: null` loaded in total silence
+  // Settled here. Before this, `stylesheets: null` loaded in total silence
   // — defaults fill ABSENT keys only — so the analyst got no signal and the
   // value reached every consumer untyped.
   const bad = { ...structuredClone(MIN_VALID), stylesheets: null, truncated: 'yes', end_reason: 'quit' };
@@ -352,7 +352,7 @@ test('tolerant: a well-formed recording produces no malformed-field warnings', (
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VALIDATOR BREADTH (T7) — §11's "every declared field type-checked"
+// VALIDATOR BREADTH — §11's "every declared field type-checked"
 //
 // Everything below closes a field the validator declared and never looked at.
 // Each block states what got through BEFORE, because a type check with no
@@ -360,7 +360,7 @@ test('tolerant: a well-formed recording produces no malformed-field warnings', (
 // ═══════════════════════════════════════════════════════════════════════════
 
 test('strict: host is {name, version} strings or null', () => {
-  // T3 Task-7 finding: `host` appeared ONCE in this file, in TOP_DEFAULTS, so
+  // `host` appeared ONCE in this file, in TOP_DEFAULTS, so
   // `host: {name: 42}` was strict-valid and every consumer read a number where
   // §2 declares a runtime name.
   const bad = strictBase(); bad.host = { name: 42, version: '1' };
@@ -456,7 +456,7 @@ test('strict: extensions are objects keyed by lowercase vendor slugs, at all thr
 test('strict: initial_state shape, including the optional form fields', () => {
   const withState = (s) => Object.assign(strictBase(),
     { segments: [seg({ initial_dom: KEYFRAME_DOM, initial_state: s })] });
-  // Task-4 carry: ZERO initial_state code paths existed, so every one of these
+  // ZERO initial_state code paths existed, so every one of these
   // loaded and only failed inside a player trying to seed the reconstruction.
   assert.deepEqual(validateStrict(withState({
     scroll: { x: 0, y: 120 },
@@ -566,7 +566,7 @@ test('strict: DomNode trees are validated recursively, in keyframes and in dom.a
     { id: 3, kind: 'comment', text: 'note' },
     { id: 4, kind: 'element', tag: 'canvas', attrs: {}, children: [], canvas_size: { w: 10, h: 5 } },
   ]))).errors, []);
-  // Everything below was strict-valid before T7: the validator asked whether
+  // Everything below was strict-valid before this check: the validator asked whether
   // initial_dom was an object and stopped there.
   assert.ok(validateStrict(withDom(tree(['just a string']))).errors
     .some(e => e.includes('children[0] must be a DomNode object')));

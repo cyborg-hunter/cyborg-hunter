@@ -408,7 +408,7 @@ function findGuardViolations(raw) {
     // make .find() lock on, then the outer loop fell through to candidate 4 and
     // a later trial's real violations were never reached. Not live for the
     // shipped honeypot (it stamps this field identically on every trial), but a
-    // latent bug for any non-uniform / merged producer. (Sol R2 candidate-3.)
+    // latent bug for any non-uniform / merged producer.
     Array.isArray(raw.trials)
       ? raw.trials.map(t => t?.guard_assistance_violations_session).find(hasReal)
       : null,

@@ -27,7 +27,7 @@ recorder does.
 |---|---|---|
 | `canonical-core` | hand-authored | Minimal valid v2: keyframe + continuation, dom.*, input, the four oracle checkpoints |
 | `jspsych-full` | generated (jsPsych → converter) | A foreign producer's answer: 909 events, canvas region-diffs, RNG, stylesheet events |
-| `redacted` | generated (CH, Chromium) | The §8 whole-FILE leak scan; the pin-8 residual boundary; the I2 moved-node vector; the §4 exclusion placeholder; the file-input floor |
+| `redacted` | generated (CH, Chromium) | The §8 whole-FILE leak scan; the pin-8 residual boundary; the moved-node vector; the §4 exclusion placeholder; the file-input floor |
 | `length-only-clipboard` | generated (CH) | §5.3's length-only producer mode |
 | `aborted` | generated (CH) | `end_reason: "aborted"` |
 | `truncated` | generated (CH) | §5.7's `recording.capture_stopped` + `truncated` mirror |
@@ -154,7 +154,7 @@ declare `"type": "module"` itself, or every `import` here breaks on lift.
 
 ## Proposed §11 wording, for r3
 
-T7 settled two parked strictness questions with tests. The spec text has not
+Two parked strictness questions were settled with tests. The spec text has not
 been touched (r2 is frozen for review); these are the sentences r3 should absorb,
 stated here so the decision and its tests sit together:
 

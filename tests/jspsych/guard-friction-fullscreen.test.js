@@ -1,4 +1,4 @@
-// F7: guard-friction requests
+// guard-friction requests
 // fullscreen with a prefix fallback (requestFullscreen || webkitRequestFullscreen
 // || mozRequestFullScreen) and getDiagnostics() reads a prefix-aware fullscreen
 // element, but the AUTHORITATIVE check() / start() / resize-settling gate used
@@ -34,7 +34,7 @@ before(async () => {
   ({ fullscreenElementOf, exitFullscreenFnOf } = await import('../../src/jspsych/extension-guard-friction.js'));
 });
 
-describe('F7 — prefix-aware fullscreen-element lookup', () => {
+describe('prefix-aware fullscreen-element lookup', () => {
   const EL = { tagName: 'HTML' };
 
   it('reads the unprefixed fullscreenElement (modern browsers)', () => {

@@ -82,7 +82,7 @@ function attrValue(node, name) {
  * and `keepBait` — the v1 analysis override (capture-dom.js `isBait`) — keeps
  * turning exactly those off, unchanged.
  *
- * Exported because the mutation mapper (Task 3) must reach the same verdict:
+ * Exported because the mutation mapper must reach the same verdict:
  * a patch that leaks the contents of a subtree the snapshot placeheld would
  * defeat the exclusion one mutation later.
  */
@@ -107,8 +107,7 @@ export function isExcluded(node, opts) {
 // walk never needed it (it descends the tree itself and stops at the
 // placeholder, so `isExcluded` per node is its question). Removed rather than
 // kept as a second, drifting statement of the same rule — the reason both
-// floors were written to read identically in the first place (T3 final review,
-// F-4).
+// floors were written to read identically in the first place.
 
 // Canvas bitmap size (spec §4). The width/height IDL properties are the
 // browser's authoritative numbers and are always present there — a bare
@@ -138,7 +137,7 @@ function mediaSrc(node) {
 }
 
 // Does a snapshot of this element carry this attribute at all? Split out of
-// buildAttrs so the mutation mapper (Task 3) reaches the same verdict for a
+// buildAttrs so the mutation mapper reaches the same verdict for a
 // `dom.attr` patch: a patch carrying what the keyframe refuses would leak the
 // same content one mutation later.
 function isEmittedAttr(tagName, name, redacted) {
@@ -383,7 +382,7 @@ function emitNode(node, span, opts, inheritedRedaction, parent) {
  * exclusion placeholder or skipped as a script still holds its number, so
  * removing an exclusion attribute later does not renumber its siblings.
  *
- * `span.reset()` is the CALLER's call (keyframe cadence, Task 8): this
+ * `span.reset()` is the CALLER's call (keyframe cadence): this
  * function only ever adds to the span it is given. Calling it at a keyframe
  * means resetting first, so that this walk is the span's first allocation and
  * the tree numbers 1..N (the precondition node-registry.js documents). A walk
@@ -401,7 +400,7 @@ export function serializeTree(root, span, opts) {
   // a subtree serialized MID-SPAN (a `dom.add` payload, a reveal) agree with
   // the keyframe that will describe the same nodes later. `emitNode` already
   // inherits taint downward once the walk is inside; this is the seed that
-  // carries the answer in from above the root (T3 final review, F-1).
+  // carries the answer in from above the root.
   return emitNode(root, span, opts,
     isInRedactedSubtree(root, opts.redactSelector)
       || isInTaintedSubtree(root, opts.taint),

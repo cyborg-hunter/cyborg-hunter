@@ -15,7 +15,7 @@
 //     stop describing, and the next patch for that node is suppressed. The
 //     node then never appears in the recording.
 //   - **A serialization taken to measure cannot corrupt a live recording.**
-//     Sizing a snapshot (Task 8's cadence trigger, a byte-cap probe) means
+//     Sizing a snapshot (a keyframe-cadence trigger, a byte-cap probe) means
 //     serializing a tree the recorder is also serializing. Give that call its
 //     OWN span and it writes into its own ids and its own delivered set; there
 //     is no shared default to fall back into.

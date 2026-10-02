@@ -105,7 +105,7 @@ test('buildReportHtml defaults transformPayloads to identity when the arg is omi
   assert.deepEqual(seenIds, ['DEMO-test5']);
 });
 
-// ── Persistence seam (walkthrough item 7, ENG-REVIEW amendment) ────────
+// ── Persistence seam (walkthrough item 7) ────────
 // buildResults' FIRST run() call previously always used run(null) — a
 // step-11 weight edit threaded through state.scoringOverrides would be
 // silently discarded on the report's first render, only reaching a LATER

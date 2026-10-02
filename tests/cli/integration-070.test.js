@@ -87,7 +87,7 @@ describe('attach-pass censuses survive prototype-key participant ids', () => {
   });
 });
 
-describe('saneCounts census survives prototype-key sanitized names (Sol R2)', () => {
+describe('saneCounts census survives prototype-key sanitized names', () => {
   let dir;
   before(() => {
     dir = mkdtempSync(join(tmpdir(), 'ch-proto-sane-'));

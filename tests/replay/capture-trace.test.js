@@ -181,7 +181,7 @@ describe('event vocabulary — dotted type names (spec §5)', () => {
   });
 
   it('no event carries a v1 `kind` and every type is spec-known', () => {
-    // The done-when grep, as an assertion: one pass over every channel this
+    // A grep for v1 kinds, as an assertion: one pass over every channel this
     // module owns, checked against the validator's own type table.
     const { doc, win, env, events } = harness({});
     doc.fire('mousemove', { clientX: 1, clientY: 1 });
@@ -507,7 +507,7 @@ describe('redaction — the spec §5.2 variants, both directions', () => {
     // Nothing else can mark it in this scenario: the field was OUTSIDE any
     // redacted subtree when the keyframe walked (serializeTree marks every node
     // it finds inside one), and no mutation mapper runs in this harness. Found
-    // unbitten while fusing the three floor walks (T3.9 fix round) — deleting
+    // unbitten while fusing the three floor walks — deleting
     // the mark passed all 451 replay tests, because every shipped test redacted
     // by container and the keyframe had already marked those.
     const { root, doc: p } = page('<div id="stage"><input id="toggling"></div>');
@@ -689,8 +689,8 @@ describe('the floors cross a shadow boundary (spec §8 has no exceptions)', () =
   });
 
   it('says nothing about a file input inside a shadow root (§13 through the host)', () => {
-    // The composed half of the file-input guard, which the T3 final review
-    // found unbitten (F-2). The retargeted target is the HOST, so the direct
+    // The composed half of the file-input guard, which a review
+    // found unbitten. The retargeted target is the HOST, so the direct
     // half cannot see the file input at all; the leak needs a host that
     // proxies `.value`, which is what a custom file-picker element does. The
     // Chromium battery drives the real `setInputFiles` (case 14) but cannot

@@ -393,7 +393,7 @@ describe('mapMutations — batch semantics', () => {
 
   it('exports the observer init the mapper assumes (attributeOldValue included)', () => {
     // attributeOldValue is not decoration: the exclusion-toggle direction is
-    // computed from the pre-mutation attribute value. Exported so Task 5's
+    // computed from the pre-mutation attribute value. Exported so the recorder's
     // wiring cannot drift from the semantics tested here.
     assert.deepStrictEqual(MUTATION_OBSERVER_INIT, {
       childList: true, attributes: true, attributeOldValue: true,
@@ -844,7 +844,7 @@ describe('mapMutations — batch composition (N1 to N4)', () => {
   });
 
   it('N6: says nothing about a node whose insertion it never emitted', () => {
-    // Pins the delivery predicate rather than a defect the pre-round-2 mapper
+    // Pins the delivery predicate rather than a defect an earlier mapper
     // had: p1 leaves the file with the collapse, is inserted somewhere the
     // patch stream never mentions, and is gone by flush. The whole batch is
     // the collapse sequence and nothing else. (Guard-level bite verified by

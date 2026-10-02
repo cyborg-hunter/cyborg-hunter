@@ -148,7 +148,7 @@ snapshotTest('trajectories core draw log', 'drawlog-trajectories.json',
     // > 0); the screen rect (teal) never does. The enriched test below fixes
     // the paradox to exercise drawOuter=true.
     //
-    // Not checked here (A4 review, sanctioned as deliberately out of scope
+    // Not checked here (deliberately out of scope
     // for this file): the zoom-tag branch (COLORS.zoomTag, '#a06000') —
     // it's unit-tested directly via computeZoomTag in trajectory-frame.test.js
     // and window-geometry.test.js instead.

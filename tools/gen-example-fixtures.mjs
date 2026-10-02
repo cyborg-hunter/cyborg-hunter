@@ -1,7 +1,7 @@
 // tools/gen-example-fixtures.mjs
 //
 // Hand-authored-by-construction example participants for the demo's results
-// screen (spec §7.2 / plan Task C1): "example-1" (HARD-leaning) and
+// screen (spec §7.2): "example-1" (HARD-leaning) and
 // "example-2" (CLEAN) sit beside the visitor's own session so the report
 // never looks empty. Deterministic: a seeded mulberry32 PRNG plus a fixed
 // EPOCH decide every value — no Date.now(), no Math.random() — so
@@ -40,7 +40,7 @@ function isoAt(perfNowMs) {
 }
 
 // mulberry32: a tiny deterministic PRNG. Same seed -> same sequence forever,
-// which is what makes regenerating this file byte-identical (the plan's
+// which is what makes regenerating this file byte-identical (the
 // determinism gate).
 function mulberry32(seed) {
   return function () {

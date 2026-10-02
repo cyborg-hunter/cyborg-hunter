@@ -1,26 +1,26 @@
 // tests/replay/alignment-viewer-model.test.js
-// The §6/§8 alignment re-point, both halves (T5 Task 6).
+// The §6/§8 alignment re-point, both halves.
 //
-// MODEL half (T5.1, kept): the per-segment camera seed folded from
+// MODEL half (kept): the per-segment camera seed folded from
 // SESSION-level `viewport_changes`, levels 2 and 3 of design §8's client-box
 // chain, and the producer-identity `foreign` flag that decides which CH panels
 // the report may draw. v1 folded per-trial `view_state` seeds plus in-stream
 // `resize` events; v2 has neither, so the fold changes shape rather than being
 // ported.
 //
-// VIEWER half (T5.6): level 1 of the client-box chain (the per-event camera),
+// VIEWER half: level 1 of the client-box chain (the per-event camera),
 // the five self-check predicates, the three anchor outcomes of §7, the
 // event-level `redacted` bucket, and the §6 MAY-omit rule. These run the
 // SHIPPED client over a booted viewer, through the shared harness.
 //
 // WHY CONSTRUCTED EVENTS AND NOT THE CORPUS. Neither committed fixture can
-// supply a PASS case, and the plan says so in two amendments:
+// supply a PASS case, and the design says so:
 //   - `jspsych-full` carries ZERO `camera` and ZERO `anchor` blocks across all
-//     909 events (Task 0), so it fires no predicate in any configuration;
+//     909 events, so it fires no predicate in any configuration;
 //   - `canonical-core`'s single anchored event is permanently `uncertain` for
 //     a fixture reason — its hand-authored `anchor.rect` is 316–320 px from
-//     where an unstyled `<button>` lands in any real browser (Task 4, measured
-//     tri-engine and reproduced independently by the reviewer). The check is
+//     where an unstyled `<button>` lands in any real browser (measured
+//     in all three engines and reproduced independently). The check is
 //     WORKING there; that case is pinned in `viewer-client.test.js` and must
 //     not be "fixed".
 // Every constructed block below has the shape capture actually emits —
@@ -212,7 +212,7 @@ describe('client-box chain (design §8, levels 2 and 3)', () => {
 describe('foreign — producer identity, not namespace presence', () => {
   it('jspsych-full is foreign AND has a null viewportClient AND a zero scrollbar delta', () => {
     // Asserted together on purpose. jspsych-full DOES carry
-    // extensions['cyborg-hunter'] (the T4 converter stamps its provenance
+    // extensions['cyborg-hunter'] (the jsPsych-v1 converter stamps its provenance
     // there), so a namespace-presence test reports foreign:false for the one
     // file that exists to prove foreignness — and §8's client-box chain then
     // computes viewport.w − undefined.w on the fixture that matters most.
@@ -260,8 +260,8 @@ describe('foreign — producer identity, not namespace presence', () => {
 // happy-dom has no layout engine: every `getBoundingClientRect()` is 0×0,
 // `documentElement.clientWidth` is 0, and `elementFromPoint` returns null
 // unconditionally. Four of the five §8 predicates are geometry, so in the bare
-// realm the check can only ever be observed FAILING (which is what T5.4
-// pinned) and never passing — and the contract here is that each predicate
+// realm the check can only ever be observed FAILING (which is what an earlier
+// test pinned) and never passing — and the contract here is that each predicate
 // fails on its OWN corruption and passes otherwise.
 //
 // So this file models layout. The model is deliberately NOT a stub of the
@@ -283,7 +283,7 @@ describe('foreign — producer identity, not namespace presence', () => {
 //     elements in document order winning, which is what an overlay does;
 //   - the iframe's on-page offset is parsed out of the `transform` the viewer
 //     WROTE, so a letterbox that was computed but never applied fails check 5.
-// Real layout — fonts, reflow, borders, transforms, zoom — is Task 8's
+// Real layout — fonts, reflow, borders, transforms, zoom — belongs to the
 // Playwright battery. What this file owns is the predicate logic and the
 // plumbing that feeds it.
 
@@ -450,7 +450,7 @@ async function checksFor(recording, opts) {
 
 const only = (checks) => { assert.equal(checks.length, 1, 'exactly one check'); return checks[0]; };
 
-describe('T5.6 — the five predicates: clean reconstruction', () => {
+describe('the five predicates: clean reconstruction', () => {
   it('a faithful reconstruction passes all five, with nothing skipped', async () => {
     const { checks } = await checksFor(alignRecording([click()]));
     const c = only(checks);
@@ -476,7 +476,7 @@ describe('T5.6 — the five predicates: clean reconstruction', () => {
   });
 });
 
-describe('T5.6 — each predicate fails on its own corruption', () => {
+describe('each predicate fails on its own corruption', () => {
   it('1a camera: a reconstruction that cannot reach the recorded scroll, on EITHER axis', async () => {
     // A camera-only event (capture drops the anchor for an excluded target with
     // no held ancestor, capture-trace.js:332), so nothing but check 1 can fire.
@@ -508,7 +508,7 @@ describe('T5.6 — each predicate fails on its own corruption', () => {
   it('2 rect: EACH of the four edges, so no one of them can go dark alone', async () => {
     // Four conjuncts, four separate mutations. A single corruption that moves
     // the whole box lights two edges at once and leaves the other two unpinned
-    // — the class of hole T5.3's M10 found (two guards, neither individually
+    // — the class of hole a review once found (two guards, neither individually
     // pinned), so each edge is isolated here: shift x AND widen to hold the
     // right edge still, and so on.
     const b = boxRect(BUTTON_BOX);
@@ -561,7 +561,7 @@ describe('T5.6 — each predicate fails on its own corruption', () => {
   });
 });
 
-describe('T5.6 — client-box chain level 1: the per-event camera', () => {
+describe('client-box chain level 1: the per-event camera', () => {
   it('a per-event client_w re-sizes the frame, and the check follows it', async () => {
     // §8: the per-event camera is AUTHORITATIVE. Scroll and resize
     // notifications dispatch after the change, so the block on the interaction
@@ -588,7 +588,7 @@ describe('T5.6 — client-box chain level 1: the per-event camera', () => {
   });
 });
 
-describe('T5.6 — §6 MAY-omit: absence is not failure', () => {
+describe('§6 MAY-omit: absence is not failure', () => {
   it('an event carrying neither block produces NO check, not a failed one', async () => {
     // CH's capture omits alignment on key.up and on repeats (spec §6's cost
     // rule, capture-trace.js:526-551). v1 conflated absence with failure, which
@@ -621,7 +621,7 @@ describe('T5.6 — §6 MAY-omit: absence is not failure', () => {
   });
 });
 
-describe('T5.6 — the three anchor outcomes (§7) and the redacted bucket (§8)', () => {
+describe('the three anchor outcomes (§7) and the redacted bucket (§8)', () => {
   it('all four statuses are distinguishable in one getChecks() call', async () => {
     const rec = alignRecording([
       click({ t: 300 }),                                            // resolves
@@ -658,7 +658,7 @@ describe('T5.6 — the three anchor outcomes (§7) and the redacted bucket (§8)
   });
 
   it('the chip says which interactions could not be verified, and does not over-claim', async () => {
-    // `no-anchor` is counted by the summary and, until T5.6, said by nothing:
+    // `no-anchor` is counted by the summary and, until the chip named it, said by nothing:
     // a segment whose interactions all landed outside the observed root read
     // as a segment with no interactions at all, and a mixed one read as fully
     // verified. Neither is a failure and both are the silence this chip exists
@@ -702,10 +702,8 @@ describe('T5.6 — the three anchor outcomes (§7) and the redacted bucket (§8)
   });
 });
 
-// ── T5.6 fix round ─────────────────────────────────────────────────────────
-
-describe('T5.6 fix — check 1a compares against the RECORDING, not the fold', () => {
-  // The review's row 6: the comparand was `cam.x/cam.y`, the viewer's OWN
+describe('check 1a compares against the RECORDING, not the fold', () => {
+  // The comparand was `cam.x/cam.y`, the viewer's OWN
   // folded camera, so a fold that never ran left both sides stale together and
   // the check passed over a frame 300px from where the recording says the page
   // was. Design §8 specifies "applied scrollX/scrollY vs
@@ -753,7 +751,7 @@ describe('T5.6 fix — check 1a compares against the RECORDING, not the fold', (
   });
 });
 
-describe('T5.6 fix — the chip qualifies the WARNING branch too', () => {
+describe('the chip qualifies the WARNING branch too', () => {
   it('names the unverifiable interactions beside the failed ones', async () => {
     // The branch an analyst is most likely to be looking at was the one branch
     // that dropped the qualifier: "⚠ 1 interaction(s) failed" while three more
@@ -773,8 +771,8 @@ describe('T5.6 fix — the chip qualifies the WARNING branch too', () => {
   });
 });
 
-describe('T5.6 fix — which predicates could not RUN is visible', () => {
-  // The review's widened residual: five shapes bucket as `ok` with a predicate
+describe('which predicates could not RUN is visible', () => {
+  // A widened residual: five shapes bucket as `ok` with a predicate
   // skipped for want of data, and all five feed "alignment verified (N
   // checks)". No fifth status (there is no spec sentence behind one) and no
   // chip change (a skip is not a failure) — the skip is simply named at the one
@@ -855,7 +853,7 @@ describe('T5.6 fix — which predicates could not RUN is visible', () => {
   });
 });
 
-describe('T5.6 fix — two guards the review found unpinned', () => {
+describe('two guards found unpinned', () => {
   it('§5.2 alignment blocks on input.* are CONSUMED, not silently dropped', async () => {
     // Spec §5.2 puts `input.value` / `input.checked` / `input.select` in the
     // same non-move input union as mouse and key, so a producer MAY carry §6
@@ -893,7 +891,7 @@ describe('T5.6 fix — two guards the review found unpinned', () => {
 
   it('a shadow host refuses geometric verification (§13)', async () => {
     // The reconstruction holds the host and nothing under it, so a rect that
-    // agrees is agreeing about a hollow box. Task 4 makes the stamp
+    // agrees is agreeing about a hollow box. The stamp is
     // viewer-owned in both directions, so the claim in the keyframe is one the
     // VIEWER re-stamped.
     const host = el(5, 'div', { id: 'host', 'data-ch-shadow': '', 'data-box': '310,205,64,28' });

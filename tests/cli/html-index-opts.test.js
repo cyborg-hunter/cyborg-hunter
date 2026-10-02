@@ -47,7 +47,7 @@ test('imageSources with a missing plot omits that img entirely', async () => {
 // These tests used to pass a model with a v1-shaped `metadata` block, which
 // is why the demo branch that read the tier out of one looked pinned while it
 // in fact resolved to "trace" for every model the demo could ever have
-// passed (T5 Task 10(a)).
+// passed.
 test('inlineReplayModels embeds models, renders the replay section, and short-circuits the loader', async () => {
   const model = { schemaVersion: 2, tier: 'dom', segments: [] };
   const html = await renderIndexHtml(summaries, triage, [p], config, false, {

@@ -2,10 +2,10 @@
 <!--
   PERF NOTE. This page is the default subject of
   cyborg-hunter-lab: probes/investigate/capture-perf-baseline.mjs, so its DOM is part of every
-  measurement taken through it. Commit 4d6856c (T3.9) added five elements and a
-  900 px filler, which means the absolute numbers recorded by T3 Tasks 0, 4 and
-  8 describe the PRE-4d6856c page and are not comparable to a fresh run against
-  this one. The T3.9 perf gate sidesteps that by measuring both arms against the
+  measurement taken through it. Commit 4d6856c added five elements and a
+  900 px filler, which means the absolute numbers recorded by earlier
+  perf runs describe the PRE-4d6856c page and are not comparable to a fresh run against
+  this one. The perf gate sidesteps that by measuring both arms against the
   f38a59f copy of this file (see cyborg-hunter-lab: probes/investigate/perf-pair.mjs); any later
   re-baseline should either do the same or state that it re-based.
 -->
@@ -40,7 +40,7 @@
     <label>Secret (redaction pin): <input type="password" id="secret"></label><br>
     <button id="next">Next</button>
 
-    <!-- Privacy-floor and seed surfaces, added for the T3 finish-line capture
+    <!-- Privacy-floor and seed surfaces, added for the capture parity check
          (cyborg-hunter-lab: parity/capture-fork-smoke.mjs). They sit AFTER #answer
          so the perf harness's focus selector still lands on #answer, which is
          the only ordinary text field. -->
