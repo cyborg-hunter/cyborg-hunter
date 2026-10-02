@@ -54,6 +54,14 @@ export function createPage(root, worker, opts) {
   var timers = (opts && opts.timers) || { set: function (fn, ms) { return setTimeout(fn, ms); }, clear: function (id) { clearTimeout(id); } };
   var reportWatchdog = null;
   var reportPosted = false;
+  // True while the error on screen is the watchdog's: a selection that
+  // arrives late proves the report rendered after all, and clears it.
+  var watchdogErrorShown = false;
+  // The report frame's own load timeout (report-frame.js). The demo's 5 s
+  // default was sized for a few participants; at the tested cohort size the
+  // report is tens of MB. "Loaded but never rendered" is the render
+  // watchdog's job, not this one's.
+  var REPORT_LOAD_TIMEOUT_MS = 60000;
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
 
@@ -68,8 +76,8 @@ export function createPage(root, worker, opts) {
     runButton.disabled = busy() || !state.checked || state.checked.counts.participant === 0;
     resetButtons.forEach(function (b) { b.disabled = busy(); });
   }
-  function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; }
-  function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; }
+  function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; watchdogErrorShown = false; }
+  function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; watchdogErrorShown = false; }
   function stopWatchdog() { if (reportWatchdog) { timers.clear(reportWatchdog); reportWatchdog = null; } }
   function armWatchdog() {
     stopWatchdog();
@@ -78,6 +86,7 @@ export function createPage(root, worker, opts) {
     reportWatchdog = timers.set(function () {
       reportWatchdog = null;
       showError('The report did not finish rendering in this browser. The zip download still contains the full report: open its index.html directly, or use the CLI.');
+      watchdogErrorShown = true;
     }, reportWatchdogMs);
   }
   function discardZip() {
@@ -256,7 +265,7 @@ export function createPage(root, worker, opts) {
     // reportUrl moves to the new document only once it has loaded: a failed
     // swap has already revoked its own url, and the old one is still showing.
     var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; armWatchdog(); },
-      function () { showError('The report frame did not load.'); }, { className: 'analyze-report', title: 'Report' });
+      function () { showError('The report frame did not load.'); }, { className: 'analyze-report', title: 'Report', loadTimeoutMs: REPORT_LOAD_TIMEOUT_MS });
     if (!replayCard) {
       replayCard = createReplayCard(q(root, 'replay'), state.assets, function (pid) {
         clearError();
@@ -336,6 +345,7 @@ export function createPage(root, worker, opts) {
     if (!e.data || e.data.type !== 'cyborg-hunter:select') return;
     reportPosted = true;       // the report's script ran, whatever the id says
     stopWatchdog();
+    if (watchdogErrorShown) clearError();
     if (!replayCard || !state.result) return;
     var pid = e.data.participantId;
     var known = typeof pid === 'string' && state.result.participants.some(function (p) { return p.participantId === pid; });

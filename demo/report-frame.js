@@ -7,19 +7,23 @@
 // demo/* and dist/ are copied into the deployed site
 // (tools/assemble-demo-site.mjs), so a `../src/...` import would 404 there.
 
-var IFRAME_LOAD_TIMEOUT_MS = 5000; // per swap: the blob iframe actually rendering
+// Per swap: the blob iframe actually rendering. Sized for the demo's report
+// (a handful of participants); a caller with a larger document passes
+// opts.loadTimeoutMs.
+var IFRAME_LOAD_TIMEOUT_MS = 5000;
 
 // Swaps the report iframe to freshly-built HTML via a Blob URL. The OLD url
 // is revoked only once the NEW document's `load` fires — a visible frame
 // never points at a revoked url (spec §7.3). Any failure — the iframe firing
-// `error`, or `load` never firing within IFRAME_LOAD_TIMEOUT_MS — revokes
-// the FRESH url instead (the old one, if any, is left alone and still
-// showing) and calls onFail rather than onload.
-// opts (optional): { className, title } of the iframe; the defaults are the
-// demo's own.
+// `error`, or `load` never firing within the load timeout — revokes the
+// FRESH url instead (the old one, if any, is left alone and still showing)
+// and calls onFail rather than onload.
+// opts (optional): { className, title } of the iframe, and loadTimeoutMs
+// (default IFRAME_LOAD_TIMEOUT_MS); the defaults are the demo's own.
 export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
   var className = (opts && opts.className) || 'results-frame';
   var title = (opts && opts.title) || 'Your cyborg-hunter report';
+  var loadTimeoutMs = (opts && opts.loadTimeoutMs) || IFRAME_LOAD_TIMEOUT_MS;
   var iframe = container.querySelector('iframe.' + className);
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -57,7 +61,7 @@ export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
       if (onFail) onFail(err);
     });
   }
-  var watchdogId = setTimeout(function () { onError(new Error('report iframe: load timed out')); }, IFRAME_LOAD_TIMEOUT_MS);
+  var watchdogId = setTimeout(function () { onError(new Error('report iframe: load timed out')); }, loadTimeoutMs);
   iframe.addEventListener('load', onLoad);
   iframe.addEventListener('error', onError);
   iframe.src = url;

@@ -73,3 +73,42 @@ test('buildReplayHostHtml passes viewer opts through when given', () => {
   assert.ok(html.includes('initChReplayViewer(document.getElementById(\'ch-replay-mount\'), {"segments":[]}, {"noExternalCss":true})'));
   assert.ok(host.buildReplayHostHtml({ segments: [] }, '', {}).includes('{"segments":[]});'), 'absent ⇒ unchanged');
 });
+
+// swapIframe's load watchdog runs on the global setTimeout: record the delays
+// it asks for, and the callbacks, instead of waiting for real time.
+function recordTimeouts(fn) {
+  const calls = [];
+  const orig = globalThis.setTimeout;
+  globalThis.setTimeout = (cb, ms) => { calls.push({ cb, ms }); return {}; };   // an id no real timer has
+  try { fn(); } finally { globalThis.setTimeout = orig; }
+  return calls;
+}
+
+test('swapIframe gives a frame 5 s to load by default, opts.loadTimeoutMs when given', () => {
+  const container = document.createElement('div');
+  const urls = [];
+  const byDefault = recordTimeouts(() => { urls.push(swapIframe(container, '<p>a</p>', null, null, null)); });
+  assert.deepEqual(byDefault.map((c) => c.ms), [5000]);
+  const longer = recordTimeouts(() => { urls.push(swapIframe(container, '<p>b</p>', null, null, null, { loadTimeoutMs: 60000 })); });
+  assert.deepEqual(longer.map((c) => c.ms), [60000]);
+  urls.forEach((u) => URL.revokeObjectURL(u));
+});
+
+test('a load that times out revokes the fresh url and calls onFail, not onload', () => {
+  const container = document.createElement('div');
+  const revoked = [];
+  const origRevoke = URL.revokeObjectURL;
+  URL.revokeObjectURL = (u) => revoked.push(u);
+  try {
+    let failed = null, loaded = false, url = null;
+    const calls = recordTimeouts(() => {
+      url = swapIframe(container, '<p>hi</p>', 'blob:prev', () => { loaded = true; }, (e) => { failed = e; }, { loadTimeoutMs: 60000 });
+    });
+    calls[0].cb();
+    assert.match(String(failed && failed.message), /load timed out/);
+    assert.equal(loaded, false);
+    assert.deepEqual(revoked, [url], 'the fresh url, never the one still showing');
+    container.querySelector('iframe').dispatchEvent(new win.Event('load'));   // a late load changes nothing
+    assert.equal(loaded, false);
+  } finally { URL.revokeObjectURL = origRevoke; }
+});

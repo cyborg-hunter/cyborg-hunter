@@ -601,3 +601,47 @@ test('a report with no participants arms no watchdog: it has nothing to select',
   await toLoadedReport(t, { ...DONE, participants: [], triageOrder: [] });
   assert.equal(clock.count(), 0);
 });
+
+test('the report frame gets a minute to load, not the demo\'s 5 s: a large cohort\'s report is tens of MB', async () => {
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
+  // The frame's load watchdog (report-frame.js) runs on the global clock:
+  // record the long delays asked for, pass the short ones (tick()) through.
+  const delays = [];
+  const orig = globalThis.setTimeout;
+  globalThis.setTimeout = (cb, ms, ...rest) => { if (ms >= 1000) { delays.push(ms); return {}; } return orig(cb, ms, ...rest); };
+  try { await toLoadedReport(t); } finally { globalThis.setTimeout = orig; }
+  assert.deepEqual(delays, [60000]);
+});
+
+test('a selection that arrives after the render watchdog fired clears its error', async () => {
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
+  const frame = await toLoadedReport(t);
+  clock.fire();
+  assert.equal(role('error').hidden, false);
+  selectFrom(frame);
+  assert.equal(role('error').hidden, true);
+  assert.equal(role('error').textContent, '');
+});
+
+test('a selection leaves any other error on screen', async () => {
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
+  const frame = await toLoadedReport(t);
+  selectFrom(frame);
+  t.emit({ type: 'error', phase: 'replay', message: 'replay failed: bad recording' });
+  selectFrom(frame);
+  assert.equal(role('error').hidden, false);
+  assert.match(role('error').textContent, /bad recording/);
+  // The watchdog fired, then another error replaced its message: the late
+  // selection does not clear that one either.
+  const clock2 = fakeTimers();
+  const t2 = boot({ timers: clock2 });
+  const frame2 = await toLoadedReport(t2);
+  clock2.fire();
+  t2.emit({ type: 'error', phase: 'replay', message: 'replay failed: bad recording' });
+  selectFrom(frame2);
+  assert.equal(role('error').hidden, false);
+  assert.match(role('error').textContent, /bad recording/);
+});
