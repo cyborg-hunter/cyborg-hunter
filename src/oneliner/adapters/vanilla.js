@@ -101,7 +101,8 @@ export function installVanillaAdapter(opts) {
   var earlierHoneypot = null;   // merged honeypot summary of earlier pages
   var restored = false;
   var submitted = false;        // this page's span was closed by a submit that replaces the page
-  var submitTask = null;        // the submit events of the running task: { before, events, committed }
+  var submitTask = null;        // the submit events of the running task: { events, committed }
+  var carrying = false;         // carry() is cutting for a submit
   var warnedSize = false;
   var noticedGet = false;       // the GET-form console.info, once per page
   var notes = [];               // cyborgHunterError notes, this page's and earlier pages'
@@ -205,6 +206,10 @@ export function installVanillaAdapter(opts) {
     // DOMContentLoaded) or after a span failed to reopen; the segmenter would
     // log the monitor's lifecycle rejection.
     if (!ctx.segmenter.state().open) return { error: 'no open span' };
+    // Any other cut (a mark, CyborgHunter.data()) during a submit's task
+    // opens a span the submit did not close: the task's decision no longer
+    // applies, and the next pagehide must cut.
+    if (!carrying) submitTask = null;
     var r;
     try {
       r = ctx.segmenter.cut({ source: source, nextTrialId: nextTrialId || undefined });
@@ -329,11 +334,12 @@ export function installVanillaAdapter(opts) {
   }
   function carry(form, submitter, cutSpan) {
     if (!submitsAnything(form, submitter)) return false;
-    // A submit into another window does not undo one already replacing the page.
-    var leaving = submitted;
-    if (cutSpan) cut('page');
+    if (cutSpan) {
+      carrying = true;
+      try { cut('page'); } finally { carrying = false; }
+    }
     var replaces = !form || replacesPage(form, submitter);
-    submitted = replaces || leaving;
+    submitted = replaces;
     persist();
     if (!form || typeof form.querySelector !== 'function') return replaces;
     var input = form.querySelector('input[name="' + HIDDEN_INPUT + '"]');
@@ -363,14 +369,17 @@ export function installVanillaAdapter(opts) {
       // A cancelled submit (validation) keeps the page, so the next pagehide
       // must cut. Decided once the page's own handlers have run (a bubble
       // listener would miss a page that stops the event's propagation), for
-      // every submit event of this task together: the page goes if it was
-      // already going, if one of them replaces it and was not cancelled, or
-      // if a handler called form.submit() on a form that replaces it.
+      // every submit event of this task together: the page goes if one of
+      // them replaces it and was not cancelled, or if a handler called
+      // form.submit() on a form that replaces it. A cut or a back/forward
+      // restore in between drops the task (submitTask), and the flag stays
+      // as they left it.
       if (!submitTask) {
-        var task = submitTask = { before: submitted, events: [], committed: false };
+        var task = submitTask = { events: [], committed: false };
         win.setTimeout(function () {
+          if (submitTask !== task) return;
           submitTask = null;
-          submitted = task.before || task.committed || task.events.some(function (e) {
+          submitted = task.committed || task.events.some(function (e) {
             return e.replaces && !e.ev.defaultPrevented;
           });
         }, 0);
@@ -415,6 +424,7 @@ export function installVanillaAdapter(opts) {
     if (!ev || !ev.persisted) return;
     try {
       submitted = false;
+      submitTask = null;
       var saved = readState();
       if (!usable(saved)) return;
       // A slim record (storage full) has no trials: keep the ones in memory.

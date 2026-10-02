@@ -561,6 +561,48 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(ctx.segmenter.state().segmentIndex, before);
   });
 
+  // A same-window post that never unloads the page (a 204 answer, a
+  // download, Stop, a beforeunload "Stay"): a later cancelled submit hands
+  // the next pagehide its cut back.
+  it('a same-window submit that did not leave, then a cancelled submit: pagehide still cuts', async () => {
+    const ctx = start();
+    submit(el('<form method="post" action="/a"></form>'));
+    await tick();
+    submit(form());
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 3);
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    assert.strictEqual(saved.trials.length, 3);
+    assert.strictEqual(saved.trials[2].integrity.pasteEvents.length, 1);
+  });
+
+  it('a mark from the page\'s own submit handler leaves the next pagehide its cut', async () => {
+    const ctx = start();
+    const f = el('<form method="post" action="/a"></form>');
+    f.addEventListener('submit', () => win.CyborgHunter.mark('next'));
+    submit(f);
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 3);
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[2].integrity.pasteEvents.length, 1);
+  });
+
+  it('a page restored from the back/forward cache before the submit settles still cuts at pagehide', async () => {
+    const ctx = start();
+    submit(el('<form method="post" action="/a"></form>'));
+    const back = new win.Event('pageshow');
+    Object.defineProperty(back, 'persisted', { value: true });
+    win.dispatchEvent(back);
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+  });
+
   it('two cancelled submits in one task leave pagehide to cut', async () => {
     const ctx = start();
     const a = form();
