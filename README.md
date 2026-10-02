@@ -6,6 +6,8 @@ Optional companion deterrence modules ship in the same package (`ch.js` bundles 
 
 **[Try the live demo →](https://cyborg-hunter.github.io/cyborg-hunter/)** — run the tour in your browser; nothing leaves your machine.
 
+**[Analyze your data in the browser →](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)** — drop your data files and get the same report the CLI builds, processed in your browser. Once the page has loaded, its security policy makes the browser refuse every data request and form submission, and every load from another address. The page's own code never navigates away or opens another page, and automated tests fail the build if it ever requests or navigates anywhere else. Nothing is uploaded. Also available as a single offline file attached to each release.
+
 ### Example: what a report looks like
 
 The bundled three-participant synthetic dataset (`examples/synthetic-pilot/` — every number hand-authored, no real participant behind any of it) triages like this:
@@ -28,7 +30,7 @@ Reproduce the table and page yourself: run `cyborg-hunter report` in `examples/s
 - `src/jspsych/` — jsPsych extension adapters (one per concern)
 - `src/cli/` + `bin/` — CLI that turns saved data into the triage report
 - `tools/convert/` — `jspsych-v1-to-v2.mjs`, converts jsPsych `schema_version: 1` recordings to SessionRecording v2 (ships in the npm package)
-- `demo/` — the interactive tour (also deployed to GitHub Pages)
+- `demo/` — the interactive tour and the browser analyzer (`demo/analyze/`), both deployed to GitHub Pages
 - `tests/`, `docs/` — tests, package docs
 - `examples/synthetic-pilot/` — synthetic three-participant dataset for trying the CLI (see [docs/worked-example.md](docs/worked-example.md))
 

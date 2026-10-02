@@ -67,6 +67,15 @@ not a Cyborg Hunter format:
   records no `participant_id`, so these must use the `<pid>-replay-<epoch>.json`
   name to attach.
 
+**Styled replays from your experiment's files.** A dom-tier recording keeps
+the URL of every external stylesheet and image; when the experiment server
+is gone (or the report must not fetch anything), point `assetsDir` (or
+`--assets-dir <path>`) at a folder with those files. They are matched by URL
+path suffix, then filename, and inlined into `replay/*.replay.js`; the replay
+section states, for example, "Experiment assets: 2 of 3 stylesheets matched
+(missing: fonts.css)". A missing or unreadable folder is an error. See
+[docs/configuration.md → Data source](configuration.md#data-source).
+
 ## Output structure
 
 ```

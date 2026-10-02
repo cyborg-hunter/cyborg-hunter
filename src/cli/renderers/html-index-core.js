@@ -82,6 +82,16 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
     ? "try { history.replaceState(null, '', `#p-${sanitized}`); } catch (e) { /* opaque-origin iframe: hash sync unavailable */ }"
     : "history.replaceState(null, '', `#p-${sanitized}`);";
 
+  // The analyze page shows replays in a host OUTSIDE this report (its CSP forbids
+  // the fetch a nested viewer would need), so the report tells its parent which
+  // participant was selected. The report runs sandboxed at an opaque origin:
+  // '*' is the only target it can name, and the message carries nothing but an
+  // id the parent already knows. Absent => the emission is unchanged
+  // (the line carries its own newline so the default has no blank line).
+  const selectionPostLine = opts.selectionPostMessage
+    ? "\n        try { window.parent.postMessage({ type: 'cyborg-hunter:select', participantId: pid }, '*'); } catch (e) { /* no parent */ }"
+    : '';
+
   // Cohort counts for filter chips and totals footer. The triage array is
   // already sorted tier-first (hard → soft → clean, score-desc within tier) by
   // triage.js — we don't re-sort here; the default "Tier" sort matches it.
@@ -615,7 +625,7 @@ ${fontFaceCss}    :root {
         // stays consistent with the visible pane.
         if (!opts.skipHash) {
           ${hashSyncLine}
-        }
+        }${selectionPostLine}
       }
 
       // --- Overlay open/close helpers (Task 11) ---
@@ -1104,9 +1114,13 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
       ? `
         <label class="replay-fetch-css-label"><input type="checkbox" class="replay-fetch-css" checked> also fetch ${externalSheets} external stylesheet${externalSheets === 1 ? '' : 's'} from ${externalSheets === 1 ? 'its origin' : 'their origins'} (needed for a styled, aligned replay)</label>`
       : '';
+    // What the experiment's own files (assetsDir / dropped folder) supplied;
+    // absent unless an asset map was applied, so the markup is otherwise unchanged.
+    const assetNote = replay && replay.assetNote ? `
+      <p class="replay-note">${esc(replay.assetNote)}</p>` : '';
     return `<div class="image-block replay-block" data-pid="${esc(participant.participantId)}"
          ${demoModel ? 'data-replay-preloaded="true"' : `data-replay-src="${esc(assetPath)}"`}>
-      <h4 class="section-heading">Session replay <span class="replay-note">(${esc(tier)} tier)</span></h4>
+      <h4 class="section-heading">Session replay <span class="replay-note">(${esc(tier)} tier)</span></h4>${assetNote}
       <div class="replay-mount">
         <button class="replay-load-btn" type="button">Load replay</button>${fetchCssLabel}
       </div>

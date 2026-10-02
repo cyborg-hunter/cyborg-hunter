@@ -14,6 +14,8 @@
 //     reused). No race with that step's copy of dist/: Playwright sets up the
 //     webServer entries in series, each one only after the previous one's
 //     URL answers, so the demo site is assembled before this build starts.
+//   - the analyze page (tests/e2e/analyze, projects analyze-*): served by the
+//     demo site's server (.demo-site/analyze/, built by the assemble step).
 
 import { defineConfig, devices } from '@playwright/test';
 
@@ -56,5 +58,11 @@ export default defineConfig({
       testDir: 'tests/e2e/oneliner',
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${ONELINER_PORT}` },
     },
+    // The analyze page: the full flow on Chromium; the zero-network, sample
+    // and offline-file checks (engines.spec.js) and the policy's own refusals
+    // (policy.spec.js) on all three engines.
+    { name: 'analyze-chromium', testDir: 'tests/e2e/analyze', use: { ...devices['Desktop Chrome'] } },
+    { name: 'analyze-firefox',  testDir: 'tests/e2e/analyze', testMatch: /(engines|policy)\.spec\.js/, use: { ...devices['Desktop Firefox'] } },
+    { name: 'analyze-webkit',   testDir: 'tests/e2e/analyze', testMatch: /(engines|policy)\.spec\.js/, use: { ...devices['Desktop Safari'] } },
   ],
 });

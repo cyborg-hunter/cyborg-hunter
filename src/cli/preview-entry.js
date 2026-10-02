@@ -40,3 +40,10 @@ export { buildViewerModel } from '../replay/viewer-model.js';
 export { drawSessionTimeline } from './renderers/session-timeline-core.js';
 export { drawTrajectoryGrid } from './renderers/trajectories-core.js';
 export { drawTypingProfile } from './renderers/typing-profile-core.js';
+
+// The analyze page's worker bundles these; keeping them here keeps the
+// platform-browser build the gate against a Node-only import creeping into a core.
+export { ingestFiles, migrateArtifact, artifactKind, parseCsvToRaw } from './ingest-core.js';
+export { mergeConfig } from './config-core.js';
+export { buildReport, renderInPageHtml, REPORT_FILES } from './report-core.js';
+export { buildAssetMap, applyAssetMap, assetMatchSummary, assetNoteText, collectAssetUrls, matchAssets, ASSET_EXTENSIONS } from './asset-match.js';

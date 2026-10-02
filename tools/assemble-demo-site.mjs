@@ -10,22 +10,28 @@
 //   1. `node build.js` -> dist/ (skipped if dist/ is newer than every file
 //      under src/ — "if stale" per the plan).
 //   2. `node tools/build-preview-core.mjs` -> demo/preview-core.js.
+//   2b. `node tools/build-analyze.mjs` -> demo/analyze/analyze.bundle.js.
 //   3. Copy demo/* (excluding demo/tests/ — Playwright specs must not ship
-//      in the public artifact) and dist/ into .demo-site/.
+//      in the public artifact — and, under demo/analyze/, everything but
+//      index.html and the built bundle) and dist/ into .demo-site/.
 //   4. Write the ASSEMBLED replay viewer script to the site root —
 //      demo/results.js fetches it as text to embed in the in-browser
 //      report, and it must be the same assembly html-index.js inlines into
 //      the CLI report: the client alone is missing the §4 instantiation
 //      module it calls into (T5 Task 2's concatenation decision).
+//   5. Write the analyze page as one offline file,
+//      .demo-site/analyze/cyborg-hunter-analyze.html (bundle inlined, policy
+//      without 'self'; see tools/offline-analyze.mjs).
 //
 // Usage: node tools/assemble-demo-site.mjs
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, rmSync, statSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { readReplayClientSrc } from '../src/cli/renderers/replay-client-source.js';
+import { buildOfflineHtml, OFFLINE_NAME } from './offline-analyze.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -33,11 +39,18 @@ const SITE_DIR = join(ROOT, '.demo-site');
 const DEMO_DIR = join(ROOT, 'demo');
 
 // Excludes demo/tests/ (Playwright specs + helpers — dev-only, must not ship
-// publicly). Everything else under demo/ is runtime: index.html, demo.css,
-// the *.js modules, signal-manifest.json, assets/.
+// publicly) and, under demo/analyze/, everything but the page and its built
+// bundle: the other files there are build inputs of tools/build-analyze.mjs.
+// Everything else under demo/ is runtime: index.html, demo.css, the *.js
+// modules, signal-manifest.json, assets/.
 function isRuntimeFile(src) {
   const rel = relative(DEMO_DIR, src);
-  return rel !== 'tests' && !rel.startsWith('tests' + sep);
+  if (rel === 'tests' || rel.startsWith('tests' + sep)) return false;
+  if (rel.startsWith('analyze' + sep)) {
+    const inner = rel.slice(('analyze' + sep).length);
+    return inner === 'index.html' || inner === 'analyze.bundle.js';
+  }
+  return true;
 }
 
 function newestMtimeUnder(dir) {
@@ -73,6 +86,7 @@ function main() {
   }
 
   run('building demo/preview-core.js', process.execPath, ['tools/build-preview-core.mjs']);
+  run('building demo/analyze/analyze.bundle.js', process.execPath, ['tools/build-analyze.mjs']);
 
   rmSync(SITE_DIR, { recursive: true, force: true });
   mkdirSync(SITE_DIR, { recursive: true });
@@ -90,6 +104,11 @@ function main() {
   // demo.css loads them by URL for the tour itself; demo/results.js fetches
   // them and inlines them into the in-browser report and the replay host.
   cpSync(join(ROOT, 'src', 'cli', 'renderers', 'fonts'), join(SITE_DIR, 'assets', 'fonts'), { recursive: true });
+  // The analyze page as a single offline file, next to the page it mirrors
+  // (the page's download link points at this name).
+  writeFileSync(join(SITE_DIR, 'analyze', OFFLINE_NAME), buildOfflineHtml(
+    readFileSync(join(DEMO_DIR, 'analyze', 'index.html'), 'utf8'),
+    readFileSync(join(DEMO_DIR, 'analyze', 'analyze.bundle.js'), 'utf8')));
 
   console.log('assemble-demo-site: assembled ' + SITE_DIR);
 }

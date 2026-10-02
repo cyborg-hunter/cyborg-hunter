@@ -348,6 +348,75 @@ cyborg-hunter report --data-dir ./pilot-2 --output-dir ./pilot-2-report
 
 Unknown flags now exit with an error rather than silently falling back to the config — so a typo can't quietly analyze the wrong dataset.
 
+### In the browser, without installing anything
+
+[cyborg-hunter.github.io/cyborg-hunter/analyze/](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)
+builds the same report in your browser: drop the data files (or a folder),
+confirm the participant-ID field the page suggests, and download the report
+as a `.zip` with the CLI's output layout, or `summary.csv`, `triage.md` and
+`event-log.csv` on their own. "Load sample data" runs the whole pipeline on
+the bundled synthetic pilot first, so you can see what you get before
+dropping real data. "Export config" writes the `cyborg-hunter.config.json`
+the run used, ready for the CLI.
+
+**Nothing leaves your browser.** Every web page can declare a security policy
+that the browser enforces. This page's policy has four parts: no data requests
+(`connect-src 'none'`), no images, scripts, fonts or frames from other
+addresses (`default-src 'none'` with only local sources allowed), no form
+submissions (`form-action 'none'`), and no `<base>` element that could point
+the page's own links elsewhere (`base-uri 'none'`). The browser enforces these
+whatever the page's code does, so even a bug could not make the page fetch,
+post or load anything from another address. The policy does not cover
+navigation: a page that moved itself, or a new window, to another address
+could carry data in that address. This page's own code never navigates away
+or opens another page, and the end-to-end tests, which run the page in
+Chromium, Firefox and WebKit, fail the build if it ever requests or navigates
+to anything but its own files. Links you click yourself (for example to this
+documentation) still open as usual, and carry none of your data. The only
+entries in your browser's Network tab are the page's own files and `blob:`
+URLs. The same page is attached to each GitHub release as one
+`cyborg-hunter-analyze.html` file that works from disk, offline; it is also
+linked from the page.
+
+Requirements and limits:
+
+- A 2023-or-later browser (Chrome, Firefox or Safari).
+- The page has been tested with cohorts of up to 150 participants (a
+  0.8 MB replay recording each) on a laptop with 24 GB of memory; it states
+  that number on screen and, above it, warns that the build may be slow or
+  fail and suggests the CLI (the build is still allowed). If a report loads
+  but never finishes rendering, the page says so; the zip still holds the
+  full report. Firefox did not always finish at about twice that size
+  (300 participants). Memory is the limit: a smaller machine stalls sooner.
+- `.json.gz` recordings are read, including files made of several gzip
+  members. Corrupt files are rejected as the CLI rejects them, with one
+  difference: if a gzip file is followed by extra data that starts with a
+  zero byte, the CLI ignores the extra data and the page rejects the file.
+
+Replays cannot fetch an experiment's external stylesheets or images from the
+web. Drop the experiment's own CSS and image files alongside the data (a
+folder is fine): they are matched to the URLs the recording references and
+inlined, and the replay card says what matched and what is missing. How the
+matching works:
+
+- A file is matched to a URL by path. The file whose whole path is the end
+  of the URL's path wins (`css/style.css` for `https://host/exp/css/style.css`,
+  over `lib/css/style.css`); failing that, the file sharing the most trailing
+  path segments, down to the filename alone.
+- If two files match equally well, the URL is reported as ambiguous and
+  nothing is inlined for it.
+- A matched stylesheet's own `url(...)` and `@import` references are matched
+  the same way. The ones you did not supply are made absolute against the
+  stylesheet's original URL, so they resolve where they did on the
+  experiment's server (and are blocked on this page).
+
+The CLI does the same with `assetsDir`: set it to the experiment's folder
+(its stylesheets and images) and the report inlines what matches. This is
+useful for an archive whose experiment server is gone. The CLI prints
+`Experiment assets (<dir>): N matched, N missing, N ambiguous` and warns
+about each ambiguous URL. A directory that cannot be read is an error, and
+the run stops. See [configuration.md](configuration.md#data-source).
+
 ## Common pitfalls
 
 **Mouse markers / tab-aways missing on trajectory plots.** Hard-reload the browser (Cmd+Shift+R on Mac) the first time after deploying — Chrome aggressively caches the dist files, and an old version will silently miss new fields. If the panels say "no mouse data" on every trial, check that `collectForPostHoc.rawMouseTrack` is not set to `false` (it is on by default since 2026-09-02; older configs may still switch it off).

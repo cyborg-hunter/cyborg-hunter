@@ -8,9 +8,10 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
-import { DEFAULT_CLI_CONFIG } from '../shared/schema.js';
-import { validateConfig } from '../shared/validation.js';
-import { resolveScoreWeights } from './analyzers/score-weights.js';
+import { mergeConfig, cliConfigWarnings } from './config-core.js';
+
+// Load-bearing re-export: tests import cliConfigWarnings from this file.
+export { cliConfigWarnings };
 
 export function loadConfig(cliArgs) {
   // Parse CLI flags into a simple key-value object
@@ -28,12 +29,14 @@ export function loadConfig(cliArgs) {
     }
   }
 
-  // Merge: defaults ← file config ← CLI flags
-  const config = { ...DEFAULT_CLI_CONFIG, ...fileConfig };
+  // Merge: defaults ← file config ← CLI flags. The warnings are computed on
+  // the file layer (config-core.js); no flag sets a key they check.
+  const { config, warnings } = mergeConfig(fileConfig);
   if (flags.data) config.dataDir = flags.data;
   if (flags.output) config.outputDir = flags.output;
   if (flags.participant) config.singleParticipant = flags.participant;
   if (flags.participantIdField) config.participantIdField = flags.participantIdField;
+  if (flags.assetsDir) config.assetsDir = flags.assetsDir;
   if (flags.filePattern) config.filePattern = flags.filePattern;
   if (flags.integrityField) config.integrityField = flags.integrityField;
   if (flags.sessionIntegrityPath) config.sessionIntegrityPath = flags.sessionIntegrityPath;
@@ -42,47 +45,14 @@ export function loadConfig(cliArgs) {
   // Resolve relative paths to absolute (relative to cwd)
   config.dataDir = resolve(config.dataDir);
   config.outputDir = resolve(config.outputDir);
+  if (config.assetsDir) config.assetsDir = resolve(config.assetsDir);
 
-  // Validate config file keys — warns about typos
-  const warnings = validateConfig(fileConfig);
+  // Config file key typos first, then config VALUES that would otherwise
+  // silently mis-score (a non-numeric softScoreThreshold coerces every
+  // `score >= threshold` to false, disabling soft flagging with no error).
   warnings.forEach(w => console.warn(`[cyborg-hunter] ${w}`));
 
-  // Validate config VALUES that would otherwise silently mis-score (a
-  // non-numeric softScoreThreshold coerces every `score >= threshold` to
-  // false, disabling soft flagging with no error).
-  cliConfigWarnings(config).forEach(w => console.warn(`[cyborg-hunter] ${w}`));
-
   return config;
-}
-
-// Value-level CLI config checks that catch misconfigurations which would
-// otherwise silently zero out a signal or verdict. Returns warning strings.
-// Exported for testing.
-export function cliConfigWarnings(config) {
-  const warnings = [];
-  const thr = config?.scoring?.softScoreThreshold;
-  if (thr != null && typeof thr !== 'number') {
-    warnings.push(
-      `scoring.softScoreThreshold is not a number (got ${JSON.stringify(thr)}) — ` +
-      `every soft-score comparison coerces to false, so NO participant will be ` +
-      `soft-flagged. Set it to a number.`
-    );
-  }
-  // The browser library's scoring rules look like they belong here too, but
-  // the CLI reads only scoring.softScoreThreshold; the report score's weights
-  // live in scoreWeights. Say so rather than ignore them silently.
-  const scoring = config?.scoring;
-  if (scoring && typeof scoring === 'object' && (scoring.soft != null || scoring.hard != null)) {
-    warnings.push(
-      'scoring.soft / scoring.hard configure the browser library, not the report; ' +
-      'the CLI ignores them (only scoring.softScoreThreshold is read). To weight ' +
-      'signals in the report score, use "scoreWeights".'
-    );
-  }
-  // This is the single place scoreWeights warnings reach the console
-  // (rankTriage resolves the same weights silently).
-  warnings.push(...resolveScoreWeights(config?.scoreWeights).warnings);
-  return warnings;
 }
 
 // Parses CLI arguments into a flags object.
@@ -97,6 +67,7 @@ export function cliConfigWarnings(config) {
 //   --file-pattern <glob>          # config.filePattern
 //   --integrity-field <name>       # config.integrityField
 //   --session-integrity-path <p>   # config.sessionIntegrityPath (dotted)
+//   --assets-dir <path>            # config.assetsDir
 //   --no-visuals                   # skip canvas-rendered images
 //
 // Throws on unknown flags. Earlier behavior was to print a warning and keep
@@ -118,6 +89,7 @@ export function parseFlags(args) {
     '--file-pattern': 'filePattern',
     '--integrity-field': 'integrityField',
     '--session-integrity-path': 'sessionIntegrityPath',
+    '--assets-dir': 'assetsDir',
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];

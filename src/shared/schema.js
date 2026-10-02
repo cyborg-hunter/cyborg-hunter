@@ -34,6 +34,7 @@ export const TRIAL_REPORT_FIELDS = {
 export const DEFAULT_CLI_CONFIG = {
   dataDir: "./data",
   replayDir: null,             // replay artifacts dir; defaults to dataDir
+  assetsDir: null,             // experiment stylesheets/images for styled replays; matched by URL path suffix (cli/asset-match.js)
   scoreWeights: null,          // report-score weights, merged per key onto the defaults (cli/analyzers/score-weights.js)
   filePattern: "*.json",
   participantIdField: "participantId",

@@ -4,7 +4,7 @@
 
 import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, symlinkSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { gzipSync } from 'zlib';
@@ -802,17 +802,17 @@ describe('replay ingest — jsPsych v1 by conversion (A3)', () => {
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
-  // The CLI imports the converter at run time, so the published package has to
-  // contain it. `files` is hand-maintained and `tools/` is not in it by
-  // default, which makes this exactly the drift class version-invariant.test.js
-  // exists for: green tests, broken tarball.
-  it('ships the converter ingest depends on inside the published package', () => {
+  // The CLI imports the converter core at run time (through ingest-core.js),
+  // so the published package has to contain it. `files` is hand-maintained
+  // and `tools/` is not in it by default, which makes this exactly the drift
+  // class version-invariant.test.js exists for: green tests, broken tarball.
+  it('ships the converter core ingest depends on inside the published package', () => {
     const pkg = JSON.parse(readFileSync(
       new URL('../../package.json', import.meta.url), 'utf8'));
     const src = readFileSync(
-      new URL('../../src/cli/ingest.js', import.meta.url), 'utf8');
+      new URL('../../src/cli/ingest-core.js', import.meta.url), 'utf8');
     const imported = src.match(/from\s+'(\.\.\/\.\.\/tools\/[^']+)'/);
-    assert.ok(imported, 'ingest.js is expected to import the converter from tools/');
+    assert.ok(imported, 'ingest-core.js is expected to import the converter from tools/');
     const path = imported[1].replace('../../', '');
     assert.ok(pkg.files.some(f => path === f || path.startsWith(f)),
       `package.json "files" must cover ${path}; got ${JSON.stringify(pkg.files)}`);
@@ -898,10 +898,70 @@ describe('A3 review fixes', () => {
       'the strict error must be surfaced: ' + JSON.stringify(warningTexts(warnings)));
   });
 
-  it('7: an exception the converter did not declare as a refusal is an internal failure, not blamed on the file', () => {
+  it('7: an exception the converter did not declare as a refusal is an internal failure, not blamed on the file', async () => {
     const boom = () => { throw new TypeError('cannot read properties of undefined'); };
-    const out = migrateArtifact({ schema_version: 1, trials: [] }, 'jspsych-v1', boom);
+    const out = await migrateArtifact({ schema_version: 1, trials: [] }, 'jspsych-v1', boom);
     assert.strictEqual(out.refusal, undefined, 'a TypeError is not a refusal');
     assert.ok(out.internal && /cannot read properties/.test(out.internal), JSON.stringify(out));
+  });
+});
+
+// A directory entry that cannot be read (here a symlink to a missing target)
+// is ONE file's problem: it gets its own warning and every other file in the
+// directory is ingested as usual. Listing the directory must never touch the
+// entries' contents, or one dangling link would cost the whole run.
+describe('unreadable directory entries', () => {
+  let dir;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ch-dangling-')); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  const dangle = (path) => symlinkSync(join(dir, 'missing-target'), path);
+  const mentioning = (warnings, name) => warnings.filter(w => String(w.file).endsWith(name));
+  // P1's own extraction notes (no session block in this minimal file) are not
+  // what these tests are about.
+  const others = (warnings) => warnings.filter(w => !String(w.file).endsWith('P1.json'));
+
+  it('a dangling replay candidate in dataDir warns once and the other replays still attach', async () => {
+    writeFileSync(join(dir, 'P1.json'), participantFile('P1'));
+    writeFileSync(join(dir, 'P1-replay-1751600000000.json'), JSON.stringify(recordingV2('P1', 1751600000000)));
+    dangle(join(dir, 'ghost.json.gz'));        // outside the participant pattern
+    const { participants, warnings } = await ingest({
+      dataDir: dir, filePattern: 'P*.json', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.strictEqual(participants.length, 1);
+    assert.ok(participants[0].replay && participants[0].replay.recording, 'P1 keeps its replay');
+    const ghost = mentioning(warnings, 'ghost.json.gz');
+    assert.strictEqual(ghost.length, 1, JSON.stringify(warnings));
+    assert.match(ghost[0].warnings[0], /^Replay candidate ghost\.json\.gz could not be read: ENOENT/);
+    assert.strictEqual(others(warnings).length, 1, JSON.stringify(warnings));
+  });
+
+  it('a dangling entry in an explicit replayDir warns once and the other replays still attach', async () => {
+    const rdir = join(dir, 'replays');
+    mkdirSync(rdir);
+    writeFileSync(join(dir, 'P1.json'), participantFile('P1'));
+    writeFileSync(join(rdir, 'P1-replay-1751600000000.json'), JSON.stringify(recordingV2('P1', 1751600000000)));
+    dangle(join(rdir, 'ghost.json'));
+    const { participants, warnings } = await ingest({
+      dataDir: dir, replayDir: rdir, filePattern: '*.json', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.ok(participants[0].replay && participants[0].replay.recording, 'P1 keeps its replay');
+    assert.strictEqual(others(warnings).length, 1, JSON.stringify(warnings));
+    assert.strictEqual(others(warnings)[0].file, join(rdir, 'ghost.json'));
+    assert.match(others(warnings)[0].warnings[0], /^Replay candidate ghost\.json could not be read: ENOENT/);
+  });
+
+  it('a dangling participant-pattern match is reported as a parse failure, not thrown', async () => {
+    writeFileSync(join(dir, 'P1.json'), participantFile('P1'));
+    dangle(join(dir, 'P2.json'));
+    const { participants, warnings } = await ingest({
+      dataDir: dir, filePattern: '*.json', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['P1']);
+    assert.deepStrictEqual(others(warnings), [{ file: join(dir, 'P2.json'),
+      warnings: [`Failed to parse: ENOENT: no such file or directory, open '${join(dir, 'P2.json')}'`] }]);
+  });
+
+  it('a file named exactly ".csv" has no extension, so it is read as JSON', async () => {
+    writeFileSync(join(dir, '.csv'), participantFile('P1'));
+    const { participants } = await ingest({
+      dataDir: dir, filePattern: '*.csv', participantIdField: 'participantId', integrityField: 'integrity' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['P1']);
   });
 });

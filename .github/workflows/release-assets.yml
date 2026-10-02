@@ -1,0 +1,52 @@
+# .github/workflows/release-assets.yml
+# On a version tag: build the site exactly as pages.yml does and attach the
+# analyze page's offline single file to the GitHub release for that tag,
+# creating the release first when none exists yet.
+name: Release assets
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  offline-analyzer:
+    runs-on: ubuntu-latest
+    steps:
+      # The write-scoped token stays out of .git/config while npm ci runs
+      # dependency install scripts; gh below reads it from GH_TOKEN.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      # A tag can point at a commit pages.yml never tested: nothing is
+      # attached to a release unless the node suites pass on it.
+      - name: Node test suites
+        run: npm test
+
+      - name: Build + assemble (same steps as pages.yml)
+        run: |
+          node build.js
+          node tools/build-preview-core.mjs
+          node tools/build-analyze.mjs
+          node tools/assemble-demo-site.mjs
+
+      - name: Public-tree hygiene gate (assembled artifact)
+        run: GATE_SCAN_DIR=.demo-site bash scripts/check-public-hygiene.sh
+
+      - name: Attach the offline analyzer to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "See CHANGELOG.md for this version."
+          gh release upload "$TAG" .demo-site/analyze/cyborg-hunter-analyze.html --clobber

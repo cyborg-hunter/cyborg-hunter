@@ -5,8 +5,8 @@
 // inlineReplayModels to the report renderer; see buildReportHtml).
 //
 // Root cause this works around (Codex-confirmed): the report iframe is
-// sandbox="allow-scripts" (opaque origin, deliberately — see results.js's
-// swapIframe docblock). replay-viewer.client.js's inner DOM-reconstruction
+// sandbox="allow-scripts" (opaque origin, deliberately — see the swapIframe
+// docblock in report-frame.js). replay-viewer.client.js's inner DOM-reconstruction
 // iframe (sandbox="allow-same-origin", no allow-scripts) needs same-origin
 // contentDocument access to rebuild the recorded page; nesting it two
 // sandboxes deep forced it opaque too, so reconstruction froze at the first
@@ -23,6 +23,8 @@
 // WITHOUT allow-scripts plus a script-blocking CSP (see
 // replay-viewer.client.js's srcdocCsp/buildSrcdoc) — a pasted <script> still
 // never runs, same guarantee the CLI report's own nested replay relies on.
+
+import { escapeScriptClose } from './report-frame.js';
 
 // The host is a separate Blob document with no access to demo.css or the
 // report's cascade, so it declares the report's tokens itself: the same
@@ -53,20 +55,8 @@ body{ padding:16px; }
 // this file and the shared module and asserts the outputs are identical, so a
 // change to one that is not made here fails the suite.
 //
-// Rule 2 (SOURCE): neutralize `</script`, the only sequence that closes a
-// <script> element, and nothing else. Nothing wider is safe here —
-// replayClientSrc is JS SOURCE and contains its own `/</g` regex literal
-// (attrEscape's `<` -> `&lt;` rule), so a bare `</` replace strips that
-// regex's closing delimiter and throws "Invalid regular expression: missing /"
-// (found by driving this live).
-function escapeScriptClose(s) {
-  // `$1` rather than a literal `script`: the match is case-insensitive, so a
-  // literal replacement would rewrite `</SCRIPT` to `<\/script` and change the
-  // VALUE of any string in the source that contains it. (The mirror test
-  // caught this divergence between two of the copies — the report's kept the
-  // case, this one did not.)
-  return String(s).replace(/<\/(script)/gi, '<\\/$1');
-}
+// Rule 2 (SOURCE), escapeScriptClose: lives in report-frame.js (imported
+// above), which the analyze page shares; its docblock carries the reasoning.
 
 // Rule 1 (DATA): escape EVERY `<`. The model carries visitor-typed and pasted
 // text, and rule 2 is incomplete against it: text reading `<!-- … <script`
@@ -79,14 +69,25 @@ function escapeJsonForScript(value) {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
+// The tag name is held apart from its `<` so this SOURCE never contains
+// `<script`: the analyze page bundles this file, and its bundle is inlined
+// into a <script> element for the offline single file, which
+// inlineSrcHazards (src/shared/inline-safe.js) refuses to do over a `<script`.
+// esbuild folds '<' + 'script>' back into one literal; a variable it keeps.
+var SCRIPT_TAG = 'script';
+
 // Pure: the host document's full HTML. DOM-free — see
 // tests/demo/replay-host.test.js. `styles.replayCss` is the CLI's own
 // REPLAY_STYLES_CSS and `styles.fontFaceCss` the report's base64 @font-face
 // block, both handed down by results.js (from the preview-core bundle and
 // loadFontFaceCss); without them the viewer renders unstyled in system faces.
-export function buildReplayHostHtml(replayModel, replayClientSrc, styles) {
+// `viewerOpts` (optional) becomes initChReplayViewer's third argument (the
+// analyze page passes { noExternalCss: true }); absent, the output is exactly
+// what it was before the argument existed.
+export function buildReplayHostHtml(replayModel, replayClientSrc, styles, viewerOpts) {
   var clientScript = escapeScriptClose(replayClientSrc || '');
   var modelJson = escapeJsonForScript(replayModel);
+  var optsArg = viewerOpts ? ', ' + escapeJsonForScript(viewerOpts) : '';
   var fontFaceCss = (styles && styles.fontFaceCss) || '';
   var replayCss = (styles && styles.replayCss) || '';
   return (
@@ -94,8 +95,8 @@ export function buildReplayHostHtml(replayModel, replayClientSrc, styles) {
     '<style>' + fontFaceCss + ROOT_CSS + replayCss + '</style>' +
     '</head><body>' +
     '<div id="ch-replay-mount"></div>' +
-    '<script>' + clientScript + '</script>' +
-    '<script>window.initChReplayViewer(document.getElementById(\'ch-replay-mount\'), ' + modelJson + ');</script>' +
+    '<' + SCRIPT_TAG + '>' + clientScript + '</' + SCRIPT_TAG + '>' +
+    '<' + SCRIPT_TAG + '>window.initChReplayViewer(document.getElementById(\'ch-replay-mount\'), ' + modelJson + optsArg + ');</' + SCRIPT_TAG + '>' +
     '</body></html>'
   );
 }

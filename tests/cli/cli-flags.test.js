@@ -84,3 +84,29 @@ describe('CLI flag parsing — 0.6.1 additions', () => {
     assert.equal(f.sessionIntegrityPath, 'payload.cyborgHunter');
   });
 });
+
+// assetsDir: the experiment's stylesheets and images for styled replays.
+describe('CLI flag parsing — assetsDir', () => {
+  it('accepts --assets-dir', () => {
+    assert.equal(parseFlags(['--assets-dir', './styles']).assetsDir, './styles');
+  });
+
+  it('loadConfig resolves assetsDir from the file or the flag, and leaves it null when unset', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ch-cfg-'));
+    const cfgPath = join(dir, 'c.json');
+    writeFileSync(cfgPath, JSON.stringify({ assetsDir: 'from-file' }));
+    try {
+      const cwd = process.cwd();
+      process.chdir(dir);
+      try {
+        assert.match(loadConfig(['--config', cfgPath]).assetsDir, /^\/.*\/from-file$/);
+        assert.match(loadConfig(['--config', cfgPath, '--assets-dir', 'from-cli']).assetsDir, /^\/.*\/from-cli$/);
+        assert.equal(loadConfig(['--config', join(dir, 'absent.json')]).assetsDir, null);
+      } finally {
+        process.chdir(cwd);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
