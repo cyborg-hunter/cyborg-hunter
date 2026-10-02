@@ -487,7 +487,8 @@ test('a cohort above the tested size shows a warning with its size; the run stay
   assert.match(warning.textContent, /151/);
   assert.match(warning.textContent, /150/);
   assert.match(warning.textContent, /slow or fail/);
-  assert.match(warning.textContent, /CLI/);
+  // Only what is known: the CLI runs outside the browser, nothing is promised about size.
+  assert.match(warning.textContent, /the CLI, which is not limited by browser memory\./);
   assert.equal(action('run').disabled, false);
 });
 

@@ -238,7 +238,7 @@ export function createPage(root, worker, opts) {
     var tested = state.limits && state.limits.testedParticipants;
     if (tested && c.participant > tested) {
       q(root, 'size-warning-text').textContent = 'This cohort has ' + c.participant + ' data files, more than the ' + tested +
-        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here; the CLI handles any size.';
+        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here, or use the CLI, which is not limited by browser memory.';
       q(root, 'size-warning').hidden = false;
     }
     updateControls();
