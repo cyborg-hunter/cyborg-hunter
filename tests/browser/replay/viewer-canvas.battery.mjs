@@ -35,7 +35,7 @@
 // REGISTRATION IS GUARDED, NOT ASSUMED. The frame is letterboxed by `scale(k)`,
 // so a frame-local point maps to a shot pixel through k. Both k and the
 // screenshot's own dimensions are asserted before any pixel is read (the
-// plan-review lesson: a probe that samples by unchecked arithmetic produced a
+// lesson from review: a probe that samples by unchecked arithmetic produced a
 // false WebKit reading). The canvas's frame-local box is MEASURED through
 // `contentDocument` rather than computed.
 //

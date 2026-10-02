@@ -1,5 +1,5 @@
 // tests/demo/playground.test.js
-// DOM-free unit tests for the C3 config playground's two pure pieces:
+// DOM-free unit tests for the config playground's two pure pieces:
 // makeDebounced (generic coalescing timer) and recomputeSignals (the
 // pre-pass that rewrites raw session/trial data as if the participant had
 // been screened under different settings — see playground.js's docblock for

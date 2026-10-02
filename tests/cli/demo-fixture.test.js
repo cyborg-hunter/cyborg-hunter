@@ -25,14 +25,14 @@ describe('demo download-trio fixture (real ingest)', () => {
 
     const { participants, warnings } = await ingest(config);
 
-    // A6 regenerated the trio via the fresh-capture path (the current v2
+    // The trio was regenerated via the fresh-capture path (the current v2
     // recorder), so the committed replay artifact is now a SessionRecording
     // v2 — the format the CLI's viewer targets. There is nothing for ingest
     // to warn about: no version mismatch (it's v2), no conversion (it's native
     // v2, not jsPsych-v1), a resolvable embedded participant_id, one session.
-    // The pre-A6 era committed a v1 artifact and this expected the one
+    // Before that, the repo committed a v1 artifact and this expected the one
     // "schema_version 1 … will report this artifact as unloadable" warning;
-    // taking that to zero is the last owed A6 item.
+    // taking that to zero is the point of regenerating.
     assert.strictEqual(warnings.length, 0,
       `expected a clean ingest with no warnings, got: ${JSON.stringify(warnings, null, 2)}`);
 

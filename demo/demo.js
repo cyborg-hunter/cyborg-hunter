@@ -209,7 +209,7 @@ function startTour(participantId, capabilities, manifest) {
 
   var state = {
     stepIndex: 0,
-    // C10 (results): results.js only receives (container, state, manifest) —
+    // Results: results.js only receives (container, state, manifest) —
     // not the monitor/participantId closures below — so it needs its own
     // copy to build the SAME payload buildDownloadFile('sessionData') does.
     participantId: participantId,
@@ -222,12 +222,12 @@ function startTour(participantId, capabilities, manifest) {
     act2Skipped: false,
     violations: [],
     trialReports: [],
-    // C7 (guard act): the token GuardFriction.start() returns — needed by
+    // Guard act: the token GuardFriction.start() returns — needed by
     // stop() — and per-reason violation tallies for the guard-cheat step's
     // chip row.
     guardStopToken: null,
     chipCounts: {},
-    // C8 (replay, always-on): the attached CyborgHunterReplay instance
+    // Replay (always-on): the attached CyborgHunterReplay instance
     // (startReplay() attempts it unconditionally at "Start"), its finalized
     // recording — cached so the download button and the "show as text"
     // fallback always agree — and whether attaching ever failed, so the
@@ -240,7 +240,7 @@ function startTour(participantId, capabilities, manifest) {
     // after creation below.
     pane: null,
     t0: 0,
-    // C3 playground: the last settled control values (set via ctx.onControls
+    // Playground: the last settled control values (set via ctx.onControls
     // after each successful rebuild; null until the visitor touches a
     // control). buildDownloadFile('config') reads these so the downloaded
     // config reflects the report as last built, tweaks included.
@@ -535,13 +535,13 @@ function startTour(participantId, capabilities, manifest) {
     participantId: participantId,
     preset: 'standard',
     onSignal: handleSignal,
-    // A8: raw per-event mouse track, opt-in and off by default in the
+    // Raw per-event mouse track, opt-in and off by default in the
     // library — the demo turns it on so the results report's trajectory
     // plots have real data to draw from a live session.
     collectForPostHoc: { rawMouseTrack: true }
   });
   monitor.startSession();
-  // Recorder-like bridge for makeLifecycle's optional recorder param (C8).
+  // Recorder-like bridge for makeLifecycle's optional recorder param.
   // A live proxy rather than passing state.recorder directly: the replay
   // recorder only attaches inside the "Start" click (startReplay()), which
   // runs AFTER this lifecycle is constructed — reading state.recorder at
@@ -585,7 +585,7 @@ function startTour(participantId, capabilities, manifest) {
     });
   }
 
-  // ----- C7: guard act -------------------------------------------------
+  // ----- guard act -------------------------------------------------
 
   // Standalone GuardFriction.start() — not the jsPsych entryTrial() helper,
   // since this demo never spins up a jsPsych instance. Only called after
@@ -736,7 +736,7 @@ function startTour(participantId, capabilities, manifest) {
     });
   }
 
-  // ----- C8: replay (always-on) ------------------------------------------
+  // ----- replay (always-on) ------------------------------------------
 
   // Attaches the standalone replay recorder unconditionally, called from the
   // "Start" click before goTo(1) opens step 2's trial — recorderBridge reads
@@ -834,7 +834,7 @@ function startTour(participantId, capabilities, manifest) {
       // carries the start as a top-level `recording_started_at` ISO string
       // (serializer.js); the pre-v2 `metadata.start_time` reading landed here
       // as Date.now() on every v2 recording, so the downloaded replay filename
-      // no longer matched what the CLI derives — hence the A6 fix.
+      // no longer matched what the CLI derives — hence the fix.
       var epoch = Date.now();
       var startedAt = recording.recording_started_at ||
         (recording.metadata && recording.metadata.start_time);
@@ -1401,7 +1401,7 @@ function startTour(participantId, capabilities, manifest) {
       var mount = cardEl.querySelector('[data-role="results-mount"]');
       // Dynamic import: results.js (and its plot-adapter.js dependency) are
       // only needed once, at this last step — lazy-loading them keeps every
-      // earlier step's page weight down. playground.js (C3) is loaded the
+      // earlier step's page weight down. playground.js is loaded the
       // same lazy way, alongside it (loadPlayground() reuses step 11's
       // cached import when the visitor already saw it there), and wired
       // through buildResults()'s optional 4th `hooks` arg — hooks.onReady is
@@ -1462,7 +1462,7 @@ function startTour(participantId, capabilities, manifest) {
     var primary = e.target.closest('[data-action="primary"]');
     if (primary) {
       var currentStep = STEPS[state.stepIndex];
-      // "Start" is the trigger point for C8's always-on replay — must run
+      // "Start" is the trigger point for the always-on replay — must run
       // before goTo(1) below so the first trial (step 2) is bracketed.
       if (currentStep.id === 'intro') startReplay();
       if (state.stepIndex < STEPS.length - 1) goTo(state.stepIndex + 1);

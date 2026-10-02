@@ -109,7 +109,7 @@ import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js
 snapshotTest('trajectories core draw log', 'drawlog-trajectories.json',
   (cc) => drawTrajectoryGrid(P, /* triageEntry */ { hardTriggered: false }, { outputDir: '.' }, cc),
   (log) => {
-    // Non-tautological checks (per the A3-review template warning): several
+    // Non-tautological checks (per the review warning on templates): several
     // fillStyle/strokeStyle assignments in trajectories-core.js fire
     // UNCONDITIONALLY once per data-bearing trial panel (mousedown color,
     // mouseup color, panel border, window-rect color) regardless of whether
@@ -210,8 +210,8 @@ snapshotTest('trajectories core draw log (enriched)', 'drawlog-trajectories-enri
 // ── Typing-profile core ──────────────────────────────────────────────────
 import { drawTypingProfile } from '../../src/cli/renderers/typing-profile-core.js';
 
-// New module-level helper, added for the typing-profile section only (A5
-// review, sanctioned). SESSION-TIMELINE and TRAJECTORIES above keep their
+// New module-level helper, added for the typing-profile section only (added
+// on review, sanctioned). SESSION-TIMELINE and TRAJECTORIES above keep their
 // existing inline fillSets/strokeSets arrow functions unchanged — not
 // migrated to this helper.
 function styleSets(log, prop, color) {
@@ -293,14 +293,14 @@ test('typing-profile core returns null when no trial has typing data', () => {
   assert.equal(log.length, 0, 'no canvas created for a no-typing-data participant');
 });
 
-// ── Tour-shape degradation guards (A8, Step 3) ───────────────────────────
+// ── Tour-shape degradation guards ───────────────────────────
 // The in-browser demo's own walkthrough ("tour") produces a fundamentally
 // different participant shape than the study fixture (P/DEMO-FIXT) above:
 // demo act/step trial ids instead of r{N}-classification, no rulePosition
 // field, no phase field (so no 'gallery'/'classification' phase tagging
 // either), and no metadata.startTime (the tour never stamps a session-start
 // wall-clock the way the jsPsych experiment wrapper does). It also carries
-// the raw mouseTrack field (A8's rawMouseTrack passthrough, this task)
+// the raw mouseTrack field (the rawMouseTrack passthrough)
 // rather than only derived mouseMetrics.
 //
 // Investigated before writing this test: ran both cores against several
@@ -376,7 +376,7 @@ const P_TOUR = extractIntegrityData(TOUR_RAW, { outputDir: '.', participantIdFie
 
 test('tour-shaped participant (no rulePosition/phase, no metadata.startTime, raw mouseTrack) does not throw either draw core', () => {
   // Sanity: this really is the degraded shape under test, and the raw
-  // mouseTrack field really did survive extraction as mouseEvents (A8's
+  // mouseTrack field really did survive extraction as mouseEvents (the
   // FIELD_MAP generalization, verified here on Shape-1 data with a tour
   // trial-id scheme rather than mouse-track-passthrough.test.js's rN- ids).
   assert.ok(P_TOUR.trials.every(t => t.rulePosition === undefined && t.phase === undefined),

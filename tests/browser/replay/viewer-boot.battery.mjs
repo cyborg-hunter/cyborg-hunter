@@ -6,7 +6,7 @@
 // client under happy-dom, which parses `srcdoc` SYNCHRONOUSLY. That makes the
 // browser leg of the boot unreachable from the node suite by construction:
 // deleting `iframe.onload = onShellLoad` outright leaves all 28 node tests
-// green while every real browser freezes at boot (the B7 inversion below),
+// green while every real browser freezes at boot (the onload-deletion inversion below),
 // and the same blind spot is how a boot defect shipped — a second `srcdoc` write booting
 // into the document the browser was about to discard, blanking the
 // reconstruction behind a `frameReady()` that still said true.
@@ -112,7 +112,7 @@ check(await page.evaluate(() => window.__readyInInitTick) === false,
   'frameReady() is FALSE in the init tick (a browser navigates srcdoc asynchronously)');
 
 // Bounded, so a boot that never happens FAILS instead of hanging. This is the
-// assertion B7 (deleting the onload install) has to trip.
+// assertion that deleting the onload install has to trip.
 let booted = true;
 try {
   await page.waitForFunction(() => window.__dbg().frameReady(), null, { timeout: 5000 });

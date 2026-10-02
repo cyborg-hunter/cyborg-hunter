@@ -76,7 +76,7 @@ function stage() {
 }
 
 describe('applyPatches — the canonical continuation reaches its checkpoints', () => {
-  // The plan's first contract: segment 1's patch sequence applied to segment
+  // The first contract: segment 1's patch sequence applied to segment
   // 0's tree reaches the state the fixture's own checkpoints name. The
   // checkpoint entries are read from the expectations file and their shape is
   // asserted, so a fixture edit fails here instead of leaving this test quietly
@@ -856,7 +856,7 @@ describe('namespace inheritance on dom.add', () => {
 });
 
 describe('differential — the same patches through the viewer and the strict player', () => {
-  // The plan's differential contract: the capture-side fuzz generator's output
+  // The differential contract: the capture-side fuzz generator's output
   // driven through THIS applier and `dom-player.js` in parallel. The generator
   // is imported rather than copied (`packages/sessionrecording-conformance/src/fuzz/mutation-fuzz.js`, extracted from
   // `mutations-fuzz.test.js`, which still drives it): two readings of the patch
@@ -885,7 +885,7 @@ describe('differential — the same patches through the viewer and the strict pl
           const viewerTree = readTree(mount.root, mount.idOf);
 
           if (strictThrew) {
-            // The plan's contract is "the same tree wherever the strict player
+            // The contract is "the same tree wherever the strict player
             // does not throw". If it ever throws on generated output that is a
             // capture-side defect, not a viewer one — say so loudly rather than
             // passing quietly on the tolerant side.

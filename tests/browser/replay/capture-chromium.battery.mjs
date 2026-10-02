@@ -160,7 +160,7 @@ await withPage('value change on an already-excluded element emits no patches', a
   await finish(page);
 });
 
-// 3. Exclusion added AND removed in the same task emits nothing (guards C2(b)).
+// 3. Exclusion added AND removed in the same task emits nothing (guards the add-then-remove case).
 await withPage('exclusion added and removed in one task emits no patches', async (page) => {
   const { keyframe } = await start(page, '<div id="box"><span id="a">x</span></div>');
   const patches = await task(page,
@@ -173,7 +173,7 @@ await withPage('exclusion added and removed in one task emits no patches', async
 });
 
 // 4. Exclusion added in the same task as the children going away: the
-//    placeholder must end EMPTY in the player (guards C1).
+//    placeholder must end EMPTY in the player (guards the exclusion-plus-removal case).
 await withPage('exclusion + child removal in one task leaves an empty placeholder', async (page) => {
   const { keyframe } = await start(page,
     '<div id="box"><span id="a">x</span><span id="b">y</span></div><p id="after">z</p>');

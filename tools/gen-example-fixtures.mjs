@@ -166,7 +166,7 @@ function buildTrial(rnd, state, trialId, spec) {
     pasteEvents, copyEvents, dropEvents: [],
     editTimestamps: [], // wiped by the keystroke-dynamics privacy gate (off by default)
     // Raw mouse track, under the field name monitor.js's rawMouseTrack
-    // passthrough writes (A8) — extract-core's FIELD_MAP maps this to
+    // passthrough writes — extract-core's FIELD_MAP maps this to
     // mouseEvents and derives mouseDataAvailable.
     mouseTrack: mousePath(rnd, duration_ms, spec.mousePoints),
     tabAwayEvents, idleGaps: [], foreignInputEvents: [], syntheticInsertions,

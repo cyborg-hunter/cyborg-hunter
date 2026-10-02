@@ -22,9 +22,9 @@ Two files are frozen and one is regenerable:
   as first captured (2026-07-29). Changing them means rewriting those tests.
 - **`DEMO-FIXT-replay-<epoch>.json` (replay) is regenerable** via
   `tools/gen-demo-fixture.mjs` (see "How to regenerate"). Regenerated 2026-08-12
-  for A6 (jsPsych harmonization Phase A): the recorder now serializes
+  (jsPsych harmonization): the recorder now serializes
   SessionRecording **v2**, so the artifact is `schema_version: 2` rather than the
-  pre-A6 v1 — which is what took the demo-fixture ingest version-warning to zero.
+  earlier v1 — which is what took the demo-fixture ingest version-warning to zero.
 
 ## Files
 
@@ -123,4 +123,4 @@ rewritten to the new capture's numbers. If the payload assembler
 tests' assertions to fit a broken fixture.
 
 First captured 2026-07-29 (session + v1 replay); replay regenerated 2026-08-12
-(v2, A6).
+(v2).

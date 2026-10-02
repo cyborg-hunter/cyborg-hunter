@@ -1,6 +1,6 @@
 // SessionRecording v2 validator — dual profiles per spec §11.
 // Zero dependencies. Lifted from tests/replay/schema-v2/ into shipped code:
-// ingest strict-validates converted recordings in-process (spec §11 A2 —
+// ingest strict-validates converted recordings in-process (spec §11 —
 // warn, never refuse), so the validator is a runtime dependency of the CLI.
 
 // Gzip magic bytes (RFC 1952): 0x1f 0x8b.

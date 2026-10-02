@@ -582,7 +582,7 @@ describe('replay artifact ingest', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// A3 — v2 from ANY producer, and jsPsych v1 BY CONVERSION
+// v2 from ANY producer, and jsPsych v1 BY CONVERSION
 // ══════════════════════════════════════════════════════════════════════════
 //
 // The content sniff recognises v2, and ownership and
@@ -599,7 +599,7 @@ describe('replay artifact ingest', () => {
 const jspsychV1 = () => JSON.parse(readFileSync(
   new URL('../tools/fixtures/jspsych-v1-minimal.json', import.meta.url), 'utf8'));
 
-describe('replay ingest — v2 from other producers (A3)', () => {
+describe('replay ingest — v2 from other producers', () => {
   const cfg = (d, extra) => ({
     dataDir: d, filePattern: '*.json',
     integrityField: 'integrity', participantIdField: 'participantId', ...extra,
@@ -688,7 +688,7 @@ describe('replay ingest — v2 from other producers (A3)', () => {
   });
 });
 
-describe('replay ingest — jsPsych v1 by conversion (A3)', () => {
+describe('replay ingest — jsPsych v1 by conversion', () => {
   const cfg = (d, extra) => ({
     dataDir: d, filePattern: '*.json',
     integrityField: 'integrity', participantIdField: 'participantId', ...extra,
@@ -764,7 +764,7 @@ describe('replay ingest — jsPsych v1 by conversion (A3)', () => {
   // entries have `events` and `initial_dom`, so it matches the jsPsych sniff
   // arm too. Reading the CH stamp first is what keeps it out of a converter
   // that would refuse it — spec §14 gives CH v1 a different migration path
-  // (none: A6 regenerates, old files stay playable at the 0.7.x tag).
+  // (none: regenerate the demo assets, old files stay playable at the 0.7.x tag).
   it('does not route a CH v1 artifact through the jsPsych converter', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ch-a3-chv1-'));
     try {
@@ -781,7 +781,7 @@ describe('replay ingest — jsPsych v1 by conversion (A3)', () => {
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
-  // The two A3 halves meeting, and they meet in a dead end: jsPsych's recorder
+  // The two halves meeting, and they meet in a dead end: jsPsych's recorder
   // writes no participant_id AND its own file names, so a recording under a
   // foreign name has nothing whatsoever to attach by. Saying so beats
   // attaching by proximity — and the message has to name the remedy, because
@@ -886,12 +886,12 @@ describe('external-review regressions', () => {
     assert.ok(!warningTexts(warnings).some(t => /unreadable|could not be parsed/.test(t)));
   });
 
-  it('6 (A2): a converted recording that fails strict validation attaches WITH a warning naming the field', async () => {
+  it('6: a converted recording that fails strict validation attaches WITH a warning naming the field', async () => {
     writeFileSync(join(dir, 'P6.json'), participantFile('P6'));
     const r = jsV1(); r.stylesheets = {};
     writeFileSync(join(dir, 'P6-replay-1751600000000.json'), JSON.stringify(r));
     const { participants, warnings } = await ingest(config());
-    assert.ok(participants[0].replay && participants[0].replay.converted, 'A2: attach, never refuse');
+    assert.ok(participants[0].replay && participants[0].replay.converted, 'attach, never refuse');
     assert.ok(warningTexts(warnings).some(t => /strict/.test(t) && /stylesheets must be an array/.test(t)),
       'the strict error must be surfaced: ' + JSON.stringify(warningTexts(warnings)));
   });

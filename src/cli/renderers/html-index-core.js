@@ -57,7 +57,7 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // sibling viewer-host iframe — see demo/replay-host.js), so the report's
   // per-participant "Session replay" section would only ever show a stale
   // "not enabled"-style message: emit no replay section at all. Default
-  // false ⇒ output byte-identical (A1 snapshot contract, same as every
+  // false ⇒ output byte-identical (HTML snapshot contract, same as every
   // other opt here).
   const replayShownExternally = opts.replayShownExternally ?? false;
   // Demo mode = any in-browser opt present. The report then runs inside an

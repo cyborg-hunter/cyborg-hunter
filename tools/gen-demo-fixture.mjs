@@ -3,9 +3,9 @@
 // Regenerates the demo fixture's REPLAY ARTIFACT (tests/fixtures/demo/
 // DEMO-FIXT-replay-<epoch>.json) by DRIVING THE REAL demo tour in headless
 // Chromium and capturing the replay file the "Replicate locally" step hands
-// out. Since the recorder/serializer moved to SessionRecording v2 (Phase A:
-// A1/A2), a fresh capture produces a v2 artifact in place of the pre-A6
-// (schema_version 1) one — this is A6, the demo-regeneration step that takes
+// out. Since the recorder/serializer moved to SessionRecording v2 (the v2
+// recorder), a fresh capture produces a v2 artifact in place of the older
+// (schema_version 1) one, which takes
 // the ingest version-warning demo-fixture.test.js checks back to zero.
 //
 // SCOPE — replay artifact only. The session file (DEMO-FIXT.json) and config

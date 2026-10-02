@@ -1,5 +1,5 @@
 // tests/core/mouse-track-passthrough.test.js
-// A8: raw mouseTrack passthrough, end to end.
+// Raw mouseTrack passthrough, end to end.
 //
 // Step-1 findings (this task; see monitor.js/extract-core.js comments added
 // alongside this test for the fix itself):
@@ -83,7 +83,7 @@ function dispatchMove(x, y) {
   win.document.dispatchEvent(ev);
 }
 
-describe('rawMouseTrack privacy gate (A8)', () => {
+describe('rawMouseTrack privacy gate', () => {
   it('default config: trial report carries the raw mouse track under `mouseTrack` (on by default since 2026-09-02)', () => {
     monitor = init({ participantId: 'P1', thresholds: { mouseThrottleMs: 0 } });
     monitor.startSession();
@@ -141,7 +141,7 @@ describe('rawMouseTrack privacy gate (A8)', () => {
   });
 });
 
-describe('Shape-1 round-trip through extractIntegrityData (A8)', () => {
+describe('Shape-1 round-trip through extractIntegrityData', () => {
   it('mouseTrack survives buildPayload → extractIntegrityData as mouseEvents/mouseDataAvailable, and session.windowPositions survives alongside it', async () => {
     monitor = init({
       participantId: 'P3',

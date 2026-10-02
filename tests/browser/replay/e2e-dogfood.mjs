@@ -214,9 +214,9 @@ check(state.counters && state.counters.patchFailures === 0 && state.counters.ski
 // does not use the CLI report's replay section: it renders the visitor's
 // recording in a sibling host document (demo/replay-host.js), built from the
 // same buildViewerModel output. Readiness only — regenerating the demo's
-// committed assets is A6's. What this asserts is that the path A6 will run
-// is not broken: a v2 capture reaches that host and reconstructs there too.
-console.log('▶ 4/5 demo replay-host readiness (A6 path)');
+// committed assets is a separate step. What this asserts is that the path it
+// will run is not broken: a v2 capture reaches that host and reconstructs there too.
+console.log('▶ 4/5 demo replay-host readiness (regeneration path)');
 const hostHtml = buildReplayHostHtml(buildViewerModel(recording), readReplayClientSrc());
 const hostFile = join(dataDir, 'replay-host.html');
 writeFileSync(hostFile, hostHtml);

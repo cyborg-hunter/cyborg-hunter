@@ -45,7 +45,7 @@ import { detectGzip, validateStrict } from '../shared/schema-v2-validator.js';
 //   <sanitizedPid>-replay-<sessionStartEpochMs>.json[.gz]
 // They sit in dataDir (or replayDir) next to the participant files and must
 // never enter the participant-file pass. Files from OTHER producers carry
-// whatever name their tool chose and are found by content instead (A3, see
+// whatever name their tool chose and are found by content instead (see
 // the foreign-artifact pass in attachReplayArtifacts).
 const REPLAY_FILE_RE = /-replay-\d+\.json(\.gz)?$/i;
 
@@ -77,7 +77,7 @@ function participantArtifactRe(sanePid) {
 // array whose entries have `events` and `initial_dom`, so it matches the
 // jsPsych arm too. Reading the CH stamp first is what keeps CH v1 out of the
 // jsPsych converter, which would refuse it — spec §14 gives CH v1 a different
-// migration path, and A6's decision makes that path "regenerate the demo
+// migration path, and the decision there is to "regenerate the demo
 // assets", not "convert" (stray old files stay playable at the 0.7.x tag).
 export function artifactKind(j) {
   if (!j || typeof j !== 'object' || !('schema_version' in j)) return null;
@@ -130,8 +130,8 @@ async function readArtifactJson(reader, gunzip) {
 // IN MEMORY, NEVER TO DISK. Ingest reads the analyst's data directory and
 // writes nothing into it; a converted sibling would also be picked up by the
 // NEXT run as a second artifact for the same participant, and it would rewrite
-// fixtures other tasks own (the committed demo trio is v1 and A6 regenerates
-// it). Provenance survives anyway: the converter stamps
+// fixtures other tasks own (the committed demo trio is regenerated
+// by tools/gen-demo-fixture.mjs). Provenance survives anyway: the converter stamps
 // `extensions["cyborg-hunter"].converter` with its version and the canonical
 // `source_sha256` of the input, and the source file stays byte-identical on
 // disk, so file + hash + tool version reproduce the conversion exactly.
@@ -150,7 +150,7 @@ export async function migrateArtifact(json, kind, deps) {
     : (j) => convertRecording(j, { sha256: deps.sha256 });
   try {
     const recording = await convert(json);
-    // A2 (spec §11): the in-memory conversion is strict-validated like the
+    // Spec §11: the in-memory conversion is strict-validated like the
     // converter CLI validates its file output — but a failure WARNS and still
     // attaches. Refusing here would lose a participant's replay to a defect the
     // viewer's tolerant profile absorbs (e.g. `stylesheets: {}` → played
@@ -190,7 +190,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
   const warnings = [];
 
   // Session recordings are excluded from the participant pass by CONTENT, not
-  // by name (A3): v2 is producer-agnostic, so a conforming artifact can arrive
+  // by name: v2 is producer-agnostic, so a conforming artifact can arrive
   // called `session.json` or anything else, and putting one through the
   // participant extractor produced a phantom "unknown" participant plus two
   // junk warnings. Files matching CH's own naming keep their extra guarantee —

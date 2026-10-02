@@ -1,6 +1,6 @@
 // tests/cli/html-index-opts.test.js
 // The three demo-mode opts for the in-browser report. Contract: ALL opts
-// absent ⇒ byte-identical to the A1 snapshots (that test enforces it);
+// absent ⇒ byte-identical to the HTML snapshots (that test enforces it);
 // each opt present ⇒ the specific emission below.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

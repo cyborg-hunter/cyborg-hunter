@@ -1,6 +1,5 @@
 // tests/demo/demo-css.test.js
-// The demo tour in the report's aesthetic (plan
-// docs/plans/2026-09-30-report-reshape.md, Part B + B7): it loads the
+// The demo tour in the report's aesthetic: it loads the
 // report's six typefaces from the assembled site, uses the report's tokens,
 // and every face a rule asks for is either embedded or deliberately the
 // system monospace (code, JSON, the event stream). Read from demo.css

@@ -40,7 +40,7 @@ function offscreenCalls(v) {
 describe('span restore over the committed canonical fixture', () => {
   // Session t=4100 lands in segment 2, whose origin is t_load 3510, so the
   // segment-relative seek is 590 — past the input.value at wire 4000 (tRel
-  // 490). The plan states the seek in SESSION time; the viewer's playhead is
+  // 490). The spec states the seek in SESSION time; the viewer's playhead is
   // segment-relative, and `round1(t − origin)` is the one conversion rule
   // (viewer-model.js's forward contract), so it is applied here rather than
   // approximated.

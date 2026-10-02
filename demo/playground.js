@@ -6,8 +6,8 @@
 // paste control flips HARD, the tab-away/typing controls (with the preset's
 // weights) move the SOFT/CLEAN line, and the triage order follows.
 //
-// Why a data pre-pass and not just config overrides (the plan's C3
-// correction + its review follow-up): the analyzers trust DATA-CARRIED
+// Why a data pre-pass and not just config overrides (a config override alone
+// cannot flip the tier): the analyzers trust DATA-CARRIED
 // verdicts over analyst config on BOTH tiers —
 //   HARD: summary.js prefers metadata.integritySession.anyHardTriggered
 //         (falling back to trialSignals.hard.*.sessionTotal/countThreshold);

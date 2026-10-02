@@ -33,7 +33,7 @@ import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.
  *     aborts the whole report — precisely the data-loss trade §11 exists to
  *     refuse. v1 degraded and rendered the rest; v2 skips the participant and
  *     says so.
- *   - a refusal already stamped by INGEST (A3): a jsPsych v1 recording the
+ *   - a refusal already stamped by INGEST: a jsPsych v1 recording the
  *     converter would not migrate, which never gets as far as a model. Task
  *     10(b) settled that a replay which does not make it is visible on three
  *     surfaces, and the CLI line report-core.js prints from this list is one of

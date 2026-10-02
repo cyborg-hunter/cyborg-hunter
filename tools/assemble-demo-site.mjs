@@ -92,7 +92,7 @@ function main() {
   mkdirSync(SITE_DIR, { recursive: true });
   cpSync(DEMO_DIR, SITE_DIR, { recursive: true, filter: isRuntimeFile });
   cpSync(join(ROOT, 'dist'), join(SITE_DIR, 'dist'), { recursive: true });
-  // demo/assets/ (example-participants.json, C1) is copied above as part of
+  // demo/assets/ (example-participants.json) is copied above as part of
   // demo/* — it isn't excluded by isRuntimeFile. The replay viewer lives
   // outside demo/ (it's the CLI's own renderer asset) and is an ASSEMBLY of
   // two source files, so the site gets the assembled text under the name

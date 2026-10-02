@@ -1,6 +1,5 @@
 // tests/cli/report-shapes.test.js
-// The shape picks from the 2026-09 report palette (plan
-// docs/plans/2026-09-30-report-reshape.md §3, §6a), read from the
+// The shape picks from the 2026-09 report palette, read from the
 // report's own CSS. Unchanged elements (severity colours, frame, tier dot,
 // fields, tiles, score readout, bars' shape, lane, click markers) are pinned
 // by the HTML snapshots instead.

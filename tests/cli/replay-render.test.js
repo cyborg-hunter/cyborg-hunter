@@ -224,7 +224,7 @@ describe('renderReplayAssets', () => {
     } finally { rmSync(sub, { recursive: true, force: true }); }
   });
 
-  // ── A3: refusals stamped one layer earlier ────────────────────────────────
+  // ── refusals stamped one layer earlier ────────────────────────────────
   // A jsPsych v1 recording the converter will not migrate is stamped
   // `unloadable` by INGEST, not here — but it is the same event as a §11
   // rejection: an artifact that exists, reads fine, and never reaches the

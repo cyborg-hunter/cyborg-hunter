@@ -150,7 +150,7 @@ describe('jsPsych replay adapter', () => {
   });
 
   it('drives DOM capture at tier "dom": every segment gets a keyframe', async () => {
-    // The plan's DECIDED item — the jsPsych host path calls buildInitialState
+    // The decided design — the jsPsych host path calls buildInitialState
     // like every other path — holds by construction, because the adapter goes
     // through the same attach() and the same attachDomCapture. Nothing pinned
     // it, and every other adapter test runs at trace tier, where there is no

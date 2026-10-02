@@ -71,7 +71,7 @@ function pickVariant(state) {
 // computed tier to report truthfully. replayUnavailable appends an honest
 // correction to the "Session replay panel below" bullet's claim when replay
 // attach failed this session (state.replayUnavailable) — steps.js's copy
-// stays untouched; this is the minimal adaptation the plan calls for.
+// stays untouched; this is the minimal adaptation needed.
 function renderWalkthrough(variant, tierHtml, replayUnavailable) {
   var replayHint = replayUnavailable
     ? '<p class="hint">Replay recording wasn’t available in this browser this ' +
@@ -117,11 +117,11 @@ async function fetchJson(url) { var r = await fetch(url); if (!r.ok) throw new E
 function identity(x) { return x; }
 
 // One full pipeline run -> report HTML string + the triage it produced.
-// configOverrides and transformPayloads both come from the playground (C3);
+// configOverrides and transformPayloads both come from the playground;
 // both absent means the base config/payloads (manifest defaults, real
 // session data) untouched.
 //
-// transformPayloads is the seam C3 needs and C2 didn't have: a config
+// transformPayloads is the seam the playground needs and the plain build didn't have: a config
 // override alone can't flip a HARD tier (the analyzers trust data-carried
 // fields — see demo/playground.js's recomputeSignals docblock), so the
 // playground has to transform the PAYLOADS themselves, not just the config,
@@ -246,7 +246,7 @@ export function buildResults(container, state, manifest, hooks, initial) {
 
   var settled = false;
   // gaveUp is distinct from settled: settled stays true forever once the
-  // FIRST run succeeds (playground reruns from C3 all happen with settled
+  // FIRST run succeeds (playground reruns all happen with settled
   // already true) — gaveUp only ever becomes true if the pipeline watchdog
   // fires before that first run finishes, so a late-arriving first result
   // knows the DOM was already replaced by the fallback card and skips
@@ -287,7 +287,7 @@ export function buildResults(container, state, manifest, hooks, initial) {
     // failure (error event or its own load watchdog). The FIRST call is what
     // buildResults awaits before declaring success below — a blob that never
     // loads falls back instead of silently "succeeding" with a broken frame.
-    // transformPayloads (C3): the playground's recomputeSignals pre-pass;
+    // transformPayloads: the playground's recomputeSignals pre-pass;
     // omitted on every call this file makes itself (the real session data,
     // untouched) and on any caller that doesn't pass one.
     function run(configOverrides, transformPayloads) {

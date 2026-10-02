@@ -1,5 +1,5 @@
 // tests/browser/replay/cursor-alignment.battery.mjs
-// Cursor-alignment stress battery — the A1 condition in real browsers.
+// Cursor-alignment stress battery — the cursor-misalignment condition in real browsers.
 //
 // THE ACCEPTANCE, and it is absolute: every anchored interaction is either
 // ALIGNED within tolerance or FLAGGED. A silent misplacement anywhere fails the
@@ -26,7 +26,7 @@
 //        is where part A's eight coordinates went.
 //   B  — SYNTHETIC GRID: a real recording made with the dist recorder against a
 //        hostile layout page, in the engine under test, and replayed in the same
-//        run — the full capture→replay round trip, which is what the A1
+//        run — the full capture→replay round trip, which is what the misalignment
 //        condition is actually about. Scenarios: flick-scroll-then-click,
 //        settled and same-task element scrollers, resize inside the coalescing
 //        window, transformed and rotated containers, centred reflow,
@@ -315,7 +315,7 @@ function fmtMeasure(m) {
 
 // ════════════════ the recording (driven in the engine under test) ════════════
 //
-// SEGMENT LIST — the A1 scenarios, one per segment, plus what each is FOR.
+// SEGMENT LIST — the misalignment scenarios, one per segment, plus what each is FOR.
 // `expect` is the acceptance for its anchored interactions:
 //   'ok'      aligned within tolerance, every §8 comparison made
 //   'flagged' the recording and the reconstruction genuinely disagree, and the
@@ -323,7 +323,7 @@ function fmtMeasure(m) {
 // A flagged entry also carries `reason`, and that is not decoration: without it
 // the scenario asserts only that SOMETHING fired, so a future regression could
 // flag for an unrelated cause and keep the battery green while the documented
-// claim silently stops being tested. C1–C5 have carried a reason predicate
+// claim silently stops being tested. The five corruption scenarios have carried a reason predicate
 // since they were written (`expectUncertain`'s `reasonRe`); these two now match.
 // `element-flick`'s Δ is a magnitude, deliberately: 200 px is the signature of
 // this exact capture gap (the scroller moves 180 → 380 inside the click's own
@@ -706,7 +706,7 @@ async function runEngine(name) {
   }
 
   // ── B — synthetic grid: record fresh in THIS engine, replay in this engine ──
-  console.log('▶ B — synthetic grid: capture → replay round trip, ' + GRID.length + ' A1 scenarios');
+  console.log('▶ B — synthetic grid: capture → replay round trip, ' + GRID.length + ' scenarios');
   const rec = await recordGrid(browser);
 
   if (FREEZE && name === 'chromium') {
@@ -776,7 +776,7 @@ async function runEngine(name) {
       const bad = anchorChecks.filter((c) => c.status === 'uncertain');
 
       if (spec.expect === 'ok') {
-        // THE A1 ACCEPTANCE, positive half: aligned within tolerance AND every
+        // THE ACCEPTANCE, positive half: aligned within tolerance AND every
         // §8 comparison actually made. `ok` with a non-empty `skipped` is a
         // partial verification, so it is reported — but not failed, because a
         // point outside the frame viewport makes `elementFromPoint` return null
@@ -790,7 +790,7 @@ async function runEngine(name) {
             JSON.stringify([...new Set(partial.flatMap((c) => c.skipped))]) + ')');
         }
       } else {
-        // THE A1 ACCEPTANCE, negative half — and this is the half that matters.
+        // THE ACCEPTANCE, negative half — and this is the half that matters.
         // A genuine disagreement must be visible on ALL FOUR surfaces, not just
         // in getChecks(): a failure only a test can see is a silent
         // misplacement as far as an analyst is concerned.
@@ -1179,23 +1179,23 @@ async function runEngine(name) {
     await page.close();
   }
 
-  { // C1 — a tampered anchor rect: the target "moved" 50px at record time
+  { // a tampered anchor rect: the target "moved" 50px at record time
     const r = clone(rec);
     segOf(r, 'baseline').events.forEach((e) => { if (e.anchor && e.anchor.rect) e.anchor.rect.x += 50; });
-    await expectUncertain(r, 'c1', 'C1 tampered anchor.rect', 'baseline', /rect moved/);
+    await expectUncertain(r, 'c1', 'tampered anchor.rect', 'baseline', /rect moved/);
   }
-  { // C2 — an anchor.node the span cannot hold (§7's third outcome: LOUD)
+  { // an anchor.node the span cannot hold (§7's third outcome: LOUD)
     const r = clone(rec);
     segOf(r, 'baseline').events.forEach((e) => { if (e.anchor) e.anchor.node = 999999; });
-    await expectUncertain(r, 'c2', 'C2 unresolvable anchor.node', 'baseline', /not held by this span/);
+    await expectUncertain(r, 'c2', 'unresolvable anchor.node', 'baseline', /not held by this span/);
   }
-  { // C3 — stylesheets stripped: the layout diverges from record time
+  { // stylesheets stripped: the layout diverges from record time
     const r = clone(rec);
     r.stylesheets = [];
     r.stylesheet_events = [];
-    await expectUncertain(r, 'c3', 'C3 stripped stylesheets (layout divergence)', 'scrolled', /rect moved|cursor outside/);
+    await expectUncertain(r, 'c3', 'stripped stylesheets (layout divergence)', 'scrolled', /rect moved|cursor outside/);
   }
-  { // C4 — corrupted camera: the seed AND every per-event block agree on a lie,
+  { // corrupted camera: the seed AND every per-event block agree on a lie,
     //      so there is no camera truth left anywhere in the recording.
     const r = clone(rec);
     const kf = spanKeyframeFor(r, model, 'comments');
@@ -1210,11 +1210,11 @@ async function runEngine(name) {
     // (2216) is past the document's own maximum, so the frame clamps at 1916
     // and check 1a catches the divergence before the rect check gets to. Both
     // are accepted — what must never happen is silence.
-    await expectUncertain(r, 'c4', 'C4 corrupted camera (seed + every per-event block)', 'comments',
+    await expectUncertain(r, 'c4', 'corrupted camera (seed + every per-event block)', 'comments',
       /applied scroll diverges|rect moved|cursor outside/);
   }
   { // C4b — SEED-ONLY corruption self-heals through the per-event camera, and
-    //       must NOT warn. The opposite direction from C4, and the reason C4
+    //       must NOT warn. The opposite direction from the corrupted-camera case, and the reason that case
     //       has to lose the snapshots too.
     const r = clone(rec);
     const kf = spanKeyframeFor(r, model, 'comments');
@@ -1233,7 +1233,7 @@ async function runEngine(name) {
     check(s.laneUncertain === 0, 'C4b paints no amber (a false alarm is a failure too)');
     await page.close();
   }
-  { // C5 — a camera block stating only scroll_y: folded nowhere, applied
+  { // a camera block stating only scroll_y: folded nowhere, applied
     //      nowhere. A shape a review found, reachable from a recording
     //      alone, and the one that used to read `ok` over a frame 300px away.
     const r = clone(rec);
@@ -1241,7 +1241,7 @@ async function runEngine(name) {
       s.events = s.events.filter((e) => e.type !== 'scroll.window');
       s.events.forEach((e) => { if (e.camera) e.camera.scroll_x = null; });
     }
-    await expectUncertain(r, 'c5', 'C5 camera stating only scroll_y (never ordered, never applied)', 'scrolled', /applied scroll diverges|rect moved/);
+    await expectUncertain(r, 'c5', 'camera stating only scroll_y (never ordered, never applied)', 'scrolled', /applied scroll diverges|rect moved/);
   }
 
   // ════════════════ PART D — trace tier: projection with no reconstruction ═══

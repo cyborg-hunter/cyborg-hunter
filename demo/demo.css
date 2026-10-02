@@ -1,5 +1,5 @@
-/* demo/demo.css — the tour in the report's own aesthetic (2026-10 reshape,
- * docs/plans/2026-09-30-report-reshape.md Part B), superseding "Lifted
+/* demo/demo.css — the tour in the report's own aesthetic (2026-10 reshape),
+ * superseding "Lifted
  * Console" (spec §9, 2026-07-31). The demo wraps the report, so it reads as
  * the same product: the report's six typefaces in matching roles (titles
  * Space Grotesk, prose Recursive, labels Sofia Sans, notes Tomorrow, numbers
@@ -18,7 +18,7 @@
  * are semantic (lamps, hard rows, tiers, REC) and never decorative.
  * Reference artifact: designs/demo-restyle-20260731/variant-b.html — this
  * file ports its tokens/treatments onto the real class inventory demo.js,
- * rail.js, live-pane.js, and the steps.js-driven engine (B4) render. Classes
+ * rail.js, live-pane.js, and the steps.js-driven engine render. Classes
  * are restyled, never renamed. Styling for the welcome-step aside player,
  * the live jsPsych mini-trials, and the old "Expect" callout is dropped
  * outright — those modules leave the codebase in a later task and have no
@@ -105,9 +105,8 @@ code, pre{font-family:var(--mono);}
  * --------------------------------------------------------------------- */
 .stepcard{background:var(--panel);border-radius:0;border:1px solid var(--line);
   box-shadow:var(--shadow);padding:32px 36px;}
-/* B4 may title the step with <h1> or class="title"; main's bare <h2> is a
- * transitional fallback for the current (pre-B4) engine — see the plan's
- * note that demo.js is mid-rewrite and still renders the old step markup. */
+/* A step may be titled with <h1> or class="title"; main's bare <h2> is a
+ * transitional fallback for the older step markup demo.js can still render. */
 .stepcard h1, .stepcard .title, main h2{font-family:var(--ff-space);font-weight:550;
   letter-spacing:.01em;font-size:29px;line-height:1.22;margin:0 0 14px;text-wrap:balance;}
 

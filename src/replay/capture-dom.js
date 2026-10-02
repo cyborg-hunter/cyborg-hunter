@@ -150,7 +150,7 @@ function payloadChars(value) {
  * since the keyframe of `JSON.stringify(patches).length`, where `patches` is
  * the array of `dom.*` events that batch mapped to.
  *
- *   - CHARS, not bytes. The plan and design call it `bytesSinceKeyframe`; it is
+ *   - CHARS, not bytes. Earlier designs called it `bytesSinceKeyframe`; it is
  *     measured in the same unit as `maxCharsPerTrial` (UTF-16 code units, which
  *     UTF-8 byte size can exceed for non-ASCII), so it carries that config's
  *     name for that config's reason. Both sides of the comparison use it, so

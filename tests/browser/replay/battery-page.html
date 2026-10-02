@@ -162,7 +162,7 @@
       // Playwright's own `click()` and `setViewportSize()` each return to the
       // event loop, which lets the browser dispatch the scroll/resize
       // notification the recorder coalesces on. These dispatch the interaction
-      // in the SAME TASK as the state change, which is the A1 case: an
+      // in the SAME TASK as the state change, which is the misalignment case: an
       // interaction recorded BEFORE the notification that describes the state
       // it happened under. The geometry is real (`getBoundingClientRect` on the
       // live element); only the event object is synthetic.

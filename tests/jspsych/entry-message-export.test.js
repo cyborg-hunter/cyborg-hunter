@@ -1,4 +1,4 @@
-// B4: the demo's guard-entry step renders the library's own entry message
+// The demo's guard-entry step renders the library's own entry message
 // verbatim (truth-by-construction — never a drifting copy of it). That
 // requires the frozen GuardFriction public API to expose the string it
 // already uses internally as createEntryTrial()'s default `message`.

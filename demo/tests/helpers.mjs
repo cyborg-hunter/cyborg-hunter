@@ -185,7 +185,7 @@ export async function installFailingFullscreenMock(page) {
 }
 
 // Wraps URL.createObjectURL/revokeObjectURL to count calls on
-// window.__chBlobCounts — the C2/C3 live-URL invariant tour.spec.js checks
+// window.__chBlobCounts — the live-URL invariant tour.spec.js checks
 // (swapIframe revokes the PREVIOUS blob url only after the new one loads, so
 // created - revoked should equal the number of "no-previous-url-yet" swaps
 // still outstanding: 1 after the first report build + any playground
