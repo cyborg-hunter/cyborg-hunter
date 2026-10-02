@@ -26,17 +26,20 @@
 //                     uncaught page error fails the test at teardown.
 //   guardNetwork / assertOnlyAllowed / siteAllowlist   the observers above.
 //   waitReady / loadSample / buildReport / railOrder / reportFrame /
-//   downloadZip       the page's steps, through its data-action/data-role hooks.
+//   reportSelected / downloadZip   the page's steps, through its
+//                     data-action/data-role hooks.
 //   pilotFiles / cliPilotTree   the synthetic pilot as dropped files, and the
 //                     CLI's report tree for it.
 //   startSentinel / makeReplayCohort   a counting local server, and a
 //                     two-participant dom-tier cohort (a stylesheet to drop,
-//                     a recorded image from the sentinel) in a temp dir.
+//                     a recorded image from the sentinel; recordings plain or
+//                     gzipped) in a temp dir.
 import { test as base, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { gzipSync } from 'node:zlib';
 import { join, resolve, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -134,6 +137,12 @@ export async function buildReport(page) {
   if (await error.isVisible()) throw new Error('the page reported: ' + (await error.textContent()));
 }
 export function reportFrame(page) { return page.frameLocator('iframe.analyze-report'); }
+// The report selects its first row on load and tells the page, which moves
+// the replay dropdown there: wait for that before choosing a replay, or the
+// late message switches the dropdown away and tears the viewer down.
+export async function reportSelected(page) {
+  await expect.poll(() => page.evaluate(() => window.__chAnalyze.state.selected), { timeout: 30000 }).not.toBeNull();
+}
 export async function railOrder(page) {
   const rows = reportFrame(page).locator('.cohort-row[data-pid]');
   await expect(rows.first()).toBeVisible({ timeout: 30000 });
@@ -171,18 +180,21 @@ export async function startSentinel() {
 // A two-participant dom-tier cohort from the committed demo pair: the sheet is
 // made href-only (so a dropped demo.css styles it), a recorded image is
 // injected from imageOrigin (so the viewer's policy has something to block;
-// a sentinel's url, or an unreachable origin), and a second participant is a
-// renamed copy. Written to a temp dir.
-export function makeReplayCohort(imageOrigin) {
+// a sentinel's url, or an unreachable origin by default; null injects none),
+// and a second participant is a renamed copy. Written to a temp dir; opts.gzip writes the recordings as
+// .json.gz, as a researcher's compressed export would arrive.
+export function makeReplayCohort(imageOrigin, opts) {
   const dir = mkdtempSync(join(tmpdir(), 'ch-e2e-cohort-'));
   const raw = readFileSync(join(ROOT, 'tests', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8');
   const rec = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'demo', 'DEMO-FIXT-replay-1785352263344.json'), 'utf8'));
   rec.stylesheets[0].css = null;
   const keyframe = rec.segments.find((s) => s.initial_dom);
-  keyframe.initial_dom.children.unshift({ id: 900001, kind: 'element', tag: 'img', attrs: { src: (imageOrigin || 'http://127.0.0.1:1') + '/blocked.png', alt: '' }, children: [] });
+  if (imageOrigin !== null) keyframe.initial_dom.children.unshift({ id: 900001, kind: 'element', tag: 'img', attrs: { src: (imageOrigin || 'http://127.0.0.1:1') + '/blocked.png', alt: '' }, children: [] });
   const write = (pid) => {
     writeFileSync(join(dir, pid + '.json'), raw.split('DEMO-FIXT').join(pid));
-    writeFileSync(join(dir, pid + '-replay-1785352263344.json'), JSON.stringify({ ...rec, participant_id: pid }));
+    const recording = JSON.stringify({ ...rec, participant_id: pid });
+    if (opts && opts.gzip) writeFileSync(join(dir, pid + '-replay-1785352263344.json.gz'), gzipSync(recording));
+    else writeFileSync(join(dir, pid + '-replay-1785352263344.json'), recording);
   };
   write('DEMO-FIXT'); write('DEMO-FIXT-B');
   writeFileSync(join(dir, 'cyborg-hunter.config.json'), JSON.stringify({ filePattern: 'DEMO-*.json', participantIdField: 'participantId' }));
