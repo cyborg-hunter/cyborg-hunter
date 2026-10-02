@@ -266,7 +266,7 @@ On a page without jsPsych, ch.js cuts the session into segments at two kinds of 
 
 - **Boot.** The first segment, `span-0`, opens when the page loads. Unnamed segments are called `span-<index>`.
 - **Manual marks.** A click on (or inside) an element with `data-ch-trial="q1"` closes the current segment as a `manual` one and opens the next, named `q1`. `CyborgHunter.mark('q1')` does the same from code; `CyborgHunter.mark()` opens an unnamed one. `CyborgHunter.startTrial({ trialId })` and `CyborgHunter.endTrial()` are aliases of `mark(trialId)` and `mark()`, so calls on the `CyborgHunter` namespace keep working. Calls on the monitor `CyborgHunter.init()` returned do not ([Switching to the one-liner](#switching-to-the-one-liner), step 9).
-- **Page loads.** A `<form>` submit and `pagehide` close the current segment as a `page` one. A `method="dialog"` submit only closes its `<dialog>`, so it is not a page load.
+- **Page loads.** A `<form>` submit and `pagehide` close the current segment as a `page` one. A `method="dialog"` submit only closes its `<dialog>`, so it is not a page load. A submit into another window or a frame (`target="_blank"`, a named target) closes the segment and posts the data, but the page stays, so its `pagehide` closes the next one.
 
 `CyborgHunter.data()` closes the current segment and returns the whole session so far (every page), ready for `JSON.stringify`. Save it with your own code:
 

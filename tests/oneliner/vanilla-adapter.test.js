@@ -256,6 +256,45 @@ describe('vanilla host: forms and page loads', () => {
     assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[0].integrity.pasteEvents.length, 1);
   });
 
+  // A form that targets another window (or a frame) leaves this page where
+  // it is: the post still carries the blob, and the real pagehide still cuts.
+  it('a target="_blank" POST carries the blob and pagehide keeps the data after it', () => {
+    const ctx = start();
+    paste('before');
+    const f = form();
+    f.setAttribute('target', '_blank');
+    submit(f);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    assert.strictEqual(JSON.parse(f.querySelector('input[name=cyborgHunterData]').value).trials.length, 1);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    assert.strictEqual(saved.trials.length, 2);
+    assert.strictEqual(saved.trials[1].integrity.pasteEvents.length, 1);
+  });
+
+  it('a submitter with formtarget="_blank" leaves the next pagehide to cut', () => {
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"><button formtarget="_blank">Preview</button></form>');
+    f.addEventListener('submit', (e) => e.preventDefault());
+    f.dispatchEvent(new win.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: f.querySelector('button') }));
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+  });
+
+  it('a form targeting this window by keyword still counts as the page load', () => {
+    const ctx = start();
+    const f = form();
+    f.setAttribute('target', '_self');
+    submit(f);
+    // Still inside the submit task: the page's own cancel has not been seen yet.
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+  });
+
   it('page loads: the next page restores the index, the earlier trials and the page count', () => {
     const ctx1 = start();
     paste('page one');
@@ -440,6 +479,99 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(posted.length, 1);
     assert.strictEqual(JSON.parse(posted[0].data).trials.length, 1);
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+  });
+
+  // The browser ignores submit() on a form that is not in the document.
+  it('form.submit() on a form outside the document cuts nothing', () => {
+    const posted = stubNativeSubmit();
+    const ctx = start();
+    const f = win.document.createElement('form');
+    f.method = 'post';
+    f.submit();
+    assert.strictEqual(posted.length, 1, 'the browser\'s submit still runs');
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[0].integrity.pasteEvents.length, 1);
+  });
+
+  it('form.submit() from a submit handler of a _blank form cuts once; pagehide cuts the rest', () => {
+    const posted = stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/submit" target="_blank"></form>');
+    f.addEventListener('submit', (e) => { e.preventDefault(); f.submit(); });
+    submit(f);
+    assert.strictEqual(posted.length, 1);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+  });
+
+  // The handler cancelled the event but submitted the form itself: the page
+  // still goes, and its pagehide (after the task that ran the handler) must
+  // not cut an empty segment.
+  it('a cancelled submit followed by form.submit() still counts as the page load', async () => {
+    stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"></form>');
+    f.addEventListener('submit', (e) => { e.preventDefault(); f.submit(); });
+    submit(f);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+  });
+
+  it('a cancelled submit whose handler submits a form outside the document still leaves pagehide to cut', async () => {
+    stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"></form>');
+    const detached = win.document.createElement('form');
+    f.addEventListener('submit', (e) => { e.preventDefault(); detached.submit(); });
+    submit(f);
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+  });
+
+  it('a cancelled submit does not undo a later submit in the same task', async () => {
+    const ctx = start();
+    const a = el('<form method="post" action="/a"></form>');
+    a.addEventListener('submit', (e) => e.preventDefault());
+    const b = el('<form method="post" action="/b"></form>');
+    submit(a);
+    submit(b);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+  });
+
+  it('a cancelled _blank submit after a page-replacing one leaves the page load in place', async () => {
+    const ctx = start();
+    const popup = el('<form method="post" action="/preview" target="_blank"></form>');
+    popup.addEventListener('submit', (e) => e.preventDefault());
+    const f = el('<form method="post" action="/submit"></form>');
+    f.addEventListener('submit', () => submit(popup));
+    submit(f);
+    await tick();
+    const before = ctx.segmenter.state().segmentIndex;
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, before);
+  });
+
+  it('two cancelled submits in one task leave pagehide to cut', async () => {
+    const ctx = start();
+    const a = form();
+    const b = form();
+    submit(a);
+    submit(b);
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 3);
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[2].integrity.pasteEvents.length, 1);
   });
 
   it('form.submit() never throws into the page and always calls the browser\'s submit', () => {

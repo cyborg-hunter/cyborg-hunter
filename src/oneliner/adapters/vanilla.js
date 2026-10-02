@@ -100,7 +100,8 @@ export function installVanillaAdapter(opts) {
   var pageCount = 1;
   var earlierHoneypot = null;   // merged honeypot summary of earlier pages
   var restored = false;
-  var submitted = false;        // this page's span was closed by a form submit
+  var submitted = false;        // this page's span was closed by a submit that replaces the page
+  var submitTask = null;        // the submit events of the running task: { before, events, committed }
   var warnedSize = false;
   var noticedGet = false;       // the GET-form console.info, once per page
   var notes = [];               // cyborgHunterError notes, this page's and earlier pages'
@@ -295,17 +296,46 @@ export function installVanillaAdapter(opts) {
     return String((submitter && submitter.formMethod) || form.method || 'get').toLowerCase();
   }
 
+  // Whether the submit replaces this page: its target (the submitter's
+  // formtarget, the form's target, then <base target>) is empty, a keyword
+  // for this window (_self; _top and _parent unload this page too), or this
+  // window's own name. _blank, or a name for another window or a frame,
+  // leaves this page where it is.
+  function replacesPage(form, submitter) {
+    var t = null;
+    if (submitter && submitter.hasAttribute && submitter.hasAttribute('formtarget')) t = submitter.getAttribute('formtarget');
+    if (t === null && form.hasAttribute && form.hasAttribute('target')) t = form.getAttribute('target');
+    if (t === null) {
+      var base = doc.querySelector ? doc.querySelector('base[target]') : null;
+      t = base ? base.getAttribute('target') : '';
+    }
+    t = String(t || '').trim();
+    var keyword = t.toLowerCase();
+    if (t === '' || keyword === '_self' || keyword === '_top' || keyword === '_parent') return true;
+    return keyword !== '_blank' && t === win.name;
+  }
+
   // The work of a form submit: close the span, save the session, and put the
   // blob into a POST form's hidden input. `cutSpan` false keeps the span as it
   // is (form.submit() called right after a submit event closed it). A dialog
   // submit (method or formmethod "dialog") only closes its <dialog>: the page
-  // stays, so it is not a page load and the next pagehide must still cut.
+  // stays, so it is not a page load and the next pagehide must still cut. A
+  // form outside the document submits nothing at all. A submit into another
+  // window or a frame posts the blob, but this page stays too, so its
+  // pagehide still cuts what comes after. Returns whether the submit
+  // replaces this page.
+  function submitsAnything(form, submitter) {
+    return !form || (effectiveMethod(form, submitter) !== 'dialog' && form.isConnected !== false);
+  }
   function carry(form, submitter, cutSpan) {
-    if (form && effectiveMethod(form, submitter) === 'dialog') return;
+    if (!submitsAnything(form, submitter)) return false;
+    // A submit into another window does not undo one already replacing the page.
+    var leaving = submitted;
     if (cutSpan) cut('page');
-    submitted = true;
+    var replaces = !form || replacesPage(form, submitter);
+    submitted = replaces || leaving;
     persist();
-    if (!form || typeof form.querySelector !== 'function') return;
+    if (!form || typeof form.querySelector !== 'function') return replaces;
     var input = form.querySelector('input[name="' + HIDDEN_INPUT + '"]');
     if (effectiveMethod(form, submitter) !== 'post') {
       if (input) input.parentNode.removeChild(input);   // left by an earlier POST submit of this form
@@ -313,7 +343,7 @@ export function installVanillaAdapter(opts) {
         noticedGet = true;
         console.info('[cyborg-hunter] A GET form was submitted: its data does not get cyborgHunterData (it would go into the URL). The session is kept for the next page and CyborgHunter.data().');
       }
-      return;
+      return replaces;
     }
     if (!input) {
       input = doc.createElement('input');
@@ -322,17 +352,32 @@ export function installVanillaAdapter(opts) {
       form.appendChild(input);
     }
     input.value = JSON.stringify(blob());
+    return replaces;
   }
 
   // Capture phase on document: runs before the page's own submit handlers,
   // so a FormData built there already holds the value.
   function onSubmit(ev) {
     try {
-      // A cancelled submit (validation) keeps the page, so its next pagehide
-      // must cut. Decided once the page's own handlers have run; a bubble
-      // listener would miss a page that stops the event's propagation.
-      win.setTimeout(function () { if (ev.defaultPrevented) submitted = false; }, 0);
-      carry(ev.target, ev.submitter, true);
+      if (!submitsAnything(ev.target, ev.submitter)) return;
+      // A cancelled submit (validation) keeps the page, so the next pagehide
+      // must cut. Decided once the page's own handlers have run (a bubble
+      // listener would miss a page that stops the event's propagation), for
+      // every submit event of this task together: the page goes if it was
+      // already going, if one of them replaces it and was not cancelled, or
+      // if a handler called form.submit() on a form that replaces it.
+      if (!submitTask) {
+        var task = submitTask = { before: submitted, events: [], committed: false };
+        win.setTimeout(function () {
+          submitTask = null;
+          submitted = task.before || task.committed || task.events.some(function (e) {
+            return e.replaces && !e.ev.defaultPrevented;
+          });
+        }, 0);
+      }
+      var entry = { ev: ev, replaces: false };
+      submitTask.events.push(entry);
+      entry.replaces = carry(ev.target, ev.submitter, true);
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
     }
@@ -353,7 +398,9 @@ export function installVanillaAdapter(opts) {
   function wrappedSubmit() {
     if (active) {
       try {
-        carry(this, null, !submitted);
+        // Inside a submit event's task the event has already cut the span.
+        var task = submitTask;
+        if (carry(this, null, !submitted && !task) && task) task.committed = true;
       } catch (e) {
         console.error(MESSAGES.vanillaEventFailed(message(e)));
       }
