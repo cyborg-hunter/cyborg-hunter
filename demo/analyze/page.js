@@ -86,25 +86,44 @@ export function createPage(root, worker, opts) {
   }
 
   // A failure of the worker itself (a script error outside a job, a message
-  // that cannot be read) carries no phase: it is charged to whatever is in
-  // flight, so a pending check or run cannot leave the page busy for good.
+  // that cannot be read, a worker the browser killed) carries no phase: it is
+  // charged to whatever is in flight, so a pending check or run cannot leave
+  // the page busy for good. The worker is then replaced by a fresh one from
+  // opts.createWorker, since a dead worker would swallow the retry. The new
+  // one holds no run, so replays need the report built again.
   function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : replayWaiters.length ? 'replay' : null; }
   function workerFailed(message) {
     var phase = inFlight();
-    var text = 'The analysis worker failed' + (message ? ': ' + message : '') + '. Try again; if it fails again, reload the page or use the CLI.';
+    var restarted = replaceWorker();
+    var text = 'The analysis worker failed' + (message ? ': ' + message : '') + '. ' +
+      (restarted ? (state.result ? 'It was restarted; build the report again to load replays.' : 'It was restarted; try again.') + ' If it fails again, use the CLI.'
+        : 'Reload the page to try again, or use the CLI.');
     if (phase) recover(phase, text); else showError(text);
   }
-  worker.onerror = function (e) { workerFailed(e && e.message); };
-  worker.onmessageerror = function () { workerFailed('a message from it could not be read'); };
+  function replaceWorker() {
+    if (!opts || !opts.createWorker) return false;
+    try { worker.terminate(); } catch (e) { /* already gone */ }
+    attach(opts.createWorker());
+    return true;
+  }
+  // Messages count only from the current worker: one that failed may still
+  // have had messages queued.
+  function attach(w) {
+    worker = w;
+    w.onmessage = function (ev) { if (w === worker) onMessage(ev); };
+    w.onerror = function (e) { if (w === worker) workerFailed(e && e.message); };
+    w.onmessageerror = function () { if (w === worker) workerFailed('a message from it could not be read'); };
+  }
 
-  worker.onmessage = function (ev) {
+  var fontsInstalled = false;
+  function onMessage(ev) {
     var msg = ev.data || {};
     if (msg.type === 'ready') {
       state.assets = msg.assets; state.limits = msg.limits;
       q(root, 'tested-size').textContent = String(msg.limits.testedParticipants);
       // The report's fonts for the page itself, from the bundle (font-src data:
       // only: nothing is fetched). The report and the replay host inline them too.
-      var style = document.createElement('style'); style.textContent = msg.assets.fontFaceCss; document.head.appendChild(style);
+      if (!fontsInstalled) { var style = document.createElement('style'); style.textContent = msg.assets.fontFaceCss; document.head.appendChild(style); fontsInstalled = true; }
       if (opts && opts.onReady) opts.onReady();
     } else if (msg.type === 'progress') {
       var bar = q(root, 'progress');
@@ -120,7 +139,8 @@ export function createPage(root, worker, opts) {
     } else if (pending[msg.type]) {
       var p = pending[msg.type]; delete pending[msg.type]; p.resolve(msg);
     }
-  };
+  }
+  attach(worker);
 
   function filesForWorker() {
     return state.sample ? [] : state.entries.map(function (e) { return { path: e.path, file: e.file }; });

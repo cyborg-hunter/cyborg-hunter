@@ -3,11 +3,17 @@
 import workerSrc from 'virtual:worker-src';
 import { createPage } from './page.js';
 
+// One worker alive at a time: making a new one (the page replaces a worker
+// that failed) revokes the previous one's blob URL.
+var workerBlob = new Blob([workerSrc], { type: 'text/javascript' });
+var workerUrl = null;
 export function createAnalyzeWorker() {
-  return new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })));
+  if (workerUrl) URL.revokeObjectURL(workerUrl);
+  workerUrl = URL.createObjectURL(workerBlob);
+  return new Worker(workerUrl);
 }
 
 if (typeof document !== 'undefined') {
-  var worker = createAnalyzeWorker();   // createPage owns its error events too
-  window.__chAnalyze = createPage(document.body, worker, {});   // exposed for the end-to-end tests
+  // createPage owns the worker's events, and replaces it through the factory if it fails.
+  window.__chAnalyze = createPage(document.body, createAnalyzeWorker(), { createWorker: createAnalyzeWorker });   // exposed for the end-to-end tests
 }

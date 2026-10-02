@@ -298,3 +298,42 @@ test('a selection message counts only from the report frame, and only for a know
   post({ type: 'cyborg-hunter:select', participantId: 'A' }, frame.contentWindow);
   assert.equal(t.page.state.selected, 'A');
 });
+
+test('after a worker failure the page retries on a fresh worker from the factory, and the retry completes', async () => {
+  document.head.innerHTML = '';
+  document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));
+  const workers = [];
+  const makeWorker = () => {
+    const w = { sent: [], terminated: false, onmessage: null, onerror: null, onmessageerror: null,
+      postMessage(m) { this.sent.push(m); }, terminate() { this.terminated = true; } };
+    workers.push(w);
+    return w;
+  };
+  const page = createPage(document.body, makeWorker(), { createWorker: makeWorker });
+  const ready = { type: 'ready', assets: { replayClientSrc: '', replayCss: '', fontFaceCss: '@font-face{}' }, limits: { testedParticipants: 150 } };
+  workers[0].onmessage({ data: ready });
+  action('sample').click(); await tick();
+  workers[0].onmessage({ data: CHECKED }); await tick();
+  action('run').click(); await tick();
+  workers[0].onmessage({ data: { type: 'zip', chunk: new Uint8Array([9]) } });
+  workers[0].onerror({ message: 'killed' });
+  await tick();
+  assert.equal(workers.length, 2, 'a new worker was created');
+  assert.equal(workers[0].terminated, true, 'the failed one is terminated');
+  assert.deepEqual(page.state.zipParts, []);
+  // A late message from the dead worker is ignored.
+  workers[0].onmessage({ data: DONE });
+  await tick();
+  assert.deepEqual(visibleStep(), ['check']);
+  workers[1].onmessage({ data: ready });
+  assert.equal([...document.head.querySelectorAll('style')].length, 1, 'fonts installed once');
+  action('run').click(); await tick();
+  assert.equal(workers[1].sent.filter((m) => m.type === 'run').length, 1, 'the retry goes to the new worker');
+  assert.equal(workers[0].sent.filter((m) => m.type === 'run').length, 1);
+  workers[1].onmessage({ data: { type: 'zip', chunk: new Uint8Array([1, 2]) } });
+  workers[1].onmessage({ data: DONE });
+  await tick();
+  document.querySelector('iframe.analyze-report').dispatchEvent(new win.Event('load'));
+  assert.deepEqual(visibleStep(), ['results']);
+  assert.equal(page.state.zipParts.length, 1);
+});
