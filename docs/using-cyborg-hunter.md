@@ -360,18 +360,21 @@ dropping real data. "Export config" writes the `cyborg-hunter.config.json`
 the run used, ready for the CLI.
 
 **Nothing leaves your browser.** Every web page can declare a security policy
-that the browser enforces. This page's policy forbids it from contacting any
-server: no data requests (`connect-src 'none'`), no images, scripts, fonts or
-frames from other addresses (`default-src 'none'` with only local sources
-allowed), no form submissions (`form-action 'none'`), and no `<base>` element
-that could point the page's own links elsewhere (`base-uri 'none'`). The page's
-code never sends your data anywhere; the policy means that even a bug or a
-malicious dropped file could not make it load or send anything. Links you
-click yourself (for example to this documentation) still open as usual, and
-carry none of your data. The end-to-end tests run the page in Chromium, Firefox and
-WebKit and fail the build if it ever makes a request. The only entries in
-your browser's Network tab are the page's own files and `blob:` URLs. The
-same page is attached to each GitHub release as one
+that the browser enforces. This page's policy has four parts: no data requests
+(`connect-src 'none'`), no images, scripts, fonts or frames from other
+addresses (`default-src 'none'` with only local sources allowed), no form
+submissions (`form-action 'none'`), and no `<base>` element that could point
+the page's own links elsewhere (`base-uri 'none'`). The browser enforces these
+whatever the page's code does, so even a bug could not make the page fetch,
+post or load anything from another address. The policy does not cover
+navigation: a page that moved itself, or a new window, to another address
+could carry data in that address. This page's own code never navigates away
+or opens another page, and the end-to-end tests, which run the page in
+Chromium, Firefox and WebKit, fail the build if it ever requests or navigates
+to anything but its own files. Links you click yourself (for example to this
+documentation) still open as usual, and carry none of your data. The only
+entries in your browser's Network tab are the page's own files and `blob:`
+URLs. The same page is attached to each GitHub release as one
 `cyborg-hunter-analyze.html` file that works from disk, offline; it is also
 linked from the page.
 

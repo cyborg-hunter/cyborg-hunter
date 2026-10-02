@@ -10,6 +10,9 @@
 //     count too, except in the viewer's reconstruction frame (below);
 //   - the guard: a page.route catch-all that lets only the boot files
 //     through. Not used for file:// loads, which some engines do not route;
+//   - the popups: any window the page or its frames open. The policy does
+//     not cover navigation, so the page's code must never open one; the
+//     page's own navigations are in the record;
 //   - the attempts: a load the policy refuses never reaches the network (and
 //     in Firefox and WebKit not the record either), so every frame that runs
 //     scripts records its securitypolicyviolation events. A violation means
@@ -65,6 +68,9 @@ export { expect };
 // data: URL, or about:blank / about:srcdoc for the frames.
 const isLocal = (url) => /^(blob:|data:|about:)/.test(url);
 
+// The windows each guarded page opened, by page.
+const popups = new WeakMap();
+
 // Install BEFORE goto. Returns the record (Request objects); call
 // assertOnlyAllowed at the end. opts.route = false skips the route catch-all
 // (file:// loads: not every engine routes them, and continue() on an
@@ -72,6 +78,8 @@ const isLocal = (url) => /^(blob:|data:|about:)/.test(url);
 export async function guardNetwork(page, allow, opts) {
   const seen = [];
   page.on('request', (r) => seen.push(r));
+  popups.set(page, []);
+  page.on('popup', (p) => popups.get(page).push(p.url() || '(a new window)'));
   if (!opts || opts.route !== false) {
     // WebKit routes the page's blob: loads too (the worker, the frames, the
     // zip); those never leave the browser, so they pass.
@@ -127,6 +135,7 @@ export async function assertOnlyAllowed(page, seen, allow) {
   const outside = requested(seen).filter((u) => !isLocal(u) && !allow.includes(u));
   expect(outside, 'requests outside the allowlist').toEqual([]);
   expect(await cspViolations(page), 'security policy violations (attempted loads)').toEqual([]);
+  expect(popups.get(page) || [], 'windows the page opened').toEqual([]);
 }
 export const siteAllowlist = (baseURL) => [baseURL + '/analyze/', baseURL + '/analyze/index.html', baseURL + '/analyze/analyze.bundle.js'];
 
