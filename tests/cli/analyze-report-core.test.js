@@ -105,9 +105,19 @@ describe('mergeConfig', () => {
     assert.match(warnings[1], /softScoreThreshold is not a number/);
   });
 
-  it('treats a missing or non-object file config as empty', () => {
-    assert.deepStrictEqual(mergeConfig(null), mergeConfig({}));
+  it('treats a missing file config as empty', () => {
+    assert.deepStrictEqual(mergeConfig(undefined), mergeConfig({}));
     assert.deepStrictEqual(mergeConfig(undefined).warnings, []);
+  });
+
+  // Valid JSON that is not an object (null, a list, a string, a number)
+  // configures nothing: say so rather than run on the defaults silently.
+  it('ignores a file config that is not an object, with a warning', () => {
+    for (const [value, kind] of [[null, 'null'], [[{ dataDir: 'x' }], 'an array'], ['x', 'a string'], [3, 'a number']]) {
+      const { config, warnings } = mergeConfig(value);
+      assert.deepStrictEqual(config, mergeConfig({}).config);
+      assert.deepStrictEqual(warnings, ['the config file holds ' + kind + ', not a JSON object; its settings are ignored']);
+    }
   });
 
   it('knows the assetsDir key', () => {

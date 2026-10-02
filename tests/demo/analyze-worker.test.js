@@ -187,6 +187,14 @@ test('reset lets go of the last run: its replays are no longer served', async ()
   assert.equal(after.phase, 'replay');
 });
 
+test('a dropped config whose JSON is not an object is ignored with the CLI\'s warning', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', files: [{ path: 'cyborg-hunter.config.json', file: new File(['[]'], 'cyborg-hunter.config.json') }] });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.deepEqual(checked.configWarnings, ['the config file holds an array, not a JSON object; its settings are ignored']);
+});
+
 test('errors name their phase', async () => {
   const w = startWorker();
   w.send({ type: 'replay', participantId: 'nobody' });

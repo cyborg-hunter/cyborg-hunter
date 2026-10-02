@@ -70,12 +70,14 @@ var lastRun = null;
 async function check(msg) {
   var readers = readersFor(msg);
   var groups = classifyFiles(readers);
-  var fileConfig = null, configWarnings = [];
+  var fileConfig, configWarnings = [];
   if (groups.config) {
     try { fileConfig = JSON.parse(decode(await groups.config.read())); }
-    catch (e) { configWarnings.push('failed to parse ' + CONFIG_NAME + ': ' + e.message); fileConfig = null; }
+    catch (e) { configWarnings.push('failed to parse ' + CONFIG_NAME + ': ' + e.message); fileConfig = undefined; }
   }
-  var merged = mergeConfig(fileConfig || {});
+  // undefined: no config (none dropped, or unreadable); anything else that
+  // is not an object gets mergeConfig's warning, as in the CLI.
+  var merged = mergeConfig(fileConfig);
   configWarnings = configWarnings.concat(merged.warnings);
   var peeks = [];
   for (var i = 0; i < groups.participant.length; i++) {
