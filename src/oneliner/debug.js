@@ -13,6 +13,8 @@
 //   Cyborg Hunter active · <jsPsych detected | vanilla mode> ·
 //   <N trials instrumented | N mark elements> · ID from <source> ·
 //   honeypot <on|off> · friction <off|observe|enforce>
+//   In manual mode: Cyborg Hunter active · manual mode · the page's
+//   cyborg-hunter extension monitors the trials
 //   N on jsPsych is the PLANNED count: unique trial objects the timeline walk
 //   instrumented (ctx.jspsych.instrumented). On vanilla it is the number of
 //   [data-ch-trial] elements in the DOM.
@@ -59,6 +61,11 @@ export function createDebug(opts) {
   var waiting = false;
 
   function parts(live) {
+    // Manual mode (the hand-over in adapters/jspsych.js): ch.js instruments
+    // no trial and runs no guard, so there is nothing of its own to count.
+    if (ctx.host === 'manual') {
+      return ['Cyborg Hunter active', 'manual mode', 'the page\'s cyborg-hunter extension monitors the trials'].join(' · ');
+    }
     var hostPart, countPart;
     if (ctx.host === 'vanilla') {
       var marks = doc.querySelectorAll ? doc.querySelectorAll('[data-ch-trial]').length : 0;
