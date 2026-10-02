@@ -28,6 +28,11 @@ jobs:
 
       - run: npm ci
 
+      # A tag can point at a commit pages.yml never tested: nothing is
+      # attached to a release unless the node suites pass on it.
+      - name: Node test suites
+        run: npm test
+
       - name: Build + assemble (same steps as pages.yml)
         run: |
           node build.js
