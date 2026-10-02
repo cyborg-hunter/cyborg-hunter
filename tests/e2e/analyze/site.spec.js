@@ -4,8 +4,8 @@
 // dropped stylesheet with the recorded external image blocked, and the
 // participant switch. Every test runs under the same request guard as
 // engines.spec.js.
-import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, buildReport, railOrder, reportFrame, downloadZip,
-  pilotFiles, cliPilotTree, makeReplayCohort, startSentinel, requested, PILOT_ORDER } from './support.mjs';
+import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
+  pilotFiles, cliPilotTree, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER } from './support.mjs';
 
 test('dropped synthetic pilot: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -63,6 +63,7 @@ test('a dropped stylesheet styles the replay; the recorded external image is nev
     await page.setInputFiles('[data-role="file-input"]', cohort.files);
     await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment assets');
     await buildReport(page);
+    await reportSelected(page);
     await page.selectOption('[data-role="replay-select"]', 'DEMO-FIXT');
     await expect(page.locator('[data-role="asset-note"]')).toHaveText('Experiment assets: 1 of 1 stylesheets matched; 0 of 1 images matched (missing: blocked.png).');
     await page.click('[data-action="load-replay"]');
@@ -77,6 +78,7 @@ test('a dropped stylesheet styles the replay; the recorded external image is nev
     await expect(img).toHaveCount(1);
     await expect.poll(() => img.evaluate((el) => el.complete)).toBe(true);   // settled: refused, or loaded
     expect(sentinel.hits).toEqual([]);
+    await settleRequests(seen, allow);
     expect(requested(seen).filter((u) => u.startsWith(sentinel.url))).toEqual([]);
     await assertOnlyAllowed(page, seen, allow);
   } finally { cohort.cleanup(); await sentinel.close(); }
@@ -91,6 +93,7 @@ test('switching participant tears down the viewer and mounts the right replay', 
     await waitReady(page);
     await page.setInputFiles('[data-role="file-input"]', cohort.files);
     await buildReport(page);
+    await reportSelected(page);
     await page.selectOption('[data-role="replay-select"]', 'DEMO-FIXT');
     await page.click('[data-action="load-replay"]');
     await expect(page.locator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT"]')).toHaveCount(1);

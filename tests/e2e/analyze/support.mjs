@@ -24,7 +24,8 @@
 //   test / expect     @playwright/test, plus an auto `pageErrors` fixture
 //                     (the house pattern, demo/tests/helpers.mjs): any
 //                     uncaught page error fails the test at teardown.
-//   guardNetwork / assertOnlyAllowed / siteAllowlist   the observers above.
+//   guardNetwork / assertOnlyAllowed / siteAllowlist / settleRequests /
+//   requested         the observers above, and the record's settled URLs.
 //   waitReady / loadSample / buildReport / railOrder / reportFrame /
 //   reportSelected / downloadZip   the page's steps, through its
 //                     data-action/data-role hooks.
@@ -96,7 +97,17 @@ function refusedInReconstruction(r) {
   try { return r.frame().url() === 'about:srcdoc'; } catch (e) { return false; }   // a worker's request has no frame
 }
 // The URLs of the record, less the reconstruction frame's refused loads.
+// Settle the record first (settleRequests): until a refused load's
+// requestfailed has fired, r.failure() is null and the load looks requested.
 export const requested = (seen) => seen.filter((r) => !refusedInReconstruction(r)).map((r) => r.url());
+
+// Waits, at most 2 s per request, for every recorded request outside the
+// boot files to finish or fail (r.response() resolves either way; null on a
+// failure). One still open after that counts as requested, which it is.
+export async function settleRequests(seen, allow) {
+  const open = seen.filter((r) => !isLocal(r.url()) && !(allow || []).includes(r.url()));
+  await Promise.all(open.map((r) => Promise.race([r.response().catch(() => null), new Promise((ok) => setTimeout(ok, 2000))])));
+}
 
 // The policy violations recorded in every frame still attached. Only the
 // viewer's reconstruction frame (about:srcdoc, no scripts) may lack the
@@ -112,6 +123,7 @@ async function cspViolations(page) {
 }
 
 export async function assertOnlyAllowed(page, seen, allow) {
+  await settleRequests(seen, allow);
   const outside = requested(seen).filter((u) => !isLocal(u) && !allow.includes(u));
   expect(outside, 'requests outside the allowlist').toEqual([]);
   expect(await cspViolations(page), 'security policy violations (attempted loads)').toEqual([]);
