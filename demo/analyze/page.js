@@ -99,6 +99,9 @@ export function createPage(root, worker, opts) {
       (restarted ? (state.result ? 'It was restarted; build the report again to load replays.' : 'It was restarted; try again.') + ' If it fails again, use the CLI.'
         : 'Reload the page to try again, or use the CLI.');
     if (phase) recover(phase, text); else showError(text);
+    // The new worker answers none of the old requests: settle every replay
+    // still waiting, or the next answer would pair with a stale waiter.
+    while (replayWaiters.length) replayWaiters.shift().reject(handled(text));
   }
   function replaceWorker() {
     if (!opts || !opts.createWorker) return false;

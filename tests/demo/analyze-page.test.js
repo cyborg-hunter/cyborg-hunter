@@ -337,3 +337,38 @@ test('after a worker failure the page retries on a fresh worker from the factory
   assert.deepEqual(visibleStep(), ['results']);
   assert.equal(page.state.zipParts.length, 1);
 });
+
+test('a worker failure with several replay requests outstanding settles them all; the next replay pairs with its own answer', async () => {
+  document.head.innerHTML = '';
+  document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));
+  const workers = [];
+  const makeWorker = () => {
+    const w = { sent: [], onmessage: null, onerror: null, onmessageerror: null,
+      postMessage(m) { this.sent.push(m); }, terminate() {} };
+    workers.push(w);
+    return w;
+  };
+  const page = createPage(document.body, makeWorker(), { createWorker: makeWorker });
+  const ready = { type: 'ready', assets: { replayClientSrc: '', replayCss: '', fontFaceCss: '@font-face{}' }, limits: { testedParticipants: 150 } };
+  const w0 = (data) => workers[0].onmessage({ data });
+  w0(ready);
+  action('sample').click(); await tick();
+  w0(CHECKED); await tick();
+  action('run').click(); await tick();
+  w0({ type: 'zip', chunk: new Uint8Array([1]) });
+  w0(DONE); await tick();
+  document.querySelector('iframe.analyze-report').dispatchEvent(new win.Event('load'));
+  const first = page.loadReplay();
+  const second = page.loadReplay();
+  await tick();
+  workers[0].onerror({ message: 'killed' });
+  assert.notEqual(await outcome(first), 'pending');
+  assert.notEqual(await outcome(second), 'pending');
+  // On the new worker, one request gets exactly its own answer.
+  workers[1].onmessage({ data: ready });
+  const third = page.loadReplay();
+  await tick();
+  workers[1].onmessage({ data: { type: 'replay-model', participantId: 'B', model: { segments: [] } } });
+  assert.equal(await outcome(third), 'resolved');
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 1);
+});
