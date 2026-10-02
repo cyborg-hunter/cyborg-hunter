@@ -52,13 +52,19 @@ async function inflateMember(bytes) {
 }
 
 // The offset of every member, or [] when fflate cannot walk the file.
+// fflate's push() recurses once per member it finds in a chunk, so a file of
+// thousands of small members overflows the stack when pushed whole; small
+// chunks keep the depth bounded.
+var WALK_CHUNK = 1024;
 function memberStarts(bytes) {
   var starts = [0];
   try {
     var walker = new Gunzip();
     walker.ondata = function () {};
     walker.onmember = function (offset) { starts.push(offset); };
-    walker.push(bytes, true);
+    for (var at = 0; at < bytes.length; at += WALK_CHUNK) {
+      walker.push(bytes.subarray(at, at + WALK_CHUNK), at + WALK_CHUNK >= bytes.length);
+    }
   } catch (e) { return []; }
   return starts;
 }

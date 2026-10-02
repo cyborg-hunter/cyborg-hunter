@@ -166,6 +166,12 @@ describe('webGunzip', () => {
     assert.deepStrictEqual(viaMembers, new Uint8Array(gunzipSync(multi)));
   });
 
+  it('inflates a file of 20,000 small members, as node:zlib does', async () => {
+    const many = cat(...Array.from({ length: 20000 }, (_, i) => gzipSync(Buffer.from(String(i % 10)))));
+    const viaMembers = await withGlobal('DecompressionStream', browserLike([many]), () => webGunzip(many));
+    assert.deepStrictEqual(viaMembers, new Uint8Array(gunzipSync(many)));
+  });
+
   it('rejects a multi-member file whose second member is corrupt, as node:zlib does', async () => {
     const second = Uint8Array.from(members[1]);
     second[second.length - 8] ^= 0xff;   // its CRC-32
@@ -188,12 +194,15 @@ describe('webGunzip', () => {
     });
   }
 
-  it('rejects four zero bytes after the last member (node:zlib accepts them)', async () => {
-    // The one known difference from the CLI, and on the strict side: the
-    // browser's stream treats any byte after the last member as junk.
-    const padded = cat(stored, new Uint8Array(4));
-    assert.deepStrictEqual(new Uint8Array(gunzipSync(padded)), new Uint8Array(record));
-    await assert.rejects(webGunzip(padded));
+  it('rejects trailing data that starts with a zero byte (node:zlib stops there and accepts)', async () => {
+    // The one known difference from the CLI, and on the strict side: node:zlib
+    // ends the file at a zero byte after a member (ignoring what follows, even
+    // a further member), while the browser's stream treats it as junk.
+    for (const tail of [new Uint8Array(1), new Uint8Array(4), cat(new Uint8Array(1), members[1])]) {
+      const padded = cat(stored, tail);
+      assert.deepStrictEqual(new Uint8Array(gunzipSync(padded)), new Uint8Array(record));
+      await assert.rejects(webGunzip(padded));
+    }
   });
 
   it('rejects bytes that are not gzip with the stream\'s own error', async () => {
