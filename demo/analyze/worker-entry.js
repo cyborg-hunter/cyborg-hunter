@@ -8,7 +8,7 @@
 //
 // Protocol (every message is { type, ... }):
 //   page → worker
-//     { type: 'check',  files: [{ path, file: File }], sample?: true }
+//     { type: 'check',  files: [{ path, file: File } | { path, bytes: ArrayBuffer }], sample?: true }
 //     { type: 'run',    files, sample?: true, config, participantIdField }
 //     { type: 'replay', participantId }
 //   worker → page
@@ -38,12 +38,19 @@ import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from './limits.js';
 var post = function (msg, transfer) { self.postMessage(msg, transfer || []); };
 var decode = function (bytes) { return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes); };
 
-// Lazy readers over File handles (the page passes the handles, never the
-// bytes): a file is read when ingest or the matcher asks for it, one at a time.
+// Lazy readers over File handles (over http the page passes the handles,
+// never the bytes): a file is read when ingest or the matcher asks for it, one
+// at a time. A page opened from file: sends each file's bytes instead (WebKit's
+// worker cannot read a File there; page.js); the reader then serves a copy of
+// them per read, as a File read hands out a fresh buffer each time.
 function fileReader(entry) {
   var name = entry.path.slice(entry.path.lastIndexOf('/') + 1);
-  return { name: name, path: entry.path, size: entry.file.size,
-    read: function () { return entry.file.arrayBuffer().then(function (b) { return new Uint8Array(b); }); } };
+  var bytes = entry.bytes ? new Uint8Array(entry.bytes) : null;
+  return { name: name, path: entry.path, size: bytes ? bytes.length : entry.file.size,
+    read: function () {
+      if (bytes) return Promise.resolve(bytes.slice());
+      return entry.file.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+    } };
 }
 function textReader(path, text) {
   var bytes = new TextEncoder().encode(text);

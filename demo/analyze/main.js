@@ -14,6 +14,8 @@ export function createAnalyzeWorker() {
 }
 
 if (typeof document !== 'undefined') {
-  // createPage owns the worker's events, and replaces it through the factory if it fails.
-  window.__chAnalyze = createPage(document.body, createAnalyzeWorker(), { createWorker: createAnalyzeWorker });   // exposed for the end-to-end tests
+  // createPage owns the worker's events, and replaces it through the factory
+  // if it fails. From file: the page reads dropped files itself (page.js).
+  window.__chAnalyze = createPage(document.body, createAnalyzeWorker(),
+    { createWorker: createAnalyzeWorker, transferBytes: location.protocol === 'file:' });   // exposed for the end-to-end tests
 }

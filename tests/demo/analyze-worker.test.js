@@ -147,6 +147,28 @@ test('a run with a recording serves the same styled replay model the zip carries
   assert.deepEqual((await w.next('replay-model')).model, fromZip);
 });
 
+test('dropped files sent as bytes (a page opened from file:) check and run as File handles do', async () => {
+  const dir = 'examples/synthetic-pilot';
+  const paths = readdirSync(dir + '/data').filter((f) => f.endsWith('.csv')).sort().map((f) => 'data/' + f).concat(['cyborg-hunter.config.json']);
+  const asFiles = () => paths.map((p) => fileEntry(dir, p, 'pilot/' + p));
+  // A fresh ArrayBuffer per message, as the page reads one for each.
+  const asBytes = () => paths.map((p) => ({ path: 'pilot/' + p, bytes: new Uint8Array(readFileSync(dir + '/' + p)).buffer }));
+  const outcome = async (files) => {
+    const w = startWorker();
+    w.send({ type: 'check', files: files() });
+    const checked = await w.next('checked', 'error');
+    assert.equal(checked.type, 'checked', checked.message);
+    w.send({ type: 'run', files: files(), config: checked.config, participantIdField: checked.idSuggestion.suggested });
+    const done = await w.next('done', 'error');
+    assert.equal(done.type, 'done', done.message);
+    return { checked, triageOrder: done.triageOrder, counts: done.counts, files: done.files, warnings: done.warnings };
+  };
+  const viaBytes = await outcome(asBytes);
+  assert.deepEqual(viaBytes, await outcome(asFiles));
+  assert.equal(viaBytes.checked.idSuggestion.suggested, 'subject_ID', 'the config was read from its bytes');
+  assert.deepEqual(viaBytes.triageOrder, ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01']);
+});
+
 test('errors name their phase', async () => {
   const w = startWorker();
   w.send({ type: 'replay', participantId: 'nobody' });

@@ -3,6 +3,9 @@
 // results. All participant data stays in the worker (File handles go over,
 // the worker reads the bytes one file at a time); this module only holds
 // what the page shows: counts, warnings, the report HTML, the zip chunks.
+// One exception, opts.transferBytes (main.js sets it for a page opened from
+// file:): WebKit's worker cannot read a File there, so the page reads each
+// dropped file itself and transfers the bytes, for every check and run.
 //
 // The worker's messages carry no run id (worker-entry.js), so the page runs
 // ONE operation at a time: while a check or a run is in flight the controls
@@ -43,7 +46,7 @@ export function createPage(root, worker, opts) {
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
 
-  function send(msg) { worker.postMessage(msg); }
+  function send(msg, transfer) { worker.postMessage(msg, transfer || []); }
   function waitFor(type) { return new Promise(function (resolve, reject) { pending[type] = { resolve: resolve, reject: reject }; }); }
   function busy() { return !!(pending.checked || pending.done); }
   function goTo(name) {
@@ -145,8 +148,22 @@ export function createPage(root, worker, opts) {
   }
   attach(worker);
 
-  function filesForWorker() {
-    return state.sample ? [] : state.entries.map(function (e) { return { path: e.path, file: e.file }; });
+  // Sends a check or run with the dropped files attached: File handles, or
+  // with opts.transferBytes each file's bytes, read afresh for every message
+  // (a transferred buffer is gone from this side). A file that cannot be read
+  // fails the step like a worker error would.
+  function sendWithFiles(msg) {
+    if (state.sample || !(opts && opts.transferBytes)) {
+      msg.files = state.sample ? [] : state.entries.map(function (e) { return { path: e.path, file: e.file }; });
+      send(msg);
+      return;
+    }
+    Promise.all(state.entries.map(function (e) { return e.file.arrayBuffer(); })).then(function (buffers) {
+      msg.files = state.entries.map(function (e, i) { return { path: e.path, bytes: buffers[i] }; });
+      send(msg, buffers);
+    }).catch(function (err) {
+      recover(msg.type, 'A dropped file could not be read: ' + (err && err.message ? err.message : String(err)));
+    });
   }
 
   async function check() {
@@ -158,7 +175,7 @@ export function createPage(root, worker, opts) {
     listWarnings(q(root, 'check-warnings'), []);
     var reply = waitFor('checked');
     updateControls();
-    send({ type: 'check', files: filesForWorker(), sample: state.sample });
+    sendWithFiles({ type: 'check', sample: state.sample });
     var checked = await reply;
     state.checked = checked;
     var c = checked.counts;
@@ -197,7 +214,7 @@ export function createPage(root, worker, opts) {
     q(root, 'progress-label').textContent = '';
     var reply = waitFor('done');
     updateControls();
-    send({ type: 'run', files: filesForWorker(), sample: state.sample, config: state.checked.config, participantIdField: state.idField });
+    sendWithFiles({ type: 'run', sample: state.sample, config: state.checked.config, participantIdField: state.idField });
     var done = await reply;
     updateControls();
     state.result = done;

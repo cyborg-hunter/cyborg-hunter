@@ -17,16 +17,24 @@ globalThis.window = win; globalThis.document = win.document;
 globalThis.Blob = win.Blob; globalThis.URL = win.URL;
 const { createPage } = await import('../../demo/analyze/page.js');
 
-function boot() {
+// opts go to createPage. With opts.transferBytes the stand-in puts each
+// message through structuredClone with its transfer list, as the worker
+// boundary does: a transferred buffer is detached on the page's side.
+function boot(opts) {
   document.head.innerHTML = '';
   // The body without its <script>: the bundle is what this test imports.
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));
   const sent = [];
-  const worker = { postMessage: (m) => sent.push(m), onmessage: null, onerror: null, onmessageerror: null };
-  const page = createPage(document.body, worker, {});
+  const transfers = [];
+  const worker = { onmessage: null, onerror: null, onmessageerror: null,
+    postMessage: (m, transfer) => {
+      transfers.push(transfer || []);
+      sent.push(opts && opts.transferBytes ? structuredClone(m, { transfer: transfer || [] }) : m);
+    } };
+  const page = createPage(document.body, worker, opts || {});
   const emit = (data) => worker.onmessage({ data });
   emit({ type: 'ready', assets: { replayClientSrc: '', replayCss: '', fontFaceCss: '@font-face{}' }, limits: { testedParticipants: 150, testedFixture: 'x' } });
-  return { page, sent, emit, worker };
+  return { page, sent, transfers, emit, worker };
 }
 const visibleStep = () => [...document.querySelectorAll('section.step')].filter((s) => !s.hidden).map((s) => s.dataset.step);
 const role = (r) => document.querySelector('[data-role="' + r + '"]');
@@ -83,6 +91,50 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
   assert.equal(role('id-field').value, 'subject_ID');
   assert.equal(role('check-warnings').textContent, 'unknown key "dataDri"');
   assert.equal(action('run').disabled, false);
+});
+
+const dropped = () => [{ path: 'study/a.csv', file: new File(['subject_ID,x\n1,2\n'], 'a.csv') },
+  { path: 'study/cyborg-hunter.config.json', file: new File(['{"participantIdField":"subject_ID"}'], 'cyborg-hunter.config.json') }];
+const asText = (buf) => new TextDecoder().decode(buf);
+async function until(cond) { for (let i = 0; i < 50 && !cond(); i++) await tick(); assert.ok(cond(), 'condition reached'); }
+
+test('over http the page hands the worker File handles, not bytes', async () => {
+  const t = boot();
+  const entries = dropped();
+  t.page.setFiles(entries);
+  await until(() => t.sent.length === 1);
+  assert.deepEqual(t.sent[0], { type: 'check', sample: false, files: entries.map((e) => ({ path: e.path, file: e.file })) });
+  assert.deepEqual(t.transfers[0], []);
+});
+
+test('from file:, the page reads each dropped file and transfers its bytes, for the check and again for the run', async () => {
+  const t = boot({ transferBytes: true });
+  t.page.setFiles(dropped());
+  await until(() => t.sent.length === 1);
+  const check = t.sent[0];
+  assert.equal(check.type, 'check');
+  assert.deepEqual(check.files.map((f) => f.path), ['study/a.csv', 'study/cyborg-hunter.config.json']);
+  assert.ok(check.files.every((f) => f.bytes instanceof ArrayBuffer && !('file' in f)));
+  assert.deepEqual(check.files.map((f) => asText(f.bytes)), ['subject_ID,x\n1,2\n', '{"participantIdField":"subject_ID"}']);
+  // Transferred, not copied: the page's buffers are detached now.
+  assert.equal(t.transfers[0].length, 2);
+  assert.ok(t.transfers[0].every((b) => b instanceof ArrayBuffer && b.byteLength === 0));
+  t.emit(CHECKED);
+  await tick();
+  action('run').click();
+  await until(() => t.sent.length === 2);
+  assert.equal(t.sent[1].type, 'run');
+  assert.deepEqual(t.sent[1].files.map((f) => asText(f.bytes)), ['subject_ID,x\n1,2\n', '{"participantIdField":"subject_ID"}'], 'read afresh for the run');
+});
+
+test('from file:, a file that cannot be read fails the check like any check error', async () => {
+  const t = boot({ transferBytes: true });
+  const bad = { path: 'gone.csv', file: { size: 1, arrayBuffer: () => Promise.reject(new Error('NotFoundError: the file is gone')) } };
+  await t.page.setFiles([bad]).catch(() => {});
+  await tick();
+  assert.deepEqual(visibleStep(), ['drop']);
+  assert.match(role('error').textContent, /the file is gone/);
+  assert.equal(t.sent.length, 0);
 });
 
 test('one run at a time: the run control is disabled while a run is in flight', async () => {
