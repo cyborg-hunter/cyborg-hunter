@@ -360,11 +360,15 @@ dropping real data. "Export config" writes the `cyborg-hunter.config.json`
 the run used, ready for the CLI.
 
 **Nothing leaves your browser.** Every web page can declare a security policy
-that the browser enforces. This page's policy says it may not contact any
-server: no data requests (`connect-src 'none'`), no form submissions
-(`form-action 'none'`), no redirection of links (`base-uri 'none'`). Once the
-page's own files have loaded, the browser refuses any attempt to send or
-fetch anything. The end-to-end tests run the page in Chromium, Firefox and
+that the browser enforces. This page's policy forbids it from contacting any
+server: no data requests (`connect-src 'none'`), no images, scripts, fonts or
+frames from other addresses (`default-src 'none'` with only local sources
+allowed), no form submissions (`form-action 'none'`), and no `<base>` element
+that could point the page's own links elsewhere (`base-uri 'none'`). The page's
+code never sends your data anywhere; the policy means that even a bug or a
+malicious dropped file could not make it load or send anything. Links you
+click yourself (for example to this documentation) still open as usual, and
+carry none of your data. The end-to-end tests run the page in Chromium, Firefox and
 WebKit and fail the build if it ever makes a request. The only entries in
 your browser's Network tab are the page's own files and `blob:` URLs. The
 same page is attached to each GitHub release as one
@@ -376,9 +380,11 @@ Requirements and limits:
 - A 2023-or-later browser (Chrome, Firefox or Safari).
 - The page has been tested with cohorts of up to 150 participants (a
   0.8 MB replay recording each) on a laptop with 24 GB of memory; it states
-  that number on screen, and above it tells you to use the CLI. Firefox did
-  not always finish at about twice that size (300 participants). Memory
-  is the limit: a smaller machine stalls sooner.
+  that number on screen and, above it, warns that the build may be slow or
+  fail and suggests the CLI (the build is still allowed). If a report loads
+  but never finishes rendering, the page says so; the zip still holds the
+  full report. Firefox did not always finish at about twice that size
+  (300 participants). Memory is the limit: a smaller machine stalls sooner.
 - `.json.gz` recordings are read, including files made of several gzip
   members. Corrupt files are rejected as the CLI rejects them, with one
   difference: if a gzip file is followed by extra data that starts with a

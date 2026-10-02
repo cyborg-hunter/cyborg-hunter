@@ -6,7 +6,7 @@ Optional companion deterrence modules ship in the same package (`ch.js` bundles 
 
 **[Try the live demo →](https://cyborg-hunter.github.io/cyborg-hunter/)** — run the tour in your browser; nothing leaves your machine.
 
-**[Analyze your data in the browser →](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)** — drop your data files and get the same report the CLI builds, processed in your browser. The page cannot make network requests (its security policy forbids them, and a test enforces it), so nothing is uploaded. Also available as a single offline file attached to each release.
+**[Analyze your data in the browser →](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)** — drop your data files and get the same report the CLI builds, processed in your browser. Its security policy forbids the page from fetching or sending anything once it has loaded (an automated test enforces this), so nothing is uploaded. Also available as a single offline file attached to each release.
 
 ### Example: what a report looks like
 
