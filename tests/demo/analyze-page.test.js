@@ -22,11 +22,11 @@ function boot() {
   // The body without its <script>: the bundle is what this test imports.
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));
   const sent = [];
-  const worker = { postMessage: (m) => sent.push(m), onmessage: null };
+  const worker = { postMessage: (m) => sent.push(m), onmessage: null, onerror: null, onmessageerror: null };
   const page = createPage(document.body, worker, {});
   const emit = (data) => worker.onmessage({ data });
   emit({ type: 'ready', assets: { replayClientSrc: '', replayCss: '', fontFaceCss: '@font-face{}' }, limits: { testedParticipants: 150, testedFixture: 'x' } });
-  return { page, sent, emit };
+  return { page, sent, emit, worker };
 }
 const visibleStep = () => [...document.querySelectorAll('section.step')].filter((s) => !s.hidden).map((s) => s.dataset.step);
 const role = (r) => document.querySelector('[data-role="' + r + '"]');
@@ -77,7 +77,8 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
   await toCheck(t);
   assert.deepEqual(t.sent, [{ type: 'check', files: [], sample: true }]);
   assert.deepEqual(visibleStep(), ['check']);
-  assert.match(role('counts').textContent, /3 participant files.*1 replay candidates.*0 experiment assets.*1 config file/);
+  // JSON files sit in both of the classifier's lists; the page counts each file once.
+  assert.match(role('counts').textContent, /^3 data files \(2 CSV, 1 JSON: participant data or recordings, told apart when the report is built\)0 experiment assets1 config file$/);
   assert.deepEqual([...role('id-field').options].map((o) => o.value), ['subject_ID', 'run_id']);
   assert.equal(role('id-field').value, 'subject_ID');
   assert.equal(role('check-warnings').textContent, 'unknown key "dataDri"');
@@ -211,4 +212,89 @@ test('start over returns to the drop step and clears the run', async () => {
   assert.equal(t.page.state.result, null);
   assert.deepEqual(t.page.state.zipParts, []);
   assert.equal(t.page.state.zipUrl, null);
+});
+
+test('a worker failure mid-run recovers like a run error: chunks discarded, controls back, retry offered', async () => {
+  for (const kind of ['onerror', 'onmessageerror']) {
+    const t = boot();
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit({ type: 'zip', chunk: new Uint8Array([1]) });
+    t.worker[kind]({ message: 'out of memory' });
+    await tick();
+    assert.deepEqual(t.page.state.zipParts, [], kind);
+    assert.deepEqual(visibleStep(), ['check'], kind);
+    assert.equal(action('run').disabled, false, kind);
+    assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled), kind);
+    assert.equal(role('error').hidden, false, kind);
+    assert.match(role('error').textContent, /worker/i, kind);
+  }
+});
+
+test('a worker failure mid-check returns to the drop step with Start over usable', async () => {
+  const t = boot();
+  action('sample').click();
+  await tick();
+  t.worker.onerror({ message: 'SyntaxError' });
+  await tick();
+  assert.deepEqual(visibleStep(), ['drop']);
+  assert.match(role('error').textContent, /SyntaxError/);
+  assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled));
+  action('sample').click();   // a retry is accepted
+  await tick();
+  assert.equal(t.sent.filter((m) => m.type === 'check').length, 2);
+});
+
+test('start over removes the old report frame and revokes its url', async () => {
+  const t = boot();
+  const revoked = [];
+  const orig = URL.revokeObjectURL;
+  URL.revokeObjectURL = (u) => { revoked.push(u); };
+  try {
+    await toResults(t);
+    const url = document.querySelector('iframe.analyze-report').src;
+    document.querySelectorAll('[data-action="reset"]')[1].click();
+    assert.equal(document.querySelector('iframe.analyze-report'), null);
+    assert.ok(revoked.includes(url));
+    assert.equal(role('run-warnings').children.length, 0);
+  } finally { URL.revokeObjectURL = orig; }
+});
+
+test('a failed report swap does not keep the dead url as the one to revoke next', async () => {
+  const t = boot();
+  const revoked = [];
+  const orig = URL.revokeObjectURL;
+  URL.revokeObjectURL = (u) => { revoked.push(u); };
+  try {
+    await toResults(t);                                   // first report loads
+    const first = document.querySelector('iframe.analyze-report').src;
+    document.querySelectorAll('[data-action="reset"]')[1].click();
+    revoked.length = 0;
+    await toCheck(t);
+    action('run').click(); await tick();
+    t.emit(DONE); await tick();
+    const frame = document.querySelector('iframe.analyze-report');
+    const failed = frame.src;
+    frame.dispatchEvent(new win.Event('error'));         // this swap fails
+    assert.deepEqual(revoked, [failed], 'the fresh url only');
+    assert.notEqual(failed, first);
+    document.querySelectorAll('[data-action="reset"]')[1].click();
+    assert.equal(revoked.filter((u) => u === failed).length, 1, 'never revoked twice, never kept');
+  } finally { URL.revokeObjectURL = orig; }
+});
+
+test('a selection message counts only from the report frame, and only for a known participant id', async () => {
+  const t = boot();
+  await toResults(t);
+  const frame = document.querySelector('iframe.analyze-report');
+  const post = (data, source) => window.dispatchEvent(new win.MessageEvent('message', { data, source }));
+  post({ type: 'cyborg-hunter:select', participantId: 'A' }, {});   // another window
+  assert.equal(t.page.state.selected, null);
+  post({ type: 'cyborg-hunter:select', participantId: { toString: () => 'A' } }, frame.contentWindow);
+  assert.equal(t.page.state.selected, null);
+  post({ type: 'cyborg-hunter:select', participantId: 'nobody' }, frame.contentWindow);
+  assert.equal(t.page.state.selected, null);
+  post({ type: 'cyborg-hunter:select', participantId: 'A' }, frame.contentWindow);
+  assert.equal(t.page.state.selected, 'A');
 });

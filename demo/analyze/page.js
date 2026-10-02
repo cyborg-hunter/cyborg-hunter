@@ -85,6 +85,18 @@ export function createPage(root, worker, opts) {
     return function (err) { if (!err || !err.handled) recover(phase, err && err.message ? err.message : String(err)); };
   }
 
+  // A failure of the worker itself (a script error outside a job, a message
+  // that cannot be read) carries no phase: it is charged to whatever is in
+  // flight, so a pending check or run cannot leave the page busy for good.
+  function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : replayWaiters.length ? 'replay' : null; }
+  function workerFailed(message) {
+    var phase = inFlight();
+    var text = 'The analysis worker failed' + (message ? ': ' + message : '') + '. Try again; if it fails again, reload the page or use the CLI.';
+    if (phase) recover(phase, text); else showError(text);
+  }
+  worker.onerror = function (e) { workerFailed(e && e.message); };
+  worker.onmessageerror = function () { workerFailed('a message from it could not be read'); };
+
   worker.onmessage = function (ev) {
     var msg = ev.data || {};
     if (msg.type === 'ready') {
@@ -127,8 +139,12 @@ export function createPage(root, worker, opts) {
     var checked = await reply;
     state.checked = checked;
     var c = checked.counts;
+    // classify-files.js puts every JSON file in BOTH the participant and the
+    // replay list (ingest tells a recording from data by content), so the
+    // replay list is the JSON count and each file is counted once here.
+    var json = c.replay, csv = c.participant - c.replay;
     q(root, 'counts').innerHTML =
-      '<span><b>' + c.participant + '</b> participant files</span><span><b>' + c.replay + '</b> replay candidates</span>' +
+      '<span><b>' + c.participant + '</b> data files (' + csv + ' CSV, ' + json + ' JSON: participant data or recordings, told apart when the report is built)</span>' +
       '<span><b>' + c.assets + '</b> experiment assets</span><span><b>' + (checked.configFound ? '1' : '0') + '</b> config file</span>' +
       (c.ignored ? '<span><b>' + c.ignored + '</b> ignored</span>' : '');
     var sel = q(root, 'id-field'); sel.innerHTML = '';
@@ -168,7 +184,9 @@ export function createPage(root, worker, opts) {
       done.counts.flaggedSoft + ' soft, ' + done.counts.clean + ' clean. Zip: ' + Math.round(done.zipBytes / 1024) + ' KB.';
     listWarnings(q(root, 'run-warnings'), done.warnings.concat(done.reportWarnings));
     root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = typeof done.files[b.dataset.file] !== 'string'; });
-    reportUrl = swapIframe(q(root, 'report'), done.html, reportUrl, null,
+    // reportUrl moves to the new document only once it has loaded: a failed
+    // swap has already revoked its own url, and the old one is still showing.
+    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; },
       function () { showError('The report frame did not load.'); }, { className: 'analyze-report', title: 'Report' });
     if (!replayCard) {
       replayCard = createReplayCard(q(root, 'replay'), state.assets, function (pid) {
@@ -186,6 +204,11 @@ export function createPage(root, worker, opts) {
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
     discardZip();
     if (replayCard) replayCard.teardown();
+    // The previous cohort's report leaves page memory with it.
+    var frame = root.querySelector('iframe.analyze-report');
+    if (frame) frame.remove();
+    if (reportUrl) { URL.revokeObjectURL(reportUrl); reportUrl = null; }
+    listWarnings(q(root, 'run-warnings'), []);
     // Cleared so choosing the same files again still fires `change`.
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';
     goTo('drop');
@@ -238,7 +261,11 @@ export function createPage(root, worker, opts) {
   window.addEventListener('message', function (e) {
     var frame = root.querySelector('iframe.analyze-report');
     if (!frame || e.source !== frame.contentWindow) return;
-    if (e.data && e.data.type === 'cyborg-hunter:select' && replayCard) { state.selected = e.data.participantId; replayCard.select(e.data.participantId); }
+    if (!e.data || e.data.type !== 'cyborg-hunter:select' || !replayCard || !state.result) return;
+    var pid = e.data.participantId;
+    var known = typeof pid === 'string' && state.result.participants.some(function (p) { return p.participantId === pid; });
+    if (!known) return;
+    state.selected = pid; replayCard.select(pid);
   });
 
   return { state: state, setFiles: setFiles, loadSample: loadSample, run: run, reset: reset,

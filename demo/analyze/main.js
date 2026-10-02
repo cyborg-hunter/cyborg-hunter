@@ -8,7 +8,6 @@ export function createAnalyzeWorker() {
 }
 
 if (typeof document !== 'undefined') {
-  var worker = createAnalyzeWorker();
-  worker.onerror = function (e) { var el = document.querySelector('[data-role="error"]'); el.textContent = 'Worker failed: ' + (e.message || 'unknown error'); el.hidden = false; };
+  var worker = createAnalyzeWorker();   // createPage owns its error events too
   window.__chAnalyze = createPage(document.body, worker, {});   // exposed for the end-to-end tests
 }
