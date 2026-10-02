@@ -162,7 +162,8 @@ test('a run error discards the zip chunks already received and offers a retry', 
   assert.deepEqual(visibleStep(), ['check']);
   assert.equal(role('error').hidden, false);
   assert.match(role('error').textContent, /No participant data/);
-  assert.equal(role('check-warnings').textContent, 'a.csv: Failed to parse: x');
+  // The run's file warnings go under the check's config warnings.
+  assert.deepEqual([...role('check-warnings').children].map((li) => li.textContent), ['unknown key "dataDri"', 'a.csv: Failed to parse: x']);
   assert.equal(action('run').disabled, false, 'retry offered');
   action('run').click();
   await tick();

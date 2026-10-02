@@ -106,7 +106,9 @@ export function createPage(root, worker, opts) {
       return;
     }
     for (var k in pending) { pending[k].reject(handled(message)); delete pending[k]; }
-    if (warnings) listWarnings(q(root, 'check-warnings'), warnings);
+    // A failed run goes back to the check step, whose list already holds the
+    // config warnings: the run's own go under them.
+    if (warnings) listWarnings(q(root, 'check-warnings'), (state.checked && phase !== 'check' ? state.checked.configWarnings || [] : []).concat(warnings));
     if (phase === 'check' || !state.checked) { state.checked = null; goTo('drop'); }
     else { discardZip(); goTo('check'); }
     updateControls();
