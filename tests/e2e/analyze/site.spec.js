@@ -84,6 +84,8 @@ test('a dropped stylesheet styles the replay; the recorded external image is nev
   } finally { cohort.cleanup(); await sentinel.close(); }
 });
 
+// Without the experiment's stylesheet dropped, the viewer offers no fetch
+// and says why the replay is unstyled.
 test('switching participant tears down the viewer and mounts the right replay', async ({ page, baseURL }) => {
   const cohort = makeReplayCohort();
   const allow = siteAllowlist(baseURL);
@@ -91,7 +93,7 @@ test('switching participant tears down the viewer and mounts the right replay', 
   try {
     await page.goto('/analyze/');
     await waitReady(page);
-    await page.setInputFiles('[data-role="file-input"]', cohort.files);
+    await page.setInputFiles('[data-role="file-input"]', cohort.files.filter((f) => !f.endsWith('demo.css')));
     await buildReport(page);
     await reportSelected(page);
     await page.selectOption('[data-role="replay-select"]', 'DEMO-FIXT');
@@ -102,6 +104,9 @@ test('switching participant tears down the viewer and mounts the right replay', 
     await page.click('[data-action="load-replay"]');
     await expect(page.locator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT-B"]')).toHaveCount(1);
     await expect(page.locator('iframe.replay-host-frame')).toHaveCount(1);
+    const host = page.frameLocator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT-B"]');
+    await expect(host.locator('.replay-note').filter({ hasText: 'no-network policy' })).toContainText('1 external stylesheet(s) cannot be fetched', { timeout: 30000 });
+    await expect(host.locator('.replay-css-btn')).toHaveCount(0);
     // Selecting in the report switches the dropdown too, and tears the viewer down.
     await reportFrame(page).locator('.cohort-row[data-pid="DEMO-FIXT"]').click();
     await expect(page.locator('[data-role="replay-select"]')).toHaveValue('DEMO-FIXT');
