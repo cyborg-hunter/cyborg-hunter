@@ -3,6 +3,77 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [0.11.0] — 2026-10-02
+
+The report in the browser: the `/analyze/` page on the project site builds
+the CLI's report from dropped data files, with nothing to install and nothing
+uploaded. Also fixes for the one-line setup on pages without jsPsych and for
+the replay viewer. No change to scoring or data formats.
+
+### Added
+- `/analyze/` page: drop the data files (or a folder) and get the CLI's
+  report, built in the browser: the interactive report with replays,
+  `summary.csv`, `triage.md`, `event-log.csv`, the plots, and a `.zip` in the
+  CLI's output layout. The page's security policy makes the browser refuse
+  data requests, form submissions and loads from other addresses. Its code
+  never navigates away or opens another page, and the end-to-end tests fail
+  the build if it does.
+- The page as one offline file, `cyborg-hunter-analyze.html`, attached to
+  each GitHub release.
+- CLI: `assetsDir` config key and `--assets-dir` flag. The experiment's own
+  stylesheets, images and fonts style the replays when its server is gone;
+  `url()` and `@import` references inside a supplied stylesheet are matched
+  too. The replay section of the report says what matched and what is
+  missing.
+- Report option `selectionPostMessage` (the report tells its parent page
+  which participant is selected) and replay-viewer option `noExternalCss`
+  (a viewer that may not fetch says so instead of offering a fetch). Both
+  are off by default.
+
+### Changed
+- The node-canvas install message now prints before "Analyzing...".
+- The analyze page's security policy no longer allows images from the
+  page's own site (`'self'` dropped from `img-src`), so a dropped stylesheet
+  or recording cannot make the browser request anything from the hosting
+  site.
+- Dev dependencies updated: esbuild 0.28, happy-dom 20.14. `npm audit`
+  reports no vulnerabilities.
+
+### Fixed
+- One-line setup on pages without jsPsych: a form submit that did not
+  replace the page could lose the data recorded after it. This happened when
+  the form posted into another window or a frame, when `submit()` was called
+  on a form outside the document, when two submits ran in one click, or when
+  a same-window post did not leave the page (a 204 answer, a download, Stop)
+  and a later submit was cancelled. The final pagehide now keeps that data.
+  A cancelled submit whose handler then calls `form.submit()` now counts as
+  the page load instead of leaving an empty segment.
+- One-line setup: with `data-debug`, after the hand-over to the page's own
+  extension the summary now says manual mode, instead of "0 trials
+  instrumented" with ch.js's guard settings.
+- Replay: a recorded attribute change can no longer turn `autoplay` back on
+  for a video or audio element.
+- Replay: on pages whose body has no percentage height, interactions at the
+  bottom of the page no longer replay 8px off.
+- The CLI warns when `cyborg-hunter.config.json` holds something other than
+  a JSON object (null, a list, a string, a number). Its settings were
+  silently ignored. The analyze page warns too.
+- Analyze page and `assetsDir` (fixed before their first release): Start
+  over frees the previous run in the worker; a failed run keeps the config
+  warnings; dropping a mix of files and folders keeps every file;
+  references in recorded stylesheet updates and uppercase `URL(` and
+  `@IMPORT` are matched.
+
+### Notes
+- The analyze page reads multi-member `.json.gz` recordings and rejects
+  corrupt gzip files as the CLI does, with one difference: when the data
+  after a gzip member starts with a zero byte, the CLI ignores it and the
+  page rejects the file.
+- The analyze page was tested with up to 150 participants in Chromium,
+  Firefox and WebKit; it warns above that. The CLI is not limited by browser
+  memory.
+- Qualtrics support and the heuristic detector move to a later release.
+
 ## [0.10.0] — 2026-10-01
 
 A one-line setup: a single `<script>` tag, `dist/ch.js`, monitors an
