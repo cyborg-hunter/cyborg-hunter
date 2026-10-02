@@ -59,9 +59,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${ONELINER_PORT}` },
     },
     // The analyze page: the full flow on Chromium; the zero-network, sample
-    // and offline-file checks on all three engines (engines.spec.js).
+    // and offline-file checks (engines.spec.js) and the policy's own refusals
+    // (policy.spec.js) on all three engines.
     { name: 'analyze-chromium', testDir: 'tests/e2e/analyze', use: { ...devices['Desktop Chrome'] } },
-    { name: 'analyze-firefox',  testDir: 'tests/e2e/analyze', testMatch: /engines\.spec\.js/, use: { ...devices['Desktop Firefox'] } },
-    { name: 'analyze-webkit',   testDir: 'tests/e2e/analyze', testMatch: /engines\.spec\.js/, use: { ...devices['Desktop Safari'] } },
+    { name: 'analyze-firefox',  testDir: 'tests/e2e/analyze', testMatch: /(engines|policy)\.spec\.js/, use: { ...devices['Desktop Firefox'] } },
+    { name: 'analyze-webkit',   testDir: 'tests/e2e/analyze', testMatch: /(engines|policy)\.spec\.js/, use: { ...devices['Desktop Safari'] } },
   ],
 });
