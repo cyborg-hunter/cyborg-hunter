@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inlineSrcHazards } from '../../src/shared/inline-safe.js';
+import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
 
 let dir, bundle;
 before(() => {
@@ -21,6 +22,15 @@ test('carries the worker source, the viewer client, the fonts and the sample', (
   assert.ok(bundle.includes('@font-face'), 'fonts baked in');
   assert.ok(bundle.includes('SYN-HARD-03') && bundle.includes('subject_ID'), 'sample data + its config baked in');
   assert.ok(bundle.includes('self.onmessage') || bundle.includes('self.postMessage'), 'worker loop baked in');
+});
+
+// The size the page shows is a measurement (tests/browser/analyze/load-measure.mjs),
+// tied to the fixture it was measured on; the bundle carries both.
+test('carries the measured cohort size and names its fixture', () => {
+  assert.ok(Number.isInteger(TESTED_PARTICIPANTS) && TESTED_PARTICIPANTS > 0);
+  assert.notEqual(TESTED_FIXTURE, 'not yet measured');
+  assert.ok(TESTED_FIXTURE.includes(String(TESTED_PARTICIPANTS) + ' dom-tier participants'), 'the fixture names the size');
+  assert.ok(bundle.includes(TESTED_FIXTURE), 'fixture text baked in');
 });
 
 test('reaches no network and no Node API', () => {
