@@ -26,3 +26,10 @@ export function bytesToBase64(bytes) {
   }
   return btoa(s);
 }
+
+// OffscreenCanvas is the worker's canvas; the plot cores only need getContext('2d').
+export function offscreenCreateCanvas(w, h) { return new OffscreenCanvas(w, h); }
+export async function offscreenEncodePng(canvas) {
+  var blob = await canvas.convertToBlob({ type: 'image/png' });
+  return new Uint8Array(await blob.arrayBuffer());
+}

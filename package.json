@@ -17,6 +17,7 @@
     "prepack": "node scripts/sync-conformance.mjs",
     "test:pack-smoke": "node scripts/pack-smoke.mjs",
     "demo:preview": "node tools/build-preview-core.mjs",
+    "demo:analyze": "node tools/build-analyze.mjs",
     "test:cli": "node --test tests/cli/*.test.js",
     "test:core": "node --test tests/core/*.test.js",
     "test:jspsych": "node --test tests/jspsych/*.test.js",
@@ -75,6 +76,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.0",
     "esbuild": "^0.21.0",
+    "fflate": "^0.8.3",
     "happy-dom": "^20.9.0"
   },
   "dependencies": {
