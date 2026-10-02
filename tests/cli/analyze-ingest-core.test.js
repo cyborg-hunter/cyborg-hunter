@@ -194,14 +194,19 @@ describe('webGunzip', () => {
     });
   }
 
-  it('rejects trailing data that starts with a zero byte (node:zlib stops there and accepts)', async () => {
-    // The one known difference from the CLI, and on the strict side: node:zlib
-    // ends the file at a zero byte after a member (ignoring what follows, even
-    // a further member), while the browser's stream treats it as junk.
+  it('trailing data that starts with a zero byte: rejected, or read exactly as node:zlib reads it', async () => {
+    // node:zlib ends the file at a zero byte after a member (ignoring what
+    // follows, even a further member). Browsers' streams reject it as junk
+    // (checked in Chromium, Firefox, WebKit and Safari); Node's own stream
+    // differs by version (20 accepts, 26 rejects). Either way the page is
+    // never more lenient than the CLI.
     for (const tail of [new Uint8Array(1), new Uint8Array(4), cat(new Uint8Array(1), members[1])]) {
       const padded = cat(stored, tail);
-      assert.deepStrictEqual(new Uint8Array(gunzipSync(padded)), new Uint8Array(record));
-      await assert.rejects(webGunzip(padded));
+      const cli = new Uint8Array(gunzipSync(padded));
+      assert.deepStrictEqual(cli, new Uint8Array(record));
+      let page;
+      try { page = await webGunzip(padded); } catch { continue; }
+      assert.deepStrictEqual(page, cli);
     }
   });
 
