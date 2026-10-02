@@ -312,19 +312,54 @@ describe('T5.4 — the data-ch-* family is viewer-owned, both verbs', () => {
     assert.equal(v.dbg.getNode(2).hasAttribute('src'), false, 'no src to fetch');
   });
 
-  it('the shell stylesheet gives <html> the full frame height (percentage-height chain)', () => {
-    // A recorded body carrying `height: 100%` (jsPsych's display element does)
-    // resolves against <html>, which lies OUTSIDE the observed root and is
-    // therefore never captured. Without this rule the chain collapses to
-    // content height and a vertically-centred page renders top-left, with
-    // every anchor rect off by the centring offset — a full-session
-    // misalignment on the first real jsPsych capture (bench harness,
-    // 2026-09-03). The fork's shell states the same rule.
-    const v = boot(baseRecording({ segments: [segment({ initial_dom: iframeKeyframe() })] }));
-    const shellCss = Array.from(v.doc().querySelectorAll('style'))
-      .map((st) => st.textContent).join('\n');
-    assert.match(shellCss, /html\{[^}]*height:\s*100%/,
-      'shell must declare html{height:100%}');
+  // The percentage-height chain. A recorded body carrying `height: 100%`
+  // (jsPsych's display element: jsPsych sets it inline, and sets the same on
+  // <html>) resolves against <html>, which lies OUTSIDE the observed root and
+  // is never captured. Without a definite <html> height the chain collapses to
+  // content height and a vertically-centred page renders top-left, every
+  // anchor rect off by the centring offset — the first real jsPsych capture
+  // (bench harness, 2026-09-03).
+  //
+  // The rule is CONDITIONAL because it has a cost on every other page: with
+  // <html> pinned to the frame, an overflowing body's bottom margin drops out
+  // of the scroll extent (overflow counts the body's border box), so the
+  // deepest reachable scroll is 8px short of the live page's on a UA-default
+  // body and every bottom-of-page interaction lands 8px off.
+  const bodyAt = (style) => bodyKeyframe([
+    { id: 2, kind: 'element', tag: 'div', attrs: { id: 'd' }, children: [] },
+  ], style == null ? {} : { style });
+  const rootHeight = (v) => v.doc().documentElement.style.height;
+
+  it('a body with a percentage height gets a full-frame <html>', () => {
+    const v = boot(baseRecording({
+      segments: [segment({ initial_dom: bodyAt('margin: 0px; height: 100%; width: 100%;') })],
+    }));
+    assert.equal(rootHeight(v), '100%');
+  });
+
+  it('a body without one leaves <html> at content height', () => {
+    for (const style of [null, 'height: 2600px', 'min-height: 100vh']) {
+      const v = boot(baseRecording({ segments: [segment({ initial_dom: bodyAt(style) })] }));
+      assert.equal(rootHeight(v), '', 'body style ' + JSON.stringify(style));
+      const shellCss = Array.from(v.doc().querySelectorAll('style'))
+        .map((st) => st.textContent).join('\n');
+      assert.doesNotMatch(shellCss, /html\{[^}]*height/,
+        'the shell must not pin <html> for every page');
+    }
+  });
+
+  it('follows the body through a dom.attr and back across a restore', () => {
+    const v = boot(baseRecording({
+      segments: [segment({
+        initial_dom: bodyAt(null),
+        events: [{ type: 'dom.attr', t: 50, node: 1, name: 'style', value: 'height: 100%' }],
+      })],
+    }));
+    assert.equal(rootHeight(v), '');
+    v.dbg.seek(100);
+    assert.equal(rootHeight(v), '100%', 'the patched body now resolves against <html>');
+    v.dbg.seek(10);
+    assert.equal(rootHeight(v), '', 'a backward seek remounts the unpatched body');
   });
 
   it('the shell stylesheet outlines the placeholder region', () => {
