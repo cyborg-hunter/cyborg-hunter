@@ -265,23 +265,43 @@
   // compares the replayed box against the capture-time one, so a viewer that
   // grew the box would report a misalignment it caused itself.
   //
-  // `html{height:100%}` completes the percentage-height chain. A recorded
-  // <body> with `height: 100%` (jsPsych's display element; any page that
-  // centres in the viewport) resolves against <html>, which sits OUTSIDE the
-  // observed root and is never captured — so whatever gave it its height on
-  // the live page (a stylesheet rule, an inline style) is absent here. With
-  // <html> at content height the chain collapses: a centred page renders
-  // top-left and every anchor rect misses by the centring offset, which is
-  // how the first real jsPsych capture played in this viewer (bench harness,
-  // 2026-09-03) while the fork — whose shell states this rule — played it
-  // right. The rule reproduces the frame's containing block, not any
-  // recorded style: body margin is left to the recording / UA default.
+  // NOTE also ABSENT: an unconditional `html{height:100%}`. <html>'s height is
+  // set per mount by syncRootHeight() below, only for a body that needs it.
   function shellRules() {
-    return 'html{height:100%;scrollbar-width:none}' +
+    return 'html{scrollbar-width:none}' +
       'html::-webkit-scrollbar{width:0;height:0}' +
       '[data-ch-placeholder]{outline:2px dashed #b26a00;outline-offset:-2px;' +
       'background:repeating-linear-gradient(45deg,rgba(178,106,0,.06),' +
       'rgba(178,106,0,.06) 6px,transparent 6px,transparent 12px)}';
+  }
+
+  // The percentage-height chain. <html> sits OUTSIDE the observed root and is
+  // never captured, so the viewer has to decide its height, and either fixed
+  // answer misplaces one kind of page:
+  //   - a recorded body with `height: 100%` (jsPsych's display element; any
+  //     page that centres in the viewport) resolves against <html>. Left at
+  //     content height, the chain collapses: a centred page renders top-left
+  //     and every anchor rect misses by the centring offset — the first real
+  //     jsPsych capture (bench harness, 2026-09-03) failed every interaction.
+  //     jsPsych sets `height: 100%` inline on BOTH <html> and <body>; only the
+  //     body's half reaches the recording.
+  //   - any other body, pinned under a full-frame <html>, overflows it, and an
+  //     overflowing box contributes its BORDER box to the scroll extent, so the
+  //     body's bottom margin drops out: on a UA-default body (8px) the deepest
+  //     reachable scroll is 8px short of the live page's (2608 vs 2616 on the
+  //     alignment battery's page), and every interaction recorded at the
+  //     bottom of the page replays 8px off its target.
+  // So <html> gets `height: 100%` exactly when the mounted body declares a
+  // percentage height inline, the case where the live page must have given
+  // <html> a definite height for the body's own to work at all. A body sized
+  // by a captured stylesheet needs nothing here: that sheet is in the frame
+  // and carries any `html{…}` rule it had. Set inline on <html>, as jsPsych
+  // does — a node no recorded id can address. Re-run after every mount (the
+  // shell, and so this style, survives restores) and every attribute patch.
+  function syncRootHeight(doc) {
+    if (!doc || !doc.body || !doc.documentElement) return;
+    var want = /%\s*$/.test(doc.body.style.height || '') ? '100%' : '';
+    if (doc.documentElement.style.height !== want) doc.documentElement.style.height = want;
   }
 
   // Written ONCE per mount. It carries no recorded content at all: the
@@ -1409,7 +1429,10 @@
       if (e.camera) foldEventCamera(e.camera);
       // `applyPatch` returns false for anything that is not one of §5.1's four
       // verbs, so the vocabulary dispatch below needs no list of its own.
-      if (span && applyPatch(e, span)) return;
+      if (span && applyPatch(e, span)) {
+        if (e.type === 'dom.attr') syncRootHeight(frameDoc());
+        return;
+      }
       var type = e.type;
       if (type === 'input.value' || type === 'input.checked' || type === 'input.select') {
         if (span) applyInput(e);
@@ -1517,7 +1540,7 @@
         span = null; walk = []; appliedIdx = 0; spanStart = -1; spanEnd = -1;
         resetCanvases(doc);
         mediaState = new Map();
-        if (doc) { mountTree(null, doc.body, doc); stats.mounts++; }
+        if (doc) { mountTree(null, doc.body, doc); syncRootHeight(doc); stats.mounts++; }
         seedCamera(targetSeg);
         pendingCamSize = true;
         flushCamSize();
@@ -1552,6 +1575,7 @@
       // 1. mount the span keyframe, fresh id map
       if (doc) {
         span = mountTree(start >= 0 ? segments[start].initialDom : null, doc.body, doc);
+        syncRootHeight(doc);
         stats.mounts++;
       } else {
         span = null;
