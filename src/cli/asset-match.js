@@ -36,10 +36,11 @@ const SRC_ATTRS = { src: true, poster: true };
 const SRC_TAGS = { img: true, source: true, video: true, audio: true };
 // One pass over CSS text finds both kinds of reference, and steps over
 // comments (matched first, with no groups, and always left as they are, so an
-// @import or url() inside one stays inert). Groups: 2 or 4 =
+// @import or url() inside one stays inert). Case-insensitive, as CSS is
+// (URL(...), @IMPORT). Groups: 2 or 4 =
 // an @import's URL (url(...) or string form), 5 = its condition (media list,
 // layer(), supports()); 7 = a url(...) reference.
-const CSS_REF = /\/\*[\s\S]*?(?:\*\/|$)|@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])([^'"]+)\3)([^;{}]*)(?:;|$)|url\(\s*(['"]?)([^'")]+)\6\s*\)/g;
+const CSS_REF = /\/\*[\s\S]*?(?:\*\/|$)|@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])([^'"]+)\3)([^;{}]*)(?:;|$)|url\(\s*(['"]?)([^'")]+)\6\s*\)/gi;
 // A layer()/supports() import cannot be spliced as a plain @media block; it is
 // left as an absolute @import and not counted.
 const CONDITIONAL_IMPORT = /\b(layer|supports)\b/i;
@@ -102,6 +103,15 @@ function* sheetsOf(recording) {
   }
 }
 
+// A stylesheet.update replaces a sheet's text later in the session. Its CSS
+// is read with no base URL (applyAssetMap rewrites it the same way), so only
+// its absolute references count.
+function* sheetUpdatesOf(recording) {
+  for (const ev of recording.stylesheet_events || recording.stylesheetEvents || []) {
+    if (ev && ev.type === 'stylesheet.update' && ev.css) yield ev.css;
+  }
+}
+
 function* segmentsOf(recording) {
   for (const seg of recording.segments || []) {
     if (!seg) continue;
@@ -147,6 +157,7 @@ function collect(recording, assetMap) {
       if (e) addCss(decodeUtf8(e.bytes), s.href);
     } else if (s.css) addCss(s.css, s.href);
   }
+  for (const css of sheetUpdatesOf(recording)) addCss(css, null);
   const tags = new Map();
   for (const { dom, events } of segmentsOf(recording)) {
     noteTags(tags, dom);
@@ -154,7 +165,6 @@ function collect(recording, assetMap) {
     for (const ev of events) {
       if (ev.type === 'dom.add') { noteTags(tags, ev.node); for (const n of walkNodes(ev.node)) addNode(n); }
       else if (ev.type === 'dom.attr' && SRC_ATTRS[ev.name] && SRC_TAGS[tags.get(ev.node)] && ev.value) addRef(ev.value);
-      else if (ev.type === 'stylesheet.update' && ev.css) for (const ref of cssRefs(ev.css, null).urls) addRef(ref);
     }
   }
   return { stylesheets: sheets, images, fonts };
