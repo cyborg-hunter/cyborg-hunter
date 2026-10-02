@@ -402,6 +402,47 @@ describe('spec §12 player filters', () => {
     assert.equal(root.getAttribute('src'), 'https://example.org/exp/clip.mp4');
   });
 
+  // The second route to a media element's `autoplay`: a later recorded
+  // `dom.attr`. Instantiation honours MEDIA_SKIP, but `applyAttr` went
+  // straight to `setFilteredAttr`, which never consulted the skip set, so a
+  // patch could arm playback the keyframe walk had refused. Same gap, same
+  // fix, as the iframe placeholder tests above. Only the SET verb is refused:
+  // removing `autoplay` can only stop playback, never start it.
+  function mediaMount(tag) {
+    const mount = instantiateTree({
+      id: 1, kind: 'element', tag: 'div', attrs: {}, children: [
+        { id: 2, kind: 'element', tag, attrs: { controls: '' },
+          media_src: 'https://example.org/exp/clip', children: [] },
+      ],
+    }, freshDoc());
+    assert.equal(mount.idMap.get(2).getAttribute('autoplay'), null);
+    return mount;
+  }
+
+  for (const tag of ['video', 'audio']) {
+    for (const name of ['autoplay', 'AUTOPLAY']) {
+      it(`a dom.attr cannot arm ${name} on <${tag}>`, () => {
+        const mount = mediaMount(tag);
+        applyPatches([{ type: 'dom.attr', t: 1, node: 2, name, value: '' }], mount);
+        const media = mount.idMap.get(2);
+        assert.equal(media.getAttribute('autoplay'), null);
+        assert.equal(media.hasAttribute('autoplay'), false);
+        // Silent and uncounted, like the viewer-owned refusals.
+        assert.equal(mount.skipped, 0);
+        assert.equal(mount.patchFailures, 0);
+      });
+    }
+
+    it(`other recorded attributes still reach <${tag}>`, () => {
+      // Proves the refusal is narrow: only the MEDIA_SKIP names are refused.
+      const mount = mediaMount(tag);
+      applyPatches([{ type: 'dom.attr', t: 1, node: 2, name: 'title', value: 'clip' }], mount);
+      assert.equal(mount.idMap.get(2).getAttribute('title'), 'clip');
+      assert.equal(mount.skipped, 0);
+      assert.equal(mount.patchFailures, 0);
+    });
+  }
+
   it('keeps ordinary URLs in the same attributes it filters', () => {
     const { root } = instantiateTree({
       id: 1, kind: 'element', tag: 'a',

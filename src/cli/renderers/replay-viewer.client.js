@@ -1282,11 +1282,11 @@
 
     // ── Media: state, never playback (design §7) ──
     // The forensic posture, and the fork's. `media_src` is honoured at
-    // instantiation so the element has its shape, `autoplay` is stripped there,
-    // and nothing here ever calls play() or writes currentTime: a replay that
-    // started making noise on the analyst's machine would be a different
-    // product, and a seeked <video> would claim frame-accuracy the format does
-    // not carry.
+    // instantiation so the element has its shape, `autoplay` is stripped there
+    // and refused on every later `dom.attr` (applyAttr), and nothing here ever
+    // calls play() or writes currentTime: a replay that started making noise
+    // on the analyst's machine would be a different product, and a seeked
+    // <video> would claim frame-accuracy the format does not carry.
     function applyMedia(e) {
       var target = resolveNode(e.node);
       if (!target) { if (span) span.patchFailures++; return; }

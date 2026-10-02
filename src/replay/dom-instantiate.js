@@ -724,6 +724,14 @@ function applyAttr(patch, mount) {
   // only — the placeholder carries no label a removal could strip.
   if (el.getAttribute(PLACEHOLDER_ATTR) === 'iframe'
       && IFRAME_SKIP[name.toLowerCase()] === true) return;
+  // Media likewise never receives the MEDIA_SKIP names after mount: a patch
+  // setting `autoplay` would start the playback instantiation refused, and the
+  // shell CSP allows `media-src *`. The tag is the one instantiation keyed the
+  // skip set on, and no patch can change an element's tag. Silent and
+  // uncounted, as above. SET verb only — removing `autoplay` can only stop
+  // playback, never start it.
+  if (MEDIA_TAGS[tagNameOf(el)] === true
+      && MEDIA_SKIP[name.toLowerCase()] === true) return;
   // ONE §12 gate on the set path, and it is the gate instantiation uses, so a
   // keyframe and a patch can never disagree about what an element may carry.
   setFilteredAttr(el, name, patch.value, mount);
