@@ -22,7 +22,7 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 
 > **Which fields actually do something.** The current CLI consumes `dataDir`,
 > `filePattern`, `participantIdField`, `integrityField`, `sessionIntegrityPath`,
-> `phaseScope`, `trajectoryDisplayOrder`, `outputDir`,
+> `assetsDir`, `phaseScope`, `trajectoryDisplayOrder`, `outputDir`,
 > `typingSpeedThreshold_cps`, `thresholds.tabAwayDurationMs` (the tab-away
 > display/soft-bin cutoff), `scoring.softScoreThreshold` (an optional analyst
 > override for the soft-flag cutoff — by default the CLI uses each participant's
@@ -50,6 +50,7 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 |---|---|---|---|
 | `dataDir` | string | `"./data"` | Directory containing participant data files |
 | `filePattern` | string | `"*.json"` (runtime) / `"*.{json,csv}"` (init) | Glob pattern for data files |
+| `assetsDir` | string | `null` | Folder holding the experiment's own stylesheets and images. Each stylesheet or image URL a replay recording references is matched to a file under this folder by path suffix (`https://host/exp/css/style.css` ↔ `css/style.css`), then by filename; the file is inlined into the replay (stylesheets as text, images as data URIs) and the report's replay section states what matched and what is missing. An ambiguous match (two files with the same suffix) is reported and left out. A directory that cannot be read stops the run with an error. Added for archives whose experiment server is gone; the browser analyzer does the same with dropped files. |
 | `participantIdField` | string | `"participantId"` | Field name holding the participant ID. **For jsPsych output, this is usually `"subject_ID"`.** Supports dot-paths since 0.6.1 (`"metadata.sessionId"`); plain names keep the historical top-level → `metadata` fallback. |
 | `trialIdField` | string | `"trialId"` | Field for trial ID |
 | `trialOrderField` | string | `"trialIndex"` | Field for trial order |
@@ -200,6 +201,7 @@ CLI flags override config-file values. Unknown flags now exit with an error rath
 | `--file-pattern <glob>` | Override `filePattern` |
 | `--integrity-field <name>` | Override `integrityField` |
 | `--session-integrity-path <path>` | Override `sessionIntegrityPath` (dotted, e.g. `payload.cyborgHunter`) |
+| `--assets-dir <path>` | Override `assetsDir` |
 | `--participant <id>` | Generate report for a single participant |
 | `--no-visuals` | Skip image generation (no `canvas` package needed) |
 
