@@ -107,3 +107,39 @@ describe('migrateArtifact (async)', () => {
     assert.strictEqual(artifactKind({ schema_version: 1, trials: [] }), 'jspsych-v1');
   });
 });
+
+// webGunzip's two paths give the same bytes: the browser's DecompressionStream
+// over a stream built without a Blob (a worker of a file:// page in WebKit
+// cannot read any Blob), and fflate's gunzip when that stream fails.
+describe('webGunzip', () => {
+  // Large enough that the stream hands the output over in several chunks.
+  const text = Array.from({ length: 40000 }, (_, i) => 'line ' + i + ' ' + (i * 7919 % 1000)).join('\n');
+  const gz = new Uint8Array(gzipSync(Buffer.from(text)));
+  const expected = new Uint8Array(gunzipSync(gz));
+  const withGlobal = async (name, value, fn) => {
+    const saved = globalThis[name];
+    globalThis[name] = value;
+    try { return await fn(); } finally { globalThis[name] = saved; }
+  };
+
+  it('inflates without constructing a Blob', async () => {
+    const out = await withGlobal('Blob', class { constructor() { throw new Error('Blob loading failed'); } }, () => webGunzip(gz));
+    assert.deepStrictEqual(out, expected);
+  });
+
+  it('falls back to fflate when the decompression stream fails, with identical output', async () => {
+    const failing = class { constructor() { throw new Error('The I/O read operation failed.'); } };
+    const out = await withGlobal('DecompressionStream', failing, () => webGunzip(gz));
+    assert.deepStrictEqual(out, expected);
+    const none = await withGlobal('DecompressionStream', undefined, () => webGunzip(gz));
+    assert.deepStrictEqual(none, expected);
+  });
+
+  it('rejects bytes that are not gzip with the stream\'s own error', async () => {
+    const garbage = textBytes('not gzip at all');
+    const native = await new Response(new Blob([garbage]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
+      .then(() => null, (e) => e);
+    assert.ok(native, 'the native stream rejects the input');
+    await assert.rejects(webGunzip(garbage), (e) => e.message === native.message);
+  });
+});
