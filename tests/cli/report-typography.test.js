@@ -1,10 +1,9 @@
 // tests/cli/report-typography.test.js
 // Every text role in the report uses the face Can picked in the report
-// palette (docs/plans/2026-09-30-report-reshape.md §8, §8a, §4, §6a), and no
+// palette, and no
 // rule names a face the report does not embed. Rules are read from the
 // report's own CSS (the last matching rule wins, as in the cascade for equal
-// specificity); computed styles are checked in a real browser in the plan's
-// Task 7.
+// specificity); computed styles are checked in a real browser.
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { buildFontFaceCss } from '../../src/cli/renderers/report-fonts.js';

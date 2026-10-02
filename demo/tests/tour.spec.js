@@ -1,7 +1,5 @@
 // demo/tests/tour.spec.js
-// Playwright E2E suite for the live demo tour (12-step remodel — spec:
-// docs/superpowers/specs/2026-07-31-ch-demo-remodel-design.md; plan:
-// docs/superpowers/plans/2026-07-31-ch-demo-remodel.md, Task D1).
+// Playwright E2E suite for the live demo tour (12-step remodel).
 // Runs against the ASSEMBLED site (.demo-site/, see playwright.config.js +
 // tools/assemble-demo-site.mjs) so demo/index.html's ./dist/... relative
 // paths resolve the same way they do on Pages.
@@ -10,8 +8,8 @@
 // fixture (helpers.mjs). frozenClock/fullscreenMock are also auto-fixtures,
 // inert until a test explicitly calls into them.
 //
-// Two behaviors below were established by DRIVING THE LIVE PAGE during D1,
-// not by reading the copy/plan alone — see the inline comments at each site:
+// Two behaviors below were established by DRIVING THE LIVE PAGE,
+// not by reading the copy alone — see the inline comments at each site:
 //   1. A synthetic 'blur' Event does NOT trigger a GuardFriction violation
 //      (its check() reads real document.hasFocus(), unaffected by a
 //      synthetic dispatch) — the guard-cheat test uses fullscreenMock.exit()
@@ -473,7 +471,7 @@ test('playground: paste threshold and tab-away/typing-speed cutoffs flip tiers',
   await expect(frame.locator('.cohort-row[data-pid="example-1"]')).toHaveAttribute('data-tier', 'soft'); // loses HARD
 
   // Tighten the tab-away cutoff and lower the fast-typing threshold — moves
-  // example-2 (all-clean fixture) into SOFT (C3-verified scenario: a 1400ms
+  // example-2 (all-clean fixture) into SOFT (verified scenario: a 1400ms
   // tab-away crosses a 1000ms cutoff, and 3 trials' ~4.6-5.3cps typing
   // crosses a 4cps threshold).
   const before2 = await statusEl.textContent();
@@ -588,7 +586,7 @@ test('act2-skip path: fullscreen failure falls back, skip lands on "From signals
 // 7. Blob hygiene: created - revoked === 2 after the report builds once and
 // the playground reruns it once. TWO independent, steady-state outstanding
 // blobs make up that count now (item 12 added the second):
-//   - the report iframe's own swap dance (C2/C3-documented): each swap
+//   - the report iframe's own swap dance: each swap
 //     revokes the PREVIOUS blob only after the NEW one loads, so exactly one
 //     of ITS urls is always left outstanding while the report is showing —
 //     unaffected by how many times the playground reruns it;

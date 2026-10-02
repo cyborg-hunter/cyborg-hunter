@@ -9,7 +9,7 @@
 // with the implementation about every one of them.
 //
 // The tracker tests keep the injected-fake harness of capture-trace.test.js
-// (that suite is untouched by Task 4) but use REAL elements as scroll targets,
+// (that suite is untouched) but use REAL elements as scroll targets,
 // since connectedness is half of what the tracker has to get right.
 
 import { describe, it } from 'node:test';
@@ -351,7 +351,7 @@ describe('buildInitialState — exclusion floor (spec §4)', () => {
   });
 
   it('seeds nothing for a node the file never received (reveal before the observer flush)', () => {
-    // Task 6/8 may seed outside a keyframe. The live DOM then says this input
+    // A later caller may seed outside a keyframe. The live DOM then says this input
     // is an ordinary child of an ordinary div, while the file still holds the
     // placeholder and has never carried the input at all.
     const { root, doc } = build(
@@ -371,7 +371,7 @@ describe('buildInitialState — exclusion floor (spec §4)', () => {
 
 describe('buildInitialState — call order', () => {
   it('returns null when the span was never walked', () => {
-    // A Task 6 wiring slip (seed before serializeTree) must not produce a
+    // A wiring slip (seed before serializeTree) must not produce a
     // plausible-looking, state-less seed: the ids it would name do not exist
     // yet, so the only honest answer is no seed at all.
     const { root, doc } = build('<div id="stage"><input id="a" type="text"></div>');
@@ -720,8 +720,8 @@ describe('scrolled-element tracker (capture-trace)', () => {
   it('rides along on the scroll listener without changing what it emits', () => {
     // The tracker is a side effect of the listener, not a channel of its own:
     // the two scroll events are exactly spec §5.6's pair, and the element one
-    // needs the span the keyframe built (T3.5 rewrote the wire; the tracking
-    // behaviour above is unchanged by it).
+    // needs the span the keyframe built (the tracking behaviour above is
+    // unchanged by the wire format).
     const { root, doc: page } = build('<div id="stage"><div id="a">a</div></div>');
     const a = page.getElementById('a');
     a.scrollTop = 40; a.scrollLeft = 5;
@@ -740,7 +740,7 @@ describe('scrolled-element tracker (capture-trace)', () => {
   });
 
   it('feeds buildInitialState end to end', () => {
-    // The wiring Task 6 will do, done by hand: scroll two elements, take a
+    // The recorder wiring, done by hand: scroll two elements, take a
     // keyframe, and seed from the tracker's Set.
     const { win, env, trace } = traceHarness({});
     const { root, doc: page } = build(

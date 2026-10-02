@@ -18,7 +18,7 @@
 // vocabulary and the id-map lifetime, not the code — this one is stricter on
 // purpose. Where the two genuinely disagreed, the fork was behind: this player
 // tolerated §4 exclusion placeholders (`attrs || {}` / `children || []`) from
-// the start, so the crash the real fork took on them surfaced at T3's finish
+// the start, so the crash the real fork took on them surfaced at the recorder's finish
 // line instead of in a unit run. They agree again as of that commit. Note the
 // fork commit whenever this file is re-synced, so the next divergence is
 // legible rather than discovered end to end.
@@ -33,12 +33,12 @@ const COMMENT_NODE = 8;
 // (which cannot be imported here: it must survive concatenation into the
 // report's viewer script as plain script text, so it has no imports and this
 // file must not become one). The rule has to live in both places for a reason
-// the T5 Task-2 review found: while both players called `createElement`, an
+// a review found: while both players called `createElement`, an
 // `svg > circle` landed in the XHTML namespace on BOTH sides, so the round-trip
 // oracle agreed about a tree neither could render. An oracle that shares the
 // implementation's blindness is not an oracle. Re-sync both when either moves.
 //
-// ONE KNOWN DIFFERENCE, recorded rather than fixed (T5 Task 3 review M-3): the
+// ONE KNOWN DIFFERENCE, recorded rather than fixed: the
 // viewer lowercases a tag before creating the element, this player creates with
 // `domNode.tag` as written. SVG is case-sensitive, so `foreignObject` and
 // `foreignobject` are different elements there — and neither the differential
@@ -127,7 +127,7 @@ export function createPlayer(keyframe) {
           // `dom.add` into an SVG subtree does not silently produce XHTML
           // children — and an add into an SVG HTML-integration point produces
           // HTML again, which is the same `childNamespaceOf` rule the keyframe
-          // walk applies (T5 Task 3, mirrored in `dom-instantiate.js`).
+          // walk applies (mirrored in `dom-instantiate.js`).
           const childNs = childNamespaceOf(
             String(parent.tagName || '').toLowerCase(), parent.namespaceURI);
           parent.insertBefore(instantiate(e.node, childNs), ref);
@@ -154,8 +154,8 @@ export function createPlayer(keyframe) {
  * binding whoever built it holds.
  *
  * Extracted from `createPlayer`'s `tree()` — which now delegates here,
- * unchanged — so the viewer's own instantiation (`src/replay/dom-instantiate.js`,
- * T5 Task 2) is read back by the SAME reader the capture-side suites judge the
+ * unchanged — so the viewer's own instantiation (`src/replay/dom-instantiate.js`)
+ * is read back by the SAME reader the capture-side suites judge the
  * mutation mapper with. A second reader would let a capture suite and a viewer
  * suite be green about incompatible trees.
  *

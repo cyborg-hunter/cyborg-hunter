@@ -1,7 +1,7 @@
 // tools/convert/jspsych-v1-to-v2.mjs
 //
 // jsPsych `schema_version: 1` SessionRecording → SessionRecording v2
-// (docs/plans/2026-08-09-session-recording-v2-spec-draft.md, §14 migration).
+// (docs/session-recording-v2.md, §14 migration notes).
 // This tool IS the migration path: players stay v2-only, there is no dual-read,
 // and there is no v2 → v1 direction.
 //

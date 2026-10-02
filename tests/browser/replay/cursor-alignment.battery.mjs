@@ -1,5 +1,5 @@
 // tests/browser/replay/cursor-alignment.battery.mjs
-// Cursor-alignment stress battery — the A1 condition in real browsers.
+// Cursor-alignment stress battery — the cursor-misalignment condition in real browsers.
 //
 // THE ACCEPTANCE, and it is absolute: every anchored interaction is either
 // ALIGNED within tolerance or FLAGGED. A silent misplacement anywhere fails the
@@ -8,7 +8,7 @@
 // visible only to a test is not visible to an analyst.
 //
 // Parts:
-//   A  — RETIRED by T5 (A2) Task 1. It drove the viewer over a v1 model and
+//   A  — RETIRED. It drove the viewer over a v1 model and
 //        asserted `model.legacy === true`, both of which the v2-only
 //        `buildViewerModel` abolishes. Code and fixture are kept verbatim in
 //        archive/ (see archive/README.md).
@@ -26,7 +26,7 @@
 //        is where part A's eight coordinates went.
 //   B  — SYNTHETIC GRID: a real recording made with the dist recorder against a
 //        hostile layout page, in the engine under test, and replayed in the same
-//        run — the full capture→replay round trip, which is what the A1
+//        run — the full capture→replay round trip, which is what the misalignment
 //        condition is actually about. Scenarios: flick-scroll-then-click,
 //        settled and same-task element scrollers, resize inside the coalescing
 //        window, transformed and rotated containers, centred reflow,
@@ -57,7 +57,7 @@
 // carrying `autofocus` logs exactly one per mount on chromium and webkit (none
 // on firefox), the sandbox refusing the focus steal is the CORRECT outcome, it
 // is not a `pageerror`, and the attribute stays because it is recorded page
-// state Task 7's `attr:autofocus` reads. (T5.4 finding (a).)
+// state a checkpoint's `attr:autofocus` reads.
 //
 // Run:   npm run build && npm run test:browser:alignment
 // Freeze: node tests/browser/replay/cursor-alignment.battery.mjs --freeze
@@ -282,7 +282,7 @@ async function selectSegment(page, i) {
 // merely segment-scoped: `checkSummary` counts `__chk`, which exists only for
 // events the walk has passed, and every segment opens at playhead 0. A segment
 // full of misaligned interactions shows a BLANK chip until it is played
-// through. (T5.6 carry M-7.)
+// through.
 async function playToEnd(page, model, i) {
   await page.evaluate((d) => window.__dbg().seek(d), model.segments[i].durMs);
   await page.waitForTimeout(60);
@@ -315,7 +315,7 @@ function fmtMeasure(m) {
 
 // ════════════════ the recording (driven in the engine under test) ════════════
 //
-// SEGMENT LIST — the A1 scenarios, one per segment, plus what each is FOR.
+// SEGMENT LIST — the misalignment scenarios, one per segment, plus what each is FOR.
 // `expect` is the acceptance for its anchored interactions:
 //   'ok'      aligned within tolerance, every §8 comparison made
 //   'flagged' the recording and the reconstruction genuinely disagree, and the
@@ -323,7 +323,7 @@ function fmtMeasure(m) {
 // A flagged entry also carries `reason`, and that is not decoration: without it
 // the scenario asserts only that SOMETHING fired, so a future regression could
 // flag for an unrelated cause and keep the battery green while the documented
-// claim silently stops being tested. C1–C5 have carried a reason predicate
+// claim silently stops being tested. The five corruption scenarios have carried a reason predicate
 // since they were written (`expectUncertain`'s `reasonRe`); these two now match.
 // `element-flick`'s Δ is a magnitude, deliberately: 200 px is the signature of
 // this exact capture gap (the scroller moves 180 → 380 inside the click's own
@@ -463,7 +463,7 @@ async function recordZoom(browser) {
 // VISUAL viewport and nothing else. The stubbed scenario cannot evidence that,
 // because it changes no layout by construction — its checks would pass
 // identically in a world where real pinch DID move geometry, so it can neither
-// confirm nor disconfirm the claim the design rests on. (T5.8 fix, review I-1.)
+// confirm nor disconfirm the claim the design rests on.
 //
 // Chromium only: CDP is Chromium's protocol, and one engine is a sufficient
 // witness for a claim about what the CSSOM means by "client coordinates" — the
@@ -547,7 +547,7 @@ const spanKeyframeFor = (rec, model, label) => {
 // and every consumer takes `model.segments[i].origin` rather than re-deriving
 // it. These two helpers keep the test tree on that reading too — hand-rolled
 // `t_load ?? t_dom_ready ?? t_start` chains here were the last latent second
-// reading in the repo (T5 final review, M1), and a change to §3's order would
+// reading in the repo, and a change to §3's order would
 // have drifted them silently while the B-storm and B-latch scenarios kept
 // reporting green.
 const originOf = (model, label) => model.segments[idxOf(model, label)].origin;
@@ -573,7 +573,7 @@ const spanOriginOf = (model, label) =>
 // somewhere reads as a regression: firefox reports segment 1's rect y as 229
 // against the pinned 230, and segment 4's as 107 against 106. Both are inside
 // ±2 and both are marked below; every other row is byte-exact on all three
-// engines. (T5.8 fix, review M-5.)
+// engines.
 const PINS = [
   { segment: 0, tRel: 28.5, target: 't-base', label: 'segment 0 click #t-base (unscrolled, span 0 keyframe)',
     dot: [140, 97], rect: [117, 89, 45, 17] },
@@ -632,9 +632,9 @@ async function runEngine(name) {
     // A whitelist nothing ever trips is a claim, not a guard. `jspsych-full`
     // carries `autofocus` once, so it produces the real specimen: the sandbox
     // refusing the focus steal (chromium and webkit log it; firefox is silent).
-    // The attribute STAYS — it is recorded page state that Task 7's
+    // The attribute STAYS — it is recorded page state that a checkpoint's
     // `attr:autofocus` reads — so the right answer is to name the error, not to
-    // strip the attribute. (T5.4 finding (a).)
+    // strip the attribute.
     const rec2 = JSON.parse(readFileSync(
       join(repoRoot, 'packages', 'sessionrecording-conformance', 'fixtures', 'jspsych-full.json'), 'utf8'));
     const autofocusSeg = rec2.segments.findIndex((s) => /"autofocus"/.test(JSON.stringify(s.initial_dom || null)));
@@ -680,7 +680,7 @@ async function runEngine(name) {
         `(dot ${m.dot ? Math.round(m.dot.x) + ',' + Math.round(m.dot.y) : 'none'} vs ${p.dot.join(',')}; ` +
         `rect ${m.target ? [m.target.x, m.target.y, m.target.w, m.target.h].map(Math.round).join(',') : 'none'} vs ${p.rect.join(',')})`);
     }
-    // Part A's ninth assertion, re-homed in DOM tier (T5.8 fix, review M-4):
+    // Part A's ninth assertion, re-homed in DOM tier:
     // an interaction with NO element target still projects on-stage. Part A
     // made it with a background click during its squeeze storm; the closest
     // shape the frozen fixture carries is the un-anchored `mouse.move` in
@@ -706,7 +706,7 @@ async function runEngine(name) {
   }
 
   // ── B — synthetic grid: record fresh in THIS engine, replay in this engine ──
-  console.log('▶ B — synthetic grid: capture → replay round trip, ' + GRID.length + ' A1 scenarios');
+  console.log('▶ B — synthetic grid: capture → replay round trip, ' + GRID.length + ' scenarios');
   const rec = await recordGrid(browser);
 
   if (FREEZE && name === 'chromium') {
@@ -754,7 +754,7 @@ async function runEngine(name) {
     // Mount accounting reads a DELTA, never an absolute: happy-dom's
     // synchronous srcdoc parse lets the boot restore run before selectSegment(0)
     // does its own, where a browser defers the first to `onload`, so
-    // `getStats().mounts` differs by one between realms at boot. (T5.4 M-3.)
+    // `getStats().mounts` differs by one between realms at boot.
     const before = await page.evaluate(() => window.__dbg().getStats());
     await selectSegment(page, 1);
     const after = await page.evaluate(() => window.__dbg().getStats());
@@ -776,11 +776,11 @@ async function runEngine(name) {
       const bad = anchorChecks.filter((c) => c.status === 'uncertain');
 
       if (spec.expect === 'ok') {
-        // THE A1 ACCEPTANCE, positive half: aligned within tolerance AND every
+        // THE ACCEPTANCE, positive half: aligned within tolerance AND every
         // §8 comparison actually made. `ok` with a non-empty `skipped` is a
         // partial verification, so it is reported — but not failed, because a
         // point outside the frame viewport makes `elementFromPoint` return null
-        // and that is COMMON in real recordings (T5.6 confirmation carry).
+        // and that is COMMON in real recordings.
         check(anchorChecks.length > 0 && bad.length === 0,
           `"${spec.id}": all ${anchorChecks.length} self-checks pass — ${spec.why}` +
           (bad.length ? ` — failing: ${JSON.stringify(bad[0])}` : ''));
@@ -790,7 +790,7 @@ async function runEngine(name) {
             JSON.stringify([...new Set(partial.flatMap((c) => c.skipped))]) + ')');
         }
       } else {
-        // THE A1 ACCEPTANCE, negative half — and this is the half that matters.
+        // THE ACCEPTANCE, negative half — and this is the half that matters.
         // A genuine disagreement must be visible on ALL FOUR surfaces, not just
         // in getChecks(): a failure only a test can see is a silent
         // misplacement as far as an analyst is concerned.
@@ -920,9 +920,8 @@ async function runEngine(name) {
       // "the storm was consumed" is checkable directly rather than inferred
       // from the alignment check that follows. `writes <= 6` alone is satisfied
       // by a viewer that stopped sizing the iframe at all — and it measured 0
-      // on firefox and webkit, so the bound had no lower guard. (T5.8 fix,
-      // review M-6.) STORM_W also forces at least one real style write on every
-      // engine, since it differs from the box the segment opens with.
+      // on firefox and webkit, so the bound had no lower guard. STORM_W also forces at least one real style write on
+      // every engine, since it differs from the box the segment opens with.
       r.viewport_changes.push({
         w: i === 239 ? 1234 : 1000 + (i % 2 ? 100 : 0),
         h: 700, dpr: 1, scale: 1, offset_x: 0, offset_y: 0,
@@ -1092,7 +1091,7 @@ async function runEngine(name) {
       `and the SAME anchor.rect (${JSON.stringify(clicks[0] && clicks[0].anchor.rect)})`);
 
     // 4. therefore the predicates are correct without reading the three fields,
-    //    which is the design §8 amendment's whole content — now measured over a
+    //    which is design §8's whole content — now measured over a
     //    genuine pinch rather than over a stub that could not have failed.
     const m2 = buildViewerModel(prec);
     const page = await openHarness(browser, m2, 'pinch-real');
@@ -1126,7 +1125,7 @@ async function runEngine(name) {
     // these nine checks would pass whatever real pinch did. They pin the weaker
     // and still necessary thing: a recording carrying non-unity `vv_*`/`dpr` is
     // not itself a reason to doubt the reconstruction. B-pinch-real above is
-    // where the geometry claim is measured. (T5.8 fix, review I-1.)
+    // where the geometry claim is measured.
     await playToEnd(page, m2, 0);
     const end = await readSegment(page);
     check(end.checks.length === 9 && end.checks.every((c) => c.status === 'ok'),
@@ -1180,23 +1179,23 @@ async function runEngine(name) {
     await page.close();
   }
 
-  { // C1 — a tampered anchor rect: the target "moved" 50px at record time
+  { // a tampered anchor rect: the target "moved" 50px at record time
     const r = clone(rec);
     segOf(r, 'baseline').events.forEach((e) => { if (e.anchor && e.anchor.rect) e.anchor.rect.x += 50; });
-    await expectUncertain(r, 'c1', 'C1 tampered anchor.rect', 'baseline', /rect moved/);
+    await expectUncertain(r, 'c1', 'tampered anchor.rect', 'baseline', /rect moved/);
   }
-  { // C2 — an anchor.node the span cannot hold (§7's third outcome: LOUD)
+  { // an anchor.node the span cannot hold (§7's third outcome: LOUD)
     const r = clone(rec);
     segOf(r, 'baseline').events.forEach((e) => { if (e.anchor) e.anchor.node = 999999; });
-    await expectUncertain(r, 'c2', 'C2 unresolvable anchor.node', 'baseline', /not held by this span/);
+    await expectUncertain(r, 'c2', 'unresolvable anchor.node', 'baseline', /not held by this span/);
   }
-  { // C3 — stylesheets stripped: the layout diverges from record time
+  { // stylesheets stripped: the layout diverges from record time
     const r = clone(rec);
     r.stylesheets = [];
     r.stylesheet_events = [];
-    await expectUncertain(r, 'c3', 'C3 stripped stylesheets (layout divergence)', 'scrolled', /rect moved|cursor outside/);
+    await expectUncertain(r, 'c3', 'stripped stylesheets (layout divergence)', 'scrolled', /rect moved|cursor outside/);
   }
-  { // C4 — corrupted camera: the seed AND every per-event block agree on a lie,
+  { // corrupted camera: the seed AND every per-event block agree on a lie,
     //      so there is no camera truth left anywhere in the recording.
     const r = clone(rec);
     const kf = spanKeyframeFor(r, model, 'comments');
@@ -1211,11 +1210,11 @@ async function runEngine(name) {
     // (2216) is past the document's own maximum, so the frame clamps at 1916
     // and check 1a catches the divergence before the rect check gets to. Both
     // are accepted — what must never happen is silence.
-    await expectUncertain(r, 'c4', 'C4 corrupted camera (seed + every per-event block)', 'comments',
+    await expectUncertain(r, 'c4', 'corrupted camera (seed + every per-event block)', 'comments',
       /applied scroll diverges|rect moved|cursor outside/);
   }
   { // C4b — SEED-ONLY corruption self-heals through the per-event camera, and
-    //       must NOT warn. The opposite direction from C4, and the reason C4
+    //       must NOT warn. The opposite direction from the corrupted-camera case, and the reason that case
     //       has to lose the snapshots too.
     const r = clone(rec);
     const kf = spanKeyframeFor(r, model, 'comments');
@@ -1234,15 +1233,15 @@ async function runEngine(name) {
     check(s.laneUncertain === 0, 'C4b paints no amber (a false alarm is a failure too)');
     await page.close();
   }
-  { // C5 — a camera block stating only scroll_y: folded nowhere, applied
-    //      nowhere. The shape T5.6's I-1 found, reachable from a recording
+  { // a camera block stating only scroll_y: folded nowhere, applied
+    //      nowhere. A shape a review found, reachable from a recording
     //      alone, and the one that used to read `ok` over a frame 300px away.
     const r = clone(rec);
     for (const s of r.segments) {
       s.events = s.events.filter((e) => e.type !== 'scroll.window');
       s.events.forEach((e) => { if (e.camera) e.camera.scroll_x = null; });
     }
-    await expectUncertain(r, 'c5', 'C5 camera stating only scroll_y (never ordered, never applied)', 'scrolled', /applied scroll diverges|rect moved/);
+    await expectUncertain(r, 'c5', 'camera stating only scroll_y (never ordered, never applied)', 'scrolled', /applied scroll diverges|rect moved/);
   }
 
   // ════════════════ PART D — trace tier: projection with no reconstruction ═══

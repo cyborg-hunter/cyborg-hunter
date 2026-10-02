@@ -48,7 +48,7 @@ it('onTrialReport receives each closed trial\'s report, and nothing when no tria
   assert.deepStrictEqual(reports, [{ trialId: 'r1' }, { trialId: 'r2' }]);
 });
 
-it('mirrors trial brackets onto an optional recorder-like object (C8: replay opt-in)', () => {
+it('mirrors trial brackets onto an optional recorder-like object (replay opt-in)', () => {
   const calls = [];
   const monitor = {
     _open: false,

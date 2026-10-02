@@ -9,7 +9,7 @@
 // near-copies of one minimal recording with a single defect each. Fifteen
 // separately typed files drift: a spec change touches the base shape and
 // fourteen of them get updated. The base lives once, here, and each entry is
-// the delta plus the prose that says which review carry it answers. The output
+// the delta plus the prose that says which gap it answers. The output
 // is DETERMINISTIC — no clock, no randomness — so re-running writes
 // byte-identical files and `git diff` is empty unless a defect actually moved.
 //
@@ -96,8 +96,8 @@ entry({
   expected_failures: { unique_node_ids: 'node id 3 is already live' },
   notes: {
     defect: 'One keyframe tree names id 3 twice, on two sibling <p> elements. Spec §4 assigns ids "in first-seen order", which presumes they are unique; a tree that breaks that has no well-defined assignment, and every dom.* event addressing id 3 afterwards is ambiguous.',
-    why_this_one_matters: 'THE r3 QUESTION THIS PINS (T5 Task-3 fix round). A keyframe carrying duplicate ids is undefended on the viewer\'s NON-BODY mount path, where the root binds last, so two players silently disagree about which node keeps the id. The corpus REFUSES the file rather than picking a winner: with duplicates invalid, the first-seen vs last-seen question never arises for a conforming recording, and §4\'s ordering sentence stays a statement about the producer rather than a tie-break rule players have to share. If r3 decides duplicates are legal and names a winner, `unique_node_ids` in corpus-invariants.js is the check that changes and this fixture is where the new rule gets stated.',
-    carve_out: 'Deliberately NOT a duplicate: dom.remove + dom.add of the same id inside one span, which is how a move legally encodes (M5). The generated `redacted.json` contains a real one — a <p> moved out of a redacted subtree, re-added with the same id and the same child text-node id — and it passes.',
+    why_this_one_matters: 'THE r3 QUESTION THIS PINS. A keyframe carrying duplicate ids is undefended on the viewer\'s NON-BODY mount path, where the root binds last, so two players silently disagree about which node keeps the id. The corpus REFUSES the file rather than picking a winner: with duplicates invalid, the first-seen vs last-seen question never arises for a conforming recording, and §4\'s ordering sentence stays a statement about the producer rather than a tie-break rule players have to share. If r3 decides duplicates are legal and names a winner, `unique_node_ids` in corpus-invariants.js is the check that changes and this fixture is where the new rule gets stated.',
+    carve_out: 'Deliberately NOT a duplicate: dom.remove + dom.add of the same id inside one span, which is how a move legally encodes (the move carve-out). The generated `redacted.json` contains a real one — a <p> moved out of a redacted subtree, re-added with the same id and the same child text-node id — and it passes.',
     strict_is_silent_here: 'validateStrict walks the tree and type-checks every node; it does not hold a set of what it has seen, and adding one would make the strict profile carry corpus semantics. This is exactly the division corpus-invariants.js exists for.',
   },
 });
@@ -116,7 +116,7 @@ entry({
   expected_failures: { references_resolve: 'node 99, which the keyframe span never emitted' },
   notes: {
     defect: 'The second event addresses node 99. The keyframe emitted ids 1, 2 and 3, and no dom.add introduces another, so the reference resolves to nothing.',
-    why_this_one_matters: 'T3 Task-1 carry. Strict validation only NUMBER-checks `node`, `parent` and `before`, so a dangling reference is a well-typed pointer to nothing: the player resolves it to undefined and, being tolerant by design (an analyst tool must not throw on participant data), says nothing at all. The defect therefore has no symptom anywhere — which is why it needs a fixture rather than a code review.',
+    why_this_one_matters: 'Strict validation only NUMBER-checks `node`, `parent` and `before`, so a dangling reference is a well-typed pointer to nothing: the player resolves it to undefined and, being tolerant by design (an analyst tool must not throw on participant data), says nothing at all. The defect therefore has no symptom anywhere — which is why it needs a fixture rather than a code review.',
     ordered_not_setwise: 'references_resolve checks in TIME ORDER within the span, not against the span\'s whole id set. A reference that arrives BEFORE the dom.add introducing its node is the same defect with a different cause, and a set-wise check would call it fine.',
   },
 });
@@ -264,7 +264,7 @@ entry({
     defect: 'A redacted input.value carrying the content in a key the spec never defined. `node`, `value_len` and the marker are all correct; the leak rides beside them.',
     why_THIS_is_the_fixture_the_corpus_most_needed: 'IT IS STRICT-VALID. validateStrict\'s redacted branch for input.value asks for a numeric node, a numeric value_len and an ABSENT `value` — all three hold — and it does not enumerate the keys an event may carry, because no per-field validator sensibly can. So the conformance profile passes this file and the privacy floor does not. That gap is the entire argument for the runner holding its own allowlist instead of trusting the validator, and before this fixture the argument was a comment.',
     what_a_real_producer_would_call_it: 'Not `plaintext`, obviously. It would be a vendor field a producer added for its own analytics, or a debugging key nobody removed — which is why the check is an allowlist of what may be present rather than a denylist of what may not.',
-    expect_leak: 'Declared. The ALWAYS_ON scan is asserted to fire and to name the offending key, which is the inversion the T1 final review asked for.',
+    expect_leak: 'Declared. The ALWAYS_ON scan is asserted to fire and to name the offending key, which is the inversion a leak test needs.',
   },
 });
 
@@ -317,8 +317,8 @@ entry({
   expected_failures: { perf_frame: 'but the last observed moment on the wire clock is 1000' },
   notes: {
     defect: 'The recording states a perf origin of 5000 and an end of 5100 — a 100 ms session — while its only segment runs to t_end 1000 on the wire clock. Under the absolute reading it declares, the recording ended 900 ms before its own last moment.',
-    why_a_declaration_is_needed_at_all: 'T3 Task-6 carry. Spec §7 puts every event `t` on the wire clock and says NOTHING about which clock `ended_at_perf` is on; §2 types it as `number | null` and stops. CH\'s serializer keeps it absolute by design; jsPsych-v1 states it on the wire clock and the converter copies that across. Both are strict-valid, and a consumer computing a duration gets two answers. So the expectations file declares the frame and the invariant holds the arithmetic to the declaration.',
-    why_the_origin_is_5000_and_not_0: 'A zero origin cannot discriminate the two readings — flipping canonical-core to relative leaves it deep-equal, which is how the ambiguity survived until T3 Task-6 went looking. Only a large non-zero origin makes the declaration mean anything, which is also why `perf_frame: "undiscriminating"` is a real value rather than a hedge: canonical-core has to say out loud that it cannot answer.',
+    why_a_declaration_is_needed_at_all: 'Spec §7 puts every event `t` on the wire clock and says NOTHING about which clock `ended_at_perf` is on; §2 types it as `number | null` and stops. CH\'s serializer keeps it absolute by design; jsPsych-v1 states it on the wire clock and the converter copies that across. Both are strict-valid, and a consumer computing a duration gets two answers. So the expectations file declares the frame and the invariant holds the arithmetic to the declaration.',
+    why_the_origin_is_5000_and_not_0: 'A zero origin cannot discriminate the two readings — flipping canonical-core to relative leaves it deep-equal, which is how the ambiguity survived until someone went looking. Only a large non-zero origin makes the declaration mean anything, which is also why `perf_frame: "undiscriminating"` is a real value rather than a hedge: canonical-core has to say out loud that it cannot answer.',
     routed_to_r3: '§7 needs one sentence naming the frame. Whichever it names, one of the two producers changes and one of the corpus\'s declarations flips with it.',
   },
 });

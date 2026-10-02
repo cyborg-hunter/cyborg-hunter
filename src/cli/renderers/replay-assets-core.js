@@ -33,7 +33,7 @@ import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.
  *     aborts the whole report — precisely the data-loss trade §11 exists to
  *     refuse. v1 degraded and rendered the rest; v2 skips the participant and
  *     says so.
- *   - a refusal already stamped by INGEST (A3): a jsPsych v1 recording the
+ *   - a refusal already stamped by INGEST: a jsPsych v1 recording the
  *     converter would not migrate, which never gets as far as a model. Task
  *     10(b) settled that a replay which does not make it is visible on three
  *     surfaces, and the CLI line report-core.js prints from this list is one of
@@ -46,8 +46,8 @@ import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.
  * The say-so is a stamp on `p.replay`, read by renderReplaySection's error
  * branch — the report's existing state for "attached but not viewable".
  * Repeated calls now return the same list (both classes are recognised from
- * the stamp), which retires the non-idempotence noted at T5 Task 10 review
- * M-5. One caller today (`report-core.js`), which renders the index from the
+ * the stamp), which retires the non-idempotence noted in review. One caller
+ * today (`report-core.js`), which renders the index from the
  * same array; replay-assets.js's renderReplayAssets is its fs form.
  *
  * `assetMap` (asset-match.js's styled-replay assets, or null) is applied to

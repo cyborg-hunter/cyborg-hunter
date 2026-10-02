@@ -228,7 +228,7 @@ describe('recorder lifecycle', () => {
     // It is not a cosmetic disagreement: t_load is the §3 time origin, so every
     // player rebases that segment's events by it, and a backdated origin put
     // the segment's playhead on the session clock while every other segment's
-    // ran on its own. T7's segment non-overlap check is what caught it.
+    // ran on its own. the conformance corpus's segment non-overlap check is what caught it.
     const unbracketed = freshRecorder();
     unbracketed.startSession();
     unbracketed.pushRecord({ type: 'mouse.move', x: 1, y: 1 });

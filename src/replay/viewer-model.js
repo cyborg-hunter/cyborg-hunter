@@ -97,7 +97,7 @@ export function buildViewerModel(recording) {
 
   const rec = recording;
   // `extensions` is nullable at every level (spec §2/§9), and a foreign
-  // producer may carry the namespace for its own reasons — the T4 converter
+  // producer may carry the namespace for its own reasons — the jsPsych-v1 converter
   // stamps provenance into it. Read individual keys; never treat presence of
   // the namespace as evidence about the producer.
   const ext = (rec.extensions && rec.extensions['cyborg-hunter']) || {};
@@ -159,7 +159,7 @@ export function buildViewerModel(recording) {
     // segment stating both t_load and t_dom_ready with different values, where
     // §3 says t_load wins — and that is also the no-change reading, since
     // CH-v1's anchor was t_load. (The fork's PLAYER still rebases by
-    // `t_dom_ready ?? 0`; that divergence is a cross-repo rider, not T5 scope.)
+    // `t_dom_ready ?? 0`; that divergence is a cross-repo rider, out of scope here.)
     const origin = tLoad != null ? tLoad
       : tDomReady != null ? tDomReady
         : tStart != null ? tStart
@@ -209,7 +209,7 @@ export function buildViewerModel(recording) {
       // segment's origin keeps a negative relative time rather than being
       // reported as happening at the segment start.
       //
-      // THE CONVERSION CONTRACT (read this before writing Task 7's checkpoint
+      // THE CONVERSION CONTRACT (read this before writing a checkpoint
       // executor). Rebasing rounds, so the two directions are not equally
       // exact and only one of them is a rule:
       //   FORWARD (session → segment) is `round1(t − origin)`, and any
@@ -277,7 +277,7 @@ export function buildViewerModel(recording) {
     userAgent: rec.user_agent || null,
 
     // `foreign` keys on PRODUCER IDENTITY, never on the presence of the
-    // `extensions['cyborg-hunter']` namespace: the T4 converter stamps its
+    // `extensions['cyborg-hunter']` namespace: the jsPsych-v1 converter stamps its
     // provenance into that namespace, so a namespace test calls the
     // designated foreign-producer fixture CH-produced. A converted CH-v1 file
     // is the mirror case — CH-produced and converter-stamped. `foreign` says

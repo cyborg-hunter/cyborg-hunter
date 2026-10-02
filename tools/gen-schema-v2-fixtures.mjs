@@ -4,11 +4,11 @@
 // shipped recorder in a real Chromium page and writing what `serialize()`
 // produced. Five fixtures, one page each:
 //
-//   redacted.json               spec Appendix + T7 brief items 1, 9, 10
-//   length-only-clipboard.json  brief item 2 (CH adapter's default mode)
-//   aborted.json                brief item 3 (end_reason "aborted")
-//   truncated.json              brief item 4 (buffer cap → capture_stopped)
-//   touch-lifecycle.json        brief item 12 (touch.* + focus/blur channels)
+//   redacted.json               spec Appendix (redaction, taint, moves)
+//   length-only-clipboard.json  CH adapter's default clipboard mode
+//   aborted.json                end_reason "aborted"
+//   truncated.json              buffer cap → capture_stopped
+//   touch-lifecycle.json        touch.* + focus/blur channels
 //
 // WHY A BROWSER AND NOT A CONSTRUCTED OBJECT. The whole point of the generated
 // half is that it is a PRODUCER'S ANSWER to the spec, not a second reading of
@@ -58,7 +58,7 @@ if (!pw) {
 }
 
 // ── the sentinels ──────────────────────────────────────────────────────────
-// THREE, not one, and the split IS the fixture's claim (T3 Task-2 review).
+// THREE, not one, and the split IS the fixture's claim.
 // §8 makes redaction a property of the FILE, and the leak scan proves that for
 // TYPED CONTENT. It does not, and must not pretend to, cover the pin-8
 // residual surface: an attribute NAME, a `data-*` VALUE and an inline `style`
@@ -75,7 +75,7 @@ export const SENTINELS = {
   // format entirely: not the name, not the value, not even a length.
   file: 'FILESENTINEL-3XQ.txt',
   // The documented residual. Lowercase and dash-free so it can also BE an
-  // attribute name, which is the surface the review asked for.
+  // attribute name, which is the surface a review asked for.
   residual: 'zqxresidual42',
   // Inlined document content. Stripped unconditionally, redacted or not.
   srcdoc: 'srcdocsentinel99',
@@ -103,7 +103,7 @@ const REDACTED_PAGE = `
     <p id="typed">placeholder</p>
   </div>
 
-  <!-- Where the I2 vector points: a node typed into INSIDE the redacted
+  <!-- Where the moved-node vector points: a node typed into INSIDE the redacted
        subtree is moved OUT of it mid-span. Without taint tracking the dom.add
        that re-parents it carries the content the keyframe withheld. -->
   <div id="open"></div>
@@ -234,7 +234,7 @@ const redacted = await withPage(REDACTED_PAGE, { redactSelector: '[data-ch-redac
   await page.setInputFiles('#picker', uploadPath);
   await settle(page);
 
-  // The I2 vector: content written INSIDE the redacted subtree, then the node
+  // The moved-node vector: content written INSIDE the redacted subtree, then the node
   // carrying it moved OUT of that subtree mid-span.
   await page.evaluate((typed) => {
     document.getElementById('typed').textContent = typed;
@@ -335,10 +335,10 @@ write('truncated.json', truncated);
 }
 
 // ── 5. touch and lifecycle ─────────────────────────────────────────────────
-// T7 brief item 12. T5.9's seek-budget gate enumerates its channel coverage
+// The seek-budget gate enumerates its channel coverage
 // against the shipped client's own KNOWN_TYPES and NAMES the types no fixture
 // carries rather than letting their absence read as coverage. Twenty-one were
-// named, and the brief is explicit that the list is not flat: touch.start and
+// named, and the list is not flat: touch.start and
 // touch.end sit in capture's withAlignment set, so they carry §6 camera/anchor
 // blocks and fire the §8 alignment self-check — the largest single term in a
 // deep-span restore, and the only way an alignment claim about TOUCH input

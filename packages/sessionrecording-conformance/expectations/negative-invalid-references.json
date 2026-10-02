@@ -30,7 +30,7 @@
   "checkpoints": [],
   "notes": {
     "defect": "The second event addresses node 99. The keyframe emitted ids 1, 2 and 3, and no dom.add introduces another, so the reference resolves to nothing.",
-    "why_this_one_matters": "T3 Task-1 carry. Strict validation only NUMBER-checks `node`, `parent` and `before`, so a dangling reference is a well-typed pointer to nothing: the player resolves it to undefined and, being tolerant by design (an analyst tool must not throw on participant data), says nothing at all. The defect therefore has no symptom anywhere — which is why it needs a fixture rather than a code review.",
+    "why_this_one_matters": "Strict validation only NUMBER-checks `node`, `parent` and `before`, so a dangling reference is a well-typed pointer to nothing: the player resolves it to undefined and, being tolerant by design (an analyst tool must not throw on participant data), says nothing at all. The defect therefore has no symptom anywhere — which is why it needs a fixture rather than a code review.",
     "ordered_not_setwise": "references_resolve checks in TIME ORDER within the span, not against the span's whole id set. A reference that arrives BEFORE the dom.add introducing its node is the same defect with a different cause, and a set-wise check would call it fine."
   }
 }

@@ -267,7 +267,7 @@
       word-break: break-word; white-space: pre-wrap;
       flex: 1; min-width: 0;  /* allow flex item to shrink and wrap correctly */
     }
-    /* When expanded by Task 11's JS: hide preview, show full text */
+    /* When expanded by the client script: hide preview, show full text */
     .paste-entry.expanded .paste-preview { display: none; }
     .paste-entry:not(.expanded) .paste-full { display: none; }
     .paste-overflow { font-size: 12px; margin-top: 4px; }
@@ -291,7 +291,7 @@
     }
     .zoomable:hover img { opacity: 0.92; }
 
-    /* Lightbox overlay — hidden by default; Task 11's JS adds .open to show it. */
+    /* Lightbox overlay — hidden by default; the client script adds .open to show it. */
     .lightbox-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       z-index: 1000; display: none;
@@ -310,7 +310,7 @@
       display: flex; align-items: center; justify-content: center; line-height: 1;
     }
 
-    /* Legend modal — opens via Task 11's JS by removing the [hidden] attribute. */
+    /* Legend modal — opens via the client script by removing the [hidden] attribute. */
     #legend-modal {
       position: fixed; inset: 0; z-index: 900;
     }
@@ -587,7 +587,7 @@
   </div>
 
   <script>
-    // Tasks 4-7 will wire interactivity (cohort selection, lightbox, legend modal).
+    // Wires interactivity (cohort selection, lightbox, legend modal).
     (function() {
       // DOM refs — captured once on load. Cohort rows and detail panes were emitted
       // server-side, so these collections stay valid for the page's lifetime.
@@ -596,7 +596,7 @@
       const rows   = [...document.querySelectorAll('.cohort-row')];
       const panes  = [...document.querySelectorAll('.participant')];
 
-      // --- Modal & lightbox refs (Task 11) ---
+      // --- Modal & lightbox refs ---
       const legend     = document.getElementById('legend-modal');
       const legendBtn  = document.querySelector('.legend-btn');
       const legendClose = legend.querySelector('.modal-close');
@@ -604,7 +604,7 @@
       const overlay     = document.getElementById('lightbox');
       const overlayImg  = document.getElementById('lightbox-img');
 
-      // Module-scoped current selection, indexed by participantId. Tasks 10/11 read it.
+      // Module-scoped current selection, indexed by participantId. The handlers below read it.
       let currentId = null;
 
       function isVisible(row) {
@@ -657,7 +657,7 @@
         }
       }
 
-      // --- Overlay open/close helpers (Task 11) ---
+      // --- Overlay open/close helpers ---
       function openLegend()    { legend.removeAttribute('hidden'); }
       function closeLegend()   { legend.setAttribute('hidden', ''); }
       function closeLightbox() { overlay.classList.remove('open'); overlayImg.src = ''; }
@@ -731,7 +731,7 @@
       searchEl.addEventListener('input', () => {
         const q = searchEl.value.trim().toLowerCase();
         for (const r of rows) {
-          // data-pid is mixed case; data-reason is pre-lowercased server-side (Task 3).
+          // data-pid is mixed case; data-reason is pre-lowercased server-side.
           const hit = !q
             || r.dataset.pid.toLowerCase().includes(q)
             || r.dataset.reason.includes(q);
@@ -1177,7 +1177,7 @@
     // Apply the current camera's viewport dims to the iframe + transform.
     // Called lazily: before each anchored self-check and once per applied
     // batch — a 240-event resize storm costs a handful of real reflows, not
-    // 240 (Sol round-1 finding 11).
+    // 240.
     function flushCamSize() {
       pendingCamSize = false;
       // Scale + letterbox apply to the OVERLAY too — trace-tier replays have
@@ -1368,7 +1368,7 @@
     }
 
     // ── Alignment self-check (per anchored discrete event) ──
-    // Compares INDEPENDENT coordinate systems (Sol round-2 finding 10):
+    // Compares INDEPENDENT coordinate systems:
     //   camera assertions  — applied scroll/dims vs requested (±1px)
     //   rect               — recorded client rect vs replayed rect (±3px/edge)
     //   containment        — projected point inside replayed rect (2px)
@@ -1832,7 +1832,7 @@
 
     // Analyst-side resizes (report sidebar, browser zoom, window resize)
     // re-derive the stage box and transform — the reconstruction must track
-    // its container, not just the recording (Sol round-1 finding 11).
+    // its container, not just the recording.
     if (typeof ResizeObserver !== 'undefined') {
       var ro = new ResizeObserver(function () {
         var newW = Math.min(mount.clientWidth || 720, 960);

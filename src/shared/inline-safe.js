@@ -4,9 +4,9 @@
 // direction. Pure and dependency-free: the CLI renderers, the Playwright
 // batteries and the investigation probes all import it.
 //
-// WHY THIS MODULE EXISTS. Before T5 Task 10 this duty was hand-rolled in nine
+// WHY THIS MODULE EXISTS. Before this module existed this duty was hand-rolled in nine
 // places, and the copy that mattered — the shipped report's — had drifted to
-// zero, so every report generated between Task 4 and Task 10 inlined a viewer
+// zero, so every report generated in that window inlined a viewer
 // the HTML parser truncated at the first `</script` inside a source COMMENT
 // and booted with a SyntaxError and no player. Nine correct copies and one
 // missing copy is the same failure the tier read had (fixed by exporting

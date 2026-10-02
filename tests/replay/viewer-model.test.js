@@ -1,8 +1,8 @@
 // tests/replay/viewer-model.test.js
-// buildViewerModel v2 (T5 Task 1, design §9): SessionRecording v2 from ANY
+// buildViewerModel v2 (design §9): SessionRecording v2 from ANY
 // producer → the viewer model the report ships alongside its viewer copy.
 //
-// This file was a shape check for the 0.7.2 module extraction; T5 grows it
+// This file was a shape check for the 0.7.2 module extraction; it has grown
 // into the real suite, because the model is now the only place where the
 // spec's segment/span vocabulary is turned into something the client walks.
 // Both committed conformance fixtures are converted here — a hand-authored
@@ -14,7 +14,7 @@ import assert from 'node:assert';
 import { readFileSync } from 'fs';
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
 // The strict profile, imported so the two readings of §3's pre-keyframe rule
-// are compared by machine rather than by prose (review I-1).
+// are compared by machine rather than by prose.
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 
 import { FIXTURES_URL as FIXTURES } from '@cyborg-hunter/sessionrecording-conformance/corpus';
@@ -131,7 +131,7 @@ describe('buildViewerModel — jspsych-full (foreign producer, 14 keyframes)', (
     assert.deepStrictEqual(model.segments.map((s) => s.origin),
       wire.segments.map((s) => s.t_dom_ready));
     // The fork's player rebases by t_dom_ready too, so a session-relative
-    // checkpoint t lands at the same moment in both players (plan Task 7).
+    // checkpoint t lands at the same moment in both players (checkpoint executor).
     const first = model.segments[0];
     assert.strictEqual(first.events[0].t,
       Math.round((wire.segments[0].events[0].t - wire.segments[0].t_dom_ready) * 10) / 10);
@@ -195,7 +195,7 @@ describe('buildViewerModel — §3 segment time origin', () => {
     assert.deepStrictEqual(seg.events.map((e) => seg.origin + e.t), [40, 150]);
   });
 
-  // ── the conversion contract Task 7's checkpoint executor reads ──────────
+  // ── the conversion contract a checkpoint executor reads ──────────
   // Two claims, because they are not the same claim and only the first is
   // exact. Measured fixture-wide rather than asserted: an earlier version of
   // this suite pinned the round trip on exactly-representable integers only,
@@ -306,7 +306,7 @@ describe('buildViewerModel — keyframe spans and defects', () => {
     assert.strictEqual(model.tier, 'trace');
   });
 
-  // The point of I-1: ONE reading of §3's pre-keyframe rule, machine-checked
+  // The point: ONE reading of §3's pre-keyframe rule, machine-checked
   // against the strict profile rather than argued.
   it('agrees with validator.js on every pre-keyframe shape', () => {
     const SHAPES = {

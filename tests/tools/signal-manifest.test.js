@@ -47,7 +47,7 @@ describe('buildManifest', () => {
   });
 });
 
-// C3 playground data: presets.{standard,strict} carry the control prefills
+// Playground data: presets.{standard,strict} carry the control prefills
 // and the verbatim soft-scoring maps recomputeSignals runs with. Pinned
 // against constants.js so demo-side scoring can never drift from the
 // library's real presets (there is no hand-mirrored table left in demo JS).

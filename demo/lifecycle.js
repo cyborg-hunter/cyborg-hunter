@@ -14,7 +14,7 @@
 //
 // Optional opts.recorder is a recorder-like object (same startTrial(opts)/
 // endTrial() semantics as monitor) whose brackets are mirrored onto the
-// SAME transitionTo() calls as the monitor's — C8's replay opt-in uses this
+// SAME transitionTo() calls as the monitor's — the demo's replay opt-in uses this
 // to keep the replay recording's trial boundaries aligned with the
 // integrity monitor's, without a second lifecycle path to keep in sync.
 

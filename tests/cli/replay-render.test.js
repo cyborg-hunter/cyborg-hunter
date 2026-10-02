@@ -18,8 +18,8 @@ import {
   inlineSafeJson, inlineSafeSrc, inlineSrcHazards,
 } from '../../src/shared/inline-safe.js';
 
-// SessionRecording v2 (spec r2). Re-pointed from the v1 wire in T5 Task 1,
-// when buildViewerModel became v2-only; rewritten here (T5 Task 10) to cover
+// SessionRecording v2 (spec r2). Re-pointed from the v1 wire
+// when buildViewerModel became v2-only; rewritten here to cover
 // all four replay-section states, the tier line, and the unloadable-artifact
 // decision against v2 input.
 function wireRecording() {
@@ -74,7 +74,7 @@ function wireRecording() {
 // A foreign producer's v2 file: carries a keyframe but states no CH tier.
 // The badge must be INFERRED structurally rather than defaulted to "trace"
 // (design §10). It still carries the `cyborg-hunter` namespace, because the
-// T4 converter stamps provenance there — presence of the namespace is not
+// jsPsych-v1 converter stamps provenance there — presence of the namespace is not
 // evidence about the producer.
 function foreignRecording() {
   const rec = wireRecording();
@@ -94,7 +94,7 @@ function traceRecording() {
 
 // A CH-v1 artifact. The §11 tolerant profile rejects it and buildViewerModel
 // throws (there is no v1 playback path — design §12). What the CLI does when
-// one reaches it is Task 10(b)'s decision, pinned below.
+// one reaches it is a deliberate decision, pinned below.
 function v1Recording() {
   return {
     schema_version: 1,
@@ -189,7 +189,7 @@ describe('renderReplayAssets', () => {
     } finally { rmSync(sub, { recursive: true, force: true }); }
   });
 
-  // ── Task 10(b): the buildViewerModel throw ────────────────────────────────
+  // ── the buildViewerModel throw ────────────────────────────────────────────
   // buildViewerModel throws on the §11 rejection set, and one unloadable
   // artifact must not cost a cohort its whole report. DECIDED: skip that
   // participant, stamp the failure where the report already has a state for
@@ -224,11 +224,11 @@ describe('renderReplayAssets', () => {
     } finally { rmSync(sub, { recursive: true, force: true }); }
   });
 
-  // ── A3: refusals stamped one layer earlier ────────────────────────────────
+  // ── refusals stamped one layer earlier ────────────────────────────────
   // A jsPsych v1 recording the converter will not migrate is stamped
   // `unloadable` by INGEST, not here — but it is the same event as a §11
   // rejection: an artifact that exists, reads fine, and never reaches the
-  // viewer. Task 10(b) settled that such a thing is visible on three surfaces,
+  // viewer. It was settled that such a thing is visible on three surfaces,
   // and the CLI line is one of them, so `skipped` has to account for both
   // origins or the console is a partial account of what did not make it.
   it('reports an artifact already stamped unloadable by ingest', () => {
@@ -310,7 +310,7 @@ describe('html-index replay section', () => {
     assert.match(html, /initChReplayViewer/, 'viewer client must be embedded');
   });
 
-  // ── The tier line (Task 10(a)) ────────────────────────────────────────────
+  // ── The tier line ────────────────────────────────────────────
   // v2 has no `metadata` block: the tier moved to
   // extensions['cyborg-hunter'].tier (serializer.js:145). Reading `metadata`
   // badged EVERY v2 recording "trace".
@@ -358,7 +358,7 @@ describe('html-index replay section', () => {
     assert.match(html, /Replay artifact corrupted/i);
   });
 
-  // ── State 2b (Task 10(b)): unloadable, and the cohort survives it ─────────
+  // ── State 2b: unloadable, and the cohort survives it ─────────
   it('renders the unloadable note for a rejected artifact while the rest of the cohort loads', async () => {
     const participants = [
       { participantId: 'BAD', trials: [{}],
@@ -402,7 +402,7 @@ describe('the inlined viewer client survives HTML parsing', () => {
   // HTML parser ends that tag at the FIRST "</script" in the text — including
   // one inside a comment or a string — so an unescaped occurrence truncates
   // the viewer mid-source and the report boots with a SyntaxError and no
-  // player. Found by the revived e2e dogfood (T5 Task 10(c)): two of the v2
+  // player. Found by the revived e2e dogfood: two of the v2
   // modules discuss "</script> breakouts" in their comments, so the report
   // shipped a viewer that could not parse. demo/replay-host.js already
   // neutralizes the sequence for its own inlining; the report did not.
@@ -429,14 +429,14 @@ describe('the inlined viewer client survives HTML parsing', () => {
       'the assignment that boots the viewer must be inside the surviving block');
     // The report's <style> block is a hand-kept copy of the viewer's rules, so
     // a renamed control loses its styling silently. `replay-trial-select` was
-    // the v1 name; the client emits `replay-segment-select` since Task 4.
+    // the v1 name; the client emits `replay-segment-select`.
     assert.match(html, /\.replay-segment-select/, 'the report styles the control the client emits');
     assert.doesNotMatch(html, /\.replay-trial-select/, 'no rule for a class nothing emits');
   });
 });
 
 describe('the inline-safe rules and the assembler precondition', () => {
-  // (T5 Task 10 fix round 3, review I-1/I-3.) The end-tag rule is complete for
+  // The end-tag rule is complete for
   // the class it covers, and NOT for the script-data-escaped class: an
   // unpaired `<!--` followed by a `<script` makes the parser swallow the
   // page's own `</script>`, so the viewer never boots and nothing is logged.

@@ -1,6 +1,6 @@
 # .github/workflows/pages.yml
 # First GitHub workflow in this repo. Builds and tests the live demo
-# (docs/superpowers/specs/2026-07-29-ch-demo-page-design.md, "Hosting & CI"),
+# ("Hosting & CI"),
 # then deploys it to GitHub Pages on push to main.
 #
 # Two jobs, least-privilege permissions:

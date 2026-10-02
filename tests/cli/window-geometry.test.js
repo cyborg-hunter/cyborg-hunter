@@ -63,8 +63,8 @@ describe('pickWindowGeometryForTrial', () => {
   it('prefers a fitting sample over closest-in-time when mouse extent demands it', () => {
     // Trial that spans a window resize. Sample A is closer in time but mouse
     // exceeds its viewport; Sample B fits the mouse extent. Picker should
-    // prefer fit over time-proximity. This covers the round-3-style case
-    // from quillien verification, where a trial straddled a resize.
+    // prefer fit over time-proximity. This covers the real-data case
+    // where a trial straddled a resize.
     const trial = {
       trialStart_perfNow: 1100,
       duration_ms: 2000,

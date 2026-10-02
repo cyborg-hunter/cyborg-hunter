@@ -90,9 +90,9 @@ const recording = await page.evaluate(() => window.CH_E2E.finish());
 check(!!recording && typeof recording === 'object',
   'the scripted session ran against the built dist and returned a recording');
 
-// ── v2 wire assertions (T3-T5 red window CLOSED here, T5 Task 10(c)) ───────
-// These were skipped from T3 (when the recorder moved to SessionRecording v2)
-// until T5 (when the viewer followed). They are the SAME eleven claims the
+// ── v2 wire assertions ─────────────────────────────────────────────────────
+// These were skipped while the recorder had moved to SessionRecording v2 and
+// the viewer had not yet followed. They are the SAME eleven claims the
 // skip list named, re-pointed at the v2 wire: dotted event types, integer
 // node ids, DomNode keyframes, `extensions['cyborg-hunter']` in place of
 // `ch_extensions`. Two of them are covered nowhere else and are the reason

@@ -1,13 +1,13 @@
 // tests/browser/replay/viewer-boot.battery.mjs
 // The viewer's SHELL BOOT, in a realm where `srcdoc` navigation is
-// asynchronous. (T5 Task 4 fix round, review I-2.)
+// asynchronous.
 //
 // WHY THIS FILE EXISTS. `tests/replay/viewer-client.test.js` drives the same
 // client under happy-dom, which parses `srcdoc` SYNCHRONOUSLY. That makes the
 // browser leg of the boot unreachable from the node suite by construction:
 // deleting `iframe.onload = onShellLoad` outright leaves all 28 node tests
-// green while every real browser freezes at boot (the review's B7 inversion),
-// and the same blind spot is how C-1 shipped — a second `srcdoc` write booting
+// green while every real browser freezes at boot (the onload-deletion inversion below),
+// and the same blind spot is how a boot defect shipped — a second `srcdoc` write booting
 // into the document the browser was about to discard, blanking the
 // reconstruction behind a `frameReady()` that still said true.
 //
@@ -24,7 +24,7 @@
 //
 // Chromium only, like `capture-chromium.battery.mjs`: every browser navigates
 // `srcdoc` asynchronously, so one engine is a sufficient witness for a claim
-// about the async leg. The tri-engine spread lives in the Task-4 report.
+// about the async leg. The tri-engine spread was measured separately.
 //
 // Run: npm run test:browser:boot
 
@@ -112,7 +112,7 @@ check(await page.evaluate(() => window.__readyInInitTick) === false,
   'frameReady() is FALSE in the init tick (a browser navigates srcdoc asynchronously)');
 
 // Bounded, so a boot that never happens FAILS instead of hanging. This is the
-// assertion B7 (deleting the onload install) has to trip.
+// assertion that deleting the onload install has to trip.
 let booted = true;
 try {
   await page.waitForFunction(() => window.__dbg().frameReady(), null, { timeout: 5000 });
@@ -133,7 +133,7 @@ check(afterBoot.stats.shellWrites === 1 && afterBoot.stats.mounts >= 1,
 check(afterBoot.bodyKids > 0, 'the reconstruction is mounted in the live document');
 check(afterBoot.node1Live, 'the span id map points into the live document');
 
-console.log('▶ C-1: the external-CSS rewrite must land in the NEW document');
+console.log('▶ the external-CSS rewrite must land in the NEW document');
 // Seek somewhere real first, so the post-rewrite restore has a position to
 // reproduce rather than a fresh segment start.
 await page.evaluate(() => window.__dbg().seek(600));
@@ -163,7 +163,7 @@ check(afterToggle.ready, 'frameReady() is true after the rewrite');
 check(afterToggle.cspAllowsHttps,
   'the live document carries the RELAXED CSP (so it is the new document, not the old one)');
 check(afterToggle.bodyKids > 0,
-  'the reconstruction survived the rewrite (C-1: booting into the discarded document blanks it)');
+  'the reconstruction survived the rewrite (booting into the discarded document blanks it)');
 check(afterToggle.node1Live,
   'the span id map points into the LIVE document, not a detached one');
 check(afterToggle.linkInLiveDoc && afterToggle.linkHref === 'https://example.test/a.css',
@@ -171,7 +171,7 @@ check(afterToggle.linkInLiveDoc && afterToggle.linkHref === 'https://example.tes
 check(afterToggle.playhead === 600, 'the playhead survived the rewrite');
 
 // A blanked reconstruction behind a truthy frameReady() is the exact shape
-// C-1 had, so assert the pair rather than either half.
+// that defect had, so assert the pair rather than either half.
 check(afterToggle.ready && afterToggle.bodyKids > 0,
   'frameReady() does not report true over a blank frame');
 

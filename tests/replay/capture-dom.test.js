@@ -754,7 +754,7 @@ describe('keyframe cadence — continuations end to end (spec §3)', () => {
   });
 
   it('a batch that arrives with no trial open never lands beside a fresh keyframe', () => {
-    // THE C-1 REPRODUCTION. An implicit segment is opened RE-ENTRANTLY from
+    // THE RE-ENTRANT SEGMENT REPRODUCTION. An implicit segment is opened RE-ENTRANTLY from
     // inside pushRecord, by a capture path that has ALREADY resolved its ids
     // against the current span. A keyframe here resets that span, so the
     // records still in flight name a numbering the file no longer describes —

@@ -2,7 +2,7 @@
 // The report's viewer script, ASSEMBLED — the one place that knows the viewer
 // client is a concatenation rather than a file.
 //
-// T5 Task 2 recorded the decision this module executes: `replay-viewer.client.js`
+// A recorded build decision is what this module executes: `replay-viewer.client.js`
 // calls `mountTree`/`applyPatch`/`applyPatches` out of `src/replay/dom-instantiate.js`,
 // and the client is a plain IIFE inlined verbatim into an HTML report — it
 // cannot `import`. The two ways to give it those functions are (a) the client
@@ -20,16 +20,16 @@
 // them; `window.initChReplayViewer` is still assigned, which is the whole
 // public surface.
 //
-// FIVE consumers were surveyed at Task 2 and are routed as follows:
+// FIVE consumers were surveyed and are routed as follows:
 //   html-index.js                      → this module (the shipped report)
 //   tools/assemble-demo-site.mjs       → this module (writes the ASSEMBLED file,
 //                                        which demo/results.js fetches by name)
-//   cursor-alignment.battery.mjs       → this module (Task 8's harness)
+//   cursor-alignment.battery.mjs       → this module (the browser battery's harness)
 //   cyborg-hunter-lab: probes/investigate/probe-support.mjs → NOT a consumer of the assembly: it
 //                                        extracts the literal `srcdocCsp()` out
 //                                        of the client source and needs the raw
 //                                        file, not the bundle.
-//   cyborg-hunter-lab: probes/investigate/cursor-alignment-probe.mjs → superseded (Task 1).
+//   cyborg-hunter-lab: probes/investigate/cursor-alignment-probe.mjs → superseded.
 
 import { readFileSync } from 'fs';
 
@@ -57,7 +57,7 @@ export function assembleReplayClientSrc(mod, client) {
   if (!EXPORT_BLOCK.test(mod)) {
     throw new Error(
       'replay-client-source: dom-instantiate.js no longer ends in a single strippable ' +
-      '`export { … };` line — the concatenation contract (T5 Task 2) is broken. ' +
+      '`export { … };` line — the concatenation contract is broken. ' +
       'Fix the module, not this assembler.');
   }
   if (/^\s*import\b/m.test(mod)) {
@@ -68,13 +68,13 @@ export function assembleReplayClientSrc(mod, client) {
   const out = "(function () {\n'use strict';\n" +
     mod.replace(EXPORT_BLOCK, '') + '\n' +
     client + '\n})();\n';
-  // Third contract, and the reason it is HERE (T5 Task 10 fix round 3, review
-  // I-1): every consumer of this function inlines the result into an HTML
+  // Third contract, and the reason it is HERE: every consumer of this function
+  // inlines the result into an HTML
   // `<script>`, and `inlineSafeSrc` — the rule they all apply — neutralises
   // `</script` and cannot neutralise the script-data-ESCAPED breakout. An
   // unpaired `<!--` followed by a `<script`, in a comment or a string, makes
   // the parser swallow the page's own closing tag: the viewer never boots and
-  // NOTHING is logged. That is strictly worse than the truncation Task 10
+  // NOTHING is logged. That is strictly worse than the truncation `inlineSafeSrc`
   // fixed, which at least raised a SyntaxError. The escape cannot be widened
   // safely (see inline-safe.js), so the precondition is asserted instead —
   // loudly, at build time, on the day a comment mentioning HTML lands.

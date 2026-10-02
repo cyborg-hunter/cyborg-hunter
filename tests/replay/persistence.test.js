@@ -106,8 +106,8 @@ const SAVED_TO = 'datapipe:ABC/P1-replay-1751600000000.json';
 
 // The same string as a literal, so the contract is readable without executing
 // the reference and a key-order or key-name change fails with a diff a human
-// can read. Its capture_failures row carries `observed_root` because Task 6's
-// I-1 fix made a misconfigured capture root report itself through exactly this
+// can read. Its capture_failures row carries `observed_root` because a
+// fix made a misconfigured capture root report itself through exactly this
 // channel — the newest producer of a value the CLI displays.
 const GOLDEN_POINTER =
   '{"schema_version":"<derived>",' +
@@ -205,7 +205,7 @@ describe('buildReplayMeta — the OUTPUT contract (byte-stable across the v2 mov
   it("passes the recording's own schema_version through, rather than assuming 2", () => {
     // The other blanked value, and the one whose first pin did not bite: every
     // fixture in this file is schema_version 2, so `=== 2` is satisfied by a
-    // hard-coded 2 in the builder (Task 7 review I-1 injected exactly that and
+    // hard-coded 2 in the builder (a review injected exactly that and
     // all 417 tests passed). A sentinel is the only version of this assertion
     // that can fail. The pointer states the version of the file it points AT,
     // which is what makes it useful next to a v1 artifact.

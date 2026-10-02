@@ -36,6 +36,12 @@
 # an extra list of agent-run vocabulary that applies to the message only.
 # Unset, behaviour is unchanged.
 #
+# Process labels: source, tests, tools and packages must not carry labels from
+# how the code was built (plan task numbers, review-round and finding ids).
+# They mean nothing to an outside reader. The label_patterns below run over
+# those paths only (src, tests, tools, packages, bin, build.js, demo; never
+# docs, never this file), and over $GATE_SCAN_DIR when it is set.
+#
 # Runs from anywhere in the repo. Scans tracked files (git grep) plus,
 # optionally, $GATE_SCAN_DIR (plain grep).
 
@@ -128,6 +134,39 @@ for pat in "${patterns[@]}"; do
         echo
         fail=1
       fi
+    fi
+  fi
+done
+
+# --- Process labels (source, tests, tools, packages) -------------------------
+# POSIX ERE with explicit boundary classes instead of \b, so the result is the
+# same under BSD and GNU regex. Q holds the two quote characters: a token like
+# T5.9 is only a label when it is NOT quoted (a quoted 'T1' is test data) and
+# not embedded in a base64 / path / version run (the +/=. and - exclusions).
+Q="'\""
+label_patterns=(
+  "(^|[^A-Za-z0-9_/+=.$Q-])T[0-9]+(\\.[0-9]+)?([^A-Za-z0-9_/+=$Q-]|$)"  # T5, T5.9
+  '(^|[^A-Za-z0-9_])Tasks?[ -][0-9]'    # Task 10, Task-3, Tasks 4-7
+  'fix round'                           # "fix round 3"
+  '[Ff]inding [0-9]'                    # "finding 2"
+  'review [A-Z]-[0-9]'                  # "review M-4"
+  '[A-Z][0-9] review'                   # "A3 review"
+  'Sol (round|R[0-9])'                  # "Sol round-1", "Sol R2"
+)
+label_paths=(src tests tools packages bin build.js demo)
+for pat in "${label_patterns[@]}"; do
+  if raw=$(git grep -I -nE "$pat" -- "${label_paths[@]}" ":(exclude)$self" 2>/dev/null); then
+    echo "PROCESS LABEL /$pat/:"
+    printf '%s\n' "$raw" | sed 's/^/  /'
+    echo
+    fail=1
+  fi
+  if [ -n "${GATE_SCAN_DIR:-}" ] && [ -d "$GATE_SCAN_DIR" ]; then
+    if raw=$(grep -rnIE "$pat" "$GATE_SCAN_DIR" 2>/dev/null); then
+      echo "PROCESS LABEL /$pat/ in \$GATE_SCAN_DIR ($GATE_SCAN_DIR):"
+      printf '%s\n' "$raw" | sed 's/^/  /'
+      echo
+      fail=1
     fi
   fi
 done

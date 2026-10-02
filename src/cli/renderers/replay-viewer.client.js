@@ -7,7 +7,7 @@
 // `mountTree`, `applyPatch` and `applyPatches` — the single reading of spec §4
 // this repo holds — are in scope here. Reading this file on its own will show
 // three undefined functions; that is the concatenation contract, not a bug
-// (T5 Task 2's recorded decision, machine-checked in
+// (a recorded build decision, machine-checked in
 // tests/replay/dom-instantiate.test.js).
 //
 // Contract: window.initChReplayViewer(mountEl, model), where model is
@@ -531,7 +531,7 @@
     // stopped being observed. `buildViewerModel` reduces the recorder's
     // `{channel, message, t}` records to channel names, which is what a chip
     // can say; the messages are recorder diagnostics with no analyst-facing
-    // reading. (T5.1 M-3: this field had no consumer until here.)
+    // reading. (This field had no consumer before this chip.)
     var captureFailChip = el('span', 'replay-note replay-warn', '');
     captureFailChip.setAttribute('data-ch-capture-failures', '');
     captureFailChip.style.display = 'none';
@@ -966,7 +966,7 @@
       // files by design, and an asymmetric fallback would let a block stating
       // only `dpr` cancel a live pinch note while preserving the DPR one —
       // inventing an end to a state the recording never said had ended. A
-      // field nobody has ever stated stays null/1/0. (T5.8 fix, review M-3.)
+      // field nobody has ever stated stays null/1/0.
       if (num(c.dpr) != null || num(c.vv_scale) != null ||
           num(c.vv_offset_x) != null || num(c.vv_offset_y) != null) {
         var prev = camView || { dpr: null, scale: 1, ox: 0, oy: 0 };
@@ -1045,7 +1045,7 @@
 
     // ── Canvas compositing and presentation (design §3) ──
     //
-    // THE MEASURED FACT THIS IS BUILT AROUND (Task 0, tri-engine): a canvas in a
+    // THE MEASURED FACT THIS IS BUILT AROUND (measured in all three engines): a canvas in a
     // frame sandboxed WITHOUT allow-scripts accepts `getContext('2d')`, accepts
     // the draw calls, holds correct pixels — and never paints them. So the
     // composite happens in an offscreen canvas owned by the REPORT document,
@@ -1068,7 +1068,7 @@
     //
     // COST. Compositing is per-event and cheap (`drawImage`); PRESENTATION is a
     // PNG re-encode and is deferred to once per applied batch, per canvas a
-    // snapshot actually touched — Task 0 measured that presented SIZE, not
+    // snapshot actually touched — measurement showed that presented SIZE, not
     // snapshot count, is what the cost tracks (ten composites presented cheaper
     // than one 189 KB baseline).
     function resetCanvases(doc) {
@@ -1077,7 +1077,7 @@
       // HEAD-scoped, like every other read of a name the viewer stamps: the
       // recording mounts into <body>, and an unscoped query cannot tell the
       // viewer's own element from a page element carrying the same attribute
-      // (the failure T5.4's I-1 found for `data-ch-sheet`).
+      // (the failure once found for `data-ch-sheet`).
       var live = doc.head.querySelectorAll('[' + CANVAS_RULE_ATTR + ']');
       for (var i = live.length - 1; i >= 0; i--) {
         if (live[i].parentNode) live[i].parentNode.removeChild(live[i]);
@@ -1156,7 +1156,7 @@
       entry.dirty = true;
     }
 
-    // Design §3.3, measured tri-engine by Task 0: a canvas in this sandbox has
+    // Design §3.3, measured in all three engines: a canvas in this sandbox has
     // NO intrinsic size, so one with no CSS size collapses and takes the
     // surrounding layout with it, while `width:50%` measures 150 in a 300px box
     // and `width:50%` with auto height honours the intrinsic ratio. The repair
@@ -1172,7 +1172,7 @@
     // composite is presented into a 4-pixel-wide element. `clientWidth` /
     // `clientHeight` are the padding box, which is both where the collapse
     // lands and what `background-origin: padding-box` sizes the presentation
-    // against. Task 0's probe could not see this: its canvases had no border.
+    // against. The first probe could not see this: its canvases had no border.
     function canvasSizeCss(el, entry) {
       if (entry.sized) return entry.sizeCss;
       var w = el.clientWidth;
@@ -1230,7 +1230,7 @@
 
     // The once-per-applied-batch boundary (design §3.1). Only canvases a
     // snapshot touched in THIS batch are re-encoded; the rest keep the rule
-    // they already have, which is the cheap follow-on Task 0's measurement
+    // they already have, which is the cheap follow-on the measurement
     // pointed at.
     function presentCanvases() {
       var doc = frameDoc();
@@ -1267,7 +1267,7 @@
         // A rejected chain is PERMANENT: one throw here (a torn-down head, a
         // `setAttribute` on a node that just left the document) would silently
         // skip every later composite for this canvas AND reject
-        // `canvasSettled()` — the one call Task 7's executor is told to await.
+        // `canvasSettled()` — the one call a checkpoint executor is told to await.
         // The composite link had a rejection handler and this one did not; note
         // that a trailing `catch` is what actually closes it, since a `then`'s
         // second argument sees the PREVIOUS link's rejection and not a throw
@@ -1290,7 +1290,7 @@
     }
 
     // What a caller awaits when it must observe a SETTLED canvas — the
-    // checkpoint executor (Task 7) and the visual batteries. Everything else
+    // checkpoint executor and the visual batteries. Everything else
     // about a restore is synchronous; this is the one part that is not, because
     // image decoding is.
     function canvasSettled() {
@@ -1442,7 +1442,7 @@
         // mouse.down/up/click, non-repeat key.down and touch.start/end), but
         // the conformance moment is this viewer playing a FOREIGN file
         // (design §7): geometry the viewer receives and ignores is geometry it
-        // declined to check while the chip says "verified". (T5.6 fix)
+        // declined to check while the chip says "verified".
         //
         // Offered only when the blocks are THERE, unlike the discrete branch
         // below. A redacted `input.value` carries `{node, redacted, value_len}`
@@ -1606,7 +1606,7 @@
       // "existed at ANY point in this span" (§13 absence-of-evidence), and that
       // must not depend on where a removal falls relative to a sample. Found by
       // the alignment battery on WebKit, whose 1 ms timer granularity makes the
-      // tRel-0 removal reachable from a real recording. (T5.8)
+      // tRel-0 removal reachable from a real recording.
       updatePlaceholderChips();
       // 4. walk the span, merged with the session streams at §7 precedence
       walk = buildWalk(walkStart, walkEnd);
@@ -1650,7 +1650,7 @@
     // absence is NOT failure — no camera block means no check.
     //
     // THE SEMANTICS ARE PINNED IN `tests/replay/alignment-viewer-model.test.js`
-    // (T5.6): each predicate — and each conjunct inside it — failing on its own
+    // — each predicate — and each conjunct inside it — failing on its own
     // injected corruption and passing otherwise, the three §7 anchor outcomes,
     // both redaction buckets, and the §6 MAY-omit rule. That file models layout
     // over the frame realm to do it; REAL geometry (fonts, reflow, zoom, pinch,
@@ -1688,7 +1688,7 @@
       // frame 300px from where the recording put the page. Design §8 says
       // "applied scrollX/scrollY vs camera.scroll_x/scroll_y"; this is that.
       // An axis the recording does not state falls back to the fold rather than
-      // to 0, which would invent a divergence out of an absent field. (T5.6 fix)
+      // to 0, which would invent a divergence out of an absent field.
       var view = doc.defaultView;
       var recX = camera && num(camera.scroll_x) != null ? camera.scroll_x : null;
       var recY = camera && num(camera.scroll_y) != null ? camera.scroll_y : null;
@@ -1719,7 +1719,7 @@
       // the chip counts as clean, while skipping the stage check entirely. A
       // divergence the viewer can still see is still a divergence, and
       // `node: null` is the shape every interaction outside the observed root
-      // carries, so the hole was not a corner. (T5.6)
+      // carries, so the hole was not a corner.
       var noAnchor = !!(anchor && anchor.node == null);
       var target = anchor && !noAnchor ? resolveNode(anchor.node) : null;
       if (target) {
@@ -2093,8 +2093,8 @@
     // per-event §6 block the walk has passed, falling back to the segment seed
     // before the first one: an interaction recorded mid-zoom is a MOMENT, and a
     // seed-scoped reading calls a session that zoomed halfway through by
-    // whichever value happened to be true at the segment origin. (T5.6's M-6:
-    // `dpr`, `vv_scale` and `vv_offset_*` had no reader anywhere; this is it.)
+    // whichever value happened to be true at the segment origin. (`dpr`, `vv_scale` and
+    // `vv_offset_*` had no reader anywhere; this is it.)
     function updateViewChips() {
       var seedDpr = (seg().camera && num(seg().camera.dpr) != null ? seg().camera.dpr : null);
       if (seedDpr == null) seedDpr = (model.viewport && num(model.viewport.dpr) != null) ? model.viewport.dpr : null;
@@ -2134,7 +2134,7 @@
       // check, so a clean segment renders an empty chip styled as a warning.
       alignChip.className = 'replay-note';
       // FOUR buckets, one sentence. `no-anchor` was counted here and said by
-      // nothing until T5.6: a segment whose interactions all landed outside the
+      // nothing before: a segment whose interactions all landed outside the
       // observed root read as a segment with no interactions, and a mixed one
       // read as fully verified. Neither is a failure — which is why they are
       // not the warning — but both are the silence this chip exists to prevent.
@@ -2147,7 +2147,7 @@
         // The qualifier rides the WARNING branch too. It is the branch an
         // analyst is most likely to be reading, and dropping it there hid three
         // unverifiable interactions behind one failed one — the same over-claim
-        // as on the verified branch, one `else if` away. (T5.6 fix)
+        // as on the verified branch, one `else if` away.
         alignChip.textContent = '⚠ ' + s.uncertain + ' interaction(s) failed the alignment self-check' +
           (qual.length ? ' (' + qual.join(', ') + ')' : '');
         alignChip.className = 'replay-note replay-warn';
@@ -2306,7 +2306,7 @@
       ro.observe(mount);
     }
 
-    // Test/debug surface (used by the alignment battery and, from Task 7, the
+    // Test/debug surface (used by the alignment battery and the
     // checkpoint executor; not a public API).
     mount._chReplayDebug = {
       seek: function (t) { seek(t); },

@@ -545,7 +545,7 @@ function qualifiedName(el, record) {
 // Redacted by position, or by history: a node whose content this recording has
 // already withheld — or which sits inside one — keeps withholding it after a
 // move (redaction.js). Both halves are SUBTREE questions, and the taint half
-// was node-only until the T3 final review's F-1: new content created inside a
+// was node-only until a review found that new content created inside a
 // moved-out container shipped in full here while the next keyframe withheld the
 // same nodes.
 function isRedactedNow(node, state) {

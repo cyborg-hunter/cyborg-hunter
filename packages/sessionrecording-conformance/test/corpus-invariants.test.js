@@ -15,7 +15,7 @@ import { INVARIANT_CHECKS, INVARIANT_NAMES, PRIVACY_INVARIANTS, REDACTED_SHAPES 
   from '@cyborg-hunter/sessionrecording-conformance/invariants';
 import { REDACTABLE_TYPES } from '@cyborg-hunter/sessionrecording-conformance/validator';
 
-// ── the dual-encoding drift guard (T1 final review) ────────────────────────
+// ── the dual-encoding drift guard ────────────────────────
 
 test('REDACTED_SHAPES and REDACTABLE_TYPES encode the same set of §8 variants', () => {
   // Two tables, one spec sentence, opposite directions: the validator's
@@ -238,7 +238,7 @@ test('unique_node_ids: a duplicate inside one keyframe tree is refused', () => {
   assert.match(String(run('unique_node_ids', rec)), /node id 2 is already live/);
 });
 
-test('unique_node_ids: the M5 carve-out — a move re-adds a removed id legally', () => {
+test('unique_node_ids: the move carve-out — a move re-adds a removed id legally', () => {
   // remove + add of the SAME id inside one span is how a move encodes, and the
   // check must not call it a duplicate. Without the carve-out every recording
   // of a reparented node is a negative fixture.

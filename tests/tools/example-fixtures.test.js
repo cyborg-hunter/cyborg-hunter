@@ -41,7 +41,7 @@ test('examples are CLI-ingestible with the intended tiers and mouse data', () =>
   assert.equal(byId['example-2'].softFlagged, false);
 });
 
-// Extra (sanctioned beyond the plan): the whole point of "rich" fixtures is
+// Extra: the whole point of "rich" fixtures is
 // that all three plot cores draw something non-trivial from them — not just
 // that the CLI pipeline ingests them without error. Runs each core with the
 // same recording-canvas factory plot-cores.test.js uses and asserts a

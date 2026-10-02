@@ -104,7 +104,7 @@ describe('serializeTree — registry integration', () => {
   });
 
   it('does not reset the span: a second walk continues the numbering', () => {
-    // resetSpan is the CALLER's call (keyframe cadence, Task 8). If
+    // resetSpan is the CALLER's call (keyframe cadence). If
     // serializeTree reset the span itself, a mid-span dom.add subtree walk
     // would silently renumber the whole keyframe.
     const span = createSpan();
@@ -119,7 +119,7 @@ describe('serializeTree — registry integration', () => {
   });
 
   it('mints no ids during emission — every id comes from the numbering pass', () => {
-    // The load-bearing half of the two-pass design, and what Task 8's span
+    // The load-bearing half of the two-pass design, and what the span
     // continuity rests on: if emission could allocate, the id space would
     // depend on serialization decisions and a continuation segment's numbering
     // would drift from the keyframe's. Instrumented rather than inferred —
@@ -274,7 +274,7 @@ describe('serializeTree — exclusion (spec §4 placeholders)', () => {
   it('numbers the excluded subtree so sibling ids keep their positions', () => {
     // The placeholder occupies its slot and its hidden descendants still burn
     // ids — events inside resolve to the placeholder (peekId + nearest-emitted
-    // ancestor, Task 3/5).
+    // ancestor).
     const { root } = build(
       '<section><div data-record-exclude><b>secret</b></div><span>kept</span></section>');
     const span = createSpan();

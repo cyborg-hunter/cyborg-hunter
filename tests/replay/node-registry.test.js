@@ -45,7 +45,7 @@ describe('createRegistry — pre-order assignment', () => {
     const reg = createRegistry();
     const { div, msgText } = canonicalTree();
     assert.strictEqual(reg.assignTree(div), 1);
-    assert.strictEqual(reg.assignTree(div), 1);   // return value too: Task 3 uses it
+    assert.strictEqual(reg.assignTree(div), 1);   // return value too: the mutation mapper uses it
     assert.strictEqual(reg.peekId(msgText), 5);
     assert.strictEqual(reg.count, 5);
   });
@@ -172,7 +172,7 @@ describe('createRegistry — node kinds', () => {
 
   it('numbers excluded/bait-looking subtrees too — filtering is the serializer\'s job', () => {
     // The registry numbers whatever tree it is given; exclusion and redaction
-    // decisions belong to the snapshot serializer (Task 2).
+    // decisions belong to the snapshot serializer.
     const reg = createRegistry();
     const baitText = text('bait');
     const bait = el('div', [baitText]);

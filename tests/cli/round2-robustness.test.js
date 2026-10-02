@@ -14,7 +14,7 @@ import { cliConfigWarnings } from '../../src/cli/config.js';
 
 const cfg = { integrityField: 'integrity', participantIdField: 'participantId' };
 
-describe('F3 — Shape-2 (responses) must not clobber extracted Shape-1 (trials)', () => {
+describe('Shape-2 (responses) must not clobber extracted Shape-1 (trials)', () => {
   it('keeps integrity trials when a payload has BOTH trials and responses', () => {
     const raw = {
       participantId: 'P',
@@ -43,7 +43,7 @@ describe('F3 — Shape-2 (responses) must not clobber extracted Shape-1 (trials)
   });
 });
 
-describe('F1 — a non-array signal field must not crash the run', () => {
+describe('a non-array signal field must not crash the run', () => {
   it('coerces a malformed array field to [] and warns', () => {
     const raw = {
       participantId: 'P',
@@ -57,7 +57,7 @@ describe('F1 — a non-array signal field must not crash the run', () => {
   });
 });
 
-describe('F1b (re-review) — array coercion must not mutate caller-owned/frozen objects', () => {
+describe('array coercion must not mutate caller-owned/frozen objects', () => {
   it('coerces a Shape-3 trial without throwing on a frozen integrity object', () => {
     const integrity = Object.freeze({ trialId: 't1', pasteEvents: {}, copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {} });
     const raw = [{ integrity }]; // Shape 3: top-level array of trials
@@ -68,7 +68,7 @@ describe('F1b (re-review) — array coercion must not mutate caller-owned/frozen
   });
 });
 
-describe('F5 — an unresolved participantId must warn, not silently become "unknown"', () => {
+describe('an unresolved participantId must warn, not silently become "unknown"', () => {
   it('warns when the id field resolves to nothing', () => {
     const raw = { subject_ID: 'P1', trials: [{ integrity: { trialId: 't1', pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {} } }] };
     const r = extractIntegrityData(raw, { integrityField: 'integrity', participantIdField: 'participantId' });
@@ -78,7 +78,7 @@ describe('F5 — an unresolved participantId must warn, not silently become "unk
   });
 });
 
-describe('F2 — a numeric trialId must not crash string handling', () => {
+describe('a numeric trialId must not crash string handling', () => {
   it('carries a numeric trialId through ingest without throwing downstream', () => {
     // The trajectories renderer calls trialId.substring(); the fix wraps it in
     // String(). We assert ingest keeps the trial (no crash) and that a String()
@@ -90,7 +90,7 @@ describe('F2 — a numeric trialId must not crash string handling', () => {
   });
 });
 
-describe('candidate-3 — findGuardViolations must scan all trials, not lock onto the first truthy-but-empty one', () => {
+describe('findGuardViolations must scan all trials, not lock onto the first truthy-but-empty one', () => {
   it('finds real violations on a later trial when earlier trials carry "[]"', () => {
     const raw = {
       participantId: 'P',
@@ -118,7 +118,7 @@ describe('candidate-3 — findGuardViolations must scan all trials, not lock ont
   });
 });
 
-describe('F4 — duplicate participant IDs across files must warn', () => {
+describe('duplicate participant IDs across files must warn', () => {
   it('flags two files that resolve to the same participantId', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ch-dup-'));
     const mk = (n) => ({ participantId: 'DUP', trials: [{ integrity: { trialId: n, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {} } }] });
@@ -131,7 +131,7 @@ describe('F4 — duplicate participant IDs across files must warn', () => {
   });
 });
 
-describe('F6 — a phaseScope phase that matches no trial must be reported', () => {
+describe('a phaseScope phase that matches no trial must be reported', () => {
   it('detects a mistyped include phase', () => {
     const participants = [
       { trials: [{ phase: 'classification' }, { phase: 'gallery' }] },
@@ -147,7 +147,7 @@ describe('F6 — a phaseScope phase that matches no trial must be reported', () 
   });
 });
 
-describe('F7 — a non-numeric softScoreThreshold must warn', () => {
+describe('a non-numeric softScoreThreshold must warn', () => {
   it('warns on a string threshold', () => {
     const warnings = cliConfigWarnings({ scoring: { softScoreThreshold: 'six' } });
     assert.ok(warnings.some(w => /softScoreThreshold/.test(w)),

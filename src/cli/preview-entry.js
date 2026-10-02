@@ -27,7 +27,7 @@ export { rankTriage } from './analyzers/triage.js';
 export { extractIntegrityData } from './extract-core.js';
 // buildViewerModel: pure wire->viewer conversion (src/replay/viewer-model.js,
 // see that file's docblock) — the demo's results build needs it to construct
-// the visitor's replay viewer-model in-browser (demo/results.js, C2) without
+// the visitor's replay viewer-model in-browser (demo/results.js) without
 // re-implementing the time-conversion logic. No Node APIs, so it bundles
 // cleanly here.
 export { buildViewerModel } from '../replay/viewer-model.js';

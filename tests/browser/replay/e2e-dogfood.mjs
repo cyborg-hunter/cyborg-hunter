@@ -9,11 +9,11 @@
 // This is the only suite that drives capture → ingest → report → viewer as
 // ONE chain: every other suite tests a link. It is also the only place the
 // index's tier badge is checked against a recording that was captured rather
-// than hand-written (T5 done-when 4).
+// than hand-written.
 //
 // Run: npm run build && npm run test:browser:e2e
 //
-// (T5 Task 10(c)) Revived from the T3-T5 red window, rewritten against the v2
+// Rewritten against the v2
 // wire: `participant_id`/`recording_started_at` at the top level, `segments`
 // in place of `trials`, and the viewer's `.replay-segment-select`. The skip
 // note said the middle of the chain was still v1 — it is not any more.
@@ -132,7 +132,7 @@ check(/replay\/ — 1 session replays/.test(cliOut), 'CLI reports the replay ass
 check(!/skipped/.test(cliOut), 'no participant was skipped as unloadable');
 check(existsSync(join(reportDir, 'index.html')), 'index.html generated');
 check(existsSync(join(reportDir, 'replay', 'E2E-P1.replay.js')), 'replay asset emitted');
-// done-when 4: the badge the analyst sees in the index, from a captured file.
+// The badge the analyst sees in the index, from a captured file.
 const indexHtml = readFileSync(join(reportDir, 'index.html'), 'utf8');
 check(/Session replay <span class="replay-note">\(dom tier\)/.test(indexHtml),
   'the index badges the recording dom tier (not the v1 metadata read: "trace")');
@@ -210,13 +210,13 @@ check(state.counters && state.counters.patchFailures === 0 && state.counters.ski
     + JSON.stringify(state.counters) + ')');
 
 // ── 4. The demo's own consumer, over the same fresh capture ───────────────
-// (T5 done-when 4 / design §13's "fresh-capture demo path" row.) The demo
+// (Design §13's "fresh-capture demo path" row.) The demo
 // does not use the CLI report's replay section: it renders the visitor's
 // recording in a sibling host document (demo/replay-host.js), built from the
 // same buildViewerModel output. Readiness only — regenerating the demo's
-// committed assets is A6's. What this asserts is that the path A6 will run
-// is not broken: a v2 capture reaches that host and reconstructs there too.
-console.log('▶ 4/5 demo replay-host readiness (A6 path)');
+// committed assets is a separate step. What this asserts is that the path it
+// will run is not broken: a v2 capture reaches that host and reconstructs there too.
+console.log('▶ 4/5 demo replay-host readiness (regeneration path)');
 const hostHtml = buildReplayHostHtml(buildViewerModel(recording), readReplayClientSrc());
 const hostFile = join(dataDir, 'replay-host.html');
 writeFileSync(hostFile, hostHtml);
@@ -233,7 +233,7 @@ const hostState = await host.evaluate(() => new Promise((resolve) => {
     return { nodes: doc && doc.body ? doc.body.querySelectorAll('*').length : 0,
       counters: dbg ? dbg.getCounters() : null };
   };
-  // The shell boots from the iframe's onload in a real browser (Task 4).
+  // The shell boots from the iframe's onload in a real browser.
   setTimeout(() => resolve(read()), 500);
 }));
 check(hostState.nodes > 10, `the host's reconstruction instantiated ${hostState.nodes} elements`);
@@ -242,7 +242,7 @@ check(hostState.counters && hostState.counters.patchFailures === 0,
 await host.close();
 
 // The same page, with one visitor-controlled text node carrying the sequence
-// that opens script-data-escaped state (T5 Task 10 review I-2). With the
+// that opens script-data-escaped state. With the
 // end-tag rule this page stayed double-escaped to EOF: its own </script> never
 // closed the element, the bootstrap call never ran, the replay card silently
 // never appeared, and NO error was raised — which is why this asserts a boot
@@ -262,7 +262,7 @@ const booted = await hostile.waitForSelector('.replay-stage', { timeout: 5000 })
 check(booted, 'a model whose text opens script-data-escaped state still boots the host');
 await hostile.close();
 
-// ── 5. Screenshot for the human reviewer ──────────────────────────────────
+// ── 5. Screenshot for a human to look at ──────────────────────────────────
 console.log('▶ 5/5 screenshot');
 const shot = join(artifactsDir, 'e2e-replay-viewer.png');
 await report.screenshot({ path: shot, fullPage: false });

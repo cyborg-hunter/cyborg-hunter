@@ -62,7 +62,7 @@ body{ padding:16px; }
 // text, and rule 2 is incomplete against it: text reading `<!-- … <script`
 // puts the parser into script-data-escaped state, where this document's own
 // `</script>` stops closing the element, the replay card silently never
-// appears, and NOTHING is logged (T5 Task 10 review I-2, reproduced in a
+// appears, and NOTHING is logged (reproduced in a
 // browser). `\u003c` inside a JSON string literal is the same character to
 // the JS parser, so the model still round-trips exactly.
 function escapeJsonForScript(value) {

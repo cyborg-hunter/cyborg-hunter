@@ -87,8 +87,8 @@ export function isRedactionTainted(node, taint) {
  * True when this node OR ANY ANCESTOR has ever been withheld.
  *
  * The subtree reading is the one every channel has to use, and it exists
- * because the node-only reading disagreed with itself across channels (T3
- * final review, F-1). The snapshot walk always inherited a tainted ancestor's
+ * because the node-only reading disagreed with itself across channels. The snapshot walk always
+ * inherited a tainted ancestor's
  * verdict downward — it descends the tree, so it carries the answer with it —
  * while the mutation mapper and the trace capture asked about the queried node
  * alone. New content created inside a container that had been moved OUT of a

@@ -316,7 +316,7 @@ describe('triage', () => {
     assert.equal(ranked[0].score, 30);
   });
 
-  it('softFlagged uses authoritativeSoftScore when present (Task 4)', () => {
+  it('softFlagged uses authoritativeSoftScore when present', () => {
     // totalSoftScore below threshold, authoritative above → should flag.
     const summary = {
       participantId: 'P1',

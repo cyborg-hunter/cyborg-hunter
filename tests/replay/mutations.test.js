@@ -393,7 +393,7 @@ describe('mapMutations — batch semantics', () => {
 
   it('exports the observer init the mapper assumes (attributeOldValue included)', () => {
     // attributeOldValue is not decoration: the exclusion-toggle direction is
-    // computed from the pre-mutation attribute value. Exported so Task 5's
+    // computed from the pre-mutation attribute value. Exported so the recorder's
     // wiring cannot drift from the semantics tested here.
     assert.deepStrictEqual(MUTATION_OBSERVER_INIT, {
       childList: true, attributes: true, attributeOldValue: true,
@@ -633,8 +633,8 @@ describe('mapMutations — root and detachment (M4)', () => {
   });
 });
 
-describe('mapMutations — batch coherence (C1 to C3)', () => {
-  it('C1: removes the children the same batch removed when the exclusion lands', () => {
+describe('mapMutations — batch coherence ', () => {
+  it('removes the children the same batch removed when the exclusion lands', () => {
     // The player holds the PRE-batch children, so the collapse has to name
     // them. Enumerating flush-time childNodes alone leaves the excluded
     // content rendered under the placeholder until the next keyframe, which
@@ -658,7 +658,7 @@ describe('mapMutations — batch coherence (C1 to C3)', () => {
     assert.ok(!JSON.stringify(events).includes('aaa'));
   });
 
-  it('C1: removes a child the batch detached before the exclusion landed', () => {
+  it('removes a child the batch detached before the exclusion landed', () => {
     const s = session(
       '<div id="stage"><div id="box"><b id="A">aaa</b><i id="B">bbb</i></div></div>');
     const p = playerFor(s);
@@ -716,7 +716,7 @@ describe('mapMutations — batch coherence (C1 to C3)', () => {
     assert.deepStrictEqual(s.flush(62), []);
   });
 
-  it('C3: append plus move-to-end reproduces the final order', () => {
+  it('append plus move-to-end reproduces the final order', () => {
     const s = session('<div id="stage"><p id="A">a</p><p id="B">b</p></div>');
     const p = playerFor(s);
     const em = s.doc.createElement('em');
@@ -729,7 +729,7 @@ describe('mapMutations — batch coherence (C1 to C3)', () => {
     assert.strictEqual(shape(p.root), shape(s.root));
   });
 
-  it('C3: insert-before a sibling that moves in later keeps every node', () => {
+  it('insert-before a sibling that moves in later keeps every node', () => {
     // The reference sibling is still under its OLD parent when the player
     // applies the insertion, so naming it makes insertBefore throw and the
     // fork's swallowed exception loses the inserted node entirely.
@@ -844,7 +844,7 @@ describe('mapMutations — batch composition (N1 to N4)', () => {
   });
 
   it('N6: says nothing about a node whose insertion it never emitted', () => {
-    // Pins the delivery predicate rather than a defect the pre-round-2 mapper
+    // Pins the delivery predicate rather than a defect an earlier mapper
     // had: p1 leaves the file with the collapse, is inserted somewhere the
     // patch stream never mentions, and is gone by flush. The whole batch is
     // the collapse sequence and nothing else. (Guard-level bite verified by

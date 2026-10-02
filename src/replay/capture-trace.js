@@ -205,8 +205,8 @@ export function attachTraceCapture(rec, env) {
     var haveHeld = !wantHeld || !span;
     var cur = node;
     while (cur && !(redacted && excluded && haveHeld)) {
-      // TAINT IS ASKED OF EVERY ANCESTOR, not just of the node (T3 final
-      // review, F-1): a field created inside a container whose content this
+      // TAINT IS ASKED OF EVERY ANCESTOR, not just of the node: a field created
+      // inside a container whose content this
       // recording already withheld is withheld too, which is the reading the
       // snapshot walk has always used and the one that makes the taint set's
       // "can only over-redact" property true of the file rather than of one
@@ -865,7 +865,7 @@ export function attachTraceCapture(rec, env) {
   // successor, and that seed is taken at the KEYFRAME (initial-state.js), after
   // the snapshot walk that gives it node ids to name. So this hook keeps only
   // the tracker upkeep the seed depends on; the call site is the capture
-  // wiring's (Task 6).
+  // wiring's.
   rec.onTrialStart(function () {
     pruneScrolledElements();
   });

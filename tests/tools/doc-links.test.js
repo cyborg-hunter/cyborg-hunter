@@ -3,8 +3,8 @@
 // the one-line setup's console messages (src/oneliner/errors.js) and the
 // guard bundles' double-load errors. A link's file must exist under docs/
 // (or the repo root) and its #anchor must be a heading of that file, slugged
-// the way GitHub slugs headings. docs/plans/ is local working material and
-// is not checked.
+// the way GitHub slugs headings. Local working notes outside docs/ are
+// not checked.
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';

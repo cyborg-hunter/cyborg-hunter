@@ -3,7 +3,7 @@
 // swap (swapIframe) and its load/error/watchdog fallback are DOM-dependent
 // and get their coverage as E2E in D1 — this file only exercises
 // assembleReportInputs, the pure payload+opts builder buildReportHtml and
-// swapIframe are layered on top of, plus (C3) that buildReportHtml threads
+// swapIframe are layered on top of, plus that buildReportHtml threads
 // its new transformPayloads seam to the right place in the pipeline.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -82,7 +82,7 @@ function makeStubCore(seenIds) {
   };
 }
 
-test('buildReportHtml applies transformPayloads to the payload list before extraction (C3 seam)', async () => {
+test('buildReportHtml applies transformPayloads to the payload list before extraction (playground seam)', async () => {
   const state = {
     participantId: 'DEMO-test4', trialReports: [], sessionReport: { trialsCompleted: 0 }, violations: [],
   };
@@ -105,7 +105,7 @@ test('buildReportHtml defaults transformPayloads to identity when the arg is omi
   assert.deepEqual(seenIds, ['DEMO-test5']);
 });
 
-// ── Persistence seam (walkthrough item 7, ENG-REVIEW amendment) ────────
+// ── Persistence seam (walkthrough item 7) ────────
 // buildResults' FIRST run() call previously always used run(null) — a
 // step-11 weight edit threaded through state.scoringOverrides would be
 // silently discarded on the report's first render, only reaching a LATER

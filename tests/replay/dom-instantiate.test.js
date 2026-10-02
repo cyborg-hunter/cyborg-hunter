@@ -1,6 +1,6 @@
 // tests/replay/dom-instantiate.test.js
-// T5 Task 2 — DomNode tree (spec §4) → real DOM, plus the integer-ID map every
-// `dom.*` patch (Task 3) and every `anchor.node` (Task 6) resolves through.
+// DomNode tree (spec §4) → real DOM, plus the integer-ID map every
+// `dom.*` patch and every `anchor.node` resolves through.
 //
 // The oracle for the shape claims is `packages/sessionrecording-conformance/src/fuzz/dom-player.js` — the
 // deliberately strict §5.1 player the capture-side suites judge the mutation
@@ -37,7 +37,7 @@ function freshDoc() {
 // `assert.equal`, everywhere in this file. Not style: when `assert.equal`
 // fails it renders both operands with `util.inspect`, and inspecting a
 // happy-dom node walks `ownerDocument → defaultView → …` until the runner is
-// SIGKILLed for memory. A reviewer investigating a real failure would get a
+// SIGKILLed for memory. Anyone investigating a real failure would get a
 // dead process instead of a diff. (Found the hard way while writing this file.)
 function same(actual, expectedNode, what) {
   assert.ok(actual === expectedNode, what);
@@ -75,8 +75,8 @@ const expected = (dom) => withoutAnnotations(asPlayerTree(dom));
 
 // The one place the viewer and the strict test player disagree.
 //
-// CORRECTED IN FIX ROUND 1, because the first version of this comment had the
-// mechanism backwards. Measured tri-engine by the reviewer, and reproduced
+// CORRECTED after measurement, because the first version of this comment had the
+// mechanism backwards. Measured tri-engine, and reproduced
 // here for happy-dom: chromium, firefox and webkit all ACCEPT
 // `setAttribute('<', 'v')`, and all three mount the real fixture node
 // unfiltered; happy-dom 20.9.0 is the realm that throws. So this filter is not
@@ -138,8 +138,8 @@ describe('instantiateTree — tree shapes round-trip', () => {
     // parser reads as carrying attributes named `<` and `div`. `div` is a legal
     // name and survives; `<` is not, and the filter drops it.
     //
-    // What that costs and does not cost, measured rather than assumed (fix
-    // round 1): chromium, firefox and webkit ACCEPT `setAttribute('<', 'v')`
+    // What that costs and does not cost, measured rather than assumed: chromium, firefox and webkit
+    // ACCEPT `setAttribute('<', 'v')`
     // and mount this exact node unfiltered, so nothing was rescued from a
     // browser abort here. happy-dom throws on it, so the STRICT TEST PLAYER
     // cannot instantiate this segment at all — `createPlayer` on segment 10
@@ -220,7 +220,7 @@ describe('mountTree — the body-root split (design §4)', () => {
   });
 
   it('the root id binds to the frame OWN body, which dom.remove must never detach', () => {
-    // Task-3 hazard, pinned where whoever writes `dom.remove` will look. The
+    // Known hazard, pinned where whoever writes `dom.remove` will look. The
     // body-root split means `idMap.get(rootId)` is the frame's `<body>`, so a
     // `dom.remove` naming that id and calling `.remove()` blindly detaches the
     // element every later mount and patch depends on. The tolerant skip is the
@@ -273,8 +273,8 @@ describe('spec §12 player filters', () => {
   it('drops on* handlers, javascript:/vbscript: URLs, and unnameable attributes', () => {
     const { root, skipped } = instantiateTree(hostile, freshDoc());
     const names = Array.from(root.attributes).map((a) => a.name);
-    // The two refusal classes are counted differently since fix round 1 (review
-    // I-4). The seven security refusals here — five `on*`/URL-scheme drops plus
+    // The two refusal classes are counted differently. The seven security
+    // refusals here — five `on*`/URL-scheme drops plus
     // the two casings — move nothing, because the reconstruction is right
     // without them. The one NAME-TOKEN refusal (`not a name`) moves `skipped`,
     // because an attribute the page really had is gone.
@@ -294,7 +294,7 @@ describe('spec §12 player filters', () => {
     // The claim that survives measurement, pinned rather than asserted in
     // prose. `<` is accepted by chromium/firefox/webkit and rejected by
     // happy-dom, so it cannot carry this argument. A whitespace-bearing name
-    // is rejected by every engine the reviewer measured AND by the realm this
+    // is rejected by every engine measured AND by the realm this
     // suite runs in, so a player with no name filter really does abort on a
     // hostile file — which is one of the three reasons the filter stays.
     const doc = freshDoc();
@@ -309,20 +309,20 @@ describe('spec §12 player filters', () => {
   });
 
   it('happy-dom, not the browser, is the realm that refuses the corpus attribute', () => {
-    // The inverse of the claim this task originally made. Pinned because the
-    // ledger sends Task 3 (the `dom.attr` name filter) and Task 8 (the browser
-    // battery) here: name validity bites in the NODE suite, not in Playwright.
+    // The inverse of the claim this module originally made. Pinned because the
+    // `dom.attr` name filter and the browser battery both come back here:
+    // name validity bites in the NODE suite, not in Playwright.
     const arena = fixture('jspsych-full').segments[10].initial_dom;
     assert.throws(() => createPlayer(arena), /InvalidCharacterError|character/i,
       'the strict test player can now instantiate the free-sort segment');
   });
 
   it('an iframe placeholder never receives a src through media_src', () => {
-    // The annotation route bypassed `IFRAME_SKIP` until fix round 1, and the
-    // reviewer measured chromium ISSUING the request when the CSP was absent.
+    // The annotation route once bypassed `IFRAME_SKIP`, and
+    // chromium was measured ISSUING the request when the CSP was absent.
     // §12's network policy is supposed to hold STRUCTURALLY here — nothing to
     // request — with `frame-src 'none'` as the belt; the belt lives in the
-    // client file Task 4 rewrites, and three consumers build their own frames.
+    // client file, and three consumers build their own frames.
     const { root } = instantiateTree({
       id: 1, kind: 'element', tag: 'iframe',
       attrs: { width: '300', height: '150' },
@@ -570,7 +570,7 @@ describe('spec §4 annotations', () => {
 describe('foreign content — SVG and MathML namespaces', () => {
   // v1 built the reconstruction from an HTML string, so the PARSER applied
   // foreign-content rules and SVG stimuli rendered. `createElement` does not:
-  // the reviewer measured a `createElement`-built `svg > circle` in chromium at
+  // a measurement of a `createElement`-built `svg > circle` in chromium at
   // namespace `…/1999/xhtml` and a bounding rect of 0×0, against `…/2000/svg`
   // and 100×100 for the same markup parsed. Nothing rendered, no chip, no
   // counter — the failure §12's placeholder duty exists to prevent. The
@@ -598,10 +598,10 @@ describe('foreign content — SVG and MathML namespaces', () => {
     const { idMap } = instantiateTree(svgTree, freshDoc());
     assert.equal(idMap.get(2).namespaceURI, SVG_NS);
     assert.equal(idMap.get(3).namespaceURI, SVG_NS);
-    // The size class the reviewer measured in chromium follows from the
+    // The size class measured in chromium follows from the
     // namespace: an XHTML-namespace <svg> lays out at 0×0 whatever its
     // width/height say, an SVG-namespace one at its viewport. happy-dom does
-    // not lay out, so the namespace IS the assertion here, and Task 8's
+    // not lay out, so the namespace IS the assertion here, and the browser
     // battery is where the rendered size becomes checkable.
     assert.equal(idMap.get(2).getAttribute('viewBox'), '0 0 100 100');
   });
@@ -637,8 +637,8 @@ describe('tolerant instantiation — a malformed node must not abort a mount', (
   // silently builds a broken element in node. That divergence is the same
   // realm-determinism argument the attribute-name filter rests on, so the tag
   // guard is the same predicate, applied at the instantiation boundary.
-  // Skipped nodes are COUNTED, which is design §4's tolerant posture; Task 3
-  // folds the count into the `counters.patchFailures` surface that already
+  // Skipped nodes are COUNTED, which is design §4's tolerant posture; the patch
+  // applier folds the count into the `counters.patchFailures` surface that already
   // drives the "recorded change(s) could not be reapplied" chip.
   it('skips and counts a child whose tag no DOM would accept', () => {
     const { root, idMap, skipped } = instantiateTree({
@@ -689,7 +689,7 @@ describe('tolerant instantiation — a malformed node must not abort a mount', (
   });
 
   it('a well-formed tree reports zero skips, and the corpus has one bad name', () => {
-    // T5 Task 3 fix round 1 (review I-4) routed NAME-TOKEN refusals into the
+    // NAME-TOKEN refusals are routed into the
     // same counter, so the corpus's single malformed attribute — the `<` in
     // jsPsych 8.2.3's free-sort arena, segment 10 — is now reported rather than
     // dropped in silence. Everything else stays at zero, and the exception is
@@ -707,7 +707,7 @@ describe('tolerant instantiation — a malformed node must not abort a mount', (
 
 describe('the module is concatenable into the report viewer as a plain script', () => {
   // The viewer client is an IIFE inlined verbatim into the report by
-  // html-index.js; it cannot `import`. The recorded decision (Task 2) is that
+  // html-index.js; it cannot `import`. The recorded decision is that
   // the BUILD concatenates this module's source ahead of the client rather than
   // the client carrying a second copy of it — so the module has to stay plain
   // script text with exactly one strippable ESM statement. These two tests are
@@ -738,7 +738,7 @@ describe('the module is concatenable into the report viewer as a plain script', 
     const mount = api.mountTree(dom, doc.body, doc);
     same(mount.root.parentNode, doc.body,
       'the concatenated mountTree still mounts into the body');
-    // The §5.1 applier ships in the same file (T5 Task 3) and has to survive
+    // The §5.1 applier ships in the same file and has to survive
     // the same strip-and-concatenate, so it is exercised through the
     // reconstructed API rather than trusted to.
     api.applyPatches([{ type: 'dom.text', t: 1, node: 5, text: 'Clicked!' }], mount);

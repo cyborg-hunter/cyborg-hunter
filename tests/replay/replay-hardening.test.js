@@ -45,7 +45,7 @@ function redactableTarget(tagName, value) {
   };
 }
 
-describe('F2 — keystroke capture must honor redactSelector', () => {
+describe('keystroke capture must honor redactSelector', () => {
   it('redacts key identity for a field matching redactSelector', () => {
     const { doc, events } = harness({ keys: 'full', redactSelector: '[data-ch-redact]' });
     const target = redactableTarget('INPUT', 'secret@example.com');
@@ -97,7 +97,7 @@ function domHarness(html, config) {
   };
 }
 
-describe('F3 — DOM capture must honor redactSelector', () => {
+describe('DOM capture must honor redactSelector', () => {
   const REDACT = { redactSelector: '[data-ch-redact]' };
 
   it('the keyframe withholds the value of a redactSelector-matching input', () => {
@@ -147,7 +147,7 @@ describe('F3 — DOM capture must honor redactSelector', () => {
   });
 });
 
-describe('F4 — recorder must cap total payload size, not just event count', () => {
+describe('recorder must cap total payload size, not just event count', () => {
   it('stops capture when the size budget is exceeded even under the event-count cap', () => {
     globalThis.window = { innerWidth: 800, innerHeight: 600, devicePixelRatio: 1 };
     const rec = createRecorder({ participantId: 'P', maxEventsPerTrial: 100000, maxCharsPerTrial: 50000 });
@@ -218,7 +218,7 @@ describe('F4 — recorder must cap total payload size, not just event count', ()
   });
 });
 
-// F5/F7 re-pointed at the v2 wire (T5 Task 1). The hardening claim is
+// Re-pointed at the v2 wire. The hardening claim is
 // unchanged — a hand-edited or truncated artifact must not abort a whole
 // cohort report — but v2 splits it in two: spec §11's four rejection
 // categories now fail LEGIBLY (a named reason, not a TypeError from deep
@@ -230,7 +230,7 @@ const v2 = (over) => ({
 });
 const seg = (over) => ({ index: 0, events: [], ...over });
 
-describe('F5 — buildViewerModel must not crash on malformed artifacts', () => {
+describe('buildViewerModel must not crash on malformed artifacts', () => {
   it('drops null and non-object event entries', () => {
     const model = buildViewerModel(v2({ segments: [
       seg({ index: 0, t_load: 0, events: [] }),
@@ -260,7 +260,7 @@ describe('F5 — buildViewerModel must not crash on malformed artifacts', () => 
   });
 });
 
-describe('F7 — buildViewerModel must sort events by time', () => {
+describe('buildViewerModel must sort events by time', () => {
   it('reorders out-of-order events (RAF-coalesced input can flush late)', () => {
     const model = buildViewerModel(v2({ segments: [seg({ t_load: 0, events: [
       { type: 'dom.attr', t: 100 },
@@ -272,7 +272,7 @@ describe('F7 — buildViewerModel must sort events by time', () => {
   });
 });
 
-describe('F9 — autoSave must never throw, even on an unserializable recording', () => {
+describe('autoSave must never throw, even on an unserializable recording', () => {
   it('returns saved_to:failed on a circular reference instead of throwing', async () => {
     const circular = {
       schema_version: 2, participant_id: 'P',

@@ -1,17 +1,17 @@
 // tests/browser/replay/viewer-canvas.battery.mjs
-// `canvas.snapshot` rendering, asserted on PRESENTED PIXELS. (T5 Task 5.)
+// `canvas.snapshot` rendering, asserted on PRESENTED PIXELS.
 //
 // WHY THIS FILE EXISTS, AND WHY IT READS SCREENSHOTS
 //
 // A canvas inside a frame sandboxed WITHOUT allow-scripts accepts
 // `getContext('2d')`, accepts the draw calls, holds correct pixels — and never
-// paints them (Task 0, reproduced on chromium, firefox and webkit). So an
+// paints them (reproduced on chromium, firefox and webkit). So an
 // assertion that reads `getImageData` on the in-frame canvas is a GREEN TEST
-// OVER A BLANK SCREEN, and the plan makes that a global constraint rather than
+// OVER A BLANK SCREEN, and the design makes that a global constraint rather than
 // advice. Every pixel below therefore comes out of an element-clipped
 // screenshot decoded in Node.
 //
-// The same trap has a second storey, which the plan review named: the data URL
+// The same trap has a second storey, which a review named: the data URL
 // the viewer presents comes from the parent-owned OFFSCREEN canvas, where
 // painting is unrestricted, so it can be perfectly correct while the
 // PRESENTATION step never happened. A data-URL check is therefore used here
@@ -35,13 +35,13 @@
 // REGISTRATION IS GUARDED, NOT ASSUMED. The frame is letterboxed by `scale(k)`,
 // so a frame-local point maps to a shot pixel through k. Both k and the
 // screenshot's own dimensions are asserted before any pixel is read (the
-// plan-review lesson: a probe that samples by unchecked arithmetic produced a
+// lesson from review: a probe that samples by unchecked arithmetic produced a
 // false WebKit reading). The canvas's frame-local box is MEASURED through
 // `contentDocument` rather than computed.
 //
 // Chromium by default, like `viewer-boot.battery.mjs` and
 // `capture-chromium.battery.mjs`; `--engines=chromium,firefox,webkit` runs the
-// spread (recorded in the Task-5 report).
+// spread (measured separately).
 //
 // Run: npm run test:browser:canvas
 
@@ -349,7 +349,7 @@ function inkBox(shot, box) {
 
 // ── per-engine run ─────────────────────────────────────────────────────────
 
-// Task-4 finding (a), routed to Task 8 and inherited here: a reconstruction
+// A known console error, inherited from the boot battery: a reconstruction
 // carrying `autofocus` logs one console error per mount on chromium and webkit
 // ("Blocked autofocusing…"), because the frame is sandboxed without
 // allow-scripts. The behaviour is correct and jspsych-full triggers it.

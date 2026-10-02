@@ -140,7 +140,7 @@ function payloadChars(value) {
  *                       a continuation to continue from, and §3 requires the
  *                       first DOM-bearing segment to be a keyframe.
  *   `segments`          segments opened in this span, the keyframe included.
- *   `patchChars`        the plan's `bytesSinceKeyframe`. See below.
+ *   `patchChars`        the design's `bytesSinceKeyframe`. See below.
  *   `lastSnapshotChars` what the span's keyframe cost the file: the exact JSON
  *                       length of its tree plus its `initial_state` seed (the
  *                       same number `noteSnapshotChars` gets). 0 when no
@@ -150,7 +150,7 @@ function payloadChars(value) {
  * since the keyframe of `JSON.stringify(patches).length`, where `patches` is
  * the array of `dom.*` events that batch mapped to.
  *
- *   - CHARS, not bytes. The plan and design call it `bytesSinceKeyframe`; it is
+ *   - CHARS, not bytes. Earlier designs called it `bytesSinceKeyframe`; it is
  *     measured in the same unit as `maxCharsPerTrial` (UTF-16 code units, which
  *     UTF-8 byte size can exceed for non-ASCII), so it carries that config's
  *     name for that config's reason. Both sides of the comparison use it, so
@@ -257,7 +257,7 @@ export function attachDomCapture(rec, env) {
   // replaced the container — and the observer, attached to whichever element
   // existed first, would have been watching neither. The recording's root is by
   // definition the element the observer watches, so it is resolved here and
-  // held. (Task 4's residual: the seed's "did anything get walked" guard
+  // held. (Residual risk: the seed's "did anything get walked" guard
   // catches a never-walked span, not a walk of a DIFFERENT root. One root
   // identity is what makes that unreachable rather than merely unlikely.)
   // Did the held root actually come from the configured selector? Resolving
@@ -498,7 +498,7 @@ export function attachDomCapture(rec, env) {
       // task as stopSession() are still queued when the recording closes and
       // disconnecting drops them silently. Draining the queue through the SAME
       // handler is what makes the last thing a participant saw a patch rather
-      // than a gap (T3 final review, F-5).
+      // than a gap.
       rec.addPreCloseFlush(function () {
         var pending = observer.takeRecords();
         if (pending && pending.length) handleBatch(pending);

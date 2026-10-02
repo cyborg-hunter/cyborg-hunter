@@ -45,7 +45,7 @@ import { detectGzip, validateStrict } from '../shared/schema-v2-validator.js';
 //   <sanitizedPid>-replay-<sessionStartEpochMs>.json[.gz]
 // They sit in dataDir (or replayDir) next to the participant files and must
 // never enter the participant-file pass. Files from OTHER producers carry
-// whatever name their tool chose and are found by content instead (A3, see
+// whatever name their tool chose and are found by content instead (see
 // the foreign-artifact pass in attachReplayArtifacts).
 const REPLAY_FILE_RE = /-replay-\d+\.json(\.gz)?$/i;
 
@@ -77,7 +77,7 @@ function participantArtifactRe(sanePid) {
 // array whose entries have `events` and `initial_dom`, so it matches the
 // jsPsych arm too. Reading the CH stamp first is what keeps CH v1 out of the
 // jsPsych converter, which would refuse it — spec §14 gives CH v1 a different
-// migration path, and A6's decision makes that path "regenerate the demo
+// migration path, and the decision there is to "regenerate the demo
 // assets", not "convert" (stray old files stay playable at the 0.7.x tag).
 export function artifactKind(j) {
   if (!j || typeof j !== 'object' || !('schema_version' in j)) return null;
@@ -86,8 +86,8 @@ export function artifactKind(j) {
   if (String(j.metadata?.recorder || '').startsWith('cyborg-hunter-replay')) return 'ch';
   // jsPsych v1 is identified by VERSION + shape, not by every trial being
   // well-formed: the converter owns trial validation and refuses with a remedy
-  // sentence, and a shape-based sniff sent malformed files past it in silence
-  // (A3 review, finding 2). An empty `trials` array is a recording too.
+  // sentence, and a shape-based sniff sent malformed files past it in silence.
+  // An empty `trials` array is a recording too.
   if (j.schema_version === 1 && Array.isArray(j.trials)) return 'jspsych-v1';
   return null;
 }
@@ -102,14 +102,14 @@ const extOf = (name) => { const i = name.lastIndexOf('.'); return i <= 0 ? '' : 
 // Reads one file as a recording candidate: { json } or { error }.
 // Gzip is decompressed HERE, not only at attach time: reading the compressed
 // bytes as utf8 and JSON.parsing them made every readable `.json.gz` artifact
-// announce itself as a truncated upload (T5 Task 10 review M-4).
+// announce itself as a truncated upload.
 async function readArtifactJson(reader, gunzip) {
   let text;
   try {
     const bytes = await reader.read();
     // Suffix OR magic bytes (RFC 1952): a gzip export renamed to `.json` is
     // still gzip, and decoding it as UTF-8 announced a truncated upload that
-    // did not exist (A3 review, finding 4).
+    // did not exist.
     const gz = /\.gz$/i.test(reader.name) || detectGzip(bytes);
     text = decodeUtf8(gz ? await gunzip(bytes) : bytes);
   } catch (e) {
@@ -130,8 +130,8 @@ async function readArtifactJson(reader, gunzip) {
 // IN MEMORY, NEVER TO DISK. Ingest reads the analyst's data directory and
 // writes nothing into it; a converted sibling would also be picked up by the
 // NEXT run as a second artifact for the same participant, and it would rewrite
-// fixtures other tasks own (the committed demo trio is v1 and A6 regenerates
-// it). Provenance survives anyway: the converter stamps
+// fixtures other tasks own (the committed demo trio is regenerated
+// by tools/gen-demo-fixture.mjs). Provenance survives anyway: the converter stamps
 // `extensions["cyborg-hunter"].converter` with its version and the canonical
 // `source_sha256` of the input, and the source file stays byte-identical on
 // disk, so file + hash + tool version reproduce the conversion exactly.
@@ -150,17 +150,17 @@ export async function migrateArtifact(json, kind, deps) {
     : (j) => convertRecording(j, { sha256: deps.sha256 });
   try {
     const recording = await convert(json);
-    // A2 (spec §11): the in-memory conversion is strict-validated like the
+    // Spec §11: the in-memory conversion is strict-validated like the
     // converter CLI validates its file output — but a failure WARNS and still
     // attaches. Refusing here would lose a participant's replay to a defect the
     // viewer's tolerant profile absorbs (e.g. `stylesheets: {}` → played
-    // unstyled); before this, that absorption was silent (finding 6).
+    // unstyled); before this, that absorption was silent.
     const verdict = validateStrict(recording);
     return { recording, converted: true, strictErrors: verdict.ok ? null : verdict.errors };
   } catch (e) {
     // Only the converter's declared refusals (`.reasons`) are about the FILE.
     // Anything else is the converter failing, and blaming participant data
-    // for it hid the stack from whoever has to fix the converter (finding 7).
+    // for it hid the stack from whoever has to fix the converter.
     if (Array.isArray(e.reasons)) return { refusal: e.reasons.join('; ') };
     return { internal: e.stack || e.message };
   }
@@ -190,7 +190,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
   const warnings = [];
 
   // Session recordings are excluded from the participant pass by CONTENT, not
-  // by name (A3): v2 is producer-agnostic, so a conforming artifact can arrive
+  // by name: v2 is producer-agnostic, so a conforming artifact can arrive
   // called `session.json` or anything else, and putting one through the
   // participant extractor produced a phantom "unknown" participant plus two
   // junk warnings. Files matching CH's own naming keep their extra guarantee —
@@ -327,7 +327,7 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // read anything out of, so it is found by CONTENT here and attached by
   // IDENTITY ONLY: its embedded participant_id must name a participant in this
   // dataset. No filename fallback exists for these and none is invented, which
-  // is what keeps Task 10's ownership defense whole for foreign producers.
+  // is what keeps the ownership defense whole for foreign producers.
   //
   // The scan keeps the NAME and the embedded id, never the recording: holding
   // every foreign artifact parsed at once would put a cohort's worth of
@@ -342,7 +342,7 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // a pid in THIS dataset. Anything else — including a foreign artifact whose
   // name merely LOOKS like CH's pattern (`download-replay-<epoch>.json`) — is
   // scanned by content. Excluding by REPLAY_FILE_RE alone let such a file
-  // fall between both routes with no warning (A3 review, finding 1).
+  // fall between both routes with no warning.
   const claimedByName = new Set();
   for (const p of participants) {
     const re = participantArtifactRe(sanitize(p.participantId));
@@ -352,7 +352,7 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // replayDir (nothing else lives there), plus anything in dataDir the
   // participant pass never saw (e.g. `session.json.gz` under a `*.json`
   // pattern). A file the participant pass DID read reports its own failure
-  // there (finding 3).
+  // there.
   // Both shells give a file the same `path` label in both lists (the Node
   // shell joins dataDir the same way for each), so the label identifies it.
   const seenByParticipantPass = new Set(participantPassFiles.map(r => r.path));
@@ -529,7 +529,7 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
     };
     owned.sort((a, b) => sessionEpoch(a) - sessionEpoch(b));
     const chosen = owned[owned.length - 1];
-    // (T5 Task 10) The targeted version is 2: the viewer is v2-only and a v1
+    // The targeted version is 2: the viewer is v2-only and a v1
     // artifact is skipped with a note when the report is built
     // (replay-assets.js). Warning "this CLI targets 1" was the previous
     // era's sentence and is now exactly backwards. Attach either way —
