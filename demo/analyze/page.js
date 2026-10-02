@@ -49,7 +49,9 @@ export function createPage(root, worker, opts) {
   // The report posts a selection message when its script runs. One that has
   // not arrived reportWatchdogMs after the frame loaded means the report did
   // not render (seen in Firefox with a few hundred participants).
+  // opts.timers ({ set, clear }) lets a test drive the clock by hand.
   var reportWatchdogMs = opts && opts.reportWatchdogMs ? opts.reportWatchdogMs : 10000;
+  var timers = (opts && opts.timers) || { set: function (fn, ms) { return setTimeout(fn, ms); }, clear: function (id) { clearTimeout(id); } };
   var reportWatchdog = null;
   var reportPosted = false;
   var runButton = root.querySelector('[data-action="run"]');
@@ -68,12 +70,12 @@ export function createPage(root, worker, opts) {
   }
   function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; }
   function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; }
-  function stopWatchdog() { if (reportWatchdog) { clearTimeout(reportWatchdog); reportWatchdog = null; } }
+  function stopWatchdog() { if (reportWatchdog) { timers.clear(reportWatchdog); reportWatchdog = null; } }
   function armWatchdog() {
     stopWatchdog();
     // No participants, no row to select, no message to wait for.
     if (reportPosted || !state.result || !state.result.participants.length) return;
-    reportWatchdog = setTimeout(function () {
+    reportWatchdog = timers.set(function () {
       reportWatchdog = null;
       showError('The report did not finish rendering in this browser. The zip download still contains the full report: open its index.html directly, or use the CLI.');
     }, reportWatchdogMs);

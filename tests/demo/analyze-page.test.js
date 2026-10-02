@@ -511,8 +511,13 @@ test('report frames take no src in the tests that follow', () => {
     return el;
   };
 });
-const SILENT_MS = 30;
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// A clock the tests advance by hand: nothing here depends on real time.
+function fakeTimers() {
+  const live = new Map();
+  let next = 1;
+  return { set: (fn) => { live.set(next, fn); return next++; }, clear: (id) => { live.delete(id); },
+    count: () => live.size, fire: () => { const fns = [...live.values()]; live.clear(); fns.forEach((f) => f()); } };
+}
 async function toLoadedReport(t, done) {
   await toCheck(t);
   action('run').click(); await tick();
@@ -526,10 +531,12 @@ async function toLoadedReport(t, done) {
 const selectFrom = (frame) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
 
 test('no selection message after the report frame loads: an error names the zip and the CLI, and nothing is torn down', async () => {
-  const t = boot({ reportWatchdogMs: SILENT_MS });
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
   await toLoadedReport(t);
+  assert.equal(clock.count(), 1, 'armed by the frame\'s load');
   assert.equal(role('error').hidden, true, 'not before the time is up');
-  await wait(SILENT_MS * 3);
+  clock.fire();
   assert.equal(role('error').hidden, false);
   assert.match(role('error').textContent, /did not finish rendering/);
   assert.match(role('error').textContent, /zip/);
@@ -540,14 +547,18 @@ test('no selection message after the report frame loads: an error names the zip 
   assert.equal(action('download-zip').disabled, false);
 });
 
-test('the watchdog stays quiet when the report posts its selection in time, or before the frame\'s load event', async () => {
-  const t = boot({ reportWatchdogMs: SILENT_MS });
+test('the watchdog is cancelled when the report posts its selection, or has posted it before the frame\'s load event', async () => {
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
   const frame = await toLoadedReport(t);
+  assert.equal(clock.count(), 1);
   selectFrom(frame);
-  await wait(SILENT_MS * 3);
+  assert.equal(clock.count(), 0);
+  clock.fire();
   assert.equal(role('error').hidden, true);
 
-  const t2 = boot({ reportWatchdogMs: SILENT_MS });
+  const clock2 = fakeTimers();
+  const t2 = boot({ timers: clock2 });
   await toCheck(t2);
   action('run').click(); await tick();
   t2.emit(DONE);
@@ -555,36 +566,38 @@ test('the watchdog stays quiet when the report posts its selection in time, or b
   const early = document.querySelector('iframe.analyze-report');
   selectFrom(early);                                   // the script ran before `load` fired
   early.dispatchEvent(new win.Event('load'));
-  await wait(SILENT_MS * 3);
+  assert.equal(clock2.count(), 0, 'never armed');
   assert.equal(role('error').hidden, true);
 });
 
 test('a message from another window does not stop the watchdog', async () => {
-  const t = boot({ reportWatchdogMs: SILENT_MS });
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
   await toLoadedReport(t);
   window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: {} }));
-  await wait(SILENT_MS * 3);
+  assert.equal(clock.count(), 1);
+  clock.fire();
   assert.equal(role('error').hidden, false);
 });
 
 test('start over and a new run cancel the watchdog', async () => {
-  const t = boot({ reportWatchdogMs: SILENT_MS });
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
   await toLoadedReport(t);
   document.querySelectorAll('[data-action="reset"]')[1].click();
-  await wait(SILENT_MS * 3);
-  assert.equal(role('error').hidden, true, 'start over');
+  assert.equal(clock.count(), 0, 'start over');
 
   await toLoadedReport(t);
-  document.querySelectorAll('[data-action="reset"]')[1].click();
-  await toCheck(t);
-  action('run').click(); await tick();
-  await wait(SILENT_MS * 3);
-  assert.equal(role('error').hidden, true, 'a run in progress');
+  assert.equal(clock.count(), 1);
+  // A new run started while the old one is armed: reset is the only way back
+  // to the check step, so drive run() directly.
+  t.page.run();                                        // waits on the worker, which this test never answers
+  assert.equal(clock.count(), 0, 'a new run');
 });
 
 test('a report with no participants arms no watchdog: it has nothing to select', async () => {
-  const t = boot({ reportWatchdogMs: SILENT_MS });
+  const clock = fakeTimers();
+  const t = boot({ timers: clock });
   await toLoadedReport(t, { ...DONE, participants: [], triageOrder: [] });
-  await wait(SILENT_MS * 3);
-  assert.equal(role('error').hidden, true);
+  assert.equal(clock.count(), 0);
 });
