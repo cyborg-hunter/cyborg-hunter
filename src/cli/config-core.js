@@ -7,11 +7,18 @@ import { validateConfig } from '../shared/validation.js';
 import { resolveScoreWeights } from './analyzers/score-weights.js';
 
 // Returns the merged config and every warning loadConfig prints, in its
-// order: unknown keys (typos) first, then the value checks.
+// order: unknown keys (typos) first, then the value checks. `undefined` is
+// no config file; a file whose JSON is not an object (null, a list, a
+// string, a number) is ignored with a warning.
 export function mergeConfig(fileConfig) {
-  const file = fileConfig && typeof fileConfig === 'object' ? fileConfig : {};
+  const isObject = fileConfig !== null && typeof fileConfig === 'object' && !Array.isArray(fileConfig);
+  const file = isObject ? fileConfig : {};
   const config = { ...DEFAULT_CLI_CONFIG, ...file };
   const warnings = [...validateConfig(file), ...cliConfigWarnings(config)];
+  if (fileConfig !== undefined && !isObject) {
+    const kind = fileConfig === null ? 'null' : Array.isArray(fileConfig) ? 'an array' : 'a ' + typeof fileConfig;
+    warnings.unshift('the config file holds ' + kind + ', not a JSON object; its settings are ignored');
+  }
   return { config, warnings };
 }
 

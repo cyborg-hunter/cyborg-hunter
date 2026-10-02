@@ -39,6 +39,21 @@ test('falls back to dataTransfer.files when items carry no entries (synthetic dr
   assert.deepEqual(out.map((e) => e.path), ['x.csv']);
 });
 
+test('a file item without an entry is kept beside the items that have one', async () => {
+  const entry = { isFile: true, isDirectory: false, name: 'a.csv', file: (cb) => cb({ name: 'a.csv', size: 1 }) };
+  const loose = { name: 'b.csv', size: 1 };
+  const items = [
+    { kind: 'file', webkitGetAsEntry: () => entry },
+    { kind: 'file', webkitGetAsEntry: () => null, getAsFile: () => loose },
+    { kind: 'string', webkitGetAsEntry: () => null, getAsFile: () => null },
+  ];
+  const dt = { items, files: [] };
+  queueMicrotask(() => { dt.items = []; });
+  const out = await collectDropped(dt);
+  assert.deepEqual(out.map((e) => e.path), ['a.csv', 'b.csv']);
+  assert.equal(out[1].file, loose);
+});
+
 test('filesFromInput prefers webkitRelativePath', () => {
   const out = filesFromInput({ files: [{ name: 'a.csv', webkitRelativePath: 'd/a.csv' }, { name: 'b.csv', webkitRelativePath: '' }] });
   assert.deepEqual(out.map((e) => e.path), ['d/a.csv', 'b.csv']);

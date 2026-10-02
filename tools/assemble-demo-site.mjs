@@ -36,14 +36,14 @@ import { buildOfflineHtml, OFFLINE_NAME } from './offline-analyze.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const SITE_DIR = join(ROOT, '.demo-site');
-const DEMO_DIR = join(ROOT, 'demo');
+export const DEMO_DIR = join(ROOT, 'demo');
 
 // Excludes demo/tests/ (Playwright specs + helpers — dev-only, must not ship
 // publicly) and, under demo/analyze/, everything but the page and its built
 // bundle: the other files there are build inputs of tools/build-analyze.mjs.
 // Everything else under demo/ is runtime: index.html, demo.css, the *.js
 // modules, signal-manifest.json, assets/.
-function isRuntimeFile(src) {
+export function isRuntimeFile(src) {
   const rel = relative(DEMO_DIR, src);
   if (rel === 'tests' || rel.startsWith('tests' + sep)) return false;
   if (rel.startsWith('analyze' + sep)) {
@@ -113,4 +113,5 @@ function main() {
   console.log('assemble-demo-site: assembled ' + SITE_DIR);
 }
 
-main();
+// Run as a script; a test imports isRuntimeFile without assembling anything.
+if (process.argv[1] && process.argv[1].endsWith('assemble-demo-site.mjs')) main();

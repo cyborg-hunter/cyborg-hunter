@@ -27,6 +27,15 @@ describe('createDebug', () => {
       'Cyborg Hunter active · jsPsych detected · 14 trials instrumented · ID from workerId · honeypot on · friction off');
   });
 
+  // After the hand-over ch.js instruments nothing and runs no guards: the
+  // researcher's own extension does the monitoring.
+  it('summary and badge in manual mode say so instead of counting trials', () => {
+    var d = createDebug({ doc: win.document, ctx: jsCtx({ win: win, host: 'manual', jspsych: { segmentsWritten: 0, instrumented: 0 } }), log: log });
+    var text = 'Cyborg Hunter active · manual mode · the page\'s cyborg-hunter extension monitors the trials';
+    assert.strictEqual(d.summary(), text);
+    assert.strictEqual(d.badgeText(), text);
+  });
+
   it('update() renders the badge and logs exactly once', () => {
     var d = createDebug({ doc: win.document, ctx: jsCtx({ win: win }), log: log });
     d.update();

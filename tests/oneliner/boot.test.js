@@ -730,7 +730,9 @@ describe('data-debug summary count', () => {
     class Manual {}
     Manual.info = { name: 'cyborg-hunter' };
     win.initJsPsych({ extensions: [{ type: Manual }] });
-    assert.strictEqual(infos.filter((m) => m.startsWith('Cyborg Hunter active')).length, 1);
+    const summaries = infos.filter((m) => m.startsWith('Cyborg Hunter active'));
+    assert.strictEqual(summaries.length, 1);
+    assert.match(summaries[0], / · manual mode · /);
   });
 
   it('vanilla with ch.js in <head>: the summary counts marks after DOMContentLoaded', () => {

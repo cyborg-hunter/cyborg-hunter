@@ -32,6 +32,7 @@ import { drawSessionTimeline, sanitize as sanitizeTimeline, shortId } from './re
 import { drawTypingProfile, sanitize as sanitizeTyping } from './renderers/typing-profile-core.js';
 import { buildReplayAssets } from './renderers/replay-assets-core.js';
 import { renderIndexHtml } from './renderers/html-index-core.js';
+import { bytesToBase64 } from '../shared/base64.js';
 
 // The text files every report contains, in write order (images/ and replay/
 // files, when there are any, come between extensions.csv and index.html).
@@ -163,21 +164,13 @@ export async function buildReport(participants, config, deps) {
     counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images };
 }
 
-// Bytes → base64 without Buffer (the worker has none), in chunks so
-// String.fromCharCode never gets a whole PNG as arguments.
-function base64(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
 // The in-page report: the SAME summaries/triage and the SAME PNG bytes the zip
 // got (plots drawn once), as data URIs; replays are shown outside the report
 // (replayShownExternally), so this must run AFTER buildReport, whose replay
 // pass stamps `assetPath` and rewrites unloadable artifacts on the participants.
 // deps = { replayClientSrc, fontFaceCss, bytesToBase64? }
 export async function renderInPageHtml(built, participants, config, deps) {
-  const toB64 = deps.bytesToBase64 || base64;
+  const toB64 = deps.bytesToBase64 || bytesToBase64;
   const imageSources = {};
   for (const p of participants) {
     const im = built.images[p.participantId] || {};

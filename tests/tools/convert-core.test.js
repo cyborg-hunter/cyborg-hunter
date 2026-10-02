@@ -21,6 +21,8 @@ const webSha = async (t) => {
 test('the core has no node: imports', () => {
   const src = readFileSync('tools/convert/convert-core.mjs', 'utf8');
   assert.equal(/^\s*import\b/m.test(src), false, 'convert-core.mjs must import nothing');
+  assert.equal(/\bimport\s*\(/.test(src), false, 'no dynamic import()');
+  assert.equal(/\brequire\s*\(/.test(src), false, 'no require()');
 });
 
 test('prepareConversion exposes the canonical text and builds v2 from a given hash', () => {

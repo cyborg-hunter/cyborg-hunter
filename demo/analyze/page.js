@@ -106,7 +106,9 @@ export function createPage(root, worker, opts) {
       return;
     }
     for (var k in pending) { pending[k].reject(handled(message)); delete pending[k]; }
-    if (warnings) listWarnings(q(root, 'check-warnings'), warnings);
+    // A failed run goes back to the check step, whose list already holds the
+    // config warnings: the run's own go under them.
+    if (warnings) listWarnings(q(root, 'check-warnings'), (state.checked && phase !== 'check' ? state.checked.configWarnings || [] : []).concat(warnings));
     if (phase === 'check' || !state.checked) { state.checked = null; goTo('drop'); }
     else { discardZip(); goTo('check'); }
     updateControls();
@@ -236,7 +238,7 @@ export function createPage(root, worker, opts) {
     var tested = state.limits && state.limits.testedParticipants;
     if (tested && c.participant > tested) {
       q(root, 'size-warning-text').textContent = 'This cohort has ' + c.participant + ' data files, more than the ' + tested +
-        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here; the CLI handles any size.';
+        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here, or use the CLI, which is not limited by browser memory.';
       q(root, 'size-warning').hidden = false;
     }
     updateControls();
@@ -289,6 +291,9 @@ export function createPage(root, worker, opts) {
     var frame = root.querySelector('iframe.analyze-report');
     if (frame) frame.remove();
     if (reportUrl) { URL.revokeObjectURL(reportUrl); reportUrl = null; }
+    // The worker holds every participant and recording of the run for the
+    // replay requests; nothing asks for one now.
+    send({ type: 'reset' });
     listWarnings(q(root, 'run-warnings'), []);
     // Cleared so choosing the same files again still fires `change`.
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';

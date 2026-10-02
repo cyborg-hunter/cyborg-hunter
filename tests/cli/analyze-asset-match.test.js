@@ -207,6 +207,25 @@ describe('references inside a supplied stylesheet', () => {
     const model = applyAssetMap(buildViewerModel(hrefOnly()), assetMap);
     assert.strictEqual(model.stylesheets[0].css, '/* @import "x.css"; url(y.png) */\n.b{}\n.a{}');
   });
+  it('matches and inlines absolute references in a recorded stylesheet update', async () => {
+    const rec = recording();
+    rec.stylesheet_events = [{ type: 'stylesheet.update', t: 5, id: 3, css: '.c{background:url(https://exp.example.org/study/img/late.png)}' }];
+    assert.ok(collectAssetUrls(rec).images.includes('https://exp.example.org/study/img/late.png'));
+    const { assetMap, report } = await buildAssetMap([rec], [{ path: 'study/img/late.png', read: async () => PNG }]);
+    assert.deepStrictEqual(report.matched.map((m) => m.path), ['study/img/late.png']);
+    const model = applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(model.stylesheetEvents[0].css, '.c{background:url("data:image/png;base64,iVBORw==")}');
+  });
+  it('reads url() and @import whatever their case, as CSS does', async () => {
+    const rec = recording();
+    rec.stylesheets = [{ id: 1, kind: 'inline', href: null, css: '@IMPORT URL("https://exp.example.org/study/css/base.css");\n.a{background:URL(https://exp.example.org/study/img/bg.png)}', media: null }];
+    const u = collectAssetUrls(rec);
+    assert.deepStrictEqual(u.stylesheets, ['https://exp.example.org/study/css/base.css']);
+    assert.ok(u.images.includes('https://exp.example.org/study/img/bg.png'));
+    const { assetMap } = await buildAssetMap([rec], [{ path: 'css/base.css', read: async () => bytes('.b{}') }, { path: 'img/bg.png', read: async () => PNG }]);
+    const model = applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(model.stylesheets[0].css, '.b{}\n.a{background:url("data:image/png;base64,iVBORw==")}');
+  });
   it('an import left as a URL at the very end, with no semicolon, does not swallow the rule after it when moved up', async () => {
     const files = [
       { path: 'css/style.css', read: async () => bytes('@import "sub.css"; .a{} @import url(https://x.org/y.css)') },

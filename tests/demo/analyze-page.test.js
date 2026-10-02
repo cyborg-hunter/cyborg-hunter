@@ -2,7 +2,7 @@
 // demo/analyze/index.html markup. The worker is a stand-in that records what
 // the page sends; each test plays the worker's side of the protocol
 // (demo/analyze/worker-entry.js's header) by hand.
-import { test } from 'node:test';
+import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
@@ -162,7 +162,8 @@ test('a run error discards the zip chunks already received and offers a retry', 
   assert.deepEqual(visibleStep(), ['check']);
   assert.equal(role('error').hidden, false);
   assert.match(role('error').textContent, /No participant data/);
-  assert.equal(role('check-warnings').textContent, 'a.csv: Failed to parse: x');
+  // The run's file warnings go under the check's config warnings.
+  assert.deepEqual([...role('check-warnings').children].map((li) => li.textContent), ['unknown key "dataDri"', 'a.csv: Failed to parse: x']);
   assert.equal(action('run').disabled, false, 'retry offered');
   action('run').click();
   await tick();
@@ -264,6 +265,13 @@ test('start over returns to the drop step and clears the run', async () => {
   assert.equal(t.page.state.result, null);
   assert.deepEqual(t.page.state.zipParts, []);
   assert.equal(t.page.state.zipUrl, null);
+});
+
+test('start over tells the worker to let go of the last run', async () => {
+  const t = boot();
+  await toResults(t);
+  document.querySelectorAll('[data-action="reset"]')[1].click();
+  assert.deepEqual(t.sent.at(-1), { type: 'reset' });
 });
 
 test('a worker failure mid-run recovers like a run error: chunks discarded, controls back, retry offered', async () => {
@@ -479,7 +487,8 @@ test('a cohort above the tested size shows a warning with its size; the run stay
   assert.match(warning.textContent, /151/);
   assert.match(warning.textContent, /150/);
   assert.match(warning.textContent, /slow or fail/);
-  assert.match(warning.textContent, /CLI/);
+  // Only what is known: the CLI runs outside the browser, nothing is promised about size.
+  assert.match(warning.textContent, /the CLI, which is not limited by browser memory\./);
   assert.equal(action('run').disabled, false);
 });
 
@@ -501,147 +510,153 @@ test('a cohort at the tested size shows no warning, and a new check clears an ea
 // after the frame loads, the page says the report did not render.
 // happy-dom (page loading disabled) fires `error` on a frame the moment its
 // src is set, which would settle every swap as a failure before a test could
-// fire `load`. From here on frames ignore src, so each test decides.
-// These are the last tests in the file.
-test('report frames take no src in the tests that follow', () => {
-  const createElement = document.createElement.bind(document);
-  document.createElement = (tag, o) => {
-    const el = createElement(tag, o);
-    if (String(tag).toLowerCase() === 'iframe') Object.defineProperty(el, 'src', { set() {}, get() { return ''; }, configurable: true });
-    return el;
-  };
-});
-// A clock the tests advance by hand: nothing here depends on real time.
-function fakeTimers() {
-  const live = new Map();
-  let next = 1;
-  return { set: (fn) => { live.set(next, fn); return next++; }, clear: (id) => { live.delete(id); },
-    count: () => live.size, fire: () => { const fns = [...live.values()]; live.clear(); fns.forEach((f) => f()); } };
-}
-async function toLoadedReport(t, done) {
-  await toCheck(t);
-  action('run').click(); await tick();
-  t.emit(done || DONE);
-  // happy-dom fires `error` on a blob: frame within a macrotask: load first.
-  for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
-  const frame = document.querySelector('iframe.analyze-report');
-  frame.dispatchEvent(new win.Event('load'));
-  return frame;
-}
-const selectFrom = (frame) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+// fire `load`. Inside this block frames ignore src, so each test decides;
+// the hooks put createElement back for any test after it.
+describe('the report render watchdog', () => {
+  let createElement;
+  before(() => {
+    createElement = document.createElement;
+    const bound = createElement.bind(document);
+    document.createElement = (tag, o) => {
+      const el = bound(tag, o);
+      if (String(tag).toLowerCase() === 'iframe') Object.defineProperty(el, 'src', { set() {}, get() { return ''; }, configurable: true });
+      return el;
+    };
+  });
+  after(() => { document.createElement = createElement; });
 
-test('no selection message after the report frame loads: an error names the zip and the CLI, and nothing is torn down', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  await toLoadedReport(t);
-  assert.equal(clock.count(), 1, 'armed by the frame\'s load');
-  assert.equal(role('error').hidden, true, 'not before the time is up');
-  clock.fire();
-  assert.equal(role('error').hidden, false);
-  assert.match(role('error').textContent, /did not finish rendering/);
-  assert.match(role('error').textContent, /zip/);
-  assert.match(role('error').textContent, /index\.html/);
-  assert.match(role('error').textContent, /CLI/);
-  assert.deepEqual(visibleStep(), ['results']);
-  assert.ok(document.querySelector('iframe.analyze-report'));
-  assert.equal(action('download-zip').disabled, false);
-});
+  // A clock the tests advance by hand: nothing here depends on real time.
+  function fakeTimers() {
+    const live = new Map();
+    let next = 1;
+    return { set: (fn) => { live.set(next, fn); return next++; }, clear: (id) => { live.delete(id); },
+      count: () => live.size, fire: () => { const fns = [...live.values()]; live.clear(); fns.forEach((f) => f()); } };
+  }
+  async function toLoadedReport(t, done) {
+    await toCheck(t);
+    action('run').click(); await tick();
+    t.emit(done || DONE);
+    // happy-dom fires `error` on a blob: frame within a macrotask: load first.
+    for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
+    const frame = document.querySelector('iframe.analyze-report');
+    frame.dispatchEvent(new win.Event('load'));
+    return frame;
+  }
+  const selectFrom = (frame) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
 
-test('the watchdog is cancelled when the report posts its selection, or has posted it before the frame\'s load event', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  const frame = await toLoadedReport(t);
-  assert.equal(clock.count(), 1);
-  selectFrom(frame);
-  assert.equal(clock.count(), 0);
-  clock.fire();
-  assert.equal(role('error').hidden, true);
+  test('no selection message after the report frame loads: an error names the zip and the CLI, and nothing is torn down', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    await toLoadedReport(t);
+    assert.equal(clock.count(), 1, 'armed by the frame\'s load');
+    assert.equal(role('error').hidden, true, 'not before the time is up');
+    clock.fire();
+    assert.equal(role('error').hidden, false);
+    assert.match(role('error').textContent, /did not finish rendering/);
+    assert.match(role('error').textContent, /zip/);
+    assert.match(role('error').textContent, /index\.html/);
+    assert.match(role('error').textContent, /CLI/);
+    assert.deepEqual(visibleStep(), ['results']);
+    assert.ok(document.querySelector('iframe.analyze-report'));
+    assert.equal(action('download-zip').disabled, false);
+  });
 
-  const clock2 = fakeTimers();
-  const t2 = boot({ timers: clock2 });
-  await toCheck(t2);
-  action('run').click(); await tick();
-  t2.emit(DONE);
-  for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
-  const early = document.querySelector('iframe.analyze-report');
-  selectFrom(early);                                   // the script ran before `load` fired
-  early.dispatchEvent(new win.Event('load'));
-  assert.equal(clock2.count(), 0, 'never armed');
-  assert.equal(role('error').hidden, true);
-});
+  test('the watchdog is cancelled when the report posts its selection, or has posted it before the frame\'s load event', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    const frame = await toLoadedReport(t);
+    assert.equal(clock.count(), 1);
+    selectFrom(frame);
+    assert.equal(clock.count(), 0);
+    clock.fire();
+    assert.equal(role('error').hidden, true);
 
-test('a message from another window does not stop the watchdog', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  await toLoadedReport(t);
-  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: {} }));
-  assert.equal(clock.count(), 1);
-  clock.fire();
-  assert.equal(role('error').hidden, false);
-});
+    const clock2 = fakeTimers();
+    const t2 = boot({ timers: clock2 });
+    await toCheck(t2);
+    action('run').click(); await tick();
+    t2.emit(DONE);
+    for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
+    const early = document.querySelector('iframe.analyze-report');
+    selectFrom(early);                                   // the script ran before `load` fired
+    early.dispatchEvent(new win.Event('load'));
+    assert.equal(clock2.count(), 0, 'never armed');
+    assert.equal(role('error').hidden, true);
+  });
 
-test('start over and a new run cancel the watchdog', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  await toLoadedReport(t);
-  document.querySelectorAll('[data-action="reset"]')[1].click();
-  assert.equal(clock.count(), 0, 'start over');
+  test('a message from another window does not stop the watchdog', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    await toLoadedReport(t);
+    window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: {} }));
+    assert.equal(clock.count(), 1);
+    clock.fire();
+    assert.equal(role('error').hidden, false);
+  });
 
-  await toLoadedReport(t);
-  assert.equal(clock.count(), 1);
-  // A new run started while the old one is armed: reset is the only way back
-  // to the check step, so drive run() directly.
-  t.page.run();                                        // waits on the worker, which this test never answers
-  assert.equal(clock.count(), 0, 'a new run');
-});
+  test('start over and a new run cancel the watchdog', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    await toLoadedReport(t);
+    document.querySelectorAll('[data-action="reset"]')[1].click();
+    assert.equal(clock.count(), 0, 'start over');
 
-test('a report with no participants arms no watchdog: it has nothing to select', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  await toLoadedReport(t, { ...DONE, participants: [], triageOrder: [] });
-  assert.equal(clock.count(), 0);
-});
+    await toLoadedReport(t);
+    assert.equal(clock.count(), 1);
+    // A new run started while the old one is armed: reset is the only way back
+    // to the check step, so drive run() directly.
+    t.page.run();                                        // waits on the worker, which this test never answers
+    assert.equal(clock.count(), 0, 'a new run');
+  });
 
-test('the report frame gets a minute to load, not the demo\'s 5 s: a large cohort\'s report is tens of MB', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  // The frame's load watchdog (report-frame.js) runs on the global clock:
-  // record the long delays asked for, pass the short ones (tick()) through.
-  const delays = [];
-  const orig = globalThis.setTimeout;
-  globalThis.setTimeout = (cb, ms, ...rest) => { if (ms >= 1000) { delays.push(ms); return {}; } return orig(cb, ms, ...rest); };
-  try { await toLoadedReport(t); } finally { globalThis.setTimeout = orig; }
-  assert.deepEqual(delays, [60000]);
-});
+  test('a report with no participants arms no watchdog: it has nothing to select', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    await toLoadedReport(t, { ...DONE, participants: [], triageOrder: [] });
+    assert.equal(clock.count(), 0);
+  });
 
-test('a selection that arrives after the render watchdog fired clears its error', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  const frame = await toLoadedReport(t);
-  clock.fire();
-  assert.equal(role('error').hidden, false);
-  selectFrom(frame);
-  assert.equal(role('error').hidden, true);
-  assert.equal(role('error').textContent, '');
-});
+  test('the report frame gets a minute to load, not the demo\'s 5 s: a large cohort\'s report is tens of MB', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    // The frame's load watchdog (report-frame.js) runs on the global clock:
+    // record the long delays asked for, pass the short ones (tick()) through.
+    const delays = [];
+    const orig = globalThis.setTimeout;
+    globalThis.setTimeout = (cb, ms, ...rest) => { if (ms >= 1000) { delays.push(ms); return {}; } return orig(cb, ms, ...rest); };
+    try { await toLoadedReport(t); } finally { globalThis.setTimeout = orig; }
+    assert.deepEqual(delays, [60000]);
+  });
 
-test('a selection leaves any other error on screen', async () => {
-  const clock = fakeTimers();
-  const t = boot({ timers: clock });
-  const frame = await toLoadedReport(t);
-  selectFrom(frame);
-  t.emit({ type: 'error', phase: 'replay', message: 'replay failed: bad recording' });
-  selectFrom(frame);
-  assert.equal(role('error').hidden, false);
-  assert.match(role('error').textContent, /bad recording/);
-  // The watchdog fired, then another error replaced its message: the late
-  // selection does not clear that one either.
-  const clock2 = fakeTimers();
-  const t2 = boot({ timers: clock2 });
-  const frame2 = await toLoadedReport(t2);
-  clock2.fire();
-  t2.emit({ type: 'error', phase: 'replay', message: 'replay failed: bad recording' });
-  selectFrom(frame2);
-  assert.equal(role('error').hidden, false);
-  assert.match(role('error').textContent, /bad recording/);
+  test('a selection that arrives after the render watchdog fired clears its error', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    const frame = await toLoadedReport(t);
+    clock.fire();
+    assert.equal(role('error').hidden, false);
+    selectFrom(frame);
+    assert.equal(role('error').hidden, true);
+    assert.equal(role('error').textContent, '');
+  });
+
+  test('a selection leaves any other error on screen', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    const frame = await toLoadedReport(t);
+    selectFrom(frame);
+    t.emit({ type: 'error', phase: 'replay', message: 'replay failed: bad recording' });
+    selectFrom(frame);
+    assert.equal(role('error').hidden, false);
+    assert.match(role('error').textContent, /bad recording/);
+    // The watchdog fired, then another error replaced its message: the late
+    // selection does not clear that one either.
+    const clock2 = fakeTimers();
+    const t2 = boot({ timers: clock2 });
+    const frame2 = await toLoadedReport(t2);
+    clock2.fire();
+    t2.emit({ type: 'error', phase: 'replay', message: 'replay failed: bad recording' });
+    selectFrom(frame2);
+    assert.equal(role('error').hidden, false);
+    assert.match(role('error').textContent, /bad recording/);
+  });
 });

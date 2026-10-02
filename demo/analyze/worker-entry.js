@@ -11,6 +11,7 @@
 //     { type: 'check',  files: [{ path, file: File } | { path, bytes: ArrayBuffer }], sample?: true }
 //     { type: 'run',    files, sample?: true, config, participantIdField }
 //     { type: 'replay', participantId }
+//     { type: 'reset' }  start over: the last run's participants are let go
 //   worker → page
 //     ready         on boot: the baked assets and the tested cohort size
 //     checked       file counts, the merged config and its warnings, the id suggestion
@@ -69,12 +70,14 @@ var lastRun = null;
 async function check(msg) {
   var readers = readersFor(msg);
   var groups = classifyFiles(readers);
-  var fileConfig = null, configWarnings = [];
+  var fileConfig, configWarnings = [];
   if (groups.config) {
     try { fileConfig = JSON.parse(decode(await groups.config.read())); }
-    catch (e) { configWarnings.push('failed to parse ' + CONFIG_NAME + ': ' + e.message); fileConfig = null; }
+    catch (e) { configWarnings.push('failed to parse ' + CONFIG_NAME + ': ' + e.message); fileConfig = undefined; }
   }
-  var merged = mergeConfig(fileConfig || {});
+  // undefined: no config (none dropped, or unreadable); anything else that
+  // is not an object gets mergeConfig's warning, as in the CLI.
+  var merged = mergeConfig(fileConfig);
   configWarnings = configWarnings.concat(merged.warnings);
   var peeks = [];
   for (var i = 0; i < groups.participant.length; i++) {
@@ -153,6 +156,7 @@ function replay(msg) {
 
 self.onmessage = function (ev) {
   var msg = ev.data || {};
+  if (msg.type === 'reset') { lastRun = null; return; }
   var job = msg.type === 'check' ? check(msg) : msg.type === 'run' ? run(msg) : msg.type === 'replay' ? Promise.resolve().then(function () { replay(msg); }) : null;
   if (!job) return;
   job.catch(function (e) { post({ type: 'error', phase: msg.type, message: e && e.message ? e.message : String(e) }); });
