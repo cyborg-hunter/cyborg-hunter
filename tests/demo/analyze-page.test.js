@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
 
 const PAGE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; " +
-  "img-src 'self' blob: data:; font-src data:; frame-src blob:; worker-src blob:; connect-src 'none'; " +
+  "img-src blob: data:; font-src data:; frame-src blob:; worker-src blob:; connect-src 'none'; " +
   "form-action 'none'; base-uri 'none'";
 const html = readFileSync(new URL('../../demo/analyze/index.html', import.meta.url), 'utf8');
 

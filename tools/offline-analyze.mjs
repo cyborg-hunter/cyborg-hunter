@@ -28,7 +28,6 @@ export function buildOfflineHtml(indexHtml, bundleSrc) {
   let out = indexHtml;
   out = replaceOnce(out, SCRIPT, '<script type="module">' + inlineSafeSrc(bundleSrc) + '</script>');
   out = replaceOnce(out, "script-src 'self' 'unsafe-inline' blob:;", "script-src 'unsafe-inline' blob:;");
-  out = replaceOnce(out, "img-src 'self' blob: data:;", 'img-src blob: data:;');
   out = replaceOnce(out, '<a href="./' + OFFLINE_NAME + '" download>Download this page as a single offline file</a>',
     '<span>You are using the offline file.</span>');
   out = replaceOnce(out, '<a href="../">live demo</a>', '<a href="' + SITE + '">live demo</a>');
