@@ -101,3 +101,10 @@ test('offscreenEncodePng keeps the native encoding when the Blob reads', async (
   const canvas = { width: 1, height: 1, convertToBlob: async () => new Blob([native]), getContext: () => { throw new Error('not used'); } };
   assert.deepEqual(await offscreenEncodePng(canvas), native);
 });
+
+test('offscreenEncodePng lets an encode failure surface unchanged', async () => {
+  const canvas = { width: 1, height: 1,
+    convertToBlob: () => Promise.reject(new Error('encoding failed')),
+    getContext: () => ({ getImageData: () => { throw new Error('the fallback must not run'); } }) };
+  await assert.rejects(offscreenEncodePng(canvas), /^Error: encoding failed$/);
+});

@@ -92,10 +92,11 @@ export function bytesToBase64(bytes) {
 // OffscreenCanvas is the worker's canvas; the plot cores only need getContext('2d').
 export function offscreenCreateCanvas(w, h) { return new OffscreenCanvas(w, h); }
 // The canvas's own PNG when its Blob can be read; otherwise the pixels,
-// encoded here (png-encode.js).
+// encoded here (png-encode.js). Only the Blob read falls back: a canvas
+// that cannot encode at all fails as before.
 export async function offscreenEncodePng(canvas) {
+  var blob = await canvas.convertToBlob({ type: 'image/png' });
   try {
-    var blob = await canvas.convertToBlob({ type: 'image/png' });
     return new Uint8Array(await blob.arrayBuffer());
   } catch (e) {
     var image = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
