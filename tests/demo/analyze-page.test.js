@@ -466,3 +466,125 @@ test('a worker failure with several replay requests outstanding settles them all
   assert.equal(await outcome(third), 'resolved');
   assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 1);
 });
+
+// A cohort above the size the page was tested with is allowed, with a warning.
+const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, assets: 0, ignored: 0 } });
+
+test('a cohort above the tested size shows a warning with its size; the run stays allowed', async () => {
+  const t = boot();
+  action('sample').click(); await tick();
+  t.emit(checkedWith(151)); await tick();
+  const warning = role('size-warning');
+  assert.equal(warning.hidden, false);
+  assert.match(warning.textContent, /151/);
+  assert.match(warning.textContent, /150/);
+  assert.match(warning.textContent, /slow or fail/);
+  assert.match(warning.textContent, /CLI/);
+  assert.equal(action('run').disabled, false);
+});
+
+test('a cohort at the tested size shows no warning, and a new check clears an earlier one', async () => {
+  const t = boot();
+  action('sample').click(); await tick();
+  t.emit(checkedWith(150)); await tick();
+  assert.equal(role('size-warning').hidden, true);
+  document.querySelectorAll('[data-action="reset"]')[0].click();
+  action('sample').click(); await tick();
+  t.emit(checkedWith(400)); await tick();
+  assert.equal(role('size-warning').hidden, false);
+  document.querySelectorAll('[data-action="reset"]')[0].click();
+  action('sample').click(); await tick();
+  assert.equal(role('size-warning').hidden, true, 'hidden again while the next check is read');
+});
+
+// The report posts a selection when its script runs. Without one, a while
+// after the frame loads, the page says the report did not render.
+// happy-dom (page loading disabled) fires `error` on a frame the moment its
+// src is set, which would settle every swap as a failure before a test could
+// fire `load`. From here on frames ignore src, so each test decides.
+// These are the last tests in the file.
+test('report frames take no src in the tests that follow', () => {
+  const createElement = document.createElement.bind(document);
+  document.createElement = (tag, o) => {
+    const el = createElement(tag, o);
+    if (String(tag).toLowerCase() === 'iframe') Object.defineProperty(el, 'src', { set() {}, get() { return ''; }, configurable: true });
+    return el;
+  };
+});
+const SILENT_MS = 30;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function toLoadedReport(t, done) {
+  await toCheck(t);
+  action('run').click(); await tick();
+  t.emit(done || DONE);
+  // happy-dom fires `error` on a blob: frame within a macrotask: load first.
+  for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
+  const frame = document.querySelector('iframe.analyze-report');
+  frame.dispatchEvent(new win.Event('load'));
+  return frame;
+}
+const selectFrom = (frame) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+
+test('no selection message after the report frame loads: an error names the zip and the CLI, and nothing is torn down', async () => {
+  const t = boot({ reportWatchdogMs: SILENT_MS });
+  await toLoadedReport(t);
+  assert.equal(role('error').hidden, true, 'not before the time is up');
+  await wait(SILENT_MS * 3);
+  assert.equal(role('error').hidden, false);
+  assert.match(role('error').textContent, /did not finish rendering/);
+  assert.match(role('error').textContent, /zip/);
+  assert.match(role('error').textContent, /index\.html/);
+  assert.match(role('error').textContent, /CLI/);
+  assert.deepEqual(visibleStep(), ['results']);
+  assert.ok(document.querySelector('iframe.analyze-report'));
+  assert.equal(action('download-zip').disabled, false);
+});
+
+test('the watchdog stays quiet when the report posts its selection in time, or before the frame\'s load event', async () => {
+  const t = boot({ reportWatchdogMs: SILENT_MS });
+  const frame = await toLoadedReport(t);
+  selectFrom(frame);
+  await wait(SILENT_MS * 3);
+  assert.equal(role('error').hidden, true);
+
+  const t2 = boot({ reportWatchdogMs: SILENT_MS });
+  await toCheck(t2);
+  action('run').click(); await tick();
+  t2.emit(DONE);
+  for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
+  const early = document.querySelector('iframe.analyze-report');
+  selectFrom(early);                                   // the script ran before `load` fired
+  early.dispatchEvent(new win.Event('load'));
+  await wait(SILENT_MS * 3);
+  assert.equal(role('error').hidden, true);
+});
+
+test('a message from another window does not stop the watchdog', async () => {
+  const t = boot({ reportWatchdogMs: SILENT_MS });
+  await toLoadedReport(t);
+  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: {} }));
+  await wait(SILENT_MS * 3);
+  assert.equal(role('error').hidden, false);
+});
+
+test('start over and a new run cancel the watchdog', async () => {
+  const t = boot({ reportWatchdogMs: SILENT_MS });
+  await toLoadedReport(t);
+  document.querySelectorAll('[data-action="reset"]')[1].click();
+  await wait(SILENT_MS * 3);
+  assert.equal(role('error').hidden, true, 'start over');
+
+  await toLoadedReport(t);
+  document.querySelectorAll('[data-action="reset"]')[1].click();
+  await toCheck(t);
+  action('run').click(); await tick();
+  await wait(SILENT_MS * 3);
+  assert.equal(role('error').hidden, true, 'a run in progress');
+});
+
+test('a report with no participants arms no watchdog: it has nothing to select', async () => {
+  const t = boot({ reportWatchdogMs: SILENT_MS });
+  await toLoadedReport(t, { ...DONE, participants: [], triageOrder: [] });
+  await wait(SILENT_MS * 3);
+  assert.equal(role('error').hidden, true);
+});

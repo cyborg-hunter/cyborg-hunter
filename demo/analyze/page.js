@@ -46,6 +46,12 @@ export function createPage(root, worker, opts) {
   // True from a run's results until the new report's first selection message:
   // that one is the report's own load-time pick of its first row.
   var reportFirstSelection = false;
+  // The report posts a selection message when its script runs. One that has
+  // not arrived reportWatchdogMs after the frame loaded means the report did
+  // not render (seen in Firefox with a few hundred participants).
+  var reportWatchdogMs = opts && opts.reportWatchdogMs ? opts.reportWatchdogMs : 10000;
+  var reportWatchdog = null;
+  var reportPosted = false;
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
 
@@ -62,6 +68,16 @@ export function createPage(root, worker, opts) {
   }
   function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; }
   function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; }
+  function stopWatchdog() { if (reportWatchdog) { clearTimeout(reportWatchdog); reportWatchdog = null; } }
+  function armWatchdog() {
+    stopWatchdog();
+    // No participants, no row to select, no message to wait for.
+    if (reportPosted || !state.result || !state.result.participants.length) return;
+    reportWatchdog = setTimeout(function () {
+      reportWatchdog = null;
+      showError('The report did not finish rendering in this browser. The zip download still contains the full report: open its index.html directly, or use the CLI.');
+    }, reportWatchdogMs);
+  }
   function discardZip() {
     state.zipParts = [];
     if (state.zipUrl) { URL.revokeObjectURL(state.zipUrl); state.zipUrl = null; }
@@ -176,6 +192,7 @@ export function createPage(root, worker, opts) {
     goTo('check');
     q(root, 'counts').innerHTML = '<span class="hint">Reading the files…</span>';
     listWarnings(q(root, 'check-warnings'), []);
+    q(root, 'size-warning').hidden = true;
     var reply = waitFor('checked');
     updateControls();
     sendWithFiles({ type: 'check', sample: state.sample });
@@ -205,12 +222,19 @@ export function createPage(root, worker, opts) {
     state.idField = sel.value;
     q(root, 'id-reason').textContent = checked.sampled + ' file(s) inspected';
     listWarnings(q(root, 'check-warnings'), checked.configWarnings);
+    var tested = state.limits && state.limits.testedParticipants;
+    if (tested && c.participant > tested) {
+      q(root, 'size-warning-text').textContent = 'This cohort has ' + c.participant + ' data files, more than the ' + tested +
+        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here; the CLI handles any size.';
+      q(root, 'size-warning').hidden = false;
+    }
     updateControls();
   }
 
   async function run() {
     if (busy() || !state.checked) return;
     clearError();
+    stopWatchdog();
     discardZip();
     goTo('run');
     var bar = q(root, 'progress'); bar.max = 1; bar.value = 0;
@@ -229,7 +253,7 @@ export function createPage(root, worker, opts) {
     root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = typeof done.files[b.dataset.file] !== 'string'; });
     // reportUrl moves to the new document only once it has loaded: a failed
     // swap has already revoked its own url, and the old one is still showing.
-    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; },
+    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; armWatchdog(); },
       function () { showError('The report frame did not load.'); }, { className: 'analyze-report', title: 'Report' });
     if (!replayCard) {
       replayCard = createReplayCard(q(root, 'replay'), state.assets, function (pid) {
@@ -241,11 +265,13 @@ export function createPage(root, worker, opts) {
     }
     replayCard.setParticipants(done.participants);
     reportFirstSelection = true;
+    reportPosted = false;
   }
 
   function reset() {
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
+    stopWatchdog();
     discardZip();
     if (replayCard) replayCard.teardown();
     // The previous cohort's report leaves page memory with it.
@@ -305,7 +331,10 @@ export function createPage(root, worker, opts) {
   window.addEventListener('message', function (e) {
     var frame = root.querySelector('iframe.analyze-report');
     if (!frame || e.source !== frame.contentWindow) return;
-    if (!e.data || e.data.type !== 'cyborg-hunter:select' || !replayCard || !state.result) return;
+    if (!e.data || e.data.type !== 'cyborg-hunter:select') return;
+    reportPosted = true;       // the report's script ran, whatever the id says
+    stopWatchdog();
+    if (!replayCard || !state.result) return;
     var pid = e.data.participantId;
     var known = typeof pid === 'string' && state.result.participants.some(function (p) { return p.participantId === pid; });
     if (!known) return;
