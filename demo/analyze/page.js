@@ -289,6 +289,9 @@ export function createPage(root, worker, opts) {
     var frame = root.querySelector('iframe.analyze-report');
     if (frame) frame.remove();
     if (reportUrl) { URL.revokeObjectURL(reportUrl); reportUrl = null; }
+    // The worker holds every participant and recording of the run for the
+    // replay requests; nothing asks for one now.
+    send({ type: 'reset' });
     listWarnings(q(root, 'run-warnings'), []);
     // Cleared so choosing the same files again still fires `change`.
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';

@@ -11,6 +11,7 @@
 //     { type: 'check',  files: [{ path, file: File } | { path, bytes: ArrayBuffer }], sample?: true }
 //     { type: 'run',    files, sample?: true, config, participantIdField }
 //     { type: 'replay', participantId }
+//     { type: 'reset' }  start over: the last run's participants are let go
 //   worker → page
 //     ready         on boot: the baked assets and the tested cohort size
 //     checked       file counts, the merged config and its warnings, the id suggestion
@@ -153,6 +154,7 @@ function replay(msg) {
 
 self.onmessage = function (ev) {
   var msg = ev.data || {};
+  if (msg.type === 'reset') { lastRun = null; return; }
   var job = msg.type === 'check' ? check(msg) : msg.type === 'run' ? run(msg) : msg.type === 'replay' ? Promise.resolve().then(function () { replay(msg); }) : null;
   if (!job) return;
   job.catch(function (e) { post({ type: 'error', phase: msg.type, message: e && e.message ? e.message : String(e) }); });

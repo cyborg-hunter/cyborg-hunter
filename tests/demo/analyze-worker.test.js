@@ -169,6 +169,24 @@ test('dropped files sent as bytes (a page opened from file:) check and run as Fi
   assert.deepEqual(viaBytes.triageOrder, ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01']);
 });
 
+test('reset lets go of the last run: its replays are no longer served', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const files = [fileEntry(dir, 'DEMO-FIXT.json', 'data/DEMO-FIXT.json'), fileEntry(dir, recName, 'data/' + recName)];
+  const w = startWorker();
+  w.send({ type: 'run', files, config: {}, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.participants.map((p) => [p.participantId, p.hasReplay]), [['DEMO-FIXT', true]]);
+  w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
+  assert.equal((await w.next('replay-model', 'error')).type, 'replay-model');
+  w.send({ type: 'reset' });
+  w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
+  const after = await w.next('replay-model', 'error');
+  assert.equal(after.type, 'error');
+  assert.equal(after.phase, 'replay');
+});
+
 test('errors name their phase', async () => {
   const w = startWorker();
   w.send({ type: 'replay', participantId: 'nobody' });

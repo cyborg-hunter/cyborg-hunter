@@ -266,6 +266,13 @@ test('start over returns to the drop step and clears the run', async () => {
   assert.equal(t.page.state.zipUrl, null);
 });
 
+test('start over tells the worker to let go of the last run', async () => {
+  const t = boot();
+  await toResults(t);
+  document.querySelectorAll('[data-action="reset"]')[1].click();
+  assert.deepEqual(t.sent.at(-1), { type: 'reset' });
+});
+
 test('a worker failure mid-run recovers like a run error: chunks discarded, controls back, retry offered', async () => {
   for (const kind of ['onerror', 'onmessageerror']) {
     const t = boot();
