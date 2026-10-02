@@ -8,6 +8,12 @@ import { DEFAULT_PARAMS } from '../../src/oneliner/participant-id.js';
 
 export var KNOWN_ID_NAMES = ['participant_id', 'participantId', 'subject_ID', 'subject_id', 'subject'].concat(DEFAULT_PARAMS);
 
+// cyborg-hunter's own per-trial columns (the jsPsych extension's integrity*
+// fields, the one-line setup's cyborgHunter* fields) are constant within a
+// participant's file and, on a small cohort, can be unique across files: they
+// look like an id to the fallback rule below and must never be offered as one.
+var OWN_COLUMN = /^(integrity|cyborgHunter)/;
+
 function constantUniqueAcross(field, peeks) {
   var seen = Object.create(null);
   for (var i = 0; i < peeks.length; i++) {
@@ -34,7 +40,7 @@ export function suggestIdField(peeks) {
   }
   for (var m = 0; m < everywhere.length; m++) {
     var f = everywhere[m];
-    if (KNOWN_ID_NAMES.indexOf(f) >= 0) continue;
+    if (KNOWN_ID_NAMES.indexOf(f) >= 0 || OWN_COLUMN.test(f)) continue;
     if (constantUniqueAcross(f, peeks)) candidates.push({ field: f, reason: 'constant within each file, unique across files' });
   }
   return { suggested: candidates.length ? candidates[0].field : null, candidates: candidates };

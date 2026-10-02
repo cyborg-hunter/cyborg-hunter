@@ -85,3 +85,32 @@ test('peek: a gzipped JSON file is decompressed first', async () => {
   const p = await peekParticipantFile({ name: 'p.json.gz', read: async () => new Uint8Array(bytes) });
   assert.deepEqual(p.keys, ['subject_ID', 'metadata.run']);
 });
+
+test("cyborg-hunter's own per-trial columns are never offered as the id, whatever the column order", async () => {
+  // The synthetic pilot with its id column renamed to a name nobody knows and
+  // moved to the end, where jsPsych's addProperties columns land after the
+  // extension's integrity* columns: those are constant per file and, on a
+  // small cohort, unique across files too.
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = 'examples/synthetic-pilot/data/';
+  const peeks = [];
+  const Papa = (await import('papaparse')).default;
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.csv')).sort()) {
+    const rows = Papa.parse(readFileSync(dir + f, 'utf8'), { header: true, skipEmptyLines: true }).data;
+    const fields = Object.keys(rows[0]).filter((k) => k !== 'subject_ID').concat('worker');
+    const moved = rows.map((r) => ({ ...r, worker: r.subject_ID }));
+    peeks.push(await peekParticipantFile(reader(f, Papa.unparse(moved, { columns: fields }))));
+  }
+  assert.equal(peeks[0].keys.at(-1), 'worker', 'the id column is last');
+  assert.ok(peeks[0].keys.includes('integrityCopyCount') && peeks[0].keys.includes('cyborgHunterVersion'));
+  const r = suggestIdField(peeks);
+  assert.equal(r.suggested, 'worker');
+  assert.deepEqual(r.candidates.map((c) => c.field), ['worker']);
+});
+
+test('the one-line setup and the extension columns are excluded by name; known names still win', () => {
+  const own = ['integrityPasteCount', 'integritySoftScore', 'integrityReplayMeta', 'cyborgHunterVersion', 'cyborgHunterOneLiner', 'cyborgHunterError'];
+  const file = (i) => ({ keys: own.concat('subject'), values: Object.fromEntries(own.map((k) => [k, ['v' + i]]).concat([['subject', ['S' + i]]])) });
+  const r = suggestIdField([file(1), file(2)]);
+  assert.deepEqual(r.candidates.map((c) => c.field), ['subject']);
+});
