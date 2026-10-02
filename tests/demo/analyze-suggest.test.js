@@ -86,6 +86,18 @@ test('peek: a gzipped JSON file is decompressed first', async () => {
   assert.deepEqual(p.keys, ['subject_ID', 'metadata.run']);
 });
 
+test('peek: a gzipped file is read without a Blob (a WebKit worker of a file:// page cannot read one)', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const bytes = gzipSync(Buffer.from(JSON.stringify({ subject_ID: 'S1' })));
+  const saved = globalThis.Blob;
+  globalThis.Blob = class { constructor() { throw new Error('Blob loading failed'); } };
+  try {
+    const p = await peekParticipantFile({ name: 'p.json.gz', read: async () => new Uint8Array(bytes) });
+    assert.ok(p, 'peeked');
+    assert.deepEqual(p.keys, ['subject_ID']);
+  } finally { globalThis.Blob = saved; }
+});
+
 test("cyborg-hunter's own per-trial columns are never offered as the id, whatever the column order", async () => {
   // The synthetic pilot with its id column renamed to a name nobody knows and
   // moved to the end, where jsPsych's addProperties columns land after the

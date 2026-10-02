@@ -2,6 +2,7 @@
 // A cheap look at one participant file for the id suggestion: CSV header plus
 // a few rows (Papa preview), or a JSON object's scalar keys. Runs in the worker.
 import Papa from 'papaparse';
+import { webGunzip } from './web-deps.js';
 
 var decode = function (bytes) { return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes); };
 
@@ -17,11 +18,11 @@ function scalarKeys(obj, prefix) {
   return { keys: keys, values: values };
 }
 
-// Gzip magic bytes: a .json.gz participant file is decompressed before reading.
+// Gzip magic bytes: a .json.gz participant file is decompressed before
+// reading, by the same gunzip ingest uses (no Blob read; web-deps.js).
 async function gunzipIfGzip(bytes) {
   if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
-  var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  return webGunzip(bytes);
 }
 
 export async function peekParticipantFile(reader, opts) {
