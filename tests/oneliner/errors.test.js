@@ -173,7 +173,7 @@ const CASES = {
     link: DOCS + 'qualtrics.md#legacy-layout'
   },
   qualtricsFieldUndeclared: {
-    args: [],
+    args: ['__js_cyborg_hunter'],
     fix: 'add an Embedded Data element named __js_cyborg_hunter at the top of Survey Flow',
     link: DOCS + 'qualtrics.md#declare-the-field'
   },
@@ -212,6 +212,13 @@ describe('error catalogue', () => {
       assert.ok(msg.endsWith(' ' + c.link), 'link: ' + msg);
     });
   }
+
+  it('the undeclared-field message names the field it is given (the legacy layout stores cyborg_hunter)', () => {
+    const msg = MESSAGES.qualtricsFieldUndeclared('cyborg_hunter');
+    assert.ok(msg.startsWith('[cyborg-hunter] The Qualtrics field cyborg_hunter is not declared:'), msg);
+    assert.ok(msg.includes('named cyborg_hunter at the top'), msg);
+    assert.ok(!msg.includes('__js_'), msg);
+  });
 
   it('the double-load message names both scripts in load order', () => {
     assert.ok(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')
