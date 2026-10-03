@@ -448,3 +448,25 @@ for (const c of finalPage) {
     expect(chErrors(log)).toEqual([]);
   });
 }
+
+// The final-page question script and the writer's own hook run in one submit
+// task (in either order: the writer's hook first when Qualtrics kept it from
+// an earlier page, the question script first otherwise). One row per page.
+for (const persist of [false, true]) {
+  test(`the final-page line with on-time clicks${persist ? ', kept callbacks' : ''}: 4 pages, 4 rows`, async ({ page }) => {
+    const log = collectConsole(page);
+    const server = await qualtricsServer(page);
+    await page.goto(at('finalLine=1' + (persist ? '&persist=1' : '')));
+    await ready(page, 1);
+    for (let n = 1; n <= 4; n++) {
+      await pasteInto(page, '#q' + n, 'page ' + n);
+      await nextPage(page, n);
+    }
+    await page.getByText('Thank you').waitFor();
+    const last = payloadsOf(server)[3];
+    expect(last.trials.map((t) => t.integritySegment.segmentIndex)).toEqual([0, 1, 2, 3]);
+    expect(last.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1, 1, 1]);
+    expect(last.cyborgHunterError).toBeUndefined();
+    expect(chErrors(log)).toEqual([]);
+  });
+}
