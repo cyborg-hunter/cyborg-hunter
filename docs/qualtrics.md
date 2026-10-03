@@ -13,16 +13,17 @@ not declare, without an error. Add an Embedded Data element named
 
 ## Legacy layout
 
-A survey that does not use the New Survey Taking Experience has
-`setEmbeddedData` but no `setJSEmbeddedData`. There the field to declare in
-Survey Flow is `cyborg_hunter`, not `__js_cyborg_hunter`.
+If `ch.js` reports "Qualtrics legacy layout detected", it found
+`setEmbeddedData` on the page but no `setJSEmbeddedData`. The message names
+the field to declare in Survey Flow for that case: `cyborg_hunter`, not
+`__js_cyborg_hunter`.
 
 ## Payload size
 
-An embedded-data field holds a limited number of characters per page submit,
-so the payload `ch.js` writes is capped. When a session's summary is longer
-than the cap, a reduced version is written and the report notes what was
-left out.
+If `ch.js` reports "The Qualtrics payload was reduced", the session's summary
+was longer than the character cap the message names, and the level it names
+was written instead. The message says that nothing needs fixing for that
+participant.
 
 ## Replay
 
