@@ -316,7 +316,7 @@ function ingestQualtricsExport(text, path, config, participants, warnings) {
   for (const w of q.warnings) warnings.push({ file: path, warnings: [w] });
   if (q.empty.length) {
     const total = q.empty.length + q.responses.length + q.invalid.length;
-    warnings.push({ file: path, warnings: [`${q.empty.length} of ${total} responses carry no Cyborg Hunter data (empty ${q.column}): ch.js never ran on those responses (licence without custom JavaScript, header script removed, or preview before the tag was added), or the field was not declared in Survey Flow — docs/qualtrics.md#troubleshooting`] });
+    warnings.push({ file: path, warnings: [`${q.empty.length} of ${total} responses carry no Cyborg Hunter data (empty ${q.column}): ch.js never ran on those responses (licence without custom JavaScript, header script removed, survey not published after the tag was added, or preview before the tag was added), or the field was not declared in Survey Flow — docs/qualtrics.md#troubleshooting`] });
   }
   for (const bad of q.invalid) {
     warnings.push({ file: `${path} (response ${bad.responseId})`, response: bad.responseId, warnings: [`${q.column} is not JSON: ${bad.error}`] });

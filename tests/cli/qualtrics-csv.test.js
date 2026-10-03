@@ -88,6 +88,7 @@ describe('ingestFiles with a Qualtrics export', () => {
     assert.strictEqual(out.participants[0].metadata.qualtricsResponseId, 'P-ONE' === out.participants[0].participantId ? 'R_1' : undefined);
     const flat = out.warnings.flatMap((w) => w.warnings.map((t) => w.file + ': ' + t));
     assert.ok(flat.some((t) => /1 of 4 responses carry no Cyborg Hunter data/.test(t)));
+    assert.ok(flat.some((t) => /carry no Cyborg Hunter data.*survey not published after the tag was added/.test(t)), 'the empty-rows warning names an unpublished survey');
     assert.ok(flat.some((t) => /\(response R_4\): __js_cyborg_hunter is not JSON/.test(t)));
     assert.ok(flat.some((t) => /\(response R_2\): .*reduced to fit the embedded-data cap \(level 2/.test(t)));
     assert.ok(flat.some((t) => /\(response R_2\): .*participantId taken from the ResponseId column/.test(t)));
