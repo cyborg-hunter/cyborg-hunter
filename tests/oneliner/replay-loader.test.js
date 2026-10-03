@@ -19,7 +19,7 @@ import assert from 'node:assert';
 import { Window } from 'happy-dom';
 import { VERSION } from '../../src/shared/constants.js';
 import {
-  replaySrcFor, loadScript, makeReplayProxy, createVanillaReplay, installReplay
+  replaySrcFor, loadScript, makeReplayProxy, createVanillaReplay, installReplay, replaySaveReminderApplies
 } from '../../src/oneliner/replay-loader.js';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 
@@ -338,6 +338,20 @@ describe('CyborgHunter.replay()', () => {
     installReplay({ win, ctx, doc: stubDoc() });
     assert.strictEqual(warns.length, 1, warns.join('\n'));
     assert.ok(warns[0].includes('Fix: ') && warns[0].includes('jsPsych'), warns[0]);
+  });
+
+  it('lab.js host: autoSave warns as on vanilla, CyborgHunter.replay() reads the standalone recorder handle, the save reminder applies', () => {
+    const ctx = baseCtx({ host: 'labjs', config: { replay: { tier: 'trace', autoSave: { mode: 'datapipe', experimentId: 'A' } }, replaySrc: null } });
+    installReplay({ win, ctx, doc: stubDoc() });
+    assert.deepStrictEqual(warns, [MESSAGES.replayAutoSaveVanilla()]);
+    assert.strictEqual(ctx.replayProxy, undefined, 'no jsPsych proxy');
+    const taken = { schema_version: 2 };
+    ctx.replay = { api: { stopSession() {}, getRecording: () => taken, destroy() {} } };
+    ctx.monitor = { getSessionReport: () => ({}) };
+    assert.strictEqual(ctx.handlers.replay(), taken);
+    // autoSave is ignored here, so the researcher still saves the recording.
+    assert.strictEqual(replaySaveReminderApplies(ctx), true);
+    assert.strictEqual(replaySaveReminderApplies(Object.assign({}, ctx, { host: 'jspsych' })), false);
   });
 
   it('vanilla host with autoSave none or absent, and jsPsych with autoSave: no such warning', () => {

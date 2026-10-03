@@ -10,14 +10,16 @@
 //        stats() → { segmentWriteMs }, remove() }
 //
 // summary():
-//   Cyborg Hunter active · <jsPsych detected | vanilla mode> ·
-//   <N trials instrumented | N mark elements> · ID from <source> ·
-//   honeypot <on|off> · friction <off|observe|enforce>
+//   Cyborg Hunter active · <jsPsych detected | lab.js <version> detected |
+//   vanilla mode> · <N trials instrumented | trials counted as they run |
+//   N mark elements> · ID from <source> · honeypot <on|off> ·
+//   friction <off|observe|enforce>
 //   In manual mode: Cyborg Hunter active · manual mode · the page's
 //   cyborg-hunter extension monitors the trials
 //   N on jsPsych is the PLANNED count: unique trial objects the timeline walk
 //   instrumented (ctx.jspsych.instrumented). On vanilla it is the number of
-//   [data-ch-trial] elements in the DOM.
+//   [data-ch-trial] elements in the DOM. lab.js's tree is not walked, so the
+//   lab.js badge counts the trials written so far (ctx.labjs.segmentsWritten).
 //   One summary is logged per page: update() logs, refresh() never does. The
 //   badge on jsPsych shows live progress, "written/planned trials"
 //   (ctx.jspsych.segmentsWritten / instrumented), or "N trials (M planned)"
@@ -97,6 +99,11 @@ export function createDebug(opts) {
       var marks = doc.querySelectorAll ? doc.querySelectorAll('[data-ch-trial]').length : 0;
       hostPart = 'vanilla mode';
       countPart = marks + ' mark elements';
+    } else if (ctx.host === 'labjs') {
+      var lj = ctx.labjs || {};
+      hostPart = 'lab.js ' + (lj.version || 'unknown') + ' detected';
+      // The tree is not walked: components are counted as they run.
+      countPart = live ? (lj.segmentsWritten || 0) + ' trials' : 'trials counted as they run';
     } else {
       hostPart = 'jsPsych detected';
       var js = ctx.jspsych || {};

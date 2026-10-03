@@ -330,6 +330,14 @@ export const MESSAGES = {
       'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
       DOCS + 'labjs.md#placement');
   },
+  // console.warn, at boot: window.lab is a lab.js 23 build (Component
+  // .prototype.lock), which ch.js does not hook yet; boot runs the vanilla host.
+  labjsVersionUnsupported: function (version) {
+    return formatError('lab.js ' + version + ' is not supported yet',
+      'ch.js hooks lab.js 20.x, the version the lab.js builder exports, so on this page it neither segments lab.js components nor writes into lab.js\'s rows, and runs as on a page without jsPsych',
+      'use lab.js 20.x (the lib/lab.js a lab.js builder export contains), or mark trials and save CyborgHunter.data() as on a page without jsPsych',
+      DOCS + 'labjs.md#labjs-23');
+  },
   // console.warn: ch.js keeps one session per page and ends it when the first
   // study's root component ends; components run after that get no columns.
   secondLabJsStudy: function () {

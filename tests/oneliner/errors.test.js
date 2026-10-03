@@ -213,6 +213,11 @@ const CASES = {
     fix: 'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
     link: DOCS + 'labjs.md#placement'
   },
+  labjsVersionUnsupported: {
+    args: ['23.0.0-alpha9'],
+    fix: 'use lab.js 20.x (the lib/lab.js a lab.js builder export contains), or mark trials and save CyborgHunter.data() as on a page without jsPsych',
+    link: DOCS + 'labjs.md#labjs-23'
+  },
   secondLabJsStudy: {
     args: [],
     fix: 'run one study per page, or reload the page between studies',

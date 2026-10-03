@@ -43,6 +43,15 @@ describe('createDebug', () => {
       'Cyborg Hunter active · jsPsych detected · 14 trials instrumented · ID from workerId · honeypot on · friction off');
   });
 
+  it('lab.js summary names the version and counts trials only live, in the badge', () => {
+    var c = jsCtx({ win: win, host: 'labjs', jspsych: undefined, labjs: { version: '20.2.4', generation: 'classic', trialsRun: 3, segmentsWritten: 3 } });
+    var d = createDebug({ doc: win.document, ctx: c, log: log });
+    assert.strictEqual(d.summary(),
+      'Cyborg Hunter active · lab.js 20.2.4 detected · trials counted as they run · ID from workerId · honeypot on · friction off');
+    assert.strictEqual(d.badgeText(),
+      'Cyborg Hunter active · lab.js 20.2.4 detected · 3 trials · ID from workerId · honeypot on · friction off');
+  });
+
   // After the hand-over ch.js instruments nothing and runs no guards: the
   // researcher's own extension does the monitoring.
   it('summary and badge in manual mode say so instead of counting trials', () => {
