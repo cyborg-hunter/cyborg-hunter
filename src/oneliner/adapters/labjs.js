@@ -272,12 +272,19 @@ export function installLabJsAdapter(opts) {
     };
   }
 
-  // Onto the last row that carries a segment, found from the end: the flip
-  // generation's internals.logIndex is undefined (its datastore.set() returns
-  // nothing), and on the classic one the root's end runs inside the last
-  // leaf's end() promise, after that leaf's row was committed. Without a
-  // trial row, into the root's own data, which its end() commits.
+  // Onto the root's own row, which its end() commits after this hook, and
+  // onto the last trial row. The root row is the one that reaches the server
+  // when the last trial row already left in an incremental Transmit slice
+  // (updates: { full: false }) before the root ended; the CLI keeps one copy
+  // of a segment index. A column the study set on its root is kept.
+  // The last trial row is found from the end: the flip generation's
+  // internals.logIndex is undefined (its datastore.set() returns nothing),
+  // and on the classic one the root's end runs inside the last leaf's end()
+  // promise, after that leaf's row was committed. A leaf run on its own has
+  // no committed row yet: its own data is the root's.
   function writeFinal(root, fields) {
+    var own = root.data || (root.data = {});
+    for (var k in fields) if (!(k in own)) own[k] = fields[k];
     try {
       var ds = datastoreOf(root);
       if (ds && Array.isArray(ds.data) && typeof ds.update === 'function') {
@@ -289,7 +296,6 @@ export function installLabJsAdapter(opts) {
         }
       }
     } catch (e) { console.error(MESSAGES.sessionEndFailed(message(e))); }
-    Object.assign(root.data || (root.data = {}), fields);
   }
 
   // The end of the session, from the root component's end(): before the
@@ -330,45 +336,55 @@ export function installLabJsAdapter(opts) {
     try { if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh(); } catch (_) { /* a debug aid */ }
   }
 
+  // The open trial's segment, the trial report and the running totals go
+  // into the component's data, which lab.js's end() commits.
+  function cutTrial(c, internals) {
+    internals.chOpen = false;
+    var t0 = ctx.debug ? performance.now() : 0;
+    var data = c.data || (c.data = {});
+    var r = ctx.segmenter.cut({ source: 'host', nextTrialId: 'gap-' + state.trialsRun });
+    if (r && r.segment) {
+      var report = r.trialReport || {};
+      report.trialStart_perfNow = internals.chStart;
+      data.integrity = report;
+      data.integritySegment = r.segment;
+      data.integrityPasteCount = r.segment.counters.pasteCount;
+      data.integrityCopyCount = r.segment.counters.copyCount;
+      data.integrityDropCount = r.segment.counters.dropCount;
+      data.integritySoftScore = r.segment.score.softScore;
+      data.integrityAnyHardTriggered = r.segment.score.anyHardTriggered;
+      state.segmentsWritten += 1;
+      state.lastTrial = c;
+      // A segment that comes with an error is complete; only the next span
+      // failed to open. Save it, and mark the row.
+      var err = r.error || internals.chError;
+      if (err) data.cyborgHunterError = err;
+    } else {
+      data.cyborgHunterError = (r && r.error) || internals.chError || 'no segment';
+    }
+    data.cyborgHunterParticipantId = ctx.participantId;
+    data.cyborgHunterVersion = VERSION;
+    followReplay();
+    try {
+      if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
+      if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh();
+    } catch (_) { /* debug counters are optional */ }
+  }
+
   // Before lab.js's own end() commits this component's row. The root's end
   // (no parent) also ends the session, once, after the cut: a leaf run on
-  // its own is both the trial and the root.
+  // its own is both the trial and the root. A failed cut still lets it run.
+  // A study ended early (study.end(), a root timeout) ends the root before
+  // the component on screen; the final segment holds that component's span,
+  // so its row is left without columns.
   function beforeEnd(c) {
     if (ctx.bootError) return;
     stamp(c);
     warnIfRunningBeforeInstall(c);
     var internals = c.internals;
+    if (internals && internals.chOpen && state.finalized) internals.chOpen = false;
     if (internals && internals.chOpen) {
-      internals.chOpen = false;
-      var t0 = ctx.debug ? performance.now() : 0;
-      var data = c.data || (c.data = {});
-      var r = ctx.segmenter.cut({ source: 'host', nextTrialId: 'gap-' + state.trialsRun });
-      if (r && r.segment) {
-        var report = r.trialReport || {};
-        report.trialStart_perfNow = internals.chStart;
-        data.integrity = report;
-        data.integritySegment = r.segment;
-        data.integrityPasteCount = r.segment.counters.pasteCount;
-        data.integrityCopyCount = r.segment.counters.copyCount;
-        data.integrityDropCount = r.segment.counters.dropCount;
-        data.integritySoftScore = r.segment.score.softScore;
-        data.integrityAnyHardTriggered = r.segment.score.anyHardTriggered;
-        state.segmentsWritten += 1;
-        state.lastTrial = c;
-        // A segment that comes with an error is complete; only the next span
-        // failed to open. Save it, and mark the row.
-        var err = r.error || internals.chError;
-        if (err) data.cyborgHunterError = err;
-      } else {
-        data.cyborgHunterError = (r && r.error) || internals.chError || 'no segment';
-      }
-      data.cyborgHunterParticipantId = ctx.participantId;
-      data.cyborgHunterVersion = VERSION;
-      followReplay();
-      try {
-        if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
-        if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh();
-      } catch (_) { /* debug counters are optional */ }
+      try { cutTrial(c, internals); } catch (e) { markFailed(c, e); }
     }
     if (!c.parent && !state.finalized) runFinalHook(c);
   }
@@ -404,7 +420,7 @@ export function installLabJsAdapter(opts) {
     try {
       var t = ev.target;
       if (t && typeof t.closest === 'function' && t.closest('[data-ch-friction-start]')) startFriction();
-    } catch (e) { hookError(e); }
+    } catch (e) { console.error(MESSAGES.guardFailed('friction', message(e))); }
   }
   win.document.addEventListener('click', onClick, true);
   ctx.handlers.startFriction = startFriction;

@@ -415,7 +415,10 @@ describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
     assert.strictEqual(last.ai_report_session, 'I used ChatGPT');
     assert.strictEqual(JSON.parse(last.guard_assistance_violations_session).length, 1);
     assert.ok(!('integritySegmentFinal' in rows.find((r) => r.sender === 'bye')), 'the skipped row after it is not the target');
-    assert.ok(!('integritySegmentFinal' in rows.find((r) => r.sender === 'root')));
+    const root = rows.find((r) => r.sender === 'root');
+    assert.strictEqual(root.integritySegmentFinal.segmentIndex, 2, 'the root row carries the final fields too');
+    assert.strictEqual(root.integrityPasteCountFinal, 0);
+    assert.strictEqual(root.ai_use_session, true);
     const atEnd = seenAtEnd.find((r) => r.sender === 'b');
     assert.ok(atEnd && atEnd.integritySegmentFinal, 'an on(end) save sees the final fields');
     assert.strictEqual(seenAtEnd.length, 3, 'on(end) runs before the root row commits');
@@ -480,6 +483,88 @@ describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
     win.CyborgHunter.startFriction();
     await tick(120);
     assert.deepStrictEqual(started.slice(4), ['fullscreen', 'start:false']);
+  });
+
+  it('a cut that throws on a leaf run on its own: the row is marked and the session still ends', async () => {
+    const ctx = await bootOn(win);
+    ctx.segmenter.cut = () => { throw new Error('kaboom'); };
+    const rows = await runToEnd(screen(lab, 'solo'));
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].cyborgHunterError, 'kaboom');
+    assert.strictEqual(rows[0].integritySegmentFinal.segmentIndex, 0);
+    assert.strictEqual(ctx.labjs.finalized, true);
+    assert.throws(() => ctx.monitor.startSession(), /destroy/, 'the monitor is torn down');
+    assert.deepStrictEqual(errors, [MESSAGES.labjsHookFailed('kaboom')]);
+  });
+
+  // lab.js ends the root before the child on screen (Sequence.onEnd aborts
+  // it afterwards), so the final segment already holds that child's span.
+  it('a study ended early (study.end() while a screen runs): the aborted screen\'s row is not marked', async () => {
+    const ctx = await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b', { timeout: 2000 })] });
+    const ended = runToEnd(study);
+    for (let i = 0; i < 200 && !win.document.body.textContent.includes('b'); i++) await tick(2);
+    study.end('abort');
+    const rows = await ended;
+    const b = rows.find((r) => r.sender === 'b');
+    assert.ok(b, 'b committed its row');
+    assert.ok(!('cyborgHunterError' in b), JSON.stringify(b.cyborgHunterError));
+    assert.ok(!('integritySegment' in b));
+    const a = rows.find((r) => r.sender === 'a');
+    assert.strictEqual(a.integritySegmentFinal.segmentIndex, 1);
+    assert.strictEqual(a.integritySegmentFinal.trialId, '1', 'b\'s span (b is component 1)');
+    assert.strictEqual(ctx.labjs.finalized, true);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  // Incremental-only Transmit: a slice that left before the root ended
+  // already carried the last trial row; the root row goes out after it.
+  it('Transmit without the full update: the final fields reach the server on the root row', async () => {
+    const posts = [];
+    const fakeFetch = (url, o) => {
+      posts.push(JSON.parse(o.body));
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}), text: async () => '' });
+    };
+    globalThis.fetch = win.fetch = fakeFetch;
+    await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root',
+      plugins: [new lab.plugins.Transmit({ url: 'https://collect.example/save', updates: { full: false } })],
+      content: [screen(lab, 'a'), screen(lab, 'b'), screen(lab, 'tail', { datacommit: false, timeout: 150 })] });
+    const ds = () => datastoreOf(study);
+    const ended = runToEnd(study);
+    for (let i = 0; i < 200 && !win.document.body.textContent.includes('tail'); i++) await tick(2);
+    await tick(40);                             // b's idle queues the slice
+    ds().flushIncrementalTransmissionQueue();   // the 2.5 s debounce, fired while the tail is on screen
+    await tick(20);
+    assert.deepStrictEqual(posts.map((p) => p.data.map((r) => r.sender)), [['a', 'b']]);
+    assert.ok(!posts[0].data[1].integritySegmentFinal, 'b left before the root ended');
+    await ended;
+    ds().flushIncrementalTransmissionQueue();
+    await tick(20);
+    const root = posts[posts.length - 1].data.find((r) => r.sender === 'root');
+    assert.ok(root, 'the root row went out');
+    assert.strictEqual(root.integritySegmentFinal.segmentIndex, 2);
+    assert.strictEqual(typeof root.integritySoftScoreFinal, 'number');
+  });
+
+  it('the final fields never replace a column the study set on its root', async () => {
+    await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root', data: { integritySoftScoreFinal: 'mine' }, content: [screen(lab, 'a')] });
+    const rows = await runToEnd(study);
+    const root = rows.find((r) => r.sender === 'root');
+    assert.strictEqual(root.integritySoftScoreFinal, 'mine');
+    assert.ok(root.integritySegmentFinal);
+  });
+
+  it('a friction mark that fails logs the friction guard error and leaves the hook error for a hook', async () => {
+    const ctx = await bootOn(win);
+    const btn = win.document.createElement('button');
+    win.document.body.appendChild(btn);
+    btn.closest = () => { throw new Error('closest boom'); };
+    btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    ctx.segmenter.cut = () => { throw new Error('cut boom'); };
+    await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a')] }));
+    assert.deepStrictEqual(errors, [MESSAGES.guardFailed('friction', 'closest boom'), MESSAGES.labjsHookFailed('cut boom')]);
   });
 
   it('restore() removes the friction mark listener and the handler', async () => {
