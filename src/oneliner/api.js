@@ -22,19 +22,20 @@
 // }
 // buildInertApi(file) → the same members, inert (the one-line file `file`
 // failed; see below).
-// mark/data/startFriction depend on the host (jsPsych or vanilla); the host
-// adapter installs them in ctx.handlers, and boot installs replay
-// (replay-loader.js). Until then they return undefined. mark() (with startTrial/endTrial) and data() are vanilla calls:
-// on the jsPsych host, and in manual mode, they warn and do nothing (ctx.host
-// is read at call time: a jsPsych page ch.js cannot hook becomes vanilla
-// after boot).
+// mark/data/startFriction depend on the host (jsPsych, lab.js or vanilla);
+// the host adapter installs them in ctx.handlers, and boot installs replay
+// (replay-loader.js). Until then they return undefined. mark() (with
+// startTrial/endTrial) and data() are vanilla calls: on the jsPsych and
+// lab.js hosts, and in manual mode, they warn and do nothing (ctx.host is
+// read at call time: a jsPsych page ch.js cannot hook becomes vanilla after
+// boot).
 
 import { VERSION } from '../shared/constants.js';
 import { init as coreInit } from '../core/monitor.js';
 import { preventTextSelection, addHoneypot, setAltText } from '../core/signals/dom-protection.js';
 import { MESSAGES } from './errors.js';
 
-var VANILLA_ONLY = '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych trials are segmented automatically';
+var VANILLA_ONLY = '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych and lab.js trials are segmented automatically';
 
 // What init() returns when it must not start a second monitor: a copy of the
 // namespace with the core monitor's documented methods as no-ops, so
@@ -67,7 +68,7 @@ export function buildPublicApi(ctx) {
   function vanillaOnly(name) {
     var h = handler(name);
     return function () {
-      if (ctx.host === 'jspsych' || ctx.host === 'manual') {
+      if (ctx.host === 'jspsych' || ctx.host === 'manual' || ctx.host === 'labjs') {
         console.warn(VANILLA_ONLY);
         return undefined;
       }

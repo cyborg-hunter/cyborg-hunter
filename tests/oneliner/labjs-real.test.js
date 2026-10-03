@@ -95,11 +95,6 @@ async function bootOn(win, dataset) {
   ({ boot: bootCh } = await import('../../src/oneliner/boot.js'));
   const ctx = bootCh({ script: { dataset: Object.assign({ participantId: 'P1', guards: 'none' }, dataset || {}), src: 'https://x/ch.js' }, win });
   assert.ok(ctx, 'ch.js booted');
-  // The vanilla adapter is not installed on the lab.js host (it would cut a
-  // segment on every Form submit and start friction a second time). Torn
-  // down before the lab.js adapter installs: teardown deletes the handlers.
-  if (ctx.vanilla) { ctx.vanilla.teardown(); ctx.vanilla = null; }
-  if (!ctx.labjsAdapter) ctx.labjsAdapter = installLabJsAdapter({ win, ctx, lab: win.lab, version: win.lab.version, generation: typeof win.lab.core.Component.prototype.lock === 'function' ? 'flip' : 'classic' });
   current = ctx;
   return ctx;
 }
@@ -134,6 +129,8 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
 
   it('every leaf is a trial, containers and skipped components get no columns, the root row commits last', async () => {
     const ctx = await bootOn(win);
+    assert.strictEqual(ctx.host, 'labjs');
+    assert.ok(!ctx.vanilla, 'no vanilla adapter on the lab.js host');
     assert.strictEqual(ctx.labjs.generation, 'classic');
     const study = new lab.flow.Sequence({ title: 'root', content: [
       screen(lab, 'intro'),
@@ -578,5 +575,35 @@ describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
     win.document.body.appendChild(btn);
     btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     assert.deepStrictEqual(started, []);
+  });
+});
+
+// The 23 line (pre-releases) is not hooked yet: boot warns once and runs the
+// vanilla host, as on a page without lab.js.
+describe('ch.js on real lab.js 23.0.0-alpha9: not hooked', () => {
+  let win, lab;
+  beforeEach(() => { ({ win, lab } = createLabWindow({ build: '23.0.0-alpha9' })); captureConsole(); });
+  afterEach(async () => {
+    releaseConsole();
+    try { if (current) current.monitor.destroy(); } catch { /* already destroyed */ }
+    try { if (current && current.vanilla) current.vanilla.teardown(); } catch { /* already torn down */ }
+    current = null;
+    await closeLabWindow(win);
+  });
+
+  it('one warning, the vanilla host, and lab.js rows without columns', async () => {
+    const run = lab.core.Component.prototype.run;
+    const ctx = await bootOn(win);
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.ok(ctx.vanilla, 'the vanilla adapter');
+    assert.strictEqual(ctx.labjsAdapter, undefined);
+    assert.strictEqual(lab.core.Component.prototype.run, run, 'lab.js is left alone');
+    assert.deepStrictEqual(warns, [MESSAGES.labjsVersionUnsupported('23.0.0-alpha9')]);
+    const study = new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b')] });
+    const rows = await runToEnd(study);
+    assert.deepStrictEqual(rows.map((r) => r.sender), ['a', 'b', 'root']);
+    assert.deepStrictEqual(withSegment(rows), []);
+    assert.ok(rows.every((r) => r.cyborgHunterParticipantId === undefined));
+    assert.deepStrictEqual(errors, [], 'not taken for a tag above lib/lab.js');
   });
 });

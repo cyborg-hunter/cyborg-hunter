@@ -168,6 +168,83 @@ describe('boot', () => {
     assert.strictEqual(ctx.host, 'jspsych');
   });
 
+  function fakeLab(extraProto) {
+    class Component { async run() {} async end() {} }
+    Component.metadata = { module: ['core'], nestedComponents: [] };
+    Object.assign(Component.prototype, extraProto || {});
+    return { version: '20.2.4', core: { Component }, flow: {}, html: {} };
+  }
+
+  it('selects the lab.js host when window.lab is defined and initJsPsych is not', () => {
+    win.lab = fakeLab();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'labjs');
+    assert.strictEqual(ctx.labjs.version, '20.2.4');
+    assert.strictEqual(ctx.labjs.generation, 'classic');
+    assert.strictEqual(typeof ctx.labjsAdapter.restore, 'function');
+    assert.ok(!ctx.vanilla, 'no vanilla adapter on the lab.js host');
+    assert.notStrictEqual(win.lab.core.Component.prototype.run.name, 'run', 'the prototype is patched');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('a page with both globals is a jsPsych page', () => {
+    win.lab = fakeLab();
+    win.initJsPsych = function () {};
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'jspsych');
+    assert.strictEqual(ctx.labjs, undefined);
+    assert.strictEqual(win.lab.core.Component.prototype.run.name, 'run', 'lab.js is left alone');
+  });
+
+  it('a lab.js build of the 23 line is not hooked: one warning, and the vanilla host as on a page without lab.js', () => {
+    win.lab = fakeLab({ lock() {} });
+    win.lab.version = '23.0.0-alpha9';
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.ok(ctx.vanilla, 'the vanilla adapter');
+    assert.strictEqual(ctx.labjs, undefined);
+    assert.strictEqual(ctx.labjsAdapter, undefined);
+    assert.strictEqual(win.lab.core.Component.prototype.run.name, 'run', 'lab.js is left alone');
+    assert.deepStrictEqual(warns, [MESSAGES.labjsVersionUnsupported('23.0.0-alpha9')]);
+    assert.deepStrictEqual(errors, [], 'not taken for a tag above lib/lab.js');
+  });
+
+  it('lab.js host: boot starts the honeypot and friction observe-only, and the standalone replay recorder', async () => {
+    win.lab = fakeLab();
+    const calls = [];
+    win.GuardHoneypot = { init: (o) => calls.push('honeypot:' + (o.jsPsych === null)) };
+    win.GuardFriction = { injectRefusalNotices: () => calls.push('notices'), start: (o) => { calls.push('friction:' + o.observeOnly); return 'tok'; }, stop() {} };
+    const rec = { startSession() { calls.push('replay'); }, startTrial() {}, endTrial() {}, stopSession() {}, getRecording() { return null; }, destroy() {} };
+    win.CyborgHunterReplay = { attach: () => rec };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'honeypot,friction', replay: '' }), win });
+    await new Promise((r) => setTimeout(r, 10));
+    // The guards start in boot; the recorder once its promise settles.
+    assert.deepStrictEqual(calls.slice(0, 2), ['honeypot:true', 'notices']);
+    assert.deepStrictEqual(calls.slice(2).sort(), ['friction:true', 'replay']);
+    assert.ok(ctx.replay, 'the vanilla recorder handle is the lab.js host\'s too');
+    win.GuardFriction.stop(win._guardFrictionToken);
+  });
+
+  it('vanilla host: a lab global that appears by DOMContentLoaded logs loadedAboveLabJs', () => {
+    Object.defineProperty(win.document, 'readyState', { configurable: true, get: () => 'loading' });
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'vanilla');
+    win.lab = fakeLab();
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    assert.ok(errors.includes(MESSAGES.loadedAboveLabJs()), errors.join('\n'));
+  });
+
+  it('a boot failure after the lab.js install restores the prototype', () => {
+    win.lab = fakeLab();
+    const orig = win.lab.core.Component.prototype.run;
+    Object.defineProperty(win, 'CyborgHunter', { configurable: true, get() { return undefined; }, set() { throw new Error('locked'); } });
+    try {
+      assert.strictEqual(boot({ script: script({ participantId: 'P1' }), win }), null);
+      assert.strictEqual(win.lab.core.Component.prototype.run, orig);
+      assert.deepStrictEqual(errors, [MESSAGES.bootFailed('locked')]);
+    } finally { delete win.CyborgHunter; }
+  });
+
   it('jsPsych host: boot wraps initJsPsych and the original still runs', () => {
     let called = 0;
     win.initJsPsych = function () { called++; return { data: { addProperties() {} }, run() {} }; };
