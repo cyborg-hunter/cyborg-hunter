@@ -31,6 +31,51 @@ describe('extractIntegrityData (pure core)', () => {
     assert.ok(result.warnings.some(w => w.includes('participantId unresolved')));
   });
 
+  const labRow = (sender, extra) => Object.assign({ sender, sender_type: 'html.Screen', sender_id: '0', timestamp: '2026-10-02T10:00:00.000Z' }, extra);
+  const integrity = (id) => ({ trialId: id, participantId: 'L1', pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
+
+  it('a top-level array (lab.js exportJson, JATOS) takes its participant id from the first row that carries one', () => {
+    const raw = [
+      labRow('bye', { ended_on: 'skipped' }),                                      // a skipped component's row: no columns
+      labRow('a', { participantId: 'L1', integrity: integrity('0'), integritySegment: { segmentIndex: 0, source: 'host', trialId: '0', pageOrigin: 1, deltas: {}, counters: { pasteCount: 0, copyCount: 0, dropCount: 0 }, score: {} } }),
+      labRow('root', { sender_type: 'flow.Sequence' })
+    ];
+    const r = extractIntegrityData(raw, { integrityField: 'integrity', participantIdField: 'participantId' });
+    assert.strictEqual(r.participantId, 'L1');
+    assert.strictEqual(r.trials.length, 1);
+    assert.strictEqual(r.trials[0].trialId, '0');
+    assert.ok(!r.warnings.some((w) => w.includes('participantId unresolved')));
+  });
+
+  it('a top-level array whose rows carry the id only inside the integrity report still resolves it', () => {
+    const raw = [labRow('a', { integrity: integrity('0') })];
+    assert.strictEqual(extractIntegrityData(raw, {}).participantId, 'L1');
+  });
+
+  it('a top-level array with no id anywhere stays "unknown", with the warning', () => {
+    const raw = [labRow('a', { integrity: { trialId: '0', pasteEvents: [] } })];
+    const r = extractIntegrityData(raw, {});
+    assert.strictEqual(r.participantId, 'unknown');
+    assert.ok(r.warnings.some((w) => w.includes('participantId unresolved')));
+  });
+
+  it('the lab.js Transmit envelope { metadata, url, data } is read as rows', () => {
+    const raw = {
+      metadata: { slice: 0, id: '3b1c…', payload: 'full' },
+      url: 'https://study.example/index.html',
+      data: [labRow('a', { participantId: 'L2', integrity: integrity('0') }), labRow('root', { sender_type: 'flow.Sequence' })]
+    };
+    const r = extractIntegrityData(raw, {});
+    assert.strictEqual(r.participantId, 'L2');
+    assert.strictEqual(r.trials.length, 1);
+  });
+
+  it('an object with a `data` array that is not an envelope of rows is not mistaken for one', () => {
+    const r = extractIntegrityData({ data: [1, 2, 3] }, {});
+    assert.strictEqual(r.trials.length, 0);
+    assert.strictEqual(r.participantId, 'unknown');
+  });
+
   it('module source has no fs/path/zlib imports', () => {
     const src = readFileSync(new URL('../../src/cli/extract-core.js', import.meta.url), 'utf8');
     assert.doesNotMatch(src, /from ['"](node:)?(fs|path|zlib)['"]/);
@@ -133,5 +178,76 @@ describe('participant ids that are not strings', () => {
     const csv = (id) => ['participantId,integrity', id + ',"{""trialId"":""0"",""pasteEvents"":[]}"'].join('\n');
     assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('42'), {}), {}).participantId, '42');
     assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('0'), {}), {}).participantId, '0');
+  });
+});
+
+// The one-line setup on lab.js writes its own id as cyborgHunterParticipantId
+// on every trial row, and as participantId on row 0 only when the study has
+// set none. A participantId that differs from it is the study's own.
+describe('lab.js rows: the study\'s participantId and ch.js\'s id', () => {
+  const row = (sender, extra) => Object.assign({ sender, sender_type: 'html.Screen' }, extra);
+  const integ = (id) => ({ trialId: id, participantId: 'CH1', pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
+
+  it('a study that sets its id mid-study is keyed by that id; ch.js\'s id goes into the metadata', () => {
+    const raw = [
+      row('intro', { participantId: 'CH1', cyborgHunterParticipantId: 'CH1', integrity: integ('0') }),   // row 0: ch.js's stamp
+      row('form', { participantId: 'R7', cyborgHunterParticipantId: 'CH1', integrity: integ('1') }),
+      row('task', { cyborgHunterParticipantId: 'CH1', integrity: integ('2') })
+    ];
+    const r = extractIntegrityData(raw, {});
+    assert.strictEqual(r.participantId, 'R7');
+    assert.strictEqual(r.metadata.cyborgHunterParticipantId, 'CH1');
+    assert.strictEqual(r.trials.length, 3);
+  });
+
+  it('the same id in both columns: keyed by it, no metadata entry', () => {
+    const raw = [row('a', { participantId: 'CH1', cyborgHunterParticipantId: 'CH1', integrity: integ('0') })];
+    const r = extractIntegrityData(raw, {});
+    assert.strictEqual(r.participantId, 'CH1');
+    assert.ok(!('cyborgHunterParticipantId' in r.metadata));
+  });
+
+  it('only cyborgHunterParticipantId (a custom id column the study never filled): keyed by ch.js\'s id, no warning', () => {
+    const raw = [row('a', { cyborgHunterParticipantId: 'CH2', integrity: { trialId: '0', pasteEvents: [] } })];
+    const r = extractIntegrityData(raw, { participantIdField: 'subject' });
+    assert.strictEqual(r.participantId, 'CH2');
+    assert.ok(!r.warnings.some((w) => w.includes('participantId unresolved')));
+  });
+
+  it('the Transmit envelope\'s metadata is copied, never changed', () => {
+    const metadata = Object.freeze({ slice: 0, payload: 'full' });
+    const raw = { metadata, url: 'https://x/', data: [row('a', { participantId: 'R1', cyborgHunterParticipantId: 'CH1', integrity: integ('0') })] };
+    const r = extractIntegrityData(raw, {});
+    assert.strictEqual(r.participantId, 'R1');
+    assert.deepStrictEqual(r.metadata, { slice: 0, payload: 'full', cyborgHunterParticipantId: 'CH1' });
+    assert.deepStrictEqual(Object.keys(metadata), ['slice', 'payload']);
+  });
+
+  it('rows are read like a { trials } file: a session report and a honeypot disclosure on a row are found', () => {
+    const session = { softScore: 0.5, anyHardTriggered: false, trialsCompleted: 1, tabAwaySums: [] };
+    const raw = [row('a', { participantId: 'R1', integrity: integ('0'), integritySession: session, ai_use_session: true, ai_report_session: 'yes' })];
+    const r = extractIntegrityData(raw, {});
+    assert.deepStrictEqual(r.session, session);
+    assert.strictEqual(r.score.softScore, 0.5);
+    assert.deepStrictEqual(r.honeypot, { aiUse: true, aiReport: 'yes' });
+  });
+
+  it('a lab.js CSV is keyed the same way (the study\'s id from a later row; ch.js\'s id in the metadata)', () => {
+    const csv = [
+      'sender,participantId,cyborgHunterParticipantId,integrity',
+      'intro,CH1,CH1,"{""trialId"":""0"",""pasteEvents"":[]}"',
+      'form,R7,CH1,"{""trialId"":""1"",""pasteEvents"":[]}"',
+      'root,,,'
+    ].join('\n');
+    const r = extractIntegrityData(parseCsvToRaw(csv, {}), {});
+    assert.strictEqual(r.participantId, 'R7');
+    assert.strictEqual(r.metadata.cyborgHunterParticipantId, 'CH1');
+  });
+
+  it('a CSV without cyborgHunterParticipantId keeps hoisting row 0 as before', () => {
+    const csv = ['participantId,integrity', ',"{""trialId"":""0""}"', 'P9,"{""trialId"":""1""}"'].join('\n');
+    const raw = parseCsvToRaw(csv, {});
+    assert.strictEqual(raw.participantId, 'unknown');
+    assert.ok(!('metadata' in raw));
   });
 });

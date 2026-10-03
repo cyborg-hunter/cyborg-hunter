@@ -32,7 +32,7 @@
 import Papa from 'papaparse';
 import { sanitizeId } from '../shared/constants.js';
 import { getByPath } from '../shared/paths.js';
-import { extractIntegrityData } from './extract-core.js';
+import { extractIntegrityData, participantFromRows } from './extract-core.js';
 import { isQualtricsExport, parseQualtricsExport } from './qualtrics-csv.js';
 // Spec §14 makes conversion the migration path for jsPsych-v1 recordings
 // (players are v2-only, there is no dual-read), so the converter is a runtime
@@ -702,6 +702,18 @@ export function parseCsvToRaw(text, config) {
         // and downstream code can handle string values gracefully.
       }
     }
+  }
+
+  // A lab.js CSV from the one-line setup (its rows carry ch.js's id as
+  // cyborgHunterParticipantId) is keyed the way a top-level array of the same
+  // rows is: the study's own participantId, even from a later row, else ch.js's id,
+  // which goes into the metadata when the two differ. Other CSVs keep the
+  // row-0 hoist.
+  if (rows.some(r => r && r.cyborgHunterParticipantId)) {
+    const { id, chId } = participantFromRows(rows, pidField, config.integrityField || 'integrity');
+    const raw = { [pidField]: id, trials: rows };
+    if (String(chId) !== String(id)) raw.metadata = { cyborgHunterParticipantId: chId };
+    return raw;
   }
 
   // Hoist participant ID from the first row to the top level so Shape-1 ingest

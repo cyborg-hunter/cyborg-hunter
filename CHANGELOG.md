@@ -29,8 +29,24 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   or that holds anything a JSON copy would change (a function, `undefined`,
   `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
   capture failure.
+- CLI and analyze page: the lab.js Transmit plugin's envelope
+  (`{ metadata, url, data: [rows] }`, what `datastore.transmit()` posts) is
+  read as a participant file.
+- CLI and analyze page: lab.js data from the one-line setup (`exportJson()`,
+  the Transmit body, `exportCsv()`) is keyed by the study's own
+  `participantId`, even one first set on a later screen, else by the setup's
+  `cyborgHunterParticipantId`; when the two differ, the setup's id is kept in
+  the participant's metadata as `cyborgHunterParticipantId`.
 
 ### Changed
+- CLI and analyze page: a participant file that is a top-level array of rows
+  (lab.js `exportJson()`, a JATOS result) is now keyed by the first row
+  carrying `participantId` (or `integrity.participantId`) instead of
+  `unknown`. Existing Shape-3 cohorts that relied on the `unknown` key get
+  their real ids; re-run `cyborg-hunter report` once after upgrading. Such a
+  file is now also read like a `{ trials: [...] }` file: a session report,
+  rolling segments, a honeypot disclosure and error markers on its rows are
+  found, where before the report said it had no session-level data.
 - Experiment assets (`assetsDir`, files dropped on `/analyze/`): a file whose
   path differs from the recorded URL only in upper/lower case now matches
   when no file matches exactly. Such files are ranked the same way as exact
