@@ -1,7 +1,7 @@
 // The browser page runs ingestFiles + buildReport with web deps (DecompressionStream,
 // crypto.subtle, dropped-file readers). This proves that path produces byte for
 // byte what the CLI writes, on every spec corpus entry.
-import { describe, it, before, after } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, cpSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
