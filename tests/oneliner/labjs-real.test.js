@@ -11,6 +11,10 @@ import { createLabWindow, closeLabWindow, datastoreOf } from './support/labjs-wi
 import { VERSION } from '../../src/shared/constants.js';
 import { installLabJsAdapter, detectLabJs } from '../../src/oneliner/adapters/labjs.js';
 import { MESSAGES } from '../../src/oneliner/errors.js';
+import Papa from 'papaparse';
+import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { parseCsvToRaw } from '../../src/cli/ingest-core.js';
+import { collectSegments } from '../../src/cli/segment-reassembly.js';
 
 const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
 
@@ -575,6 +579,79 @@ describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
     win.document.body.appendChild(btn);
     btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
     assert.deepStrictEqual(started, []);
+  });
+});
+
+// What the report CLI and the analyze page read from a lab.js study: its
+// exportJson() (the JATOS export, the Download plugin's JSON), the body the
+// Transmit plugin posts at the end, and its exportCsv(). The final fields sit
+// on the last trial row and on the root row; read either way they count once.
+describe('ch.js on real lab.js 20.2.4: the saved data through the report reader', () => {
+  let win, lab;
+  beforeEach(() => { ({ win, lab } = createLabWindow({ build: '20.2.4' })); captureConsole(); });
+  afterEach(async () => {
+    releaseConsole();
+    try { if (current) current.monitor.destroy(); } catch { /* destroyed by the final hook */ }
+    current = null;
+    await closeLabWindow(win);
+  });
+
+  async function runAndSave() {
+    const posts = [];
+    globalThis.fetch = win.fetch = (url, o) => {
+      posts.push(JSON.parse(o.body));
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}), text: async () => '' });
+    };
+    win.GuardHoneypot = fakeHoneypot([{ start: 12, duration: 3, reason: 'tab-away' }], true, 'I used ChatGPT');
+    await bootOn(win, { guards: 'honeypot' });
+    const study = new lab.flow.Sequence({ title: 'root',
+      plugins: [new lab.plugins.Transmit({ url: 'https://collect.example/save' })],
+      content: [screen(lab, 'a', { timeout: 60 }), screen(lab, 'b'), new lab.core.Dummy({ title: 'bye' })] });
+    const ended = runToEnd(study);
+    for (let i = 0; i < 100 && !win.document.querySelector('main p'); i++) await tick(2);
+    paste(win, 'during a');
+    await ended;
+    await tick(40);
+    const ds = datastoreOf(study);
+    return { json: JSON.parse(ds.exportJson()), csv: ds.exportCsv(), full: posts.find((p) => p.metadata && p.metadata.payload === 'full') };
+  }
+
+  it('exportJson(), the Transmit body and exportCsv() give the same participant, session and disclosure', async () => {
+    const { json, csv, full } = await runAndSave();
+    assert.ok(json.find((r) => r.sender === 'b').integritySegmentFinal && json.find((r) => r.sender === 'root').integritySegmentFinal,
+      'the final segment is on the last trial row and on the root row');
+    assert.deepStrictEqual(collectSegments({ trials: json }).map((s) => s.segmentIndex), [0, 1, 2], 'two trial segments and one final, once');
+
+    const r = extractIntegrityData(json, {});
+    assert.strictEqual(r.participantId, 'P1');
+    assert.deepStrictEqual(r.trials.map((t) => t.sender), ['a', 'b']);
+    assert.ok(r.session, 'the session is reassembled from the rows');
+    assert.strictEqual(r.session.pasteCount, 1, 'the paste counts once');
+    assert.strictEqual(typeof r.score.anyHardTriggered, 'boolean');
+    assert.deepStrictEqual(r.honeypot, { aiUse: true, aiReport: 'I used ChatGPT' });
+    assert.strictEqual(r.guardFriction.violations.length, 1);
+    assert.deepStrictEqual(r.warnings.filter((w) => /participantId|both a dumped/.test(w)), []);
+
+    const withoutRoot = extractIntegrityData(json.filter((row) => row.sender !== 'root'), {});
+    assert.deepStrictEqual([withoutRoot.session, withoutRoot.score, withoutRoot.honeypot], [r.session, r.score, r.honeypot],
+      'the root row\'s copy of the final fields adds nothing');
+    const wrapped = extractIntegrityData({ participantId: 'P1', trials: json }, {});
+    assert.deepStrictEqual([r.session, r.score], [wrapped.session, wrapped.score], 'the rows read as a { trials } file does');
+
+    assert.ok(full, 'the Transmit plugin posted the full data');
+    const t = extractIntegrityData(full, {});
+    assert.strictEqual(t.participantId, 'P1');
+    assert.strictEqual(t.trials.length, 2);
+    assert.deepStrictEqual([t.session, t.score, t.honeypot], [r.session, r.score, r.honeypot]);
+
+    const header = Papa.parse(csv).data[0];
+    assert.strictEqual(new Set(header).size, header.length, 'no column twice');
+    const c = extractIntegrityData(parseCsvToRaw(csv, {}), {});
+    assert.strictEqual(c.participantId, 'P1');
+    assert.strictEqual(c.trials.length, 2);
+    assert.strictEqual(c.session.pasteCount, 1);
+    assert.deepStrictEqual(c.honeypot, r.honeypot);
+    assert.deepStrictEqual(errors, []);
   });
 });
 

@@ -107,14 +107,6 @@ The items below are known limitations of the replay feature, kept open deliberat
 
 **Severity:** Minor. Producer-controlled; affects only malformed session payloads.
 
-### Shape-3 (top-level array) participants ingest as "unknown", so their replay artifacts never attach
-
-**Symptom:** For a Shape-3 payload (a top-level JSON array of trials), `extractIntegrityData` resolves the participant id against the raw value itself (`getByPath(raw, pidField)` then `raw.metadata`), and an array carries neither, so every Shape-3 participant lands under `"unknown"` (with the 0.6.2 unresolved-id warning). Consequences: `attachReplayArtifacts` searches for `unknown-replay-<epoch>.json` and never finds the participant's real artifact (e.g. `P3-replay-<epoch>.json`), and `--participant P3` filters the participant out entirely.
-
-**Why it isn't patched here:** resolving the id from the trial rows (e.g. first row's `pidField`, or the integrity sub-object's `participantId`) is a small, testable change for a future minor version; it alters how existing Shape-3 cohorts key their outputs, so it needs the versioned-behavior treatment.
-
-**Severity:** Medium for Shape-3 adopters using replay or `--participant`. Shape-1 cohorts (a `{ trials: [...] }` wrapper object — what the jsPsych extension saves) and Shape-2 cohorts (a legacy `{ responses: [...] }` layout) are unaffected.
-
 ## Guard / friction
 
 ### Sidebar opened before fullscreen entry is not detected
