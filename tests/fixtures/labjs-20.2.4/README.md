@@ -1,11 +1,11 @@
 # Vendored lab.js 20.2.4 (test fixture)
 
 Unmodified `dist/lab.js` from the `lab.js` 20.2.4 npm package (UMD, defines the
-global `lab`; `lab.version` reads `20.2.4`). It is the same file the hosted
-builder exports as `lib/lab.js`. Used only by tests: `tests/oneliner/labjs-real.test.js`
-runs the one-line setup against real lab.js under happy-dom, and the Playwright
-fixture pages in `tests/e2e/oneliner/fixtures/labjs-*.html` load it in a real
-browser. `lab.css` is not vendored: no test depends on lab.js's styling.
+global `lab`; `lab.version` reads `20.2.4`). Its byte size and version string
+match the `lib/lab.js` the hosted builder exports (compared by size and version,
+not by hash). Used only by tests: `tests/oneliner/labjs-real.test.js` runs the
+one-line setup against real lab.js under happy-dom. `lab.css` is not vendored:
+no test depends on lab.js's styling.
 
 Source: https://github.com/FelixHenninger/lab.js. License: Apache-2.0 (full text in
 LICENSE; third-party notices from the build in LICENSE-third-party.txt), copyright
