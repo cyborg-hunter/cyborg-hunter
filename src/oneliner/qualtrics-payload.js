@@ -247,10 +247,56 @@ function emptyOlderRows(p, t) {
   t.pagesTrimmed = Math.max(0, p.trials.length - 1);
 }
 
+// Under the legacy layout every page is a full load with its own monitor,
+// and the CLI adds up the last segment of each page origin
+// (src/cli/segment-reassembly.js). When levels 3-4 drop every row of a page,
+// that page's counters and score would go with them, so the last segments
+// of the dropped pages are summed the way the CLI sums pages into one
+// segment for integritySegments. It takes the earliest dropped page's origin
+// and last index, which keeps the CLI's clock anchor and segment order. One
+// page origin (the New Survey Taking Experience) never needs it.
+function rollup(all, kept) {
+  var keptOrigins = kept.map(function (r) { return r.integritySegment && r.integritySegment.pageOrigin; });
+  var lasts = [];   // the last segment of each dropped page, in page order
+  all.forEach(function (r) {
+    var s = r.integritySegment;
+    if (!s || typeof s.segmentIndex !== 'number' || keptOrigins.indexOf(s.pageOrigin) !== -1) return;
+    for (var i = 0; i < lasts.length && lasts[i].pageOrigin !== s.pageOrigin; i++);
+    if (i === lasts.length || s.segmentIndex > lasts[i].segmentIndex) lasts[i] = s;
+  });
+  if (!lasts.length) return null;
+  var seg = { segmentIndex: lasts[0].segmentIndex, source: 'rollup', pageOrigin: lasts[0].pageOrigin, deltas: {},
+    counters: { pasteCount: 0, copyCount: 0, dropCount: 0 } };
+  var hard = {}, soft = 0, done = 0, last = null;
+  lasts.forEach(function (s) {
+    Object.keys(seg.counters).forEach(function (k) { seg.counters[k] += (s.counters && s.counters[k]) || 0; });
+    if (!s.score) return;
+    last = s.score;
+    var hs = last.hardScore || {};
+    Object.keys(hs).forEach(function (k) {
+      var h = hard[k] || (hard[k] = { count: 0 });
+      h.count += hs[k].count || 0;
+      if (hs[k].threshold !== undefined) h.threshold = hs[k].threshold;
+    });
+    soft += last.softScore || 0;
+    done += last.trialsCompleted || 0;
+  });
+  if (last) {
+    var any = false;
+    Object.keys(hard).forEach(function (k) {
+      hard[k].triggered = typeof hard[k].threshold === 'number' && hard[k].count >= hard[k].threshold;
+      any = any || hard[k].triggered;
+    });
+    seg.score = { hardScore: hard, softScore: soft, softScoreThreshold: last.softScoreThreshold,
+      anyHardTriggered: any, trialsCompleted: done };
+  }
+  return seg;
+}
+
 // Level 3: the newest KEEP_PAGES rows. The first segment's config (preset,
 // thresholds) moves onto the oldest kept segment so the CLI still bins this
 // participant with the thresholds the monitor used.
-function keepNewestRows(p, t) {
+function keepNewestRows(p, t, all) {
   if (p.trials.length <= KEEP_PAGES) return;
   var dropped = p.trials.slice(0, -KEEP_PAGES);
   p.trials = p.trials.slice(-KEEP_PAGES);
@@ -265,6 +311,8 @@ function keepNewestRows(p, t) {
   if (config && first && !first.config) first.config = config;
   t.pagesDropped += dropped.length;
   t.pagesTrimmed = p.trials.length - 1;
+  var r = rollup(all, p.trials);
+  if (r) p.integritySegments = [r];
 }
 
 // Own fields only: a key a page script put on Object.prototype is not data.
@@ -275,7 +323,7 @@ function copy(to, from, keys) {
 
 // Level 4: the newest row with the schema's required fields only; every
 // value was bounded at level 0, so its size does not grow with the session.
-function newestOnly(p, t) {
+function newestOnly(p, t, all) {
   var last = p.trials[p.trials.length - 1];
   p.trials.forEach(function (r) { if (r.integritySegment) countDeltas(t, r.integritySegment.deltas); });
   t.pagesDropped += Math.max(0, p.trials.length - 1);
@@ -298,6 +346,8 @@ function newestOnly(p, t) {
     row.integritySegment.deltas = {};
   }
   out.trials.push(row);
+  var r = rollup(all, [last]);
+  if (r) out.integritySegments = [r];
   return out;
 }
 
@@ -339,12 +389,13 @@ export function buildQualtricsPayload(opts) {
     // Every later level works on a parsed copy of level 0 (the raw traces are
     // already gone, so the copy is small) and is free to change it in place.
     var work = JSON.parse(json);
+    var all = work.trials;   // every row, for the rollup of pages levels 3-4 drop
     var t = { level: 1, droppedSessionEntries: {}, pagesTrimmed: 0, pagesDropped: 0 };
     work.cyborgHunterOneLiner.truncated = t;
     var steps = [keepNewestSessionEntries, emptyOlderRows, keepNewestRows, newestOnly];
     for (var i = 0; i < steps.length; i++) {
       t.level = i + 1;
-      var out = steps[i](work, t) || work;
+      var out = steps[i](work, t, all) || work;
       json = JSON.stringify(out);
       n = utf8Length(json);
       if (n <= cap) return result(out, json, n, t.level, full);

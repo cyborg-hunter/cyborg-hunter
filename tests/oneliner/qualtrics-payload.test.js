@@ -364,6 +364,108 @@ describe('the cap', () => {
   });
 });
 
+// The result at a ladder level: built with the smallest cap that level
+// fits (the level a cap gets never rises as the cap grows).
+function atLevel(b, level) {
+  let lo = 1, hi = 10000000;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (build(b, mid).level <= level) hi = mid; else lo = mid + 1;
+  }
+  const out = build(b, lo);
+  assert.strictEqual(out.level, level);
+  return out;
+}
+
+// What the CLI makes of a payload: session counters, score, hard trigger.
+function totals(raw) {
+  const r = extractIntegrityData(raw, {});
+  return { paste: r.session.pasteCount, copy: r.session.copyCount, drop: r.session.dropCount,
+    hard: r.score.anyHardTriggered, hardPaste: r.score.hardScore.paste.count, soft: r.score.softScore, trials: r.score.trialsCompleted };
+}
+
+// Under the legacy layout every page is a full load with its own monitor,
+// and the CLI adds up the last segment of each page origin
+// (src/cli/segment-reassembly.js): levels 3 and 4 drop whole pages, and
+// their counts must not go with them.
+describe('the legacy layout: one monitor per page', () => {
+  for (const [rows, rowsPerPage] of [[12, 6], [18, 6], [10, 1]]) {
+    it(rows / rowsPerPage + ' page origins: the CLI\'s totals and hard trigger at levels 3 and 4 equal the untrimmed session\'s', () => {
+      // Pastes on the first page only, so the hard trigger lives on a dropped page.
+      const b = blob({ pages: rows, rowsPerPage, legacy: true, events: 1, tabAways: 2, pasteRows: [0, 1] });
+      const truth = totals(b);
+      assert.deepStrictEqual([truth.paste, truth.hard, truth.trials], [2, true, rows]);
+      const truthTrials = extractIntegrityData(b, {}).trials;
+      for (const level of [3, 4]) {
+        const out = atLevel(b, level);
+        const raw = JSON.parse(out.json);
+        assert.deepStrictEqual(totals(raw), truth, 'level ' + level);
+        const [rollup] = raw.integritySegments;
+        assert.deepStrictEqual([rollup.source, rollup.pageOrigin, rollup.deltas], ['rollup', ORIGIN, {}]);
+        // The kept trials sit on the untrimmed session's clock.
+        const newest = extractIntegrityData(raw, {}).trials.at(-1);
+        assert.strictEqual(newest.startTime, truthTrials.at(-1).startTime);
+      }
+    });
+  }
+
+  it('one page origin needs no rollup, and its totals still hold', () => {
+    const b = blob({ pages: 12, events: 1, tabAways: 2, pasteRows: [0, 1] });
+    const truth = totals(b);
+    for (const level of [3, 4]) {
+      const out = atLevel(b, level);
+      assert.ok(!('integritySegments' in out.payload), 'level ' + level);
+      assert.deepStrictEqual(totals(JSON.parse(out.json)), truth);
+    }
+  });
+});
+
+// Levels 4 and 5 must fit any cap the adapter could use, whatever the
+// session wrote and however long the ids are.
+describe('the last levels have fixed upper bounds', () => {
+  it('level 4 stays under 9,000 bytes with every field at its longest', () => {
+    // Every string LABEL_MAX three-byte characters, every error note NOTE_MAX,
+    // every number 24 characters long (and finite when summed), every
+    // allowlisted key present, three page origins (so a rollup): 8,583 bytes
+    // when this was written.
+    const NUM = -1.2345678901234567e-300, LONG = '頁'.repeat(200);
+    const fill = (v, k) => (Array.isArray(v) ? v.map((x) => fill(x))
+      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([key, x]) => [key, fill(x, key)]))
+      : typeof v === 'number' ? (k === 'segmentIndex' || k === 'pageOrigin' ? v : NUM)
+      : typeof v === 'string' ? LONG : v);
+    const b = fill(blob({ pages: 12, legacy: true, rowsPerPage: 4, events: 2 }));
+    const nums = (...keys) => Object.fromEntries(keys.map((k) => [k, NUM]));
+    const hardSignal = nums('trialHits', 'sessionTotal', 'countThreshold'), softSignal = nums('hits', 'capped', 'score');
+    for (const r of b.trials) {
+      r.integrity.trialSignals = { hard: { paste: hardSignal, copy: hardSignal, drop: hardSignal },
+        soft: { copy: softSignal, tabAway: softSignal, sidebarEvent: softSignal, devTools: softSignal, foreignInput: softSignal,
+          typingSpeed: nums('charsPerSec', 'threshold', 'hit', 'score') } };
+      const hard = { count: NUM, threshold: NUM, triggered: true };
+      r.integritySegment.score.hardScore = { paste: hard, copy: hard, drop: hard };
+      for (const k of ['tabAwaySums', 'tabAwayEvents', 'charsPerSec', 'idleGaps', 'sidebarEvents', 'devToolsEvents', 'aiExtensionsFound',
+        'keyboardShortcuts', 'extensionInjections', 'viewportWidthShifts', 'zoomChanges']) {
+        r.integritySegment.deltas[k] = [k === 'tabAwaySums' || k === 'charsPerSec' ? NUM : { t: NUM }];
+      }
+      r.cyborgHunterError = '頁'.repeat(1000);
+    }
+    Object.assign(b, { cyborgHunterError: '頁'.repeat(1000), ai_use_session: true, ai_report_session: 'x'.repeat(100000),
+      guard_assistance_violation_count_session: NUM,
+      guard_assistance_violations_session: JSON.stringify(Array.from({ length: 100 }, () =>
+        ({ reason: LONG, start: NUM, end: NUM, duration: NUM, in_progress: true, pageOrigin: NUM }))) });
+    b.cyborgHunterOneLiner.pageCount = NUM;
+    const out = atLevel(b, 4);
+    assert.ok(out.payload.integritySegments, 'the rollup is there');
+    assert.ok(out.chars <= 9000, out.chars + ' bytes');
+  });
+
+  it('the minimal payload stays under 600 bytes', () => {
+    const unreadable = { participantId: '頁'.repeat(200), trials: [{ get integrity() { throw new Error('unreadable'); } }] };
+    const out = buildQualtricsPayload({ blob: unreadable });
+    assert.strictEqual(out.level, 5);
+    assert.ok(out.chars <= 600, out.chars + ' bytes');
+  });
+});
+
 // Each ladder test's cap sits between the fixture's measured sizes at the
 // level under test and the level before it, so the test lands on that level.
 describe('the ladder', () => {
