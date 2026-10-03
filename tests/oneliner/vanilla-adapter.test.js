@@ -12,6 +12,8 @@ import { Window } from 'happy-dom';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 import { VERSION } from '../../src/shared/constants.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { attach as attachRecorder } from '../../src/replay/index.js';
+import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 
 class StubResizeObserver {
   constructor(cb) { this.cb = cb; }
@@ -1202,9 +1204,10 @@ describe('vanilla host: data-replay', () => {
         log.cfg = cfg;
         return {
           startSession: () => log.push('startSession'),
-          startTrial: (o) => log.push('startTrial:' + o.trialId),
+          startTrial: (o) => { log.push('startTrial:' + o.trialId); if (o.extensions) log.extensions = o.extensions; },
           endTrial: () => log.push('endTrial'),
           stopSession: (r) => log.push('stopSession:' + r),
+          resumeSession: () => log.push('resumeSession'),
           getRecording: () => { log.push('getRecording'); return { schema_version: 2 }; },
           destroy: () => log.push('destroy')
         };
@@ -1245,6 +1248,108 @@ describe('vanilla host: data-replay', () => {
     win.CyborgHunter.mark('q9');
     win.dispatchEvent(new win.Event('pagehide'));
     assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
+  });
+
+  // The back/forward cache: the browser shows the page again with its
+  // scripts' memory intact (pageshow, persisted) and runs no script again.
+  function pageshow(persisted) {
+    const ev = new win.Event('pageshow');
+    Object.defineProperty(ev, 'persisted', { value: persisted });
+    win.dispatchEvent(ev);
+  }
+
+  it('back/forward cache: pagehide stops the recorder, a persisted pageshow resumes it with a segment marked as a restore', async () => {
+    const log = fakeReplay();
+    const ctx = start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual(log.slice(2), ['endTrial', 'startTrial:span-1', 'stopSession:finished']);
+    // A later page saved the session further on.
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    saved.segmentIndex = 4;
+    win.sessionStorage.setItem(KEY, JSON.stringify(saved));
+
+    pageshow(false);
+    assert.strictEqual(log.length, 5, 'a pageshow that is not a restore does nothing');
+    pageshow(true);
+    assert.deepStrictEqual(log.slice(5), ['resumeSession', 'startTrial:span-1']);
+    assert.deepStrictEqual(log.extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 4, 'integrity re-adopts the saved session as before');
+    win.CyborgHunter.mark('q1');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual(log.slice(7), ['endTrial', 'startTrial:q1', 'endTrial', 'startTrial:span-6', 'stopSession:finished']);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('back/forward cache with replay off: nothing is started', async () => {
+    const log = fakeReplay();
+    start();
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    pageshow(true);
+    assert.deepStrictEqual([...log], []);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('back/forward cache: a recorder that fails to resume is a catalogue error, and integrity carries on', async () => {
+    const log = fakeReplay();
+    const attach = win.CyborgHunterReplay.attach;
+    win.CyborgHunterReplay.attach = (cfg) => Object.assign(attach(cfg), { resumeSession: () => { throw new Error('cannot resume'); } });
+    const ctx = start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    saved.segmentIndex = 4;
+    win.sessionStorage.setItem(KEY, JSON.stringify(saved));
+    pageshow(true);
+    assert.strictEqual(errors.length, 1);
+    const [head] = MESSAGES.replayRestoreFailed('\u0000').split('\u0000');
+    assert.ok(errors[0].startsWith(head) && errors[0].includes('cannot resume'), errors[0]);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 4);
+    paste('after the restore');
+    const blob = win.CyborgHunter.data();
+    assert.strictEqual(blob.trials[blob.trials.length - 1].integrity.pasteEvents.length, 1, 'integrity records on');
+    assert.deepStrictEqual(log.slice(2), ['endTrial', 'startTrial:span-1', 'stopSession:finished'],
+      'the recorder that did not resume is left alone');
+  });
+
+  it('back/forward cache without a saved session (storage blocked): the recorder still resumes', async () => {
+    const log = fakeReplay();
+    start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    win.sessionStorage.removeItem(KEY);
+    pageshow(true);
+    assert.deepStrictEqual(log.slice(5), ['resumeSession', 'startTrial:span-1']);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('back/forward cache with the real recorder: replay() returns one recording, the restored visit in a keyframe segment marked as a restore', async () => {
+    win.CyborgHunterReplay = { attach: attachRecorder };
+    start({ replay: 'dom' });
+    await tick();
+    el('<p id="first-visit">one</p>');
+    win.CyborgHunter.mark('q1');
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    el('<p id="changed-while-away">two</p>');   // dropped: the recorder is stopped
+    await tick();
+    pageshow(true);
+    click(el('<button id="after-back">Next</button>'));
+    await tick();
+    const rec = win.CyborgHunter.replay();
+
+    assert.deepStrictEqual(validateStrict(rec).errors, []);
+    assert.deepStrictEqual(rec.segments.map((s) => s.label), ['span-0', 'q1', 'span-2', 'span-2']);
+    const restored = rec.segments[3];
+    assert.deepStrictEqual(restored.extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.strictEqual(restored.initial_dom.id, 1, 'a keyframe, ids from 1');
+    assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'));
+    assert.ok(restored.events.some((e) => e.type === 'mouse.click'), 'the click after Back is recorded');
+    assert.deepStrictEqual(rec.segments.slice(0, 3).map((s) => s.extensions), [null, null, null]);
+    assert.strictEqual(rec.end_reason, 'finished');
+    assert.strictEqual(win.CyborgHunter.replay(), rec, 'later calls return the same recording');
+    assert.deepStrictEqual(errors, []);
   });
 
   it('without data-replay nothing is loaded and replay() warns', async () => {

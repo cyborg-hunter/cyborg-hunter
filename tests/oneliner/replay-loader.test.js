@@ -59,9 +59,10 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 function fakeApi(log) {
   return {
     startSession: () => { log.push('startSession'); },
-    startTrial: (o) => { log.push('startTrial:' + o.trialId); },
+    startTrial: (o) => { log.push('startTrial:' + o.trialId); if (o.extensions) log.extensions = o.extensions; },
     endTrial: () => { log.push('endTrial'); },
     stopSession: (reason) => { log.push('stopSession:' + reason); },
+    resumeSession: () => { log.push('resumeSession'); },
     getRecording: (opts) => { log.push('getRecording'); log.opts = opts; return RECORDING; },
     destroy: () => { log.push('destroy'); }
   };
@@ -423,6 +424,87 @@ describe('vanilla replay', () => {
     assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
     ctx.replay.startTrial('after');   // the adapter's next mark: ignored
     assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
+  });
+
+  // The back/forward cache: pagehide stopped the recorder, and the browser
+  // shows the page again with everything in memory (pageshow, persisted).
+  const RESTORED = { 'cyborg-hunter': { restoredFrom: 'bfcache' } };
+
+  async function started(log) {
+    win.CyborgHunterReplay = fakeStandalone(log);
+    const ctx = baseCtx({ host: 'vanilla' });
+    installReplay({ win, ctx, doc: stubDoc() }).startVanilla();
+    await flush();
+    log.length = 0;
+    return ctx;
+  }
+
+  it('restore() after the pagehide stop resumes the same recorder; its next segment is marked as a restore', async () => {
+    const log = [];
+    const ctx = await started(log);
+    ctx.replay.stop();
+    ctx.replay.restore('span-1');
+    assert.deepStrictEqual([...log], ['stopSession:finished', 'resumeSession', 'startTrial:span-1']);
+    assert.deepStrictEqual(log.extensions, RESTORED);
+    ctx.replay.endTrial();
+    ctx.replay.startTrial('q1');   // the adapter's next cut is followed again
+    log.length = 0;
+    assert.strictEqual(ctx.handlers.replay(), RECORDING, 'one recording: both visits');
+    assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('restore() while the recorder still records does nothing', async () => {
+    const log = [];
+    const ctx = await started(log);
+    ctx.replay.restore('span-0');
+    assert.deepStrictEqual([...log], []);
+  });
+
+  it('restore() after replay() took the recording starts a new one; replay() then returns the restored visit\'s', async () => {
+    const log = [];
+    const ctx = await started(log);
+    assert.strictEqual(ctx.handlers.replay(), RECORDING);   // the researcher saved it before leaving
+    ctx.replay.stop();                                      // pagehide: nothing left to stop
+    const second = { schema_version: 2, segments: [], second: true };
+    win.CyborgHunterReplay = { attach: (cfg) => { log.push('attach'); log.cfg = cfg; return Object.assign(fakeApi(log), { getRecording: () => { log.push('getRecording'); return second; } }); } };
+    log.length = 0;
+    ctx.replay.restore('span-1');
+    assert.deepStrictEqual([...log], ['attach', 'startSession', 'startTrial:span-1']);
+    assert.deepStrictEqual(log.extensions, RESTORED);
+    assert.deepStrictEqual(log.cfg, { participantId: 'P1', autoSave: { mode: 'none' }, _ownerSavesRecording: true, tier: 'trace' });
+    assert.strictEqual(ctx.handlers.replay(), second);
+    assert.strictEqual(ctx.handlers.replay(), second, 'and keeps returning it');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('a recorder that cannot resume (an older cyborg-hunter-replay.js) is a catalogue error; replay() still returns the recording up to the stop', async () => {
+    const log = [];
+    const ctx = await started(log);
+    delete ctx.replay.api.resumeSession;
+    ctx.replay.stop();
+    assert.doesNotThrow(() => ctx.replay.restore('span-1'));
+    assert.strictEqual(errors.length, 1);
+    const [head] = MESSAGES.replayRestoreFailed('\u0000').split('\u0000');
+    assert.ok(errors[0].startsWith(head), errors[0]);
+    assert.ok(errors[0].includes('resumeSession'), errors[0]);
+    log.length = 0;
+    ctx.replay.startTrial('q1');   // still stopped: ignored
+    assert.strictEqual(ctx.handlers.replay(), RECORDING);
+    assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
+  });
+
+  it('a new recorder that fails to start is a catalogue error and is torn down', async () => {
+    const log = [];
+    const ctx = await started(log);
+    ctx.handlers.replay();
+    win.CyborgHunterReplay = { attach: () => Object.assign(fakeApi(log), { startSession: () => { throw new Error('no body'); } }) };
+    log.length = 0;
+    ctx.replay.restore('span-1');
+    assert.deepStrictEqual([...log], ['destroy']);
+    assert.strictEqual(errors.length, 1);
+    assert.ok(errors[0].includes('no body'), errors[0]);
+    assert.strictEqual(ctx.handlers.replay(), RECORDING, 'the recording already taken');
   });
 
   it('installReplay logs a load failure once and replay() then warns', async () => {

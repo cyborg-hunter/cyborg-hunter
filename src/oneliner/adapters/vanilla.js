@@ -45,7 +45,10 @@
 // A page shown again from the back/forward cache (pageshow with persisted)
 // keeps its monitor and this adapter's memory from before it was left; it
 // re-adopts the saved session, which later pages have added to, so the
-// indices continue and its next pagehide cuts again.
+// indices continue and its next pagehide cuts again. With data-replay the
+// recorder, stopped at pagehide, records again: the same recording goes on
+// with a keyframe segment marked as a back/forward-cache restore (see
+// restore() in replay-loader.js), named after the open span.
 //
 // When sessionStorage refuses the session (quota), a slim record still keeps
 // the segment index and the page count; the next page's blob then carries a
@@ -62,7 +65,8 @@
 // }
 //   ctx:        boot's context; gains ctx.handlers.mark / data / startFriction;
 //               ctx.replay (data-replay, set later by replay-loader.js) follows
-//               every cut and is stopped at pagehide
+//               every cut, is stopped at pagehide and restored at a
+//               back/forward-cache pageshow
 //   clock:      () => page origin, the segmenter's clock (performance.timeOrigin)
 //   warnChars:  persist() warns once above this many characters (4,000,000)
 // install restores the saved state first, so the boot span opened after it is
@@ -441,13 +445,17 @@ export function installVanillaAdapter(opts) {
       submitted = false;
       submitTask = null;
       var saved = readState();
-      if (!usable(saved)) return;
-      // A slim record (storage full) has no trials: keep the ones in memory.
-      if (!saved.storageError) trials = saved.trials.slice();
-      adopt(saved);
+      if (usable(saved)) {
+        // A slim record (storage full) has no trials: keep the ones in memory.
+        if (!saved.storageError) trials = saved.trials.slice();
+        adopt(saved);
+      }
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
     }
+    // After the integrity state, and whatever became of it: restore() logs
+    // its own failures and never throws.
+    if (ctx.replay) ctx.replay.restore(ctx.segmenter.state().currentTrialId);
   }
 
   function onPageHide() {

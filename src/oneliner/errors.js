@@ -137,6 +137,15 @@ export const MESSAGES = {
       'put cyborg-hunter-replay.js next to ch.js or point data-replay-src at it, and allow its URL in the page\'s Content-Security-Policy',
       DOCS + 'known-issues.md#one-line-setup');
   },
+  // console.error, vanilla host: the page came back from the back/forward
+  // cache and the recorder could not record again (replay-loader.js
+  // restore()). The usual cause is a cyborg-hunter-replay.js from a release
+  // without resumeSession(). Integrity monitoring is unaffected.
+  replayRestoreFailed: function (msg) {
+    return formatError('Session replay did not resume when the participant came back to this page', msg,
+      'serve the cyborg-hunter-replay.js of the same release as ch.js; CyborgHunter.replay() still returns the recording up to when the participant left this page',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
   // console.warn, from CyborgHunter.replay(), which then returns null.
   replayOff: function () {
     return formatError('CyborgHunter.replay() has no recording',

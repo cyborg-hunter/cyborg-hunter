@@ -105,6 +105,11 @@ const CASES = {
     fix: 'put cyborg-hunter-replay.js next to ch.js or point data-replay-src at it, and allow its URL in the page\'s Content-Security-Policy',
     link: DOCS + 'known-issues.md#one-line-setup'
   },
+  replayRestoreFailed: {
+    args: ['api.resumeSession is not a function'],
+    fix: 'serve the cyborg-hunter-replay.js of the same release as ch.js; CyborgHunter.replay() still returns the recording up to when the participant left this page',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
+  },
   replayOff: {
     args: [],
     fix: 'add data-replay to the ch.js tag',
