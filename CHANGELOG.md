@@ -12,8 +12,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   `startTrial({ extensions })` sets a segment's vendor `extensions`. The
   one-line setup uses both for a page restored from the back/forward cache,
   marking its segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
-  A value that is not an object keyed by lowercase vendor names (`"my-lab"`)
-  is left out and logged as a `segment_extensions` capture failure.
+  A value that is not an object keyed by lowercase vendor names (`"my-lab"`),
+  or that holds anything a JSON copy would change (a function, `undefined`,
+  `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
+  capture failure.
 
 ### Changed
 - Experiment assets (`assetsDir`, files dropped on `/analyze/`): a file whose

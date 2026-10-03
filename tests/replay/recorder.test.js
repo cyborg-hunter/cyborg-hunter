@@ -405,6 +405,45 @@ describe('recorder: resumeSession', () => {
     }
   });
 
+  it('startTrial refuses the whole block when a nested value is not one JSON would keep as it is', () => {
+    // A JSON copy would drop a function or undefined, write NaN and Infinity
+    // as null and a Date as a string: the file would say what the host did
+    // not. The block is refused and logged, like a cycle.
+    const nested = {
+      'a function': { lab: { cb() {} } },
+      'undefined': { lab: { x: undefined } },
+      'NaN': { lab: { n: NaN } },
+      'Infinity': { lab: [1, -Infinity] },
+      'a Date': { lab: { when: new Date(0) } },
+      'a Map': { lab: new Map() },
+      'a class instance': { lab: new (class Point { constructor() { this.x = 1; } })() },
+      'a sparse array': { lab: [1, , 3] },   // eslint-disable-line no-sparse-arrays
+      'a symbol': { lab: Symbol('s') },
+      'a bigint': { lab: 1n },
+    };
+    for (const [name, ext] of Object.entries(nested)) {
+      const rec = freshRecorder();
+      rec.startSession();
+      assert.doesNotThrow(() => rec.startTrial({ trialId: 't1', extensions: ext }), name);
+      rec.stopSession('finished');
+      const wire = serialize(rec.getState(), {});
+      assert.strictEqual(wire.segments[0].extensions, null, name);
+      const f = rec.getState().captureFailures;
+      assert.deepStrictEqual(f.map((x) => x.channel), ['segment_extensions'], name);
+      assert.match(f[0].message, /lab/, name + ': the message names where');
+    }
+    // Shared (not cyclic) references and an object without a prototype are fine.
+    const shared = { k: 1 };
+    const bare = Object.assign(Object.create(null), { b: true });
+    const rec = freshRecorder();
+    rec.startSession();
+    rec.startTrial({ trialId: 't1', extensions: { lab: { one: shared, two: shared, bare } } });
+    rec.stopSession('finished');
+    assert.deepStrictEqual(rec.getState().captureFailures, []);
+    assert.deepStrictEqual(serialize(rec.getState(), {}).segments[0].extensions,
+      { lab: { one: { k: 1 }, two: { k: 1 }, bare: { b: true } } });
+  });
+
   it('fires onResume hooks; a throwing hook is a capture failure, not a throw', () => {
     const rec = freshRecorder();
     const seen = [];

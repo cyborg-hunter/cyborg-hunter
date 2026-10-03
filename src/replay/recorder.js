@@ -235,26 +235,61 @@ export function createRecorder(userConfig) {
 
   // A JSON copy of the host's segment extensions, taken at startTrial: the
   // host can change or reuse its object afterwards without changing the
-  // recording, and anything the file could not carry (a cycle, a BigInt)
-  // fails HERE, as a capture failure, rather than in getRecording(). So does
-  // a copy the format forbids (spec §9: an object keyed by lowercase vendor
-  // slugs, the pattern the strict validator checks): a string, an array or
-  // a "Cyborg Hunter" key would make the whole file fail strict validation.
+  // recording, and anything the file could not carry fails HERE, as a
+  // capture failure, rather than in getRecording(). So does a value the
+  // format forbids (spec §9: an object keyed by lowercase vendor slugs, the
+  // pattern the strict validator checks): a string, an array or a
+  // "Cyborg Hunter" key would make the whole file fail strict validation.
+  // And so does a value JSON would not keep as it is (see jsonValueError):
+  // the whole block is refused rather than written altered.
   function hostExtensions(ext) {
     if (ext === undefined || ext === null) return null;
     try {
-      var copy = JSON.parse(JSON.stringify(ext));
-      if (copy === null || typeof copy !== 'object' || Array.isArray(copy)) {
-        throw new Error('extensions must be an object keyed by vendor');
-      }
-      for (var k in copy) {
+      if (!isPlainObject(ext)) throw new Error('extensions must be an object keyed by vendor');
+      for (var k in ext) {
         if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(k)) throw new Error('vendor key "' + k + '" is not a lowercase slug');
       }
-      return copy;
+      var why = jsonValueError(ext, 'extensions', []);
+      if (why) throw new Error(why);
+      return JSON.parse(JSON.stringify(ext));
     } catch (e) {
       recorder.captureFailure('segment_extensions', e);
       return null;
     }
+  }
+
+  // An object literal's kind, from any window: its prototype is null or a
+  // root prototype (Object.prototype). A Date, a Map or a class instance is
+  // not one: JSON writes it as something else or as {}.
+  function isPlainObject(v) {
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+    var proto = Object.getPrototypeOf(v);
+    return proto === null || Object.getPrototypeOf(proto) === null;
+  }
+
+  // Why `v` is not a value a JSON copy keeps as it is, or null: JSON drops a
+  // function or undefined (or writes null for it in an array), writes NaN and
+  // Infinity as null, and a Date, a Map or a class instance as something
+  // else. Accepted: null, booleans, strings, finite numbers, arrays and plain
+  // objects of those. `path` names the value in the message; `ancestors`
+  // catches a cycle (a value shared by two branches is fine).
+  function jsonValueError(v, path, ancestors) {
+    if (v === null || typeof v === 'string' || typeof v === 'boolean') return null;
+    if (typeof v === 'number') return isFinite(v) ? null : path + ' is ' + v;
+    if (typeof v !== 'object') return path + ' is ' + (typeof v);
+    if (ancestors.indexOf(v) !== -1) return path + ' is a cycle';
+    var isArray = Array.isArray(v);
+    if (!isArray && !isPlainObject(v)) return path + ' is not a plain object';
+    var keys = isArray ? null : Object.keys(v);
+    var n = isArray ? v.length : keys.length;
+    ancestors.push(v);
+    for (var i = 0; i < n; i++) {
+      var why = isArray ? jsonValueError(v[i], path + '[' + i + ']', ancestors)
+        : jsonValueError(v[keys[i]], path + '.' + keys[i], ancestors);
+      if (why) return why;
+    }
+    ancestors.pop();
+    return null;
   }
 
   // Pending records first, so they land in the trial that was open when they
