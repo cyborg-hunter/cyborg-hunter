@@ -57,19 +57,20 @@
 //     still open → close it, keep its report as a gap, and retry once.
 
 // What evidence() counts. Every entry in one of the open trial's arrays (a
-// paste, a copy, an edit, a click, a tab-away, an idle gap...) and every new
-// entry in a session array (segment-diff.js newEntries()), but not the
-// samples that accumulate with movement alone: mouse moves (a click,
-// mousedown or mouseup still counts) and the element trace, sampled under
-// the pointer while it moves. Nor the background window-position samples
-// (BACKGROUND_KEYS). A participant who moves the mouse while the next page
-// loads would otherwise add a segment to every page.
-var MOVEMENT_KEYS = { elementTrace: true };
+// paste, a copy, an edit, a click, a tab-away...) and every new entry in a
+// session array (segment-diff.js newEntries()), but not the samples that
+// accumulate with movement alone: mouse moves (a click, mousedown or mouseup
+// still counts) and the element trace, sampled under the pointer while it
+// moves. Nor what timers record whatever the participant does: idle gaps
+// (the idle check says nobody acted) and the background window-position
+// samples (BACKGROUND_KEYS). A participant who moves the mouse, or waits,
+// while the next page loads would otherwise add a segment to every page.
+var NOT_ACTIONS = { elementTrace: true, idleGaps: true };
 function trialEvidence(trial) {
   var n = 0;
   Object.keys(trial).forEach(function (k) {
     var v = trial[k];
-    if (!Array.isArray(v) || MOVEMENT_KEYS[k]) return;
+    if (!Array.isArray(v) || NOT_ACTIONS[k]) return;
     n += k === 'mouseEvents' ? v.filter(function (m) { return !m || m.type !== 'move'; }).length : v.length;
   });
   return n;

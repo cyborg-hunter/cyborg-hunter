@@ -379,6 +379,19 @@ describe('segmenter', () => {
     assert.equal(seg.holdsEvidence(), false, 'finished');
   });
 
+  // The idle-gap check is a timer: an entry says the participant did
+  // nothing, so a slow page load alone must not make a segment.
+  it('holdsEvidence: an idle gap alone is not evidence', () => {
+    let trial = null;
+    const seg = setup((real) => wrap(real, { getTrialSnapshot: () => trial }));
+    seg.start();
+    trial = { pasteEvents: [], idleGaps: [{ duration_ms: 12000, t: 1 }] };
+    assert.equal(seg.evidence(), 0);
+    assert.equal(seg.holdsEvidence(), false);
+    trial.pasteEvents.push({ pastedLength: 2 });
+    assert.equal(seg.evidence(), 1);
+  });
+
   it('holdsEvidence: a monitor that cannot be read counts as evidence', () => {
     const seg = setup((real) => wrap(real, { getTrialSnapshot: () => { throw new Error('boom'); } }));
     seg.start();

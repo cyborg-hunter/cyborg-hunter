@@ -63,7 +63,7 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   next page is still loading. It is saved as its own segment when the page
   is left, and a later `form.submit()` posts it. A submit that the next page
   follows with nothing done in between still adds no segment; mouse movement
-  alone does not count.
+  or waiting alone does not count.
 - One-line setup on pages without jsPsych: a form whose own `submit` handler
   changes its method or target is handled as the browser sends it. Switched
   from GET to POST, it now carries `cyborgHunterData`; switched from POST to
