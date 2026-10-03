@@ -384,9 +384,11 @@ Requirements and limits:
 - The page has been tested with cohorts of up to 150 participants (a
   0.8 MB replay recording each) on a laptop with 24 GB of memory; it states
   that number on screen and, above it, warns that the build may be slow or
-  fail and suggests the CLI (the build is still allowed). If a report loads
-  but never finishes rendering, the page says so; the zip still holds the
-  full report. Firefox did not always finish at about twice that size
+  fail and suggests the CLI (the build is still allowed). If a check or a
+  build reports no progress for a minute, the page says it is still working
+  and suggests reloading if nothing changes in a few minutes; it never stops
+  the build itself. If a report loads but never finishes rendering, the page
+  says so; the zip still holds the full report. Firefox did not always finish at about twice that size
   (300 participants). Memory is the limit: a smaller machine stalls sooner.
 - `.json.gz` recordings are read, including files made of several gzip
   members. Corrupt files are rejected as the CLI rejects them, with one

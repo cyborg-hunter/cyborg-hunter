@@ -18,6 +18,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   `<picture>`'s `<source>`), an SVG `<image>`'s `href`/`xlink:href`, and an
   `<input type="image">`'s `src`: each is matched, inlined when supplied, and
   counted among the images in the note.
+- `/analyze/`: when a check or a build sends no progress for a minute, the
+  page shows "Still working — this is taking longer than usual. If nothing
+  changes in a few minutes, reload the page." under the step. The next
+  progress, the result, an error or Start over hides it. Nothing is cancelled
+  or restarted.
 
 ### Fixed
 - `/analyze/`: selecting a participant without a replay recording in the
