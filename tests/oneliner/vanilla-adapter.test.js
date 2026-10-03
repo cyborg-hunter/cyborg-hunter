@@ -311,15 +311,20 @@ describe('vanilla host: forms and page loads', () => {
     });
   }
 
-  // form.dispatchEvent(new Event('submit')) runs the page's submit handlers
-  // but submits nothing. happy-dom leaves isTrusted unset; a browser sets it
-  // to false on such an event.
-  it('a submit event the page dispatches itself is not a page load; pagehide keeps the data after it', async () => {
-    const ctx = start();
-    const f = el('<form method="post" action="/submit"></form>');
+  // form.dispatchEvent(new Event('submit')) runs the page's submit handlers.
+  // Chromium and WebKit submit nothing for it; Firefox still sends the form.
+  // happy-dom leaves isTrusted unset; a browser sets it to false on such an
+  // event.
+  function untrustedSubmit(f) {
     const ev = new win.Event('submit', { bubbles: true, cancelable: true });
     Object.defineProperty(ev, 'isTrusted', { value: false });
     f.dispatchEvent(ev);
+  }
+
+  it('a submit event the page dispatches itself is not counted as leaving; a later pagehide keeps the data after it', async () => {
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"></form>');
+    untrustedSubmit(f);
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
     assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 1, 'its handlers still see the blob');
     await tick();
@@ -327,6 +332,27 @@ describe('vanilla host: forms and page loads', () => {
     win.dispatchEvent(new win.Event('pagehide'));
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
     assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+  });
+
+  // Firefox: the dispatched event sends the form and the page goes. The post
+  // carries everything so far, and pagehide closes at most one extra,
+  // empty segment.
+  it('a dispatched submit event that does send the form loses nothing; pagehide adds at most one empty segment', async () => {
+    start();
+    paste('before');
+    const f = el('<form method="post" action="/submit"></form>');
+    untrustedSubmit(f);
+    const posted = JSON.parse(f.querySelector('input[name=cyborgHunterData]').value);
+    assert.deepStrictEqual(posted.trials.map((t) => t.integrity.pasteEvents.length), [1]);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));   // the page leaves, with nothing recorded since
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY)).trials;
+    assert.strictEqual(saved[0].integrity.pasteEvents.length, 1, 'the data before the submit is kept');
+    assert.ok(saved.length <= 2, 'at most one extra segment');
+    for (const t of saved.slice(1)) {
+      assert.strictEqual(t.integrity.pasteEvents.length, 0);
+      assert.strictEqual(t.integritySoftScore, 0, 'the extra segment is empty');
+    }
   });
 
   // In a browser a control named "method" shadows form.method (the form's

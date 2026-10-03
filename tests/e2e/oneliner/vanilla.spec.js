@@ -312,7 +312,9 @@ test('a submit handler that cancels the event and calls form.submit() saves one 
   expect(chErrors(log)).toEqual([]);
 });
 
-test('a submit event the page dispatches itself submits nothing, and the data after it is kept', async ({ page }) => {
+// Chromium sends nothing for a dispatched submit event (as WebKit; Firefox
+// does send the form, which this Chromium-only suite cannot cover).
+test('a submit event the page dispatches itself sends nothing in Chromium, and the data after it is kept', async ({ page }) => {
   const log = collectConsole(page);
   const requested = [];
   page.on('request', (r) => { if (r.url().includes('/post-plain')) requested.push(r.url()); });

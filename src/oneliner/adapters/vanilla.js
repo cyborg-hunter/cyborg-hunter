@@ -397,7 +397,10 @@ export function installVanillaAdapter(opts) {
       var entry = { ev: ev, replaces: false };
       submitTask.events.push(entry);
       // A submit event the page dispatched itself (isTrusted false) runs the
-      // handlers, which may read the blob, but submits nothing.
+      // handlers, which may read the blob. It is not counted as leaving:
+      // Chromium and WebKit submit nothing for it. Firefox still sends the
+      // form; the pagehide that follows then closes one extra, empty
+      // segment. Nothing is lost either way.
       entry.replaces = carry(ev.target, ev.submitter, true) && ev.isTrusted !== false;
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
