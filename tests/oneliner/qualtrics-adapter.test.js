@@ -267,19 +267,29 @@ describe('Qualtrics host: the page-submit writer', () => {
     assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(d));
   });
 
-  // A test hook for the browser harness (tests/e2e/oneliner), which has no
-  // other way into boot: not a researcher option.
-  it('CyborgHunterConfig.qualtricsMaxChars sets the cap and never reaches the monitor', () => {
+  // A test seam for the browser harness (tests/e2e/oneliner), which has no
+  // other way into boot: not a researcher option. It can only lower the cap.
+  it('CyborgHunterConfig.qualtricsMaxChars lowers the cap and never reaches the monitor', () => {
+    win.CyborgHunterConfig = { qualtricsMaxChars: 3000 };
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    for (let i = 0; i < 40; i++) tabAway(3500);
+    const v = fake.submit('next')[STORED_FIELD];
+    assert.strictEqual(ctx.qualtrics.lastWrite().cap, 3000);
+    assert.ok(bytes(v) <= 3000, bytes(v) + ' bytes');
+    assert.ok(!('qualtricsMaxChars' in ctx.config.monitor));
+    assert.deepStrictEqual(warns.filter((w) => w.includes('qualtricsMaxChars')), []);
+  });
+
+  it('CyborgHunterConfig.qualtricsMaxChars above MAX_CHARS is clamped: no page config can raise the cap', () => {
     win.CyborgHunterConfig = { qualtricsMaxChars: 50000 };
     const fake = fakeSurveyEngine();
     const ctx = start(fake);
     for (let i = 0; i < 150; i++) tabAway(3500);
     const v = fake.submit('next')[STORED_FIELD];
-    assert.strictEqual(ctx.qualtrics.lastWrite().cap, 50000);
-    assert.ok(bytes(v) > MAX_CHARS, 'written whole: ' + bytes(v) + ' bytes');
-    assert.strictEqual(JSON.parse(v).cyborgHunterOneLiner.truncated, false);
-    assert.ok(!('qualtricsMaxChars' in ctx.config.monitor));
-    assert.deepStrictEqual(warns.filter((w) => w.includes('qualtricsMaxChars')), []);
+    assert.strictEqual(ctx.qualtrics.lastWrite().cap, MAX_CHARS);
+    assert.ok(bytes(v) <= MAX_CHARS, bytes(v) + ' bytes');
+    assert.ok(JSON.parse(v).cyborgHunterOneLiner.truncated.level >= 1, 'reduced to the default cap');
   });
 
   for (const bad of [0, -1, 1.5, '50000', NaN, Infinity, null]) {

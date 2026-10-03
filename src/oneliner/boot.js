@@ -67,10 +67,12 @@
 //   win:               the window (the core monitor itself uses the globals)
 //   monitorFactory:    core init(); injectable for tests
 //   participantParams: URL parameter names for the participant id, in order
-//   qualtricsMaxChars: the Qualtrics writer's cap; injectable for tests (a
+//   qualtricsMaxChars: the Qualtrics writer's cap; injectable for tests. A
 //                      page reaches it through CyborgHunterConfig
-//                      .qualtricsMaxChars, config.js: the browser harness's
-//                      hook)
+//                      .qualtricsMaxChars (config.js), a test seam for the
+//                      browser harness that can only lower the cap: it is
+//                      clamped to MAX_CHARS, so no page config pushes a
+//                      write above Qualtrics' limit
 // ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
 //         participantId, participantIdSource, monitor, differ, segmenter,
 //         host, scriptSrc, handlers, win, api, qualtricsLayout,
@@ -119,7 +121,7 @@ import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, installInertWrapper, watchHostPlacement } from './adapters/jspsych.js';
 import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
-import { detectQualtrics, qualtricsSurveyId, installQualtricsAdapter } from './adapters/qualtrics.js';
+import { detectQualtrics, qualtricsSurveyId, installQualtricsAdapter, MAX_CHARS } from './adapters/qualtrics.js';
 import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
 
@@ -229,7 +231,7 @@ export function boot(opts) {
       ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: surveyId });
       if (ctx.qualtricsLayout) {
         ctx.qualtrics = installQualtricsAdapter({
-          win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars || config.qualtricsMaxChars,
+          win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars || (config.qualtricsMaxChars && Math.min(config.qualtricsMaxChars, MAX_CHARS)),
           onWrite: ctx.debug ? function () { ctx.debug.refresh(); } : null
         });
       }

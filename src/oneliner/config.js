@@ -23,11 +23,12 @@
 //                                            used, adapters/qualtrics.js)
 //   qualtricsMaxChars,                       CyborgHunterConfig.qualtricsMaxChars
 //                                            when a positive integer, else
-//                                            undefined: the Qualtrics writer's
-//                                            cap. A test hook for the browser
-//                                            harness, not a researcher option
-//                                            (a cap above Qualtrics' limit
-//                                            would stop the participant)
+//                                            undefined: a lower cap for the
+//                                            Qualtrics writer. A test seam for
+//                                            the browser harness, not a
+//                                            researcher option; boot clamps it
+//                                            to MAX_CHARS, so it can only lower
+//                                            the cap
 //   monitor                                  every other CyborgHunterConfig key,
 //                                            passed to init() as is (init's own
 //                                            validateConfig warns on typos);
