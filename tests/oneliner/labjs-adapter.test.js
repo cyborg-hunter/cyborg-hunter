@@ -138,6 +138,24 @@ describe('trial rules', () => {
     assert.strictEqual(isTrial(grandchild, labWithParallel), false);
     assert.strictEqual(isTrial(child, { flow: {} }), true, 'a lab without Parallel (23) has no such rule');
   });
+  it('a Parallel inside a Parallel is not a trial, directly or under a container', () => {
+    const outer = new Parallel();
+    outer.options = { id: '0' };
+    const inner = new Parallel();
+    inner.options = { id: '0_0' }; inner.parent = outer;
+    const deeper = new Parallel();
+    deeper.options = { id: '0_1_0' }; deeper.parent = comp({ nested: ['content'], parent: outer });
+    assert.strictEqual(isTrial(outer, labWithParallel), true);
+    assert.strictEqual(isTrial(inner, labWithParallel), false);
+    assert.strictEqual(isTrial(deeper, labWithParallel), false);
+  });
+  it('a component that commits no row (datacommit: false) is not a trial', () => {
+    assert.strictEqual(isTrial(comp({ options: { datacommit: false } }), labWithParallel), false);
+    assert.strictEqual(isTrial(comp({ options: { datacommit: null } }), labWithParallel), true);
+    const par = new Parallel();
+    par.options = { id: '1', datacommit: false };
+    assert.strictEqual(isTrial(par, labWithParallel), false);
+  });
 });
 
 describe('idOf', () => {
@@ -187,6 +205,18 @@ describe('trialOptions', () => {
     el.innerHTML = '<p data-ch-trial="flip-mark"></p>';
     const c = comp({ options: { id: undefined }, internals: { context: { el } }, id: () => '1' });
     assert.strictEqual(trialOptions(c, { generation: 'flip', index: 0, rerun: 1 }).trialId, 'flip-mark');
+    win.close();
+  });
+  it('classic: only an html.Screen reads a mark; another leaf shares the element the previous screen left', () => {
+    const win = new Window();
+    const el = win.document.createElement('div');
+    el.innerHTML = '<p data-ch-trial="previous-screen"></p>';
+    class Screen {}
+    const lab = { flow: {}, html: { Screen } };
+    const leaf = comp({ options: { id: '1', el } });
+    assert.strictEqual(trialOptions(leaf, { generation: 'classic', index: 1, rerun: 1, lab }).trialId, '1');
+    const shown = Object.setPrototypeOf(comp({ options: { id: '2', el } }), Screen.prototype);
+    assert.strictEqual(trialOptions(shown, { generation: 'classic', index: 2, rerun: 1, lab }).trialId, 'previous-screen');
     win.close();
   });
   it('a re-run leaf gets #<n> on a derived id, never on a given name', () => {

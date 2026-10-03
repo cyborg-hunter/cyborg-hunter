@@ -32,8 +32,8 @@
 //                    internals.context.el; the id getter
 //
 // Nothing here throws into lab.js: a hook failure becomes cyborgHunterError on
-// the row and one catalogue error per page, and lab.js runs as if ch.js were
-// absent from that component on. Guards and replay are the vanilla host's
+// that component's row and one catalogue error per page, and later components
+// are still hooked. Guards and replay are the vanilla host's
 // standalone ones (boot.js); the vanilla adapter is not installed on this
 // host, so the friction start mark (data-ch-friction-start) is handled here.
 
@@ -89,13 +89,16 @@ function isParallel(c, lab) {
 }
 
 // A Parallel runs its children at once and the monitor holds one trial at a
-// time, so the Parallel is the trial and nothing under it is.
+// time, so the outermost Parallel is the trial and nothing under it is (a
+// Parallel inside one included). A component with datacommit: false commits
+// no row to carry a segment, so it is no trial either: its span goes into the
+// gap the next segment carries.
 export function isTrial(c, lab) {
   if (!c || typeof c !== 'object') return false;
-  if (isParallel(c, lab)) return true;
-  if (isContainer(c)) return false;
+  if (c.options && c.options.datacommit === false) return false;
   for (var p = c.parent; p; p = p.parent) if (isParallel(p, lab)) return false;
-  return true;
+  if (isParallel(c, lab)) return true;
+  return !isContainer(c);
 }
 
 // options.id is what both generations' prepareNested writes ('0', '1_2');
@@ -136,11 +139,20 @@ function markIn(el) {
 
 function given(v) { return v !== undefined && v !== null && v !== ''; }
 
-// What the host trial opens with. o: { generation, index, rerun }.
+// Classic components share options.el, and only an html.Screen (Form and Page
+// are Screens) replaces its content; any other leaf (a core.Component pause)
+// would read the mark the previous screen left there.
+function readsMark(c, o) {
+  var S = o.lab && o.lab.html && o.lab.html.Screen;
+  return o.generation !== 'classic' || typeof S !== 'function' || c instanceof S;
+}
+
+// What the host trial opens with. o: { generation, index, rerun, lab? }.
 export function trialOptions(c, o) {
   var own = c.options && c.options.cyborgHunter && typeof c.options.cyborgHunter === 'object' ? c.options.cyborgHunter : {};
   var params = paramsOf(c);
-  var named = given(own.trialId) ? own.trialId : (given(params.chTrialId) ? params.chTrialId : markIn(elOf(c, o.generation)));
+  var named = given(own.trialId) ? own.trialId
+    : (given(params.chTrialId) ? params.chTrialId : (readsMark(c, o) ? markIn(elOf(c, o.generation)) : null));
   var trialId = given(named) ? String(named) : (idOf(c) || ('trial-' + o.index));
   if (!given(named) && o.rerun > 1) trialId += '#' + o.rerun;
   var decoy = given(own.decoyAnswer) || own.decoyAnswer === false ? own.decoyAnswer
@@ -159,13 +171,39 @@ export function installLabJsAdapter(opts) {
   var proto = lab.core.Component.prototype;
   if (proto.run && proto.run[PATCHED]) return proto.run[PATCHED];
   var origRun = proto.run, origEnd = proto.end;
-  var state = { version: opts.version, generation: generation, trialsRun: 0, segmentsWritten: 0, finalized: false, lastTrial: null, stamped: false, warnedSecond: false, loggedHookError: false };
+  var state = { version: opts.version, generation: generation, trialsRun: 0, segmentsWritten: 0, finalized: false, lastTrial: null, stamped: false, warnedSecond: false, warnedRunning: false, loggedHookError: false };
   ctx.labjs = state;
 
   function hookError(e) {
     if (state.loggedHookError) return;
     state.loggedHookError = true;
     console.error(MESSAGES.labjsHookFailed(message(e)));
+  }
+
+  // A hook failure: one catalogue error per page, and the component's row
+  // (lab.js commits data in its end()) says what failed.
+  function markFailed(c, e) {
+    hookError(e);
+    try { (c.data || (c.data = {})).cyborgHunterError = message(e); } catch (_) { /* the error is logged */ }
+  }
+
+  // The researcher's own participantId (in the component's data, a
+  // parameter, or the datastore's state) is never overwritten: ch.js's id
+  // always goes into cyborgHunterParticipantId, and into participantId only
+  // where the study sets none. lab.js's commit() copies every row into the
+  // datastore's state, so a state value equal to ch.js's id is the one an
+  // earlier row of ch.js's put there.
+  function researcherSetsId(c, ds) {
+    if (c.data && given(c.data.participantId)) return true;
+    if (given(paramsOf(c).participantId)) return true;
+    var st = ds && ds.state;
+    return !!(st && given(st.participantId) && st.participantId !== ctx.participantId);
+  }
+  function idFields(c, ds, into) {
+    into.cyborgHunterParticipantId = ctx.participantId;
+    if (!researcherSetsId(c, ds)) into.participantId = ctx.participantId;
+    into.cyborgHunterVersion = VERSION;
+    return into;
   }
 
   // data-replay: the standalone recorder follows the segmenter (set by
@@ -182,10 +220,20 @@ export function installLabJsAdapter(opts) {
   // component's and a Dummy's included) is committed inside its own end(), so
   // the first end() puts the participant id on row 0 (the CLI's CSV reader
   // hoists the id from row 0).
-  function stamp(ds) {
+  function stamp(c) {
+    var ds = datastoreOf(c);
     if (state.stamped || !ds || typeof ds.set !== 'function') return;
     state.stamped = true;
-    try { ds.set({ participantId: ctx.participantId, cyborgHunterVersion: VERSION }); } catch (_) { /* the rows carry it too */ }
+    try { ds.set(idFields(c, ds, {})); } catch (_) { /* the rows carry it too */ }
+  }
+
+  // A trial that ends without its run() having passed through the hook was
+  // already on screen when ch.js installed: its events go into the next
+  // segment's gap, and its row gets no columns.
+  function warnIfRunningBeforeInstall(c) {
+    if (state.warnedRunning || state.finalized || (c.internals && c.internals.chRunSeen) || !isTrial(c, lab)) return;
+    state.warnedRunning = true;
+    console.warn(MESSAGES.labjsStudyAlreadyRunning());
   }
 
   function afterRun(c, controlled) {
@@ -203,7 +251,7 @@ export function installLabJsAdapter(opts) {
     }
     internals.chRuns = (internals.chRuns || 0) + 1;
     internals.chError = null;
-    var o = trialOptions(c, { generation: generation, index: state.trialsRun, rerun: internals.chRuns });
+    var o = trialOptions(c, { generation: generation, index: state.trialsRun, rerun: internals.chRuns, lab: lab });
     state.trialsRun += 1;
     internals.chStart = performance.now();   // same anchor as the jsPsych extension's on_load
     var r = ctx.segmenter.rotate(o);
@@ -215,7 +263,9 @@ export function installLabJsAdapter(opts) {
 
   // Before lab.js's own end() commits this component's row.
   function beforeEnd(c) {
-    if (!ctx.bootError) stamp(datastoreOf(c));
+    if (ctx.bootError) return;
+    stamp(c);
+    warnIfRunningBeforeInstall(c);
     var internals = c.internals;
     if (!internals || !internals.chOpen) return;
     internals.chOpen = false;
@@ -241,8 +291,7 @@ export function installLabJsAdapter(opts) {
     } else {
       data.cyborgHunterError = (r && r.error) || internals.chError || 'no segment';
     }
-    data.participantId = ctx.participantId;
-    data.cyborgHunterVersion = VERSION;
+    idFields(c, datastoreOf(c), data);
     followReplay();
     try {
       if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
@@ -256,23 +305,21 @@ export function installLabJsAdapter(opts) {
   function wrappedRun() {
     var self = this;
     var controlled = generation === 'flip' ? !!(arguments[0] && arguments[0].controlled) : true;
+    try { if (self.internals) self.internals.chRunSeen = true; } catch (_) { /* only the running-before-install warning reads it */ }
     var result = origRun.apply(self, arguments);
     if (!result || typeof result.then !== 'function') {
-      try { afterRun(self, controlled); } catch (e) { hookError(e); }
+      try { afterRun(self, controlled); } catch (e) { markFailed(self, e); }
       return result;
     }
     return result.then(function (v) {
-      try { afterRun(self, controlled); } catch (e) { hookError(e); }
+      try { afterRun(self, controlled); } catch (e) { markFailed(self, e); }
       return v;
     });
   }
 
   function wrappedEnd() {
     var self = this;
-    try { beforeEnd(self); } catch (e) {
-      hookError(e);
-      try { (self.data || (self.data = {})).cyborgHunterError = message(e); } catch (_) { /* the error is logged */ }
-    }
+    try { beforeEnd(self); } catch (e) { markFailed(self, e); }
     return origEnd.apply(self, arguments);
   }
 

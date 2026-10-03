@@ -10,6 +10,7 @@ import assert from 'node:assert';
 import { createLabWindow, closeLabWindow, datastoreOf } from './support/labjs-window.js';
 import { VERSION } from '../../src/shared/constants.js';
 import { installLabJsAdapter, detectLabJs } from '../../src/oneliner/adapters/labjs.js';
+import { MESSAGES } from '../../src/oneliner/errors.js';
 
 const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
 
@@ -232,5 +233,121 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
     ctx.labjsAdapter.restore();
     assert.strictEqual(proto.run, origRun);
     assert.strictEqual(proto.end, origEnd);
+  });
+
+  it('a Parallel inside a Parallel is part of the outer trial', async () => {
+    await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root', content: [
+      new lab.flow.Parallel({ title: 'outer', mode: 'all', content: [
+        new lab.flow.Parallel({ title: 'inner', mode: 'all', content: [screen(lab, 'i1')] }),
+        screen(lab, 'o2', { timeout: 25 })
+      ] }),
+      screen(lab, 'after')
+    ] });
+    const rows = await runToEnd(study);
+    assert.deepStrictEqual(withSegment(rows).map((r) => [r.sender, r.integritySegment.trialId]), [['outer', '0'], ['after', '1']]);
+    assert.ok(!('integritySegment' in rows.find((r) => r.sender === 'inner')));
+  });
+
+  it('a component with datacommit: false is not a trial; its span goes into the next segment\'s gap', async () => {
+    const ctx = await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root', content: [
+      screen(lab, 'a'), screen(lab, 'nocommit', { datacommit: false, timeout: 60 }), screen(lab, 'c')
+    ] });
+    const ended = runToEnd(study);
+    for (let i = 0; i < 200 && !win.document.body.textContent.includes('nocommit'); i++) await tick(2);
+    paste(win, 'during nocommit');
+    const rows = await ended;
+    assert.deepStrictEqual(rows.map((r) => r.sender), ['a', 'c', 'root']);
+    const [a, c] = withSegment(rows);
+    assert.deepStrictEqual([a.integritySegment.segmentIndex, c.integritySegment.segmentIndex], [0, 1]);
+    assert.strictEqual(c.integritySegment.gap.reduce((n, g) => n + g.pasteEvents.length, 0), 1, 'the paste is in c\'s gap');
+    assert.strictEqual(ctx.labjs.trialsRun, 2);
+    assert.strictEqual(ctx.labjs.segmentsWritten, 2);
+  });
+
+  it('a throwing rotate marks each trial row, logs one error, and lab.js runs to the end', async () => {
+    const ctx = await bootOn(win);
+    ctx.segmenter.rotate = () => { throw new Error('rotate boom'); };
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b')] }));
+    assert.deepStrictEqual(rows.map((r) => [r.sender, r.cyborgHunterError]), [['a', 'rotate boom'], ['b', 'rotate boom'], ['root', undefined]]);
+    assert.deepStrictEqual(errors, [MESSAGES.labjsHookFailed('rotate boom')]);
+  });
+
+  it('a throwing cut marks each trial row, logs one error, and lab.js runs to the end', async () => {
+    const ctx = await bootOn(win);
+    ctx.segmenter.cut = () => { throw new Error('cut boom'); };
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b')] }));
+    assert.deepStrictEqual(rows.map((r) => [r.sender, r.cyborgHunterError]), [['a', 'cut boom'], ['b', 'cut boom'], ['root', undefined]]);
+    assert.deepStrictEqual(errors, [MESSAGES.labjsHookFailed('cut boom')]);
+  });
+
+  it('a naming failure marks the row and the next trial still opens', async () => {
+    await bootOn(win);
+    const bad = screen(lab, 'a', { cyborgHunter: { get trialId() { throw new Error('naming boom'); } } });
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [bad, screen(lab, 'b')] }));
+    assert.strictEqual(rows[0].cyborgHunterError, 'naming boom');
+    assert.deepStrictEqual(withSegment(rows).map((r) => r.sender), ['b']);
+    assert.deepStrictEqual(errors, [MESSAGES.labjsHookFailed('naming boom')]);
+  });
+
+  it('a researcher\'s participantId in the datastore or in a row is never overwritten', async () => {
+    await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root', content: [
+      screen(lab, 'a'), screen(lab, 'b', { data: { participantId: 'mine' } }), screen(lab, 'c')
+    ] });
+    study.on('prepare', function () { this.options.datastore.set('participantId', 'theirs'); });
+    const rows = await runToEnd(study);
+    assert.deepStrictEqual(rows.map((r) => r.participantId), ['theirs', 'mine', undefined, undefined]);
+    assert.deepStrictEqual(withSegment(rows).map((r) => r.cyborgHunterParticipantId), ['P1', 'P1', 'P1']);
+    assert.strictEqual(datastoreOf(study).state.participantId, 'mine');
+  });
+
+  it('a participantId parameter is kept in every row', async () => {
+    await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root', parameters: { participantId: 'param' }, content: [screen(lab, 'a'), screen(lab, 'b')] });
+    const rows = await runToEnd(study);
+    assert.deepStrictEqual(rows.map((r) => r.participantId), ['param', 'param', 'param']);
+    assert.strictEqual(rows[0].cyborgHunterParticipantId, 'P1');
+    assert.notStrictEqual(datastoreOf(study).state.participantId, 'P1');
+  });
+
+  it('without a researcher\'s id, rows carry ch.js\'s id in both columns', async () => {
+    await bootOn(win);
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a')] }));
+    assert.deepStrictEqual([rows[0].participantId, rows[0].cyborgHunterParticipantId], ['P1', 'P1']);
+  });
+
+  it('installed while a screen is on display: that screen gets no columns, and one warning says so', async () => {
+    const study = new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a', { timeout: 60 }), screen(lab, 'b')] });
+    const ended = runToEnd(study);
+    for (let i = 0; i < 100 && !win.document.querySelector('main p'); i++) await tick(2);
+    await bootOn(win);
+    const rows = await ended;
+    assert.deepStrictEqual(withSegment(rows).map((r) => r.sender), ['b']);
+    assert.deepStrictEqual(warns.filter((w) => w.includes('already running')), [MESSAGES.labjsStudyAlreadyRunning()]);
+  });
+
+  it('a second install returns the first handle and wraps once', async () => {
+    const ctx = await bootOn(win);
+    const proto = lab.core.Component.prototype;
+    const run = proto.run, end = proto.end;
+    const again = installLabJsAdapter({ win, ctx, lab, version: lab.version, generation: 'classic' });
+    assert.strictEqual(again, ctx.labjsAdapter);
+    assert.strictEqual(proto.run, run);
+    assert.strictEqual(proto.end, end);
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a')] }));
+    assert.strictEqual(withSegment(rows).length, 1);
+    assert.strictEqual(ctx.labjs.trialsRun, 1);
+    assert.strictEqual(ctx.labjs.segmentsWritten, 1);
+  });
+
+  it('a plain component after a marked screen is named by its own id, not the screen\'s mark', async () => {
+    await bootOn(win);
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [
+      screen(lab, 'm', { content: '<p data-ch-trial="mark-m">m</p>' }),
+      new lab.core.Component({ title: 'iti', timeout: 15 })
+    ] }));
+    assert.deepStrictEqual(withSegment(rows).map((r) => r.integritySegment.trialId), ['mark-m', '1']);
   });
 });
