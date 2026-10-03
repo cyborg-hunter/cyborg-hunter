@@ -20,6 +20,10 @@ the field to declare in Survey Flow for that case: `cyborg_hunter`, not
 
 ## Payload size
 
+The payload `ch.js` writes to Qualtrics is a summary of the session: it never
+contains text the participant typed or pasted, mouse or element traces, or
+window positions.
+
 If `ch.js` reports "The Qualtrics payload was reduced", the session's summary
 was longer than the character cap the message names, and the level it names
 was written instead. The message says that nothing needs fixing for that
