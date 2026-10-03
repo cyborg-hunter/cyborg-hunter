@@ -26,7 +26,9 @@
 //      boot reminder depends on it. The vanilla
 //      adapter (adapters/vanilla.js) is installed before the first span
 //      opens: it restores a previous page's segment index, so the boot span
-//      is named after the continued index;
+//      is named after the continued index. On a Qualtrics survey it leaves
+//      the page boundary to the Qualtrics writer (ctx.qualtrics), installed
+//      right after it: one capped embedded-data write per page submit;
 //   6. the monitor's session starts and the segmenter keeps it inside a
 //      trial from this moment on ('span-<index>'), so a paste before the
 //      first host trial or mark is still recorded. The session start needs
@@ -54,15 +56,16 @@
 //  10. data-debug only (debug.js): the badge and the console summary, shown
 //      once now and again when the jsPsych timeline is walked.
 //
-// boot({ script, win, monitorFactory?, participantParams? }) → ctx | null
+// boot({ script, win, monitorFactory?, participantParams?, qualtricsMaxChars? }) → ctx | null
 //   script:            the ch.js <script> element (document.currentScript), or null
 //   win:               the window (the core monitor itself uses the globals)
 //   monitorFactory:    core init(); injectable for tests
 //   participantParams: URL parameter names for the participant id, in order
+//   qualtricsMaxChars: the Qualtrics writer's cap; injectable for tests
 // ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
 //         participantId, participantIdSource, monitor, differ, segmenter,
 //         host, scriptSrc, handlers, win, api, qualtricsLayout,
-//         rerunCount, vanilla?,
+//         rerunCount, vanilla?, qualtrics? (Qualtrics writer),
 //         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
 //         debug? (data-debug) }
 //
@@ -106,7 +109,7 @@ import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, installInertWrapper, watchHostPlacement } from './adapters/jspsych.js';
 import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
-import { detectQualtrics } from './adapters/qualtrics.js';
+import { detectQualtrics, installQualtricsAdapter } from './adapters/qualtrics.js';
 import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
 
@@ -200,7 +203,12 @@ export function boot(opts) {
       if (ctx.qualtricsLayout === 'legacy') console.warn(MESSAGES.qualtricsLegacyLayout());
     }
     var replay = installReplay({ win: win, ctx: ctx });
-    if (host === 'vanilla') ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });
+    if (host === 'vanilla') {
+      // Under Qualtrics the writer owns the page boundary: the vanilla
+      // adapter cuts on marks only. opts.qualtricsMaxChars is for tests.
+      ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout });
+      if (ctx.qualtricsLayout) ctx.qualtrics = installQualtricsAdapter({ win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars });
+    }
 
     // The session start observes document.body (core signals/browser.js), so
     // with ch.js in <head> it waits for DOMContentLoaded; everything else,
@@ -334,6 +342,7 @@ function failDeferred(ctx, adapter, e) {
 function fail(win, ctx, adapter, e) {
   var msg = String((e && e.message) || e);
   ctx.bootError = msg;
+  if (ctx.qualtrics) { try { ctx.qualtrics.teardown(); } catch (_) { /* already failing */ } }
   if (ctx.vanilla) { try { ctx.vanilla.teardown(); } catch (_) { /* already failing */ } }
   if (ctx.monitor) { try { ctx.monitor.destroy(); } catch (_) { /* already failing; the boot error is the one to show */ } }
   console.error(MESSAGES.bootFailed(msg));
