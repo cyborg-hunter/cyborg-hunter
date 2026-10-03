@@ -955,7 +955,7 @@ describe('resume after a stop: a keyframe segment in the same recording', () => 
       await settle();
 
       api.resumeSession();
-      api.startTrial({ trialId: 'span-1', extensions: { 'cyborg-hunter': { restoredFrom: 'bfcache' } } });
+      api.startTrial({ trialId: 'span-1', extensions: { 'cyborg-hunter': { restored_from: 'bfcache' } } });
       stage.removeChild(away);                  // a node only the new keyframe holds
       fire(doc.getElementById('go'), 'click');
       await settle();
@@ -981,7 +981,7 @@ describe('resume after a stop: a keyframe segment in the same recording', () => 
     assert.equal(restored.initial_dom.id, 1);
     assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'),
       'the keyframe shows the DOM as it was on return');
-    assert.deepEqual(restored.extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.deepEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
     assert.deepEqual(recording.segments.slice(0, 2).map(s => s.extensions), [null, null]);
   });
 

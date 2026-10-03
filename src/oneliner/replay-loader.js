@@ -164,7 +164,7 @@ export function makeReplayProxy(opts) {
 
 // The first segment recorded after a back/forward-cache restore says so, in
 // the segment's vendor data (spec §2 SegmentRecording `extensions`).
-var RESTORED_FROM_BFCACHE = { 'cyborg-hunter': { restoredFrom: 'bfcache' } };
+var RESTORED_FROM_BFCACHE = { 'cyborg-hunter': { restored_from: 'bfcache' } };
 
 // createVanillaReplay({ win, doc, src, ctx, timeoutMs? })
 //   → Promise<{ api, startTrial(trialId), endTrial(), stop(), restore(trialId) }>

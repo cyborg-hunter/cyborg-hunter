@@ -428,7 +428,7 @@ describe('vanilla replay', () => {
 
   // The back/forward cache: pagehide stopped the recorder, and the browser
   // shows the page again with everything in memory (pageshow, persisted).
-  const RESTORED = { 'cyborg-hunter': { restoredFrom: 'bfcache' } };
+  const RESTORED = { 'cyborg-hunter': { restored_from: 'bfcache' } };
 
   async function started(log) {
     win.CyborgHunterReplay = fakeStandalone(log);

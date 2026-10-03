@@ -1273,7 +1273,7 @@ describe('vanilla host: data-replay', () => {
     assert.strictEqual(log.length, 5, 'a pageshow that is not a restore does nothing');
     pageshow(true);
     assert.deepStrictEqual(log.slice(5), ['resumeSession', 'startTrial:span-1']);
-    assert.deepStrictEqual(log.extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.deepStrictEqual(log.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 4, 'integrity re-adopts the saved session as before');
     win.CyborgHunter.mark('q1');
     win.dispatchEvent(new win.Event('pagehide'));
@@ -1342,7 +1342,7 @@ describe('vanilla host: data-replay', () => {
     assert.deepStrictEqual(validateStrict(rec).errors, []);
     assert.deepStrictEqual(rec.segments.map((s) => s.label), ['span-0', 'q1', 'span-2', 'span-2']);
     const restored = rec.segments[3];
-    assert.deepStrictEqual(restored.extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.deepStrictEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
     assert.strictEqual(restored.initial_dom.id, 1, 'a keyframe, ids from 1');
     assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'));
     assert.ok(restored.events.some((e) => e.type === 'mouse.click'), 'the click after Back is recorded');

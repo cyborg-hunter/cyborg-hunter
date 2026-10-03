@@ -318,7 +318,7 @@ describe('recorder: resumeSession', () => {
     assert.strictEqual(rec.getState().endReason, null, 'no longer ended');
     assert.strictEqual(serialize(rec.getState(), {}).end_reason, 'aborted',
       'taken while resumed, it reads like any recording that was not stopped');
-    rec.startTrial({ trialId: 't2', extensions: { 'cyborg-hunter': { restoredFrom: 'bfcache' } } });
+    rec.startTrial({ trialId: 't2', extensions: { 'cyborg-hunter': { restored_from: 'bfcache' } } });
     rec.pushRecord({ type: 'mouse.move', x: 3, y: 3 });
     rec.stopSession('finished');
 
@@ -330,7 +330,7 @@ describe('recorder: resumeSession', () => {
     const wire = serialize(s, {});
     assert.strictEqual(wire.end_reason, 'finished');
     assert.ok(wire.ended_at_perf > firstEnd, 'ended_at_perf moves to the second stop');
-    assert.deepStrictEqual(wire.segments[1].extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.deepStrictEqual(wire.segments[1].extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
     assert.strictEqual(wire.segments[0].extensions, null);
   });
 

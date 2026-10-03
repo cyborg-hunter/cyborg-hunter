@@ -2,7 +2,7 @@
 // data-replay on a page without jsPsych, shown again from the back/forward
 // cache. pagehide stops the recorder; the persisted pageshow resumes it, so
 // what the participant does after pressing Back is in the same recording, in
-// a keyframe segment whose extensions say { restoredFrom: "bfcache" }.
+// a keyframe segment whose extensions say { restored_from: "bfcache" }.
 //
 // Whether the engine really restored the page from the cache is checked, not
 // assumed: the pageshow listener in the fixture saw persisted === true, and
@@ -66,7 +66,7 @@ test('back/forward cache: the replay records on after Back, in a keyframe segmen
   expect(rec.participant_id).toBe('E2E-BFC-1');
   expect(rec.end_reason).toBe('finished');
   const marked = rec.segments.filter((s) => s.extensions && s.extensions['cyborg-hunter'] &&
-    s.extensions['cyborg-hunter'].restoredFrom === 'bfcache');
+    s.extensions['cyborg-hunter'].restored_from === 'bfcache');
   expect(marked).toHaveLength(1);
   const at = marked[0].index;
   expect(marked[0].initial_dom).not.toBeNull();

@@ -210,7 +210,7 @@ export function createRecorder(userConfig) {
       tEnd: null,
       // The host's segment-level vendor data (spec §2 SegmentRecording
       // `extensions`, keyed by vendor), e.g. the one-line setup's
-      // { "cyborg-hunter": { restoredFrom: "bfcache" } }. The serializer
+      // { "cyborg-hunter": { restored_from: "bfcache" } }. The serializer
       // merges CH's own `implicit` flag into it.
       extensions: (opts && opts.extensions) || null,
       // Spec §3: a keyframe is a DomNode tree, a continuation is null. Null

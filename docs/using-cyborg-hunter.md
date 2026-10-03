@@ -98,6 +98,8 @@ const { meta } = await rec.autoSaveNow({ chSessionReport: monitor.getSessionRepo
 rec.destroy();
 ```
 
+`rec.resumeSession()` records again after `stopSession()`, in later segments of the same recording; `end_reason` is set again by the next stop. Call `startTrial()` right after it. The first segment after a resume is a full DOM snapshot, and an event that arrives before that segment opens loses its target id. `startTrial()` also takes `extensions`, the segment's vendor data (`{ "<vendor>": … }`). The one-line setup uses both when the browser shows a page again from its back/forward cache (Back), marking that segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
+
 ### Configuration
 
 | Option | Default | Meaning |

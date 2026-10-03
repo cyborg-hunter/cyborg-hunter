@@ -47,7 +47,7 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - One-line setup with `data-replay` on pages without jsPsych: a page the
   browser shows again from the back/forward cache (Back) now records on, in
   the same recording, from a keyframe segment marked
-  `extensions["cyborg-hunter"].restoredFrom: "bfcache"`; before, everything
+  `extensions["cyborg-hunter"].restored_from: "bfcache"`; before, everything
   after Back was missing from the replay.
 
 ### Removed
