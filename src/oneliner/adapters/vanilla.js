@@ -297,24 +297,34 @@ export function installVanillaAdapter(opts) {
     }
   }
 
+  // A form's attributes are read through Element.prototype: a control named
+  // "method" in the form shadows form.method, and one named "getAttribute"
+  // or "hasAttribute" shadows that method. null when the attribute is absent
+  // (or the node is not an element).
+  var elementGetAttribute = win.Element && win.Element.prototype.getAttribute;
+  function attr(node, name) {
+    try { return elementGetAttribute.call(node, name); } catch (_) { return null; }
+  }
+
+  // A value other than post or dialog is a GET.
   function effectiveMethod(form, submitter) {
-    return String((submitter && submitter.formMethod) || form.method || 'get').toLowerCase();
+    return String((submitter && submitter.formMethod) || attr(form, 'method') || 'get').toLowerCase();
   }
 
   // Whether the submit replaces this page: its target (the submitter's
   // formtarget, the form's target, then <base target>) is empty, a keyword
   // for this window (_self; _top and _parent unload this page too), or this
   // window's own name. _blank, or a name for another window or a frame,
-  // leaves this page where it is.
+  // leaves this page where it is. The value is compared as written, as
+  // browsers do: " _self " is a window name, not the keyword.
   function replacesPage(form, submitter) {
-    var t = null;
-    if (submitter && submitter.hasAttribute && submitter.hasAttribute('formtarget')) t = submitter.getAttribute('formtarget');
-    if (t === null && form.hasAttribute && form.hasAttribute('target')) t = form.getAttribute('target');
+    var t = submitter ? attr(submitter, 'formtarget') : null;
+    if (t === null) t = attr(form, 'target');
     if (t === null) {
       var base = doc.querySelector ? doc.querySelector('base[target]') : null;
       t = base ? base.getAttribute('target') : '';
     }
-    t = String(t || '').trim();
+    t = String(t || '');
     var keyword = t.toLowerCase();
     if (t === '' || keyword === '_self' || keyword === '_top' || keyword === '_parent') return true;
     return keyword !== '_blank' && t === win.name;
@@ -386,7 +396,12 @@ export function installVanillaAdapter(opts) {
       }
       var entry = { ev: ev, replaces: false };
       submitTask.events.push(entry);
-      entry.replaces = carry(ev.target, ev.submitter, true);
+      // A submit event the page dispatched itself (isTrusted false) runs the
+      // handlers, which may read the blob. It is not counted as leaving:
+      // Chromium and WebKit submit nothing for it. Firefox still sends the
+      // form; the pagehide that follows then closes one extra, empty
+      // segment. Nothing is lost either way.
+      entry.replaces = carry(ev.target, ev.submitter, true) && ev.isTrusted !== false;
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
     }

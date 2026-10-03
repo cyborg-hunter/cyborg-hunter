@@ -14,10 +14,6 @@ import { makeRecordingCanvasFactory } from './recording-canvas.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXT = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));
 
-// Re-exported for tests/demo/plot-adapter.test.js and
-// tests/tools/example-fixtures.test.js, which import it from this file.
-export { makeRecordingCanvasFactory };
-
 function snapshotTest(name, file, render, extraChecks) {
   test(name, async () => {
     const log = [];

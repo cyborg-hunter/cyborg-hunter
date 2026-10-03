@@ -12,6 +12,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { buildWorkerSrc } from '../../tools/build-analyze.mjs';
 import { REPORT_FILES } from '../../src/cli/report-core.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
+import { NODE_IMPORT } from '../cli/node-import-pattern.js';
 
 if (!globalThis.crypto) globalThis.crypto = (await import('node:crypto')).webcrypto;
 
@@ -67,7 +68,7 @@ test('the worker source reaches no network and no Node API', () => {
   // The page bundle carries this source as an escaped string, where the
   // bundle test's patterns cannot see it; the source itself is checked here.
   assert.equal(workerSrc.includes('registry.npmjs.org'), false, 'update check is unreachable');
-  assert.doesNotMatch(workerSrc, /(from\s*|import\s*\(\s*|require\s*\(\s*)["'](node:[^"']*|fs|path|zlib|crypto)["']/);
+  assert.doesNotMatch(workerSrc, NODE_IMPORT);
 });
 
 test('check on the sample finds three participant files and the id field its config names', async () => {

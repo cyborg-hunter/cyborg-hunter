@@ -12,7 +12,7 @@ import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { drawSessionTimeline } from '../../src/cli/renderers/session-timeline-core.js';
 import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js';
 import { drawTypingProfile } from '../../src/cli/renderers/typing-profile-core.js';
-import { makeRecordingCanvasFactory } from '../cli/plot-cores.test.js';
+import { makeRecordingCanvasFactory } from '../cli/recording-canvas.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));

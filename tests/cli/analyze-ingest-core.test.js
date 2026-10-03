@@ -3,10 +3,10 @@
 // feeds it dropped files. Both must produce what ingest() produces today.
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { ingest, fsReader } from '../../src/cli/ingest.js';
 import { ingestFiles, migrateArtifact, artifactKind } from '../../src/cli/ingest-core.js';
 import { webGunzip, webSha256 } from '../../demo/analyze/web-deps.js';

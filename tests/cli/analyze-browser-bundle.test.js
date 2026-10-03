@@ -4,6 +4,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { build } from 'esbuild';
+import { NODE_IMPORT } from './node-import-pattern.js';
 
 const CORES = ['src/cli/report-core.js', 'src/cli/config-core.js', 'src/cli/ingest-core.js', 'src/cli/asset-match.js'];
 
@@ -14,7 +15,7 @@ describe('browser bundle of the CLI cores', () => {
         format: 'esm', write: false, logLevel: 'silent' }).catch((e) => e);
       assert.deepStrictEqual((result.errors || []).map((e) => e.text), [], 'bundles without errors');
       const text = result.outputFiles[0].text;
-      assert.doesNotMatch(text, /(from\s*|import\s*\(\s*|require\s*\(\s*)["'](node:[^"']*|fs|path|zlib|crypto)["']/);
+      assert.doesNotMatch(text, NODE_IMPORT);
       assert.ok(!text.includes('registry.npmjs.org'), 'no update check in the bundle');
     });
   }
