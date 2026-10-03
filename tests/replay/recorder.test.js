@@ -423,6 +423,80 @@ describe('recorder: resumeSession', () => {
   });
 });
 
+// A capture channel holding records it has not pushed yet (capture-trace's
+// frame-coalesced work) hands them over at every segment boundary, into the
+// segment open while they happened.
+describe('recorder: boundary flushes', () => {
+  function withFlush() {
+    const rec = freshRecorder();
+    const pending = [];
+    const calls = [];
+    rec.addBoundaryFlush(() => {
+      calls.push(rec.getState().state);
+      while (pending.length) rec.pushRecord({ type: 'focus' }, pending.shift());
+    });
+    rec.startSession();
+    return { rec, pending, calls };
+  }
+  const shape = (rec) => rec.getState().trials.map((t) => t.trialId + ':' + t.events.length);
+
+  it('runs before a trial closes, so its pending records land in that trial', () => {
+    const { rec, pending } = withFlush();
+    rec.startTrial({ trialId: 'a' });
+    pending.push(1);
+    rec.endTrial();
+    rec.startTrial({ trialId: 'b' });
+    pending.push(2);
+    rec.startTrial({ trialId: 'c' });   // auto-closes b
+    pending.push(3);
+    rec.stopSession('finished');
+    assert.deepStrictEqual(shape(rec), ['a:1', 'b:1', 'c:1']);
+  });
+
+  it('runs before a trial opens with none open: the record gets a segment of its own', () => {
+    const { rec, pending } = withFlush();
+    rec.startTrial({ trialId: 'a' });
+    rec.endTrial();
+    pending.push(1);
+    rec.startTrial({ trialId: 'b' });
+    assert.deepStrictEqual(shape(rec), ['a:0', '__session__:1', 'b:0']);
+  });
+
+  it('runs at a stop or a destroy with no trial open', () => {
+    const { rec, pending } = withFlush();
+    pending.push(1);
+    rec.stopSession('finished');
+    assert.deepStrictEqual(shape(rec), ['__session__:1']);
+    const second = withFlush();
+    second.pending.push(1);
+    second.rec.destroy();
+    assert.deepStrictEqual(shape(second.rec), ['__session__:1']);
+  });
+
+  it('does not run on a call the lifecycle refuses, nor once stopped', () => {
+    const { rec, calls } = withFlush();
+    rec.stopSession('finished');
+    const before = calls.length;
+    assert.throws(() => rec.startTrial({ trialId: 'x' }));
+    assert.throws(() => rec.endTrial());
+    rec.destroy();
+    assert.strictEqual(calls.length, before);
+    assert.ok(calls.every((s) => s === 'session' || s === 'trial'));
+  });
+
+  it('a throwing flush is a capture failure and the boundary still happens', () => {
+    const rec = freshRecorder();
+    rec.addBoundaryFlush(() => { throw new Error('flush broke'); });
+    rec.startSession();
+    rec.startTrial({ trialId: 'a' });
+    assert.doesNotThrow(() => rec.endTrial());
+    const f = rec.getState().captureFailures;
+    assert.ok(f.length >= 1);
+    assert.ok(f.every((x) => x.channel === 'boundary_flush' && /flush broke/.test(x.message)));
+    assert.strictEqual(rec.getState().state, 'session');
+  });
+});
+
 describe('v2 sinks: pushRecord and pushViewportChange', () => {
   const VP = { w: 800, h: 600, dpr: 1, scale: 1, offset_x: 0, offset_y: 0 };
 

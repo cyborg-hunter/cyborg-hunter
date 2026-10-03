@@ -84,6 +84,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   recording of the restored visit, starting with that marked segment, instead
   of the earlier recording again; save every recording it returns. Before,
   everything after Back was missing from the replay.
+- Session replay: an input value, scroll, touch move or viewport change in
+  the last animation frame before a segment ends now stays in that segment.
+  Before, it arrived a frame later in the next segment, timed before that
+  segment began; at a stop (`stopSession()`, `CyborgHunter.replay()`, leaving
+  the page) it was lost; and on a page restored from the back/forward cache
+  it landed in the restored segment.
 
 ### Removed
 - Internal renderer wrappers removed

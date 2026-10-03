@@ -797,6 +797,15 @@ export function attachTraceCapture(rec, env) {
   var touchPending = false;
   var lastTouches = null;
   var lastTouchT = 0;
+  // Emptied once pushed, so a frame that comes after a boundary flush
+  // (flushPending) pushes nothing twice.
+  function flushTouchMove() {
+    touchPending = false;
+    if (!lastTouches) return;
+    var touches = lastTouches;
+    lastTouches = null;
+    rec.pushRecord({ type: 'touch.move', touches: touches }, lastTouchT);
+  }
   rec.addListener(doc, 'touchmove', guard(rec, 'touch', function (e) {
     // Converted eagerly: a Touch is only meaningful for its own event, so the
     // coalescing window must hold the numbers, not the objects.
@@ -804,12 +813,7 @@ export function attachTraceCapture(rec, env) {
     lastTouchT = now();
     if (touchPending) return;
     touchPending = true;
-    raf(guard(rec, 'touch', function () {
-      touchPending = false;
-      if (lastTouches) {
-        rec.pushRecord({ type: 'touch.move', touches: lastTouches }, lastTouchT);
-      }
-    }));
+    raf(guard(rec, 'touch', flushTouchMove));
   }), { passive: true, capture: true });
   rec.addListener(doc, 'touchend', guard(rec, 'touch', function (e) {
     flushCameraNow();
@@ -870,11 +874,38 @@ export function attachTraceCapture(rec, env) {
     pruneScrolledElements();
   });
 
+  // ── Frame-coalesced work at segment boundaries ──
+  // Inputs, scrolls, touch moves and viewport changes wait for the next
+  // animation frame, each record keeping the time of its event. The recorder
+  // runs this before a trial closes or opens and before the recording stops
+  // (addBoundaryFlush), so they land in the segment that was open when they
+  // happened. A frame later they would land in the next segment, timed
+  // before its origin, or be dropped after a stop; a page in the
+  // back/forward cache runs that frame only after the restore, when the
+  // target may be gone. The frame already scheduled then finds nothing.
+  function flushPending() {
+    guard(rec, 'scroll', flushScrolls)();
+    guard(rec, 'viewport', flushViewport)();
+    guard(rec, 'input', flushInputs)();
+    guard(rec, 'touch', flushTouchMove)();
+  }
+  rec.addBoundaryFlush(flushPending);
+
   // A resumed recording (recorder.js resumeSession) states the geometry it
   // resumes at: the window may have changed while nothing was recorded, and
   // a browser need not fire resize for that. An unchanged state is dropped
-  // by the stream's dedup.
+  // by the stream's dedup. Whatever was queued while the recording was
+  // stopped is dropped too, as the recorder drops every record then: the
+  // stop already took what came before it, and a frame left over from
+  // before the page was cached must not stamp it into the restored segment.
   rec.onResume(function () {
+    pendingWindowScroll = null;
+    pendingElementScrolls.clear();
+    pendingResize = null;
+    pendingVv = null;
+    pendingInputs.clear();
+    lastTouches = null;
+    scrollFlushQueued = resizeFlushQueued = vvFlushQueued = inputFlushQueued = touchPending = false;
     rec.pushViewportChange(viewportState(), now());
   });
 

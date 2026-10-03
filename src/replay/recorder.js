@@ -121,6 +121,16 @@ export function createRecorder(userConfig) {
       try { preCloseFlushes[i](); } catch (e) { recorder.captureFailure('pre_close_flush', e); }
     }
   }
+  // Channels holding records they have not pushed yet (see addBoundaryFlush).
+  // Run only while recording: a flush pushes, and outside the recording window
+  // a push is dropped (or, destroyed, throws).
+  var boundaryFlushes = [];
+  function runBoundaryFlushes() {
+    if (state !== 'session' && state !== 'trial') return;
+    for (var i = 0; i < boundaryFlushes.length; i++) {
+      try { boundaryFlushes[i](); } catch (e) { recorder.captureFailure('boundary_flush', e); }
+    }
+  }
   var trialCounter = 0;
   var trialStartHooks = [];   // capture modules subscribe (e.g. DOM snapshot)
   var resumeHooks = [];       // capture modules subscribe (see resumeSession)
@@ -247,7 +257,10 @@ export function createRecorder(userConfig) {
     }
   }
 
+  // Pending records first, so they land in the trial that was open when they
+  // happened.
   function closeTrial() {
+    runBoundaryFlushes();
     currentTrial.tEnd = performance.now();
     session.trials.push(currentTrial);
     currentTrial = null;
@@ -405,6 +418,10 @@ export function createRecorder(userConfig) {
     },
 
     startTrial: function (opts) {
+      // Records pending from before this call go to the trial open now, or,
+      // with none open, into an implicit one closed below: never into the
+      // trial this call opens, whose origin is later than they are.
+      runBoundaryFlushes();
       if (state === 'trial') {
         // Standalone users may forget endTrial(); auto-close so events never
         // bleed across trials, and leave an auditable marker. The marker is a
@@ -461,8 +478,10 @@ export function createRecorder(userConfig) {
 
     stopSession: function (reason) {
       // BEFORE anything closes: a channel holding undelivered state gets to
-      // deliver it into the still-open trial.
+      // deliver it into the still-open trial (or, with none open, into an
+      // implicit one).
       runPreCloseFlushes();
+      runBoundaryFlushes();
       if (state === 'trial') {
         state = 'session';
       }
@@ -619,6 +638,17 @@ export function createRecorder(userConfig) {
       if (typeof fn === 'function') preCloseFlushes.push(fn);
     },
 
+    // Work a capture channel must do at every segment boundary: records it
+    // holds back (capture-trace coalesces inputs, scrolls, touch moves and
+    // viewport changes to the next animation frame, each keeping the time of
+    // its event) are pushed before a trial closes or opens and before the
+    // recording stops or is destroyed. Pushed a frame later they would land
+    // in the next segment, timed before its origin, or be dropped after a
+    // stop. Runs only while recording; a throwing flush is a capture failure.
+    addBoundaryFlush: function (fn) {
+      if (typeof fn === 'function') boundaryFlushes.push(fn);
+    },
+
     // Read-only view for serializer + tests. Trials array includes the open
     // trial so mid-session getRecording() sees everything so far.
     // Deliberately readable AFTER destroy(): the buffer survives teardown
@@ -637,6 +667,7 @@ export function createRecorder(userConfig) {
       // readable afterwards. A no-op after stopSession, which already ran
       // the flushes for this close (the flag is cleared only by a resume).
       runPreCloseFlushes();
+      runBoundaryFlushes();
       transition('destroyed');
       listeners.forEach(function (l) {
         if (l.options && l.options._isObserver) {
