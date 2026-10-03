@@ -1049,6 +1049,32 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(win.HTMLFormElement.prototype.submit, native);
   });
 
+  // A host adapter that owns the page boundary (Qualtrics) installs the
+  // vanilla adapter with pageBoundaries: false.
+  it('pageBoundaries: false installs no submit, pagehide or submit() wrap', async () => {
+    const { installVanillaAdapter } = await import('../../src/oneliner/adapters/vanilla.js');
+    const posted = stubNativeSubmit();
+    const native = win.HTMLFormElement.prototype.submit;
+    const ctx = start();
+    ctx.vanilla.teardown();
+    ctx.vanilla = installVanillaAdapter({ win, ctx, pageBoundaries: false });
+    assert.strictEqual(win.HTMLFormElement.prototype.submit, native, 'submit() is not wrapped');
+
+    const f = form();
+    submit(f);
+    f.submit();
+    assert.strictEqual(posted.length, 1, 'the browser\'s submit() still runs');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.vanilla.blob().trials.length, 0);
+    assert.strictEqual(f.querySelector('input[name="cyborgHunterData"]'), null);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+
+    click(el('<button data-ch-trial="q2">Next</button>'));
+    assert.strictEqual(ctx.vanilla.blob().trials.length, 1, 'a mark still cuts');
+    assert.strictEqual(ctx.vanilla.blob().trials[0].integritySegment.source, 'manual');
+    assert.deepStrictEqual(errors, []);
+  });
+
   for (const name of ['participantId', 'pid']) {
     it(`a participant named '${name}' keeps the id and a working multi-page session`, () => {
       const ctx1 = start({ participantId: name });

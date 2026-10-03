@@ -69,7 +69,7 @@
 // prototype), which exist while ch.js runs in <head>; nothing here needs <body> before a click or a submit. The guards
 // (honeypot bait, friction) wait for DOMContentLoaded in guards.js.
 //
-// installVanillaAdapter({ win, ctx, clock?, warnChars? }) → {
+// installVanillaAdapter({ win, ctx, clock?, warnChars?, pageBoundaries? }) → {
 //   blob(), cut(source, nextTrialId?), persist(), restore(), teardown(),
 //   noteError(text)   adds a cyborgHunterError note to this and later blobs
 // }
@@ -79,6 +79,12 @@
 //               back/forward-cache pageshow
 //   clock:      () => page origin, the segmenter's clock (performance.timeOrigin)
 //   warnChars:  persist() warns once above this many characters (4,000,000)
+//   pageBoundaries: false installs neither the submit and formdata
+//               listeners, the submit() wrap nor the pagehide/pageshow
+//               listeners, for a host adapter that owns the page boundary
+//               (adapters/qualtrics.js). Marks, data() and the friction start
+//               work as before; the recorder then runs until
+//               CyborgHunter.replay() is called.
 // install restores the saved state first, so the boot span opened after it is
 // named after the continued index. Nothing here throws into the page.
 
@@ -107,6 +113,7 @@ export function installVanillaAdapter(opts) {
   var win = opts.win, ctx = opts.ctx;
   var clock = opts.clock || function () { return performance.timeOrigin; };
   var warnChars = opts.warnChars || WARN_CHARS;
+  var pageBoundaries = opts.pageBoundaries !== false;
   var key = KEY_PREFIX + ctx.participantId;
   var doc = win.document;
 
@@ -575,11 +582,13 @@ export function installVanillaAdapter(opts) {
 
   restore();
   doc.addEventListener('click', onClick, true);
-  doc.addEventListener('submit', onSubmit, true);
-  doc.addEventListener('formdata', onFormData, true);
-  if (nativeSubmit) formProto.submit = wrappedSubmit;
-  win.addEventListener('pagehide', onPageHide);
-  win.addEventListener('pageshow', onPageShow);
+  if (pageBoundaries) {
+    doc.addEventListener('submit', onSubmit, true);
+    doc.addEventListener('formdata', onFormData, true);
+    if (nativeSubmit) formProto.submit = wrappedSubmit;
+    win.addEventListener('pagehide', onPageHide);
+    win.addEventListener('pageshow', onPageShow);
+  }
 
   ctx.handlers.mark = function (trialId) { cut('manual', trialId); };
   ctx.handlers.data = function () { cut('manual'); return blob(); };
