@@ -348,6 +348,23 @@ describe('recorder: resumeSession', () => {
     assert.strictEqual(runs, 2, 'stop then destroy: once');
   });
 
+  it('startTrial keeps a copy of the host\'s extensions; extensions that are not JSON are a capture failure', () => {
+    const rec = freshRecorder();
+    rec.startSession();
+    const ext = { 'cyborg-hunter': { restored_from: 'bfcache' } };
+    rec.startTrial({ trialId: 't1', extensions: ext });
+    ext['cyborg-hunter'].restored_from = 'changed later';
+    rec.endTrial();
+    const cyclic = { a: {} };
+    cyclic.a.self = cyclic;
+    assert.doesNotThrow(() => rec.startTrial({ trialId: 't2', extensions: cyclic }));
+    rec.stopSession('finished');
+    const wire = serialize(rec.getState(), {});
+    assert.deepStrictEqual(wire.segments[0].extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
+    assert.strictEqual(wire.segments[1].extensions, null);
+    assert.deepStrictEqual(rec.getState().captureFailures.map((f) => f.channel), ['segment_extensions']);
+  });
+
   it('fires onResume hooks; a throwing hook is a capture failure, not a throw', () => {
     const rec = freshRecorder();
     const seen = [];

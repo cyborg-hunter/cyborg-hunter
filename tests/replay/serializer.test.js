@@ -231,6 +231,13 @@ describe('serialize → segments (spec §3)', () => {
       { 'cyborg-hunter': { restored_from: 'bfcache' }, other: { k: 1 } });
     assert.notStrictEqual(rec.segments[0].extensions, s.trials[0].extensions,
       'a copy: the file does not share an object with the recorder\'s buffer');
+    assert.notStrictEqual(rec.segments[0].extensions['cyborg-hunter'], s.trials[0].extensions['cyborg-hunter'],
+      'a deep copy: not even the vendor\'s own object');
+    rec.segments[0].extensions['cyborg-hunter'].note = 'edited by the researcher';
+    rec.segments[0].extensions.other.k = 2;
+    assert.deepStrictEqual(wire(s).segments[0].extensions,
+      { 'cyborg-hunter': { restored_from: 'bfcache' }, other: { k: 1 } },
+      'editing one returned recording changes no later one');
   });
 
   it('an implicit segment with host extensions keeps both', () => {

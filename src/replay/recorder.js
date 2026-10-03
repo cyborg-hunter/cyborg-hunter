@@ -212,7 +212,7 @@ export function createRecorder(userConfig) {
       // `extensions`, keyed by vendor), e.g. the one-line setup's
       // { "cyborg-hunter": { restored_from: "bfcache" } }. The serializer
       // merges CH's own `implicit` flag into it.
-      extensions: (opts && opts.extensions) || null,
+      extensions: hostExtensions(opts && opts.extensions),
       // Spec §3: a keyframe is a DomNode tree, a continuation is null. Null
       // until the DOM capture's trial-start hook fills it, and on trace tier
       // it stays null for the whole recording, which is the honest statement
@@ -221,6 +221,18 @@ export function createRecorder(userConfig) {
       initialState: null,
       events: []
     };
+  }
+
+  // A JSON copy of the host's segment extensions, taken at startTrial: the
+  // host can change or reuse its object afterwards without changing the
+  // recording, and anything the file could not carry (a cycle, a BigInt)
+  // fails HERE, as a capture failure, rather than in getRecording().
+  function hostExtensions(ext) {
+    if (!ext) return null;
+    try { return JSON.parse(JSON.stringify(ext)); } catch (e) {
+      recorder.captureFailure('segment_extensions', e);
+      return null;
+    }
   }
 
   function closeTrial() {
@@ -610,7 +622,8 @@ export function createRecorder(userConfig) {
       if (state === 'destroyed') return;
       // A caller that tears down without stopping still gets its pending
       // batch: the buffer survives destroy() by contract, so the patches are
-      // readable afterwards. A no-op after stopSession, which drained it.
+      // readable afterwards. A no-op after stopSession, which already ran
+      // the flushes for this close (the flag is cleared only by a resume).
       runPreCloseFlushes();
       transition('destroyed');
       listeners.forEach(function (l) {
