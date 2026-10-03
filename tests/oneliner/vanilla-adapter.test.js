@@ -311,6 +311,24 @@ describe('vanilla host: forms and page loads', () => {
     });
   }
 
+  // form.dispatchEvent(new Event('submit')) runs the page's submit handlers
+  // but submits nothing. happy-dom leaves isTrusted unset; a browser sets it
+  // to false on such an event.
+  it('a submit event the page dispatches itself is not a page load; pagehide keeps the data after it', async () => {
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"></form>');
+    const ev = new win.Event('submit', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'isTrusted', { value: false });
+    f.dispatchEvent(ev);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 1, 'its handlers still see the blob');
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+  });
+
   it('page loads: the next page restores the index, the earlier trials and the page count', () => {
     const ctx1 = start();
     paste('page one');

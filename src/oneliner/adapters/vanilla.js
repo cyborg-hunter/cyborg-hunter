@@ -387,7 +387,9 @@ export function installVanillaAdapter(opts) {
       }
       var entry = { ev: ev, replaces: false };
       submitTask.events.push(entry);
-      entry.replaces = carry(ev.target, ev.submitter, true);
+      // A submit event the page dispatched itself (isTrusted false) runs the
+      // handlers, which may read the blob, but submits nothing.
+      entry.replaces = carry(ev.target, ev.submitter, true) && ev.isTrusted !== false;
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
     }
