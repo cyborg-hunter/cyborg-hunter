@@ -713,8 +713,13 @@ describe('ch.js on real jsPsych: lazy replay', () => {
     await runTimeline(jsPsych, tl);
     const seg = recording.segments.find((s) => s.label === 'trial-2');
     assert.ok(seg, JSON.stringify(recording.segments.map((s) => s.label)));
+    // The file states t_load relative to the session start, rounded to 0.1 ms
+    // (serializer.js wireT), so the start read back can sit up to 0.05 ms
+    // below the real one. The late load this guards against came milliseconds
+    // early.
     const startedAt = recording.recording_started_at_perf + seg.t_load;
-    assert.ok(startedAt >= beforeLoad[0], 'segment starts at ' + startedAt + ', before the plugin\'s on_load at ' + beforeLoad[0]);
+    const WIRE_ROUNDING_MS = 0.05;
+    assert.ok(startedAt + WIRE_ROUNDING_MS >= beforeLoad[0], 'segment starts at ' + startedAt + ', before the plugin\'s on_load at ' + beforeLoad[0]);
     assert.deepStrictEqual(errors, []);
   });
 
