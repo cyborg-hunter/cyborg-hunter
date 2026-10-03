@@ -345,6 +345,22 @@ describe('vanilla host: forms and page loads', () => {
     });
   }
 
+  it('a method="dialog" form with a control named "method" is still a dialog submit; pagehide keeps the data after it', () => {
+    const ctx = start();
+    paste('before');
+    const f = el('<form method="dialog"><button>OK</button></form>');
+    const field = el('<input name="method" value="by-hand">');
+    f.appendChild(field);
+    Object.defineProperty(f, 'method', { value: field, configurable: true });
+    submit(f);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    assert.strictEqual(saved.trials.length, 1);
+    assert.strictEqual(saved.trials[0].integrity.pasteEvents.length, 2);
+  });
+
   // The target is read the same way: a control named "getAttribute" or
   // "hasAttribute" does not break the post into another window.
   for (const name of ['getAttribute', 'hasAttribute']) {
