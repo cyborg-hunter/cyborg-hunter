@@ -79,6 +79,21 @@ test('refuses an index.html without the markers it rewrites', () => {
   assert.throws(() => buildOfflineHtml('<html><head></head></html>', bundle), /marker/);
 });
 
+// Each marker on its own: the real index.html with only that one missing.
+for (const marker of [
+  '<meta charset="utf-8">',
+  '<script type="module" src="./analyze.bundle.js"></script>',
+  "script-src 'self' 'unsafe-inline' blob:;",
+  '<a href="./' + OFFLINE_NAME + '" download>Download this page as a single offline file</a>',
+  '<a href="../">live demo</a>',
+]) {
+  test('refuses an index.html without ' + marker, () => {
+    assert.ok(index.includes(marker), 'the real index.html has it');
+    assert.throws(() => buildOfflineHtml(index.replace(marker, ''), bundle),
+      (e) => e.message.includes('marker not found') && e.message.includes(marker));
+  });
+}
+
 test('refuses an index.html whose charset no longer precedes the script', () => {
   const moved = index.replace('<meta charset="utf-8">\n', '').replace('</body>', '<meta charset="utf-8">\n</body>');
   assert.throws(() => buildOfflineHtml(moved, bundle), /charset/);
