@@ -356,24 +356,98 @@ describe('video and audio', () => {
   });
 });
 
+// Three more ways a page shows an image: a srcset candidate list (on <img>
+// and on a <picture>'s <source>), an SVG <image>'s href or xlink:href, and an
+// <input type="image">. Recorded as written (only an <img>'s src is
+// resolved at capture), so relative URLs match by their path.
+describe('srcset, SVG <image> and <input type="image">', () => {
+  const files = [{ path: 'img/a.png', read: async () => PNG }, { path: 'img/c.png', read: async () => PNG }];
+  const D = 'data:image/png;base64,iVBORw==';
+  it('collects every srcset candidate, with density or width descriptors, with or without a space after the comma', () => {
+    const u = collectAssetUrls(domOnly([
+      el(2, 'img', { src: X + 'img/a.png', srcset: 'img/a.png 1x, img/b.png 2x' }),
+      el(3, 'picture', {}, [el(4, 'source', { srcset: 'img/c.png 480w, img/d.png 800w', media: '(min-width: 600px)' }), el(5, 'img', { src: X + 'img/e.png' })]),
+      el(6, 'img', { srcset: 'img/f.png 1x,img/g.png 2x' }),
+      el(7, 'img', { srcset: '  img/h.png,  img/i.png 1.5x ,' }),
+    ]));
+    assert.deepStrictEqual(u.images, [X + 'img/a.png', 'img/a.png', 'img/b.png', 'img/c.png', 'img/d.png', X + 'img/e.png',
+      'img/f.png', 'img/g.png', 'img/h.png', 'img/i.png']);
+  });
+  it('inlines each supplied candidate and leaves the rest of the srcset exactly as written', async () => {
+    const nodes = () => [el(2, 'img', { srcset: 'img/a.png 1x, img/b.png 2x' }), el(3, 'img', { srcset: 'img/b.png 480w,img/c.png  800w' })];
+    const { assetMap } = await buildAssetMap([domOnly(nodes())], files);
+    assert.strictEqual(assetNoteText(assetMatchSummary(domOnly(nodes()), assetMap)), 'Experiment assets: 2 of 3 images matched (missing: b.png).');
+    const body = applyAssetMap(buildViewerModel(domOnly(nodes())), assetMap).segments[0].initialDom;
+    assert.strictEqual(body.children[0].attrs.srcset, D + ' 1x, img/b.png 2x');
+    assert.strictEqual(body.children[1].attrs.srcset, 'img/b.png 480w,' + D + '  800w');
+    assert.deepStrictEqual(collectAssetUrls(domOnly([body.children[0]])).images, ['img/b.png'], 'the rewritten srcset still parses: a data: URI\'s comma is inside its candidate');
+  });
+  it('a <source> under <video> has no images in its srcset', () => {
+    const u = collectAssetUrls(domOnly([el(2, 'video', {}, [el(3, 'source', { srcset: 'img/a.png 1x' })])]));
+    assert.deepStrictEqual(u.images, []);
+  });
+  it('collects and inlines an SVG <image>\'s href and xlink:href, and an <input type="image">\'s src', async () => {
+    const nodes = () => [
+      el(2, 'svg', {}, [el(3, 'image', { href: 'img/a.png', width: '10' }), el(4, 'image', { 'xlink:href': 'img/c.png' })]),
+      el(5, 'a', { href: 'img/a.png' }),
+      el(6, 'input', { type: 'IMAGE', src: X + 'img/a.png', alt: 'go' }),
+      el(7, 'input', { type: 'text', src: X + 'img/z.png' }),
+    ];
+    const u = collectAssetUrls(domOnly(nodes()));
+    assert.deepStrictEqual(u.images, ['img/a.png', 'img/c.png', X + 'img/a.png'], 'a link\'s href and a text input\'s src are not images');
+    const { assetMap } = await buildAssetMap([domOnly(nodes())], files);
+    assert.strictEqual(assetNoteText(assetMatchSummary(domOnly(nodes()), assetMap)), 'Experiment assets: 3 of 3 images matched.');
+    const body = applyAssetMap(buildViewerModel(domOnly(nodes())), assetMap).segments[0].initialDom;
+    assert.strictEqual(body.children[0].children[0].attrs.href, D);
+    assert.strictEqual(body.children[0].children[1].attrs['xlink:href'], D);
+    assert.strictEqual(body.children[1].attrs.href, 'img/a.png');
+    assert.strictEqual(body.children[2].attrs.src, D);
+  });
+  it('follows a dom.attr that sets a srcset, an href or an image input\'s src later in the session', async () => {
+    const rec = () => domOnly(
+      [el(2, 'img', { src: X + 'img/x.png' }), el(3, 'svg', {}, [el(4, 'image', {})]), el(5, 'input', { type: 'text' })],
+      [{ type: 'dom.attr', t: 1, node: 2, name: 'srcset', value: 'img/a.png 1x, img/b.png 2x' },
+        { type: 'dom.attr', t: 2, node: 4, name: 'xlink:href', value: 'img/c.png' },
+        { type: 'dom.attr', t: 3, node: 5, name: 'src', value: 'img/n.png' },
+        { type: 'dom.attr', t: 4, node: 5, name: 'type', value: 'image' },
+        { type: 'dom.attr', t: 5, node: 5, name: 'src', value: 'img/a.png' },
+        { type: 'dom.add', t: 6, parent: 1, before: null, node: el(6, 'picture', {}, [el(7, 'source', { srcset: 'img/c.png 2x' })]) }]);
+    assert.deepStrictEqual(collectAssetUrls(rec()).images, [X + 'img/x.png', 'img/a.png', 'img/b.png', 'img/c.png'],
+      'a src set while the input was a text field is not an image');
+    const { assetMap } = await buildAssetMap([rec()], files);
+    const events = applyAssetMap(buildViewerModel(rec()), assetMap).segments[0].events;
+    assert.deepStrictEqual(events.map((e) => (e.type === 'dom.attr' ? e.value : e.node.children[0].attrs.srcset)),
+      [D + ' 1x, img/b.png 2x', D, 'img/n.png', 'image', D, D + ' 2x']);
+  });
+});
+
 // The analyze page words its replay card's note in the worker
 // (demo/analyze/worker-entry.js: assetNoteText(assetMatchSummary(...)) through
 // the page bundle's entry, before the report pass); the CLI words the
 // report's replay section inside buildReplayAssets. The two must agree.
 describe('the analyze page and the CLI word the note the same', () => {
-  it('for a recording with stylesheets, images and media', async () => {
+  it('for a recording with stylesheets, images in every form, and media', async () => {
     const entry = await import('../../src/cli/preview-entry.js');
     const { buildReplayAssets } = await import('../../src/cli/renderers/replay-assets-core.js');
     const files = [
       { path: 'study/css/style.css', read: async () => bytes('p{margin:0}') },
       { path: 'study/img/stim-1.png', read: async () => PNG },
     ];
-    const { assetMap } = await entry.buildAssetMap([recording()], files);
-    const page = entry.assetNoteText(entry.assetMatchSummary(recording(), assetMap));
-    const p = { participantId: 'P1', replay: { recording: recording(), file: 'P1-replay.json' } };
+    // srcset, an SVG <image> and an image input count among the images.
+    const rec = () => {
+      const r = recording();
+      r.segments[0].initial_dom.children.push(
+        el(20, 'img', { srcset: 'img/stim-1.png 1x, img/stim-1@2x.png 2x' }),
+        el(21, 'svg', {}, [el(22, 'image', { 'xlink:href': 'img/shape.png' })]),
+        el(23, 'input', { type: 'image', src: X + 'img/go.png' }));
+      return r;
+    };
+    const { assetMap } = await entry.buildAssetMap([rec()], files);
+    const page = entry.assetNoteText(entry.assetMatchSummary(rec(), assetMap));
+    const p = { participantId: 'P1', replay: { recording: rec(), file: 'P1-replay.json' } };
     buildReplayAssets([p], { sink: () => {}, assetMap });
     assert.strictEqual(p.replay.assetNote, page);
-    assert.strictEqual(page, 'Experiment assets: 1 of 2 stylesheets matched (missing: fonts.css); 1 of 5 images matched (missing: bg.png, poster.jpg, stim-2.png, stim-3.png); 1 video/audio element shown as placeholder; replays never load or play media.');
+    assert.strictEqual(page, 'Experiment assets: 1 of 2 stylesheets matched (missing: fonts.css); 2 of 9 images matched (missing: bg.png, poster.jpg, stim-1@2x.png, shape.png, go.png, stim-2.png, stim-3.png); 1 video/audio element shown as placeholder; replays never load or play media.');
   });
 });
 

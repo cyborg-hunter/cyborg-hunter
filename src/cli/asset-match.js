@@ -6,6 +6,12 @@
 // viewer model: stylesheet text as `css`, images as data: URIs. One matcher,
 // one mapping, both paths — and never a fetch, which the page's policy forbids.
 //
+// An image is an <img>'s src or srcset candidate, a <picture> <source>'s
+// srcset candidate, an SVG <image>'s href or xlink:href, an
+// <input type="image">'s src, a video's poster, or a url() in CSS. Only an
+// <img>'s src is resolved at capture; the rest are recorded as written, and
+// a relative URL matches by its path like any other.
+//
 // What a <video> or <audio> plays is collected too, as media, but never
 // matched or inlined: the viewer shows the element at its size and never
 // loads or plays it, so the note counts media in a clause of its own rather
@@ -129,12 +135,13 @@ function* segmentsOf(recording) {
   }
 }
 
-// Every element node seen so far, by id, as { tag, parent }: a dom.attr
-// event names its node only by id, and a <source>'s kind depends on its
-// parent. `parent` is the parent's id (a dom.add root's is the event's).
+// Every element node seen so far, by id, as { tag, parent, type }: a
+// dom.attr event names its node only by id, a <source>'s kind depends on its
+// parent, and an <input>'s src is an image only when its type says so.
+// `parent` is the parent's id (a dom.add root's is the event's).
 function noteTree(elems, node, parent) {
   if (!node || typeof node !== 'object') return;
-  if (node.kind === 'element' && node.id != null) elems.set(node.id, { tag: node.tag, parent });
+  if (node.kind === 'element' && node.id != null) elems.set(node.id, { tag: node.tag, parent, type: node.attrs && node.attrs.type });
   for (const c of node.children || []) noteTree(elems, c, node.id);
 }
 const parentTagOf = (elems, id) => {
@@ -143,16 +150,22 @@ const parentTagOf = (elems, id) => {
   return p ? p.tag : undefined;
 };
 
-// Whether one attribute of an element references an image ('image'), a
-// media file ('media'), or nothing to match (null). Only these elements'
-// attributes count: an iframe's src is a page, which the viewer never loads.
+// Whether one attribute of an element ({ tag, type }) references an image
+// ('image'), a list of images ('srcset'), a media file ('media'), or nothing
+// to match (null). Only these elements' attributes count: an iframe's src is
+// a page, which the viewer never loads, and a link's href is not an image
+// (an `image` tag is always SVG's: HTML parses <image> as <img>).
 // A <source> is media under <video>/<audio> and an image under <picture>;
 // anywhere else, or under a parent the recording never showed, its
 // extension decides.
-function refKind(tag, parentTag, name, value) {
-  if (tag === 'img') return name === 'src' ? 'image' : null;
+function refKind(el, parentTag, name, value) {
+  const tag = el.tag;
+  if (tag === 'img') return name === 'src' ? 'image' : name === 'srcset' ? 'srcset' : null;
+  if (tag === 'input') return name === 'src' && String(el.type).toLowerCase() === 'image' ? 'image' : null;
+  if (tag === 'image') return name === 'href' || name === 'xlink:href' ? 'image' : null;
   if (tag === 'video') return name === 'src' ? 'media' : name === 'poster' ? 'image' : null;
   if (tag === 'audio') return name === 'src' ? 'media' : null;
+  if (tag === 'source' && name === 'srcset') return MEDIA_TAGS[parentTag] ? null : 'srcset';
   if (tag === 'source' && name === 'src') {
     if (MEDIA_TAGS[parentTag]) return 'media';
     if (parentTag === 'picture') return 'image';
@@ -161,22 +174,67 @@ function refKind(tag, parentTag, name, value) {
   return null;
 }
 
+// The URLs in a srcset, as [start, end) spans, by the HTML parsing rules:
+// candidates are separated by whitespace and commas; a URL runs to the next
+// whitespace, less any trailing commas (which then end the candidate);
+// otherwise its descriptors run to the next comma outside parentheses. A
+// comma inside a URL (a data: URI has one) stays part of it.
+const SPACE = /[\t\n\f\r ]/;
+function srcsetUrls(text) {
+  const spans = [];
+  let i = 0;
+  while (i < text.length) {
+    while (i < text.length && (SPACE.test(text[i]) || text[i] === ',')) i++;
+    if (i >= text.length) break;
+    const start = i;
+    while (i < text.length && !SPACE.test(text[i])) i++;
+    let end = i;
+    if (text[end - 1] === ',') {
+      while (text[end - 1] === ',') end--;
+    } else {
+      let paren = false;
+      for (; i < text.length; i++) {
+        if (text[i] === '(') paren = true;
+        else if (text[i] === ')') paren = false;
+        else if (text[i] === ',' && !paren) { i++; break; }
+      }
+    }
+    spans.push([start, end]);
+  }
+  return spans;
+}
+
 // Calls visit(kind, value, replace) for every image or media reference in
 // the segments' keyframe trees, dom.add subtrees and dom.attr values, in
 // order; replace(v) writes a new value back where the old one was found.
+// Each srcset candidate is visited as an image of its own, and a replaced
+// candidate is spliced back in with the rest of the srcset as written.
 // `media_src` (the resolved URL a video or audio loaded) is always media.
 function eachRef(segments, visit) {
   const elems = new Map();
+  const ref = (kind, value, write) => {
+    if (!kind || !value) return;
+    if (kind !== 'srcset') { visit(kind, value, write); return; }
+    const text = String(value);
+    let out = '', at = 0, changed = false;
+    for (const [start, end] of srcsetUrls(text)) {
+      let url = text.slice(start, end);
+      visit('image', url, (x) => { url = x; changed = true; });
+      out += text.slice(at, start) + url;
+      at = end;
+    }
+    if (changed) write(out + text.slice(at));
+  };
   const tree = (root) => {
     for (const n of walkNodes(root)) {
       if (n.kind !== 'element') continue;
+      const el = { tag: n.tag, type: n.attrs && n.attrs.type };
       const parentTag = parentTagOf(elems, n.id);
       for (const name of Object.keys(n.attrs || {})) {
         const v = n.attrs[name];
-        const kind = v ? refKind(n.tag, parentTag, name, v) : null;
-        if (kind) visit(kind, v, (x) => { n.attrs[name] = x; });
+        ref(v ? refKind(el, parentTag, name, v) : null, v, (x) => { n.attrs[name] = x; });
       }
-      if (n.media_src) visit('media', n.media_src, (x) => { n.media_src = x; });
+      if (n.media_src) ref('media', n.media_src, (x) => { n.media_src = x; });
     }
   };
   for (const { dom, events } of segments) {
@@ -184,9 +242,10 @@ function eachRef(segments, visit) {
     tree(dom);
     for (const ev of events) {
       if (ev.type === 'dom.add') { noteTree(elems, ev.node, ev.parent); tree(ev.node); }
-      else if (ev.type === 'dom.attr' && ev.value && elems.has(ev.node)) {
-        const kind = refKind(elems.get(ev.node).tag, parentTagOf(elems, ev.node), ev.name, ev.value);
-        if (kind) visit(kind, ev.value, (x) => { ev.value = x; });
+      else if (ev.type === 'dom.attr' && elems.has(ev.node)) {
+        const el = elems.get(ev.node);
+        if (ev.name === 'type') el.type = ev.value;
+        else if (ev.value) ref(refKind(el, parentTagOf(elems, ev.node), ev.name, ev.value), ev.value, (x) => { ev.value = x; });
       }
     }
   }

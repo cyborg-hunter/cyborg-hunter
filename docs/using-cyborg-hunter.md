@@ -413,6 +413,11 @@ matching works:
   the same way. The ones you did not supply are made absolute against the
   stylesheet's original URL, so they resolve where they did on the
   experiment's server (and are blocked on this page).
+- Images are found wherever a page shows one: an `<img>`'s `src` and each
+  `srcset` candidate (also a `<picture>` `<source>`'s `srcset`), an SVG
+  `<image>`'s `href` or `xlink:href`, an `<input type="image">`'s `src`, and
+  `url(...)` in stylesheets. A srcset candidate you supply is inlined; the
+  others stay as written.
 - Video and audio are never matched: the replay shows each `<video>` or
   `<audio>` as an empty box of its size and never loads or plays it, so the
   card counts them apart from images ("2 video/audio elements shown as
