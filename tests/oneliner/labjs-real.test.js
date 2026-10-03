@@ -147,7 +147,7 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
       assert.strictEqual(r.integritySegment.source, 'host');
       assert.strictEqual(r.integrity.trialId, r.integritySegment.trialId);
       assert.strictEqual(typeof r.integrity.trialStart_perfNow, 'number');
-      assert.strictEqual(r.participantId, 'P1');
+      assert.strictEqual(r.cyborgHunterParticipantId, 'P1');
       assert.strictEqual(r.cyborgHunterVersion, VERSION);
       assert.strictEqual(typeof r.integritySoftScore, 'number');
       assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
@@ -291,17 +291,32 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
     assert.deepStrictEqual(errors, [MESSAGES.labjsHookFailed('naming boom')]);
   });
 
-  it('a researcher\'s participantId in the datastore or in a row is never overwritten', async () => {
-    await bootOn(win);
-    const study = new lab.flow.Sequence({ title: 'root', content: [
-      screen(lab, 'a'), screen(lab, 'b', { data: { participantId: 'mine' } }), screen(lab, 'c')
-    ] });
-    study.on('prepare', function () { this.options.datastore.set('participantId', 'theirs'); });
-    const rows = await runToEnd(study);
-    assert.deepStrictEqual(rows.map((r) => r.participantId), ['theirs', 'mine', undefined, undefined]);
-    assert.deepStrictEqual(withSegment(rows).map((r) => r.cyborgHunterParticipantId), ['P1', 'P1', 'P1']);
-    assert.strictEqual(datastoreOf(study).state.participantId, 'mine');
-  });
+  // Where a study sets its own participantId, and the participantId column it
+  // gives (rows a, b, c, root). ch.js's own id is in cyborgHunterParticipantId
+  // on every trial row, and in participantId on row 0 only when the study had
+  // set none by the time that row was committed.
+  const setId = function () { this.options.datastore.set('participantId', 'R'); };
+  const ID_CASES = [
+    ['datastore.set in the root\'s prepare', (s) => s.on('prepare', setId), ['R', undefined, undefined, undefined]],
+    ['a data option on b', null, ['P1', 'R', undefined, undefined], { data: { participantId: 'R' } }],
+    ['datastore.set in b\'s run handler', (s, b) => b.on('run', setId), ['P1', 'R', undefined, undefined]],
+    ['datastore.set in b\'s after:end handler', (s, b) => b.on('after:end', setId), ['P1', undefined, 'R', undefined]],
+    ['data.participantId in b\'s end handler', (s, b) => b.on('end', function () { this.data.participantId = 'R'; }), ['P1', 'R', undefined, undefined]],
+    ['datastore.set in b\'s end handler', (s, b) => b.on('end', setId), ['P1', 'R', undefined, undefined]],
+    ['datastore.set in the first component\'s end handler', (s, b, a) => a.on('end', setId), ['R', undefined, undefined, undefined]]
+  ];
+  for (const [where, hook, column, bOpts] of ID_CASES) {
+    it('a participantId the study sets (' + where + ') is kept in its row and in the datastore\'s state', async () => {
+      await bootOn(win);
+      const a = screen(lab, 'a'), b = screen(lab, 'b', bOpts), c = screen(lab, 'c');
+      const study = new lab.flow.Sequence({ title: 'root', content: [a, b, c] });
+      if (hook) hook(study, b, a);
+      const rows = await runToEnd(study);
+      assert.deepStrictEqual(rows.map((r) => r.participantId), column);
+      assert.strictEqual(datastoreOf(study).state.participantId, 'R');
+      assert.deepStrictEqual(withSegment(rows).map((r) => r.cyborgHunterParticipantId), ['P1', 'P1', 'P1']);
+    });
+  }
 
   it('a participantId parameter is kept in every row', async () => {
     await bootOn(win);
@@ -312,10 +327,12 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
     assert.notStrictEqual(datastoreOf(study).state.participantId, 'P1');
   });
 
-  it('without a researcher\'s id, rows carry ch.js\'s id in both columns', async () => {
+  it('without a study id, row 0 carries ch.js\'s id as participantId, trial rows as cyborgHunterParticipantId, and the state none', async () => {
     await bootOn(win);
-    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a')] }));
-    assert.deepStrictEqual([rows[0].participantId, rows[0].cyborgHunterParticipantId], ['P1', 'P1']);
+    const study = new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b')] });
+    const rows = await runToEnd(study);
+    assert.deepStrictEqual(rows.map((r) => [r.participantId, r.cyborgHunterParticipantId]), [['P1', 'P1'], [undefined, 'P1'], [undefined, undefined]]);
+    assert.strictEqual(datastoreOf(study).state.participantId, undefined);
   });
 
   it('installed while a screen is on display: that screen gets no columns, and one warning says so', async () => {
