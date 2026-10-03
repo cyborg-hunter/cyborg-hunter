@@ -870,6 +870,14 @@ export function attachTraceCapture(rec, env) {
     pruneScrolledElements();
   });
 
+  // A resumed recording (recorder.js resumeSession) states the geometry it
+  // resumes at: the window may have changed while nothing was recorded, and
+  // a browser need not fire resize for that. An unchanged state is dropped
+  // by the stream's dedup.
+  rec.onResume(function () {
+    rec.pushViewportChange(viewportState(), now());
+  });
+
   // The capture handle. v1 callers ignore the return value (index.js calls this
   // for its side effects), so it stays invisible to them; the keyframe path
   // reads the scrolled-element set through it. The span is NOT echoed back: it

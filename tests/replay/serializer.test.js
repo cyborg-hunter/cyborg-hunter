@@ -223,6 +223,23 @@ describe('serialize → segments (spec §3)', () => {
       { 'cyborg-hunter': { implicit: true } });
   });
 
+  it('a segment carries the extensions its host gave startTrial', () => {
+    const s = state();
+    s.trials[0].extensions = { 'cyborg-hunter': { restoredFrom: 'bfcache' }, other: { k: 1 } };
+    const rec = wire(s);
+    assert.deepStrictEqual(rec.segments[0].extensions,
+      { 'cyborg-hunter': { restoredFrom: 'bfcache' }, other: { k: 1 } });
+    assert.notStrictEqual(rec.segments[0].extensions, s.trials[0].extensions,
+      'a copy: the file does not share an object with the recorder\'s buffer');
+  });
+
+  it('an implicit segment with host extensions keeps both', () => {
+    const s = state();
+    s.trials[1].extensions = { 'cyborg-hunter': { restoredFrom: 'bfcache' } };
+    assert.deepStrictEqual(wire(s).segments[1].extensions,
+      { 'cyborg-hunter': { implicit: true, restoredFrom: 'bfcache' } });
+  });
+
   it('events are time-sorted within a segment', () => {
     const s = state();
     s.trials[0].events = [

@@ -909,3 +909,101 @@ describe('teardown flushes the mutations still queued at stop', () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESUME: a stopped recording records again (back/forward cache)
+//
+// The one-line setup stops the recorder at pagehide and resumes it when the
+// browser shows the page again from the back/forward cache. While stopped,
+// the MutationObserver keeps delivering and mapMutations keeps numbering the
+// nodes it sees into the span, but storeEvent drops every record: the span
+// then describes nodes no player was sent. So the first segment after the
+// resume must be a keyframe, whatever the cadence would otherwise say.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('resume after a stop: a keyframe segment in the same recording', () => {
+  let recording;
+
+  before(async () => {
+    installWindow();
+    try {
+      const doc = win.document;
+      const stage = doc.getElementById('stage');
+      // keyframeEvery 10: without the forced keyframe the restored segment
+      // would be a continuation.
+      const api = CHReplay.attach({
+        participantId: 'P-RESUME-01', tier: 'dom', root: '#stage',
+        keyframeEvery: 10, autoSave: { mode: 'none' },
+      });
+      api.startSession();
+      api.startTrial({ trialId: 'span-0' });
+      const one = doc.createElement('div');
+      one.id = 'before-leaving';
+      stage.appendChild(one);
+      await settle();
+      api.endTrial();
+      api.startTrial({ trialId: 'span-1' });   // the cut at pagehide opens the next span
+      api.stopSession('finished');
+
+      // Away: the DOM and the window change while nothing is recorded.
+      const away = doc.createElement('div');
+      away.id = 'changed-while-away';
+      stage.appendChild(away);
+      Object.defineProperty(win, 'innerWidth', { value: 640, configurable: true });
+      await settle();
+
+      api.resumeSession();
+      api.startTrial({ trialId: 'span-1', extensions: { 'cyborg-hunter': { restoredFrom: 'bfcache' } } });
+      stage.removeChild(away);                  // a node only the new keyframe holds
+      fire(doc.getElementById('go'), 'click');
+      await settle();
+      const last = doc.createElement('div');
+      last.id = 'last-word';
+      stage.appendChild(last);                  // same task as the stop: the flush keeps it
+      api.stopSession('finished');              // closes the open segment, as pagehide's stop does
+      recording = api.getRecording();
+      api.destroy();
+    } finally {
+      restoreWindow();
+    }
+  });
+
+  it('strict-validates', () => {
+    assert.deepEqual(validateStrict(recording).errors, []);
+  });
+
+  it('the restored segment is a keyframe numbered from 1, marked as a restore', () => {
+    assert.deepEqual(recording.segments.map(s => s.label), ['span-0', 'span-1', 'span-1']);
+    const restored = recording.segments[2];
+    assert.ok(restored.initial_dom, 'a keyframe, not a continuation');
+    assert.equal(restored.initial_dom.id, 1);
+    assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'),
+      'the keyframe shows the DOM as it was on return');
+    assert.deepEqual(restored.extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.deepEqual(recording.segments.slice(0, 2).map(s => s.extensions), [null, null]);
+  });
+
+  it('a conforming player resolves every patch across the restore', () => {
+    let player = null;
+    for (const seg of recording.segments) {
+      const patches = seg.events.filter(e => e.type.startsWith('dom.'));
+      if (seg.initial_dom) player = createPlayer(seg.initial_dom);
+      player.apply(patches);
+    }
+    const ids = [];
+    (function walk(n) {
+      if (n.kind === 'element' && n.attrs && n.attrs.id) ids.push(n.attrs.id);
+      (n.children || []).forEach(walk);
+    })(player.tree());
+    assert.ok(!ids.includes('changed-while-away'), 'its removal resolved');
+    assert.ok(ids.includes('last-word'), 'the second stop flushed the queued add');
+  });
+
+  it('records the click after the restore, ends finished, and states the new viewport', () => {
+    assert.ok(recording.segments[2].events.some(e => e.type === 'mouse.click'));
+    assert.equal(recording.end_reason, 'finished');
+    assert.ok(recording.viewport_changes.some(v => v.w === 640),
+      'the resume states the geometry the restored page is laid out at');
+    assert.deepEqual(recording.extensions['cyborg-hunter'].capture_failures, []);
+  });
+});

@@ -8,7 +8,7 @@
 //   rec.startSession();
 //   rec.startTrial({ trialId: 'r1' });  // optional bracketing
 //   rec.endTrial();
-//   rec.stopSession('finished');
+//   rec.stopSession('finished');        // resumeSession() would record on
 //   await rec.autoSaveNow();            // or rec.getRecording() and DIY
 //   rec.destroy();
 
@@ -136,6 +136,8 @@ export function attach(userConfig) {
     startTrial: function (opts) { rec.startTrial(opts); return api; },
     endTrial: function () { rec.endTrial(); return api; },
     stopSession: function (reason) { rec.stopSession(reason); return api; },
+    // Records again after a stop, in the same recording (recorder.js).
+    resumeSession: function () { rec.resumeSession(); return api; },
 
     getRecording: function (opts) {
       return serialize(rec.getState(), opts || {});

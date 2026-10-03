@@ -277,6 +277,95 @@ describe('recorder lifecycle', () => {
   });
 });
 
+// A stopped recording that resumes (the one-line setup does this when the
+// browser shows a page again from the back/forward cache): one recording,
+// whose later segments follow the stop. Nothing is finalized at stop except
+// end_reason; ended_at_perf is derived at serialize time.
+describe('recorder: resumeSession', () => {
+  it('only a stopped recording resumes', () => {
+    const created = freshRecorder();
+    assert.throws(() => created.resumeSession(), /resumeSession/);
+    const live = freshRecorder();
+    live.startSession();
+    assert.throws(() => live.resumeSession(), /resumeSession/);
+    live.startTrial({ trialId: 't1' });
+    assert.throws(() => live.resumeSession(), /resumeSession/);
+    live.stopSession('finished');
+    live.destroy();
+    assert.throws(() => live.resumeSession(), /resumeSession/);
+  });
+
+  it('startSession after a stop still throws (resume is the only way back)', () => {
+    const rec = freshRecorder();
+    rec.startSession();
+    rec.stopSession('finished');
+    assert.throws(() => rec.startSession(), /invalid lifecycle call/);
+  });
+
+  it('records again after a resume, in later segments of the same recording', async () => {
+    const rec = freshRecorder();
+    rec.startSession();
+    const s0 = rec.getState().sessionStart;
+    rec.startTrial({ trialId: 't1' });
+    rec.pushRecord({ type: 'mouse.move', x: 1, y: 1 });
+    rec.stopSession('finished');
+    rec.pushRecord({ type: 'mouse.move', x: 2, y: 2 });   // stopped: dropped
+    const firstEnd = serialize(rec.getState(), {}).ended_at_perf;
+    await new Promise((r) => setTimeout(r, 5));
+
+    rec.resumeSession();
+    assert.strictEqual(rec.getState().state, 'session');
+    assert.strictEqual(rec.getState().endReason, null, 'no longer ended');
+    assert.strictEqual(serialize(rec.getState(), {}).end_reason, 'aborted',
+      'taken while resumed, it reads like any recording that was not stopped');
+    rec.startTrial({ trialId: 't2', extensions: { 'cyborg-hunter': { restoredFrom: 'bfcache' } } });
+    rec.pushRecord({ type: 'mouse.move', x: 3, y: 3 });
+    rec.stopSession('finished');
+
+    const s = rec.getState();
+    assert.strictEqual(s.sessionStart, s0, 'the same recording');
+    assert.deepStrictEqual(s.trials.map((t) => t.trialId), ['t1', 't2']);
+    assert.deepStrictEqual(s.trials.map((t) => t.events.length), [1, 1]);
+    assert.ok(s.trials[1].tLoad >= s.trials[0].tEnd, 'segments do not overlap');
+    const wire = serialize(s, {});
+    assert.strictEqual(wire.end_reason, 'finished');
+    assert.ok(wire.ended_at_perf > firstEnd, 'ended_at_perf moves to the second stop');
+    assert.deepStrictEqual(wire.segments[1].extensions, { 'cyborg-hunter': { restoredFrom: 'bfcache' } });
+    assert.strictEqual(wire.segments[0].extensions, null);
+  });
+
+  it('runs the pre-close flushes at every stop, and destroy after a stop does not run them again', () => {
+    const rec = freshRecorder();
+    let runs = 0;
+    rec.startSession();
+    rec.addPreCloseFlush(() => { runs++; });
+    rec.stopSession('finished');
+    assert.strictEqual(runs, 1);
+    rec.resumeSession();
+    rec.stopSession('finished');
+    assert.strictEqual(runs, 2, 'the second stop flushes too');
+    rec.destroy();
+    assert.strictEqual(runs, 2, 'stop then destroy: once');
+  });
+
+  it('fires onResume hooks; a throwing hook is a capture failure, not a throw', () => {
+    const rec = freshRecorder();
+    const seen = [];
+    rec.onResume(() => seen.push('a'));
+    rec.onResume(() => { throw new Error('hook broke'); });
+    rec.onResume(() => seen.push('c'));
+    rec.startSession();
+    rec.stopSession('finished');
+    assert.deepStrictEqual(seen, [], 'not at start or stop');
+    rec.resumeSession();
+    assert.deepStrictEqual(seen, ['a', 'c']);
+    const f = rec.getState().captureFailures;
+    assert.strictEqual(f.length, 1);
+    assert.strictEqual(f[0].channel, 'resume_hook');
+    assert.match(f[0].message, /hook broke/);
+  });
+});
+
 describe('v2 sinks: pushRecord and pushViewportChange', () => {
   const VP = { w: 800, h: 600, dpr: 1, scale: 1, offset_x: 0, offset_y: 0 };
 

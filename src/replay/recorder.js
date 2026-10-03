@@ -90,6 +90,9 @@ export const REPLAY_DEFAULTS = {
 };
 
 // States: created → session ⇄ trial → stopped; destroyed is terminal.
+// stopped → session is not in the table: only resumeSession() takes it, so
+// startSession() on a stopped recorder still throws (it would reset the
+// recording's time origin).
 const VALID = {
   created:   ['session', 'destroyed'],
   session:   ['trial', 'stopped', 'destroyed'],
@@ -106,18 +109,21 @@ export function createRecorder(userConfig) {
   var listeners = [];
   var intervals = [];
   // Channels with undelivered state to hand over before the recording closes
-  // (see addPreCloseFlush). Drained once, then emptied, so stop-then-destroy
-  // cannot run one twice.
+  // (see addPreCloseFlush). Run once per close: the flag keeps
+  // stop-then-destroy from running them twice, and resumeSession() clears it,
+  // since a resumed recording closes again and has new state to hand over.
   var preCloseFlushes = [];
+  var preCloseFlushed = false;
   function runPreCloseFlushes() {
-    var pending = preCloseFlushes;
-    preCloseFlushes = [];
-    for (var i = 0; i < pending.length; i++) {
-      try { pending[i](); } catch (e) { recorder.captureFailure('pre_close_flush', e); }
+    if (preCloseFlushed) return;
+    preCloseFlushed = true;
+    for (var i = 0; i < preCloseFlushes.length; i++) {
+      try { preCloseFlushes[i](); } catch (e) { recorder.captureFailure('pre_close_flush', e); }
     }
   }
   var trialCounter = 0;
   var trialStartHooks = [];   // capture modules subscribe (e.g. DOM snapshot)
+  var resumeHooks = [];       // capture modules subscribe (see resumeSession)
   // Running byte estimate for the OPEN trial (reset per trial). Kept off the
   // serialized trial object (a WeakMap) so it never pollutes the wire payload.
   var trialChars = new WeakMap();
@@ -202,6 +208,11 @@ export function createRecorder(userConfig) {
       tStart: (opts && opts.tStart) != null ? opts.tStart : null,
       tDomReady: (opts && opts.tDomReady) != null ? opts.tDomReady : null,
       tEnd: null,
+      // The host's segment-level vendor data (spec §2 SegmentRecording
+      // `extensions`, keyed by vendor), e.g. the one-line setup's
+      // { "cyborg-hunter": { restoredFrom: "bfcache" } }. The serializer
+      // merges CH's own `implicit` flag into it.
+      extensions: (opts && opts.extensions) || null,
       // Spec §3: a keyframe is a DomNode tree, a continuation is null. Null
       // until the DOM capture's trial-start hook fills it, and on trace tier
       // it stays null for the whole recording, which is the honest statement
@@ -397,6 +408,31 @@ export function createRecorder(userConfig) {
       if (currentTrial) closeTrial();
     },
 
+    // A stopped recording records again, into later segments of the SAME
+    // recording. The one-line setup calls this when the browser shows a page
+    // again from the back/forward cache (src/oneliner/replay-loader.js).
+    //
+    // Safe because a stop finalizes almost nothing: the open trial is closed
+    // (so the next startTrial opens a fresh one), `ended_at_perf` is derived
+    // from the buffer at serialize time, and `end_reason` is the one field
+    // stopSession sets, cleared here and set again by the next stop. The
+    // capture modules never detached (only destroy() does that), so they are
+    // still wired; their resume hooks (onResume) bring whatever went stale
+    // while every record was dropped up to date: capture-dom forces a
+    // keyframe on the next segment, capture-trace states the viewport.
+    resumeSession: function () {
+      if (state !== 'stopped') {
+        throw new Error('[cyborg-hunter-replay] invalid lifecycle call: resumeSession() from ' + state +
+          '. Only a stopped recording resumes.');
+      }
+      state = 'session';
+      session.endReason = null;
+      preCloseFlushed = false;
+      for (var i = 0; i < resumeHooks.length; i++) {
+        try { resumeHooks[i](); } catch (e) { recorder.captureFailure('resume_hook', e); }
+      }
+    },
+
     stopSession: function (reason) {
       // BEFORE anything closes: a channel holding undelivered state gets to
       // deliver it into the still-open trial.
@@ -512,6 +548,10 @@ export function createRecorder(userConfig) {
 
     onTrialStart: function (fn) {
       trialStartHooks.push(fn);
+    },
+
+    onResume: function (fn) {
+      resumeHooks.push(fn);
     },
 
     setStylesheets: function (sheets) {

@@ -429,6 +429,15 @@ export function attachDomCapture(rec, env) {
     }
   });
 
+  // A resumed recording (recorder.js resumeSession) keyframes its next
+  // segment, whatever the cadence would say. While it was stopped the
+  // observer kept delivering and mapMutations kept numbering what it saw into
+  // the span, but the recorder dropped every patch: the span now describes
+  // nodes no player was sent. The page may also look different on return
+  // (the back/forward cache case). Clearing hasKeyframe makes rule 1 of
+  // `shouldKeyframe` fire, and the keyframe's span.reset() restarts the ids.
+  rec.onResume(function () { cadence.hasKeyframe = false; });
+
   // A keyframe that was dropped or threw leaves the file with no tree for this
   // span, so the next segment must take one rather than continue from nothing:
   // a continuation carrying dom.* patches before any keyframe is a recording no
