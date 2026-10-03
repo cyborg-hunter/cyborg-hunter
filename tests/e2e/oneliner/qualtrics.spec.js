@@ -348,3 +348,103 @@ test('perf: the write at submit stays under the capture budget on a 40-page, 400
   expect(Math.max(...ms)).toBeLessThan(20);
   expect(ms.sort((a, b) => a - b)[Math.floor(ms.length / 2)]).toBeLessThan(5);
 });
+
+// A submit before the header ran again. With ?blockNext=0 the harness enables
+// Next as soon as the next page shows, and with ?headerDelay the header's
+// script runs late on every page after the first (as a slow network or a
+// cache miss on its re-fetch would make it), so a participant can submit a
+// page before its header re-run lands. Whether Qualtrics allows that, and
+// whether it keeps addOnPageSubmit callbacks across pages (?persist=1), is to
+// be checked on a live survey; both answers are covered here.
+const EARLY = 'blockNext=0&headerDelay=1500';
+const headerRuns = (page) => page.evaluate(() => window.__qxHeaderRuns);
+async function settled(page, runs) {
+  await page.waitForFunction((k) => window.__qxHeaderRuns === k, runs);
+}
+// Next, clicked at once; resolves when the next page (or the end) shows.
+async function nextEarly(page, n) {
+  await page.click('#next');
+  await page.waitForFunction((k) => window.__qxPage === k, n + 1);
+}
+
+for (const persist of [true, false]) {
+  const kept = persist ? 'kept callbacks' : 'dropped callbacks';
+  test(`a middle page submitted before its header ran again, ${kept}: one row per page, nothing lost`, async ({ page }) => {
+    const log = collectConsole(page);
+    const server = await qualtricsServer(page);
+    await page.goto(at(EARLY + (persist ? '&persist=1' : '')));
+    await ready(page, 1);
+    await pasteInto(page, '#q1', 'page 1');
+    await nextEarly(page, 1);
+    await pasteInto(page, '#q2', 'page 2');
+    await nextEarly(page, 2);                                // page 2's header is still loading
+    expect(await headerRuns(page)).toBe(1);
+    await settled(page, 3);
+    await pasteInto(page, '#q3', 'page 3');
+    await nextEarly(page, 3);
+    await settled(page, 4);
+    await nextEarly(page, 4);
+    await page.getByText('Thank you').waitFor();
+
+    const payloads = payloadsOf(server);
+    if (persist) {
+      expect(payloads[1].trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);   // the kept hook wrote page 2
+    } else {
+      expect(server.posts[1].values[FIELD]).toBe(server.posts[0].values[FIELD]);   // no hook: Qualtrics posted the stale value
+    }
+    expect(payloads[2].trials.map((t) => t.integritySegment.segmentIndex)).toEqual([0, 1, 2]);
+    expect(payloads[2].trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1, 1]);
+    const last = payloads[3];
+    expect(last.trials.map((t) => t.integritySegment.segmentIndex)).toEqual([0, 1, 2, 3]);
+    expect(last.trials[3].integritySegment.counters.pasteCount).toBe(3);
+    const badge = await badgeText(page);
+    if (persist) {
+      expect(last.cyborgHunterError).toBeUndefined();
+      expect(badge).not.toContain('missed');
+    } else {
+      // The gap is visible: in the payload (the CLI reports it) and on the badge.
+      expect(last.cyborgHunterError).toMatch(/submitted before Cyborg Hunter's page-submit hook was in place/);
+      expect(badge).toContain(' · submits missed ×1 · ');
+    }
+    expect(chErrors(log)).toEqual([]);
+    const out = saveAndReport(newTmpDir('qx-early-' + persist), 'E2E-QX-1.json', server.posts[3].values[FIELD]);
+    expect(out.stdout).toContain('Found 1 participants');
+    expect(out.summaryCsv[0].totalPasteEvents).toBe('3');
+  });
+}
+
+const finalPage = [
+  { name: 'kept callbacks: the kept hook writes it', query: '&persist=1', saved: true },
+  { name: 'dropped callbacks, with the final-page question script: CyborgHunter.data() writes it', query: '&finalLine=1', saved: true },
+  { name: 'dropped callbacks, no final-page script: nothing in the page runs at that submit, the final page is lost', query: '', saved: false }
+];
+for (const c of finalPage) {
+  test(`the final page submitted before its header ran again, ${c.name}`, async ({ page }) => {
+    const log = collectConsole(page);
+    const server = await qualtricsServer(page);
+    await page.goto(at(EARLY + c.query));
+    await ready(page, 1);
+    for (let n = 1; n <= 3; n++) {
+      await pasteInto(page, '#q' + n, 'page ' + n);
+      await nextEarly(page, n);
+      if (n < 3) await settled(page, n + 1);                 // pages 2 and 3 wait for their header
+    }
+    await pasteInto(page, '#q4', 'page 4');
+    await nextEarly(page, 4);                                // page 4's header is still loading
+    await page.getByText('Thank you').waitFor();
+    expect(await headerRuns(page)).toBe(3);
+    await settled(page, 4);                                  // the late re-run lands on the end page: no write, no error
+
+    const last = payloadsOf(server)[3];
+    if (c.saved) {
+      expect(last.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1, 1, 1]);
+      expect(last.trials[3].integritySegment.counters.pasteCount).toBe(4);
+    } else {
+      // The documented residual: the post carries page 3's value. Only the
+      // final-page question script covers this case.
+      expect(server.posts[3].values[FIELD]).toBe(server.posts[2].values[FIELD]);
+      expect(last.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1, 1]);
+    }
+    expect(chErrors(log)).toEqual([]);
+  });
+}

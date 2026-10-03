@@ -35,7 +35,21 @@
          pages=N               the number of pages (4)
          force=1               page 1's question requires an answer: an empty
                                textarea stops the submit after the callbacks
-                               ran (#qx-validation), nothing is posted
+                               ran (#qx-validation), nothing is posted. That
+                               order (callbacks, then validation) is assumed,
+                               not checked on a live survey; the other order
+                               would lose nothing either
+         blockNext=0           Next works as soon as the next page shows,
+                               before the header's script has run again (by
+                               default Next waits for it, and __qxPage is set
+                               only then); __qxPage is set at once
+         headerDelay=ms        the header's script runs ms late on every page
+                               after the first, as a slow network or a cache
+                               miss on the re-fetch would make it (with
+                               blockNext=0, a page can be submitted first)
+         finalLine=1           the final page runs the documented final-page
+                               question script,
+                               addOnPageSubmit(function () { CyborgHunter.data(); })
          replay=1              data-replay on the tag
          recipe=1              the final page runs the replay upload question
                                script (#qx-replay-recipe below)
@@ -106,6 +120,9 @@ Qualtrics.SurveyEngine.addOnload(function () {
     var pages = Number(params.get('pages')) || 4;
     var force = params.get('force') === '1';
     var recipe = params.get('recipe') === '1';
+    var blockNext = params.get('blockNext') !== '0';
+    var finalLine = params.get('finalLine') === '1';
+    var headerDelay = Number(params.get('headerDelay')) || 0;
     var survey = params.get('SID') || 'none';
     var declared = params.has('declared')
       ? params.get('declared').split(',').filter(Boolean)
@@ -159,6 +176,10 @@ Qualtrics.SurveyEngine.addOnload(function () {
     // The header rendered again: Qualtrics replaces its HTML, so the script
     // runs again. Resolves once it has run, which is when the page is ready.
     function renderHeader(first) {
+      if (first || !headerDelay) return runHeader(first);
+      return new Promise(function (r) { setTimeout(r, headerDelay); }).then(function () { return runHeader(false); });
+    }
+    function runHeader(first) {
       header.innerHTML = '';
       header.innerHTML = tag;   // innerHTML alone never runs a script
       var old = header.querySelector('script[src]');
@@ -194,6 +215,11 @@ Qualtrics.SurveyEngine.addOnload(function () {
         '<textarea id="q' + page + '"></textarea>' +
         '<button type="button" id="next">Next</button>';
       document.getElementById('next').addEventListener('click', next);
+      // Question scripts run as the page renders, whether or not the header
+      // has run again yet.
+      if (finalLine && page === pages) {
+        (0, eval)('Qualtrics.SurveyEngine.addOnPageSubmit(function () { CyborgHunter.data(); });');
+      }
       if (recipe && page === pages) {
         (0, eval)(document.getElementById('qx-replay-recipe').textContent);
         onloadHooks.forEach(function (fn) { fn.call(question); });
@@ -247,7 +273,9 @@ Qualtrics.SurveyEngine.addOnload(function () {
           sessionStorage.setItem(RESUME_KEY, String(page));
           renderPage();
           if (page > pages) { ready(); return; }
-          return renderHeader(false).then(ready);
+          if (blockNext) return renderHeader(false).then(ready);
+          ready();
+          renderHeader(false).catch(function () { /* counted by __qxHeaderRuns only when it ran */ });
         }, function () {
           show('qx-error', 'Something went wrong');
         })
