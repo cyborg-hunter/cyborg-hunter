@@ -139,6 +139,63 @@ describe('ch.js on real jsPsych: a synchronous trial before a named trial', () =
     });
   }
 
+  // The call-function's own row is cut from the span opened at the previous
+  // trial's on_finish (`gap-<index of that trial>`). A trialId/phase the
+  // researcher set on the call-function names that row instead; the cut, the
+  // rotations and the next trial stay as they were.
+  for (const [label, gap] of [['next trial starts synchronously', undefined], ['next trial starts after a post_trial_gap', 20]]) {
+    it(`a labelled call-function row carries its trialId and phase; an unlabelled one stays gap-<n> (${label})`, async () => {
+      const ctx = bootCh();
+      const rotated = [];
+      const rotate = ctx.segmenter.rotate;
+      ctx.segmenter.rotate = (o) => { rotated.push(o.trialId + '|' + o.phase); return rotate(o); };
+      const jsPsych = win.initJsPsych({});
+      const labelled = Object.assign(callFunction(), { extensions: named({ trialId: 'save-step', phase: 'setup' }) });
+      const plain = callFunction();
+      if (gap !== undefined) { labelled.post_trial_gap = gap; plain.post_trial_gap = gap; }
+      const rows = await runTimeline(jsPsych, [
+        { type: Timer, extensions: named({ trialId: 'A-named', phase: 'pA' }) },
+        labelled,
+        { type: Timer, extensions: named({ trialId: 'T-named', phase: 'pT' }) },
+        plain,
+        { type: Timer, extensions: named({ trialId: 'U-named', phase: 'pU' }) }
+      ]);
+      assert.equal(rows.length, 5);
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.equal(rows[1].integrity.trialId, 'save-step');
+      assert.equal(rows[1].integrity.phase, 'setup');
+      assert.equal(rows[1].integritySegment.trialId, 'save-step');
+      // Unlabelled: the span opened at trial 2's on_finish.
+      assert.equal(rows[3].integrity.trialId, 'gap-2');
+      assert.equal(rows[3].integrity.phase, 'default');
+      assert.equal(rows[3].integritySegment.trialId, 'gap-2');
+      for (const [i, id, phase] of [[0, 'A-named', 'pA'], [2, 'T-named', 'pT'], [4, 'U-named', 'pU']]) {
+        assert.equal(rows[i].integrity.trialId, id);
+        assert.equal(rows[i].integrity.phase, phase);
+        assert.equal(rows[i].integritySegment.trialId, id);
+      }
+      assert.deepStrictEqual(rows.map((r) => r.integritySegment.segmentIndex), [0, 1, 2, 3, 4]);
+      assert.equal(rows[4].integritySegmentFinal.segmentIndex, 5);
+      assert.deepStrictEqual(rotated, ['A-named|pA', 'T-named|pT', 'U-named|pU']);
+      assert.deepStrictEqual(errors, []);
+    });
+
+    it(`a call-function labelled with phase only keeps gap-<n> as its trialId (${label})`, async () => {
+      bootCh();
+      const jsPsych = win.initJsPsych({});
+      const cf = Object.assign(callFunction(), { extensions: named({ phase: 'setup' }) });
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const rows = await runTimeline(jsPsych, [{ type: Timer }, cf, { type: Timer }]);
+      assert.equal(rows.length, 3);
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.equal(rows[1].integrity.trialId, 'gap-0');
+      assert.equal(rows[1].integrity.phase, 'setup');
+      assert.equal(rows[1].integritySegment.trialId, 'gap-0');
+      assert.equal(rows[2].integrity.trialId, 'trial-2');
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
   it('a call-function trial last in the timeline does not touch the finished session', async () => {
     bootCh();
     const jsPsych = win.initJsPsych({});
@@ -198,6 +255,30 @@ describe('ch.js on real jsPsych: a synchronous trial before a promise-returning 
       assert.equal(t.integrity.decoy.source, 'skipped');
       assert.equal(t.integritySegment.trialId, 'T-named');
       for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.deepStrictEqual(rotated, ['A-named|pA', 'T-named|pT']);
+      assert.deepStrictEqual(errors, []);
+    });
+
+    it(`a labelled call-function keeps its label and the promise trial after it keeps its own (${label})`, async () => {
+      const ctx = bootCh();
+      const rotated = [];
+      const rotate = ctx.segmenter.rotate;
+      ctx.segmenter.rotate = (o) => { rotated.push(o.trialId + '|' + o.phase); return rotate(o); };
+      const jsPsych = win.initJsPsych({});
+      const cf = Object.assign(callFunction(), { extensions: named({ trialId: 'save-step', phase: 'setup' }) });
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const rows = await runTimeline(jsPsych, [
+        { type: Timer, extensions: named({ trialId: 'A-named', phase: 'pA' }) },
+        cf,
+        { type: PromiseLoad, extensions: named({ trialId: 'T-named', phase: 'pT' }) }
+      ]);
+      assert.equal(rows.length, 3);
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      for (const [i, id, phase] of [[0, 'A-named', 'pA'], [1, 'save-step', 'setup'], [2, 'T-named', 'pT']]) {
+        assert.equal(rows[i].integrity.trialId, id);
+        assert.equal(rows[i].integrity.phase, phase);
+        assert.equal(rows[i].integritySegment.trialId, id);
+      }
       assert.deepStrictEqual(rotated, ['A-named|pA', 'T-named|pT']);
       assert.deepStrictEqual(errors, []);
     });

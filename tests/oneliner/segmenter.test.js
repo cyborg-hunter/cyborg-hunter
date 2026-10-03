@@ -129,6 +129,39 @@ describe('segmenter', () => {
     assert.ok(!('gap' in next.segment), 'the gap buffer is cleared at each cut');
   });
 
+  // A host trial that finished without rotating (jsPsych call-function) is
+  // cut from the gap span; a label names that cut and nothing else.
+  it('cut({ label }) names the closing span\'s report and segment; counts and the next span are unchanged', () => {
+    const seg = setup();
+    seg.start();
+    paste('hello');
+    const out = seg.cut({ source: 'host', nextTrialId: 'gap-1', label: { trialId: 'save-step', phase: 'setup' } });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.segment.trialId, 'save-step');
+    assert.equal(out.trialReport.trialId, 'save-step');
+    assert.equal(out.trialReport.phase, 'setup');
+    assert.equal(out.segment.counters.pasteCount, 1);
+    assert.equal(out.trialReport.pasteEvents.length, 1, 'the span\'s own evidence stays on its report');
+    assert.ok(!('gap' in out.segment));
+    assert.equal(seg.state().currentTrialId, 'gap-1');
+    assert.equal(seg.state().segmentIndex, 1);
+    const next = seg.cut({ source: 'host' });
+    assert.equal(next.segment.trialId, 'gap-1', 'the label does not carry over');
+    assert.equal(next.trialReport.phase, 'default');
+  });
+
+  it('cut({ label }) applies only the labels present', () => {
+    const seg = setup();
+    seg.start({ trialId: 'gap-0' });
+    const phaseOnly = seg.cut({ source: 'host', label: { phase: 'setup' } });
+    assert.equal(phaseOnly.segment.trialId, 'gap-0');
+    assert.equal(phaseOnly.trialReport.trialId, 'gap-0');
+    assert.equal(phaseOnly.trialReport.phase, 'setup');
+    const idOnly = seg.cut({ source: 'host', label: { trialId: 'save-step' } });
+    assert.equal(idOnly.segment.trialId, 'save-step');
+    assert.equal(idOnly.trialReport.phase, 'default');
+  });
+
   it('segmentIndex increments across cuts and honours setSegmentIndex', () => {
     const seg = setup();
     seg.start();

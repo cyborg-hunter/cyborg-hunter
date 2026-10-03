@@ -12,7 +12,11 @@
 //                               no segment; the gap report is buffered for the
 //                               next cut() and also returned
 //                               → gapReport | null (nothing was open) | { error }
-//   cut({ source, nextTrialId?, nextOpts? })   close + segment + open next
+//   cut({ source, nextTrialId?, nextOpts?, label? })   close + segment + open next
+//                               label { trialId?, phase? } renames the span
+//                               being closed, on its report and segment only
+//                               (a host trial that never rotated in, e.g.
+//                               jsPsych call-function, adapters/jspsych-extension.js)
 //                               → { segment, trialReport }          success
 //                               → { segment, trialReport, error }   cut OK, reopen failed
 //                               → { error }                         nothing was cut
@@ -103,10 +107,16 @@ export function createSegmenter(opts) {
   }
 
   // Close the open trial and turn everything since the last cut into a segment.
-  function closeAndSegment(source) {
+  // A label renames the closed span after the fact: the monitor ran it under
+  // its old name (decoy lookup, signal callbacks), only the saved names change.
+  // The report is endTrial's own copy, so renaming it touches nothing else.
+  function closeAndSegment(source, label) {
     var report = closeTrial();
+    var trialId = currentTrialId;
+    if (label && label.trialId) { trialId = label.trialId; if (report) report.trialId = label.trialId; }
+    if (label && label.phase && report) report.phase = label.phase;
     var segment = differ.cut({
-      segmentIndex: segmentIndex, source: source, trialId: currentTrialId,
+      segmentIndex: segmentIndex, source: source, trialId: trialId,
       pageOrigin: clock(), trialReport: report, gapReports: gapReports
     });
     gapReports = [];
@@ -147,7 +157,7 @@ export function createSegmenter(opts) {
       o = o || {};
       var out;
       try {
-        out = closeAndSegment(o.source || sourceDefault);
+        out = closeAndSegment(o.source || sourceDefault, o.label);
       } catch (e) { return fail('segment write', e); }
       try {
         openTrial(o.nextTrialId || spanId(), o.nextOpts);

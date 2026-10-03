@@ -230,6 +230,52 @@ describe('OneLinerExtension: on_load', () => {
     assert.equal(calls[1][1].phase, 'pT');
   });
 
+  // The call-function's row is cut from the gap span the previous cut opened.
+  // A trialId/phase the researcher set on it (seen at on_start; on_load never
+  // came) labels that cut; only the labels present are passed.
+  it('a labelled trial that finished before its on_load labels its cut with its trialId and phase', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(2));
+    const cf = { trialId: 'save-step', phase: 'setup', decoyAnswer: false };
+    ext.on_start(cf);
+    ext.on_finish(cf);
+    ext.on_load(cf);                          // the late load callback is still dropped
+    assert.deepStrictEqual(calls, [['cut', { source: 'host', nextTrialId: 'gap-2', label: { trialId: 'save-step', phase: 'setup' } }]]);
+  });
+
+  it('a synchronous trial labelled with phase only passes only the phase', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(2));
+    const cf = { phase: 'setup' };
+    ext.on_start(cf);
+    ext.on_finish(cf);
+    assert.deepStrictEqual(calls, [['cut', { source: 'host', nextTrialId: 'gap-2', label: { phase: 'setup' } }]]);
+  });
+
+  it('an unlabelled or params-less synchronous trial cuts without a label', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(2));
+    for (const cf of [{}, undefined, { decoyAnswer: false }]) {
+      ext.on_start(cf);
+      ext.on_finish(cf);
+    }
+    assert.deepStrictEqual(calls.map((c) => c[1]), [0, 1, 2].map(() => ({ source: 'host', nextTrialId: 'gap-2' })));
+  });
+
+  it('a trial whose on_load rotated cuts without a label (its span already carries the names)', () => {
+    const { ctx, calls } = makeCtx();
+    OneLinerExtension.ctx = ctx;
+    const ext = new OneLinerExtension(fakeJsPsych(3));
+    const p = { trialId: 'q1', phase: 'test' };
+    ext.on_start(p);
+    ext.on_load(p);
+    ext.on_finish(p);
+    assert.deepStrictEqual(calls[1], ['cut', { source: 'host', nextTrialId: 'gap-3' }]);
+  });
+
   it('after the session has ended, on_load does not touch the segmenter', () => {
     const { ctx, calls } = makeCtx({ jspsych: { finalized: true } });
     OneLinerExtension.ctx = ctx;

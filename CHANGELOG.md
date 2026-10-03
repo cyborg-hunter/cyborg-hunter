@@ -23,6 +23,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   changes in a few minutes, reload the page." under the step. The next
   progress, the result, an error or Start over hides it. Nothing is cancelled
   or restarted.
+- A jsPsych call-function (or other synchronous) step labelled with
+  trialId/phase now keeps that label on its row; unlabelled steps keep
+  `gap-<n>`. Rows recorded by 0.10.x–0.11.x for such steps were labelled
+  `gap-<n>`.
 
 ### Fixed
 - `/analyze/`: selecting a participant without a replay recording in the
