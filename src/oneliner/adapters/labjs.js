@@ -174,8 +174,11 @@ export function installLabJsAdapter(opts) {
     if (s.open) ctx.replay.startTrial(s.currentTrialId);
   }
 
-  // Once per datastore: row 0 carries the participant id even when it is a
-  // skipped component's row (the CLI's CSV reader hoists the id from row 0).
+  // Once per page, from the first end() of any component: datastore.set()
+  // stages its fields into the next commit only, and every row (a skipped
+  // component's and a Dummy's included) is committed inside its own end(), so
+  // the first end() puts the participant id on row 0 (the CLI's CSV reader
+  // hoists the id from row 0).
   function stamp(ds) {
     if (state.stamped || !ds || typeof ds.set !== 'function') return;
     state.stamped = true;
@@ -199,7 +202,6 @@ export function installLabJsAdapter(opts) {
     internals.chError = null;
     var o = trialOptions(c, { generation: generation, index: state.trialsRun, rerun: internals.chRuns });
     state.trialsRun += 1;
-    stamp(datastoreOf(c));
     internals.chStart = performance.now();   // same anchor as the jsPsych extension's on_load
     var r = ctx.segmenter.rotate(o);
     internals.chOpen = true;
@@ -210,6 +212,7 @@ export function installLabJsAdapter(opts) {
 
   // Before lab.js's own end() commits this component's row.
   function beforeEnd(c) {
+    if (!ctx.bootError) stamp(datastoreOf(c));
     var internals = c.internals;
     if (!internals || !internals.chOpen) return;
     internals.chOpen = false;

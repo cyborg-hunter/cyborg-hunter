@@ -154,6 +154,21 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
     assert.deepStrictEqual(errors, []);
   });
 
+  it('row 0 carries the participant id when it is a Dummy\'s or a skipped component\'s row', async () => {
+    await bootOn(win);
+    const study = new lab.flow.Sequence({ title: 'root', content: [
+      new lab.core.Dummy({ title: 'start' }),
+      screen(lab, 'skipped', { skip: true }),
+      screen(lab, 'a')
+    ] });
+    const rows = await runToEnd(study);
+    assert.deepStrictEqual(rows.map((r) => r.sender), ['start', 'skipped', 'a', 'root']);
+    assert.strictEqual(rows[0].participantId, 'P1');
+    assert.strictEqual(rows[0].cyborgHunterVersion, VERSION);
+    assert.ok(!('integritySegment' in rows[0]) && !('integritySegment' in rows[1]));
+    assert.deepStrictEqual(withSegment(rows).map((r) => r.sender), ['a']);
+  });
+
   it('a paste during a trial lands in that trial; one before the first trial is a gap on the first segment', async () => {
     await bootOn(win);
     paste(win, 'early');
