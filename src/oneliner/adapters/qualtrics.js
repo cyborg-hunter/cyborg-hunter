@@ -104,20 +104,22 @@ export function installQualtricsAdapter(opts) {
     try {
       ctx.vanilla.cut('page');   // { error } alone (no open span): write what exists
       var b = build();
-      if (b.chars > maxChars) {
+      // Measured here on the string written, whatever the builder reports.
+      var chars = b.json.length;
+      if (chars > maxChars) {
         failed('payload over cap after reduction');
       } else {
         if (b.level > 0) {
           // The message names the size before reduction; only this slow
           // path pays for the second build.
-          var full = buildQualtricsPayload({ blob: ctx.vanilla.blob(), maxChars: Infinity }).chars;
+          var full = buildQualtricsPayload({ blob: ctx.vanilla.blob(), maxChars: Infinity }).json.length;
           console.warn(MESSAGES.qualtricsPayloadReduced(b.level, full, maxChars));
         }
         var se = win.Qualtrics.SurveyEngine;
         if (legacy) se.setEmbeddedData(LEGACY_FIELD, b.json);
         else se.setJSEmbeddedData(FIELD_NAME, b.json);
-        last = { chars: b.chars, cap: maxChars, level: b.level };
-        result = { chars: b.chars, cap: maxChars, level: b.level, payload: b.payload };
+        last = { chars: chars, cap: maxChars, level: b.level };
+        result = { chars: chars, cap: maxChars, level: b.level, payload: b.payload };
       }
     } catch (e) {
       failed(message(e));

@@ -168,7 +168,7 @@ describe('Qualtrics host: the page-submit writer', () => {
     assert.strictEqual(ctx.qualtrics.lastWrite().level, p.cyborgHunterOneLiner.truncated.level);
     const reduced = warns.filter((w) => w.startsWith('[cyborg-hunter] The Qualtrics payload was reduced'));
     assert.strictEqual(reduced.length, 1);
-    const full = buildQualtricsPayload({ blob: ctx.vanilla.blob(), maxChars: Infinity }).chars;
+    const full = buildQualtricsPayload({ blob: ctx.vanilla.blob(), maxChars: Infinity }).json.length;
     assert.ok(full > MAX_CHARS, full + ' chars before reduction');
     assert.ok(reduced[0].includes('the full summary was ' + full + ' characters'), 'names the size before reduction: ' + reduced[0]);
     assert.ok(p.trials[p.trials.length - 1].integritySegment.score, 'the newest segment keeps the score');
