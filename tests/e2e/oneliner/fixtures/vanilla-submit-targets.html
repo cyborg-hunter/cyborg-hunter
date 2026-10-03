@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: vanilla submits that keep the page</title>
+  <!-- Fixture for tests/e2e/oneliner/vanilla.spec.js. One page, no marks:
+       the boot span is span-0. Each spec uses one of the forms below:
+         #popup      POST into a new window (target="_blank");
+         #framed     POST into the named iframe "sink";
+         #handler    a submit handler that cancels the event and calls
+                     form.submit(): the page goes, once;
+         #plain      a POST form the spec submits with a synthetic submit
+                     event (dispatchEvent), which submits nothing;
+         #clobbered  a POST form with a control named "method".
+       The first three, and the synthetic event, leave the page in place: the
+       next pagehide closes what was recorded after them. -->
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-VAN-4" data-guards="none"></script>
+  <textarea id="answer"></textarea>
+  <iframe name="sink" title="sink"></iframe>
+  <form id="popup" method="post" action="/post-popup" target="_blank">
+    <button type="submit" id="popup-submit">Preview</button>
+  </form>
+  <form id="framed" method="post" action="/post-framed" target="sink">
+    <button type="submit" id="framed-submit">Save a draft</button>
+  </form>
+  <form id="handler" method="post" action="/post-handler">
+    <button type="submit" id="handler-submit">Send</button>
+  </form>
+  <form id="plain" method="post" action="/post-plain"></form>
+  <form id="clobbered" method="post" action="/post-clobbered">
+    <input type="hidden" name="method" value="by-hand">
+    <button type="submit" id="clobbered-submit">Send</button>
+  </form>
+  <script>
+    document.getElementById('handler').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      ev.target.submit();
+    });
+  </script>
+</body>
+</html>
