@@ -53,6 +53,7 @@ afterEach(() => {
     if (c && c.monitor) { try { c.monitor.destroy(); } catch { /* already destroyed */ } }
   }
   delete performance.now;   // the own property beforeEach added; the prototype method is back
+  delete performance.timeOrigin;   // the own property laterPage() added; the prototype getter is back
   win.HTMLFormElement.prototype.submit = nativeFormSubmit;
   console.error = orig.error; console.warn = orig.warn; console.info = orig.info;
   win.close();
@@ -82,6 +83,27 @@ function reinstall(ctx, fake, opts) {
   fake.submitHooks.length = 0;
   ctx.qualtrics = installQualtricsAdapter(Object.assign({ win, ctx }, opts));
   return ctx.qualtrics;
+}
+
+// A new page load in the same tab (a reload, or the next legacy page): the
+// page's ch.js is gone and a new one boots. happy-dom's sessionStorage is
+// per Window, so the tab's storage is copied over; one node process has one
+// performance.timeOrigin, so the new page gets its own.
+const realOrigin = performance.timeOrigin;
+function nextPage(ctx, ms) {
+  ctx.qualtrics.teardown();
+  ctx.vanilla.teardown();
+  ctx.monitor.destroy();
+  const saved = {};
+  for (let i = 0; i < win.sessionStorage.length; i++) {
+    const k = win.sessionStorage.key(i);
+    saved[k] = win.sessionStorage.getItem(k);
+  }
+  const page = new Window({ url: 'https://survey.example/jfe/form/SV_test' });
+  for (const [k, v] of Object.entries(saved)) page.sessionStorage.setItem(k, v);
+  win.close();
+  useWindow(page);
+  Object.defineProperty(performance, 'timeOrigin', { value: realOrigin + ms, configurable: true });
 }
 
 // Two user actions never share a task: the writer's latch clears on a
@@ -585,6 +607,45 @@ describe('Qualtrics host: the fallbacks live verification can pick', () => {
   });
 });
 
+// Qualtrics keeps a response across a reload ("Allow respondents to finish
+// later" is on by default) and resumes it on the same page, while the
+// reload boots a new ch.js in the same tab.
+describe('Qualtrics host: a reload', () => {
+  it('pagehide saves the session without a cut, and the resumed page\'s write holds every page', async () => {
+    const fake1 = fakeSurveyEngine();
+    const ctx1 = start(fake1);
+    paste('page one');
+    fake1.submit('next');
+    await tick();
+    fake1.rerunHeader(win, null);
+    paste('page two');
+    fake1.submit('next');
+    await tick();
+    fake1.rerunHeader(win, null);                            // page three, then the reload
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual(ctx1.segmenter.state(), { open: true, segmentIndex: 2, currentTrialId: 'span-2' }, 'no cut');
+    assert.deepStrictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials.map((t) => t.integritySegment.segmentIndex), [0, 1]);
+
+    nextPage(ctx1, 30000);
+    const fake2 = fakeSurveyEngine();
+    start(fake2);
+    const p = JSON.parse(fake2.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1, 2]);
+    assert.strictEqual(p.trials[0].integrity.pasteEvents.length, 1);
+    assert.strictEqual(p.trials[1].integrity.pasteEvents.length, 1);
+    assert.strictEqual(p.cyborgHunterOneLiner.pageCount, 2, 'two page loads');
+  });
+
+  it('a writer torn down saves nothing at pagehide', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    win.CyborgHunter.mark('q2');
+    ctx.qualtrics.teardown();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(win.sessionStorage.getItem(KEY), null);
+  });
+});
+
 describe('Qualtrics host: the legacy layout', () => {
   it('writes cyborg_hunter through setEmbeddedData and keeps the session for the next page load', () => {
     const fake = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
@@ -606,6 +667,30 @@ describe('Qualtrics host: the legacy layout', () => {
     hook('next');
     const saved = JSON.parse(win.sessionStorage.getItem(KEY));
     assert.deepStrictEqual(saved.trials.map((t) => t.integritySegment.segmentIndex), [0, 1]);
+  });
+
+  it('the next page load restores the session, and its write carries both pages', () => {
+    const fake1 = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    const ctx1 = start(fake1);
+    paste('page one');
+    fake1.submit('next');
+    win.dispatchEvent(new win.Event('pagehide'));
+    nextPage(ctx1, 30000);
+    const fake2 = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    start(fake2);
+    const p = JSON.parse(fake2.submit('next')[LEGACY_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1]);
+    assert.strictEqual(p.trials[0].integrity.pasteEvents.length, 1);
+    assert.strictEqual(p.cyborgHunterOneLiner.pageCount, 2);
+  });
+
+  it('pagehide saves a cut no submit saved', () => {
+    const fake = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    start(fake);
+    win.CyborgHunter.mark('q2');
+    win.dispatchEvent(new win.Event('pagehide'));
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    assert.deepStrictEqual(saved.trials.map((t) => t.integritySegment.segmentIndex), [0]);
   });
 
   it('the submit after CyborgHunter.data() saves what came between', () => {

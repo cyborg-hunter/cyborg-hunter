@@ -50,7 +50,10 @@
 // its own, and the submit after it writes again, with what came in between.
 // CyborgHunter.data() cuts, writes and returns the checked payload (or the
 // marker) on every call, and never takes a submit's write. A failed write is
-// logged and noted in the blob, and the survey goes on.
+// logged and noted in the blob, and the survey goes on. At pagehide (a
+// reload, a closed tab) the session is saved without a cut, so a ch.js
+// booting again in the tab continues it; the legacy layout, where every page
+// is a new boot, also saves it at every submit callback.
 //
 // Nothing here throws into the page: the submit callback, the re-run hook
 // and data() each end in a catch-all, and the error text, the console calls
@@ -231,6 +234,17 @@ export function installQualtricsAdapter(opts) {
     } catch (_) { /* never into Qualtrics' submit */ }
   }
 
+  // A reload or a closed tab (never a page change inside the survey, which
+  // keeps this document): the session is saved, so a ch.js booting again in
+  // this tab continues it (adapters/vanilla.js restore) and the next write
+  // still holds the earlier pages. Qualtrics resumes a reloaded response on
+  // the same page. No cut: the open span is not a page the survey submitted.
+  // Outside the submit hook, so the save's stringify of the raw traces costs
+  // the submit nothing.
+  function onPageHide() {
+    try { if (active) ctx.vanilla.persist(); } catch (_) { /* the page is going away */ }
+  }
+
   function ensureHook() {
     if (registeredPage !== null && (registerOnce || registeredPage === page)) return;
     try {
@@ -242,6 +256,7 @@ export function installQualtricsAdapter(opts) {
   }
 
   ensureHook();
+  win.addEventListener('pagehide', onPageHide);
   // A re-run is the next page, so any submit from here is a new one. With
   // writeOnRerun the page before it is written first, under its own page
   // number.
@@ -264,6 +279,7 @@ export function installQualtricsAdapter(opts) {
     lastWrite: function () { return last; },
     teardown: function () {
       active = false;   // a hook Qualtrics already holds cannot be removed
+      win.removeEventListener('pagehide', onPageHide);
       delete ctx.handlers.rerun;
       ctx.handlers.data = vanillaData;
     }
