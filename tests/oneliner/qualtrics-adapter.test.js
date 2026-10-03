@@ -674,6 +674,13 @@ describe('Qualtrics host: one saved session per survey', () => {
     assert.strictEqual(at('/jfe/preview/previewId/0a1b2c3d-4e5f-6789/SV_1AbC2dEf3GhI4jK?Q_CHL=preview&Q_SurveyVersionID=current'), 'SV_1AbC2dEf3GhI4jK');
     assert.strictEqual(at('/SE/?SID=SV_1AbC2dEf3GhI4jK'), 'SV_1AbC2dEf3GhI4jK');
     assert.strictEqual(at('/jfe/form/my-study'), null);
+    // In the query only SID names the survey; any other parameter may hold an
+    // id of another survey (a referrer, a redirect).
+    assert.strictEqual(at('/my-study?from=SV_1AbC2dEf3GhI4jK'), null);
+    assert.strictEqual(at('/my-study?SID=SV_1AbC2dEf3GhI4jK&from=SV_Other'), 'SV_1AbC2dEf3GhI4jK');
+    assert.strictEqual(at('/my-study?from=x&SID=SV_1AbC2dEf3GhI4jK'), 'SV_1AbC2dEf3GhI4jK');
+    assert.strictEqual(at('/my-study?XSID=SV_1AbC2dEf3GhI4jK'), null);
+    assert.strictEqual(at('/my-study-SV_1AbC2dEf3GhI4jK'), null, 'a path part that only contains an id');
     assert.strictEqual(at('/jfe/form/SV_1AbC2dEf3GhI4jK', 'SV_FromTag9'), 'SV_FromTag9');
     assert.strictEqual(at('/jfe/form/my-study', ' SV_FromTag9 '), 'SV_FromTag9');
     // Piped text Qualtrics did not resolve, or anything else, is not an id.

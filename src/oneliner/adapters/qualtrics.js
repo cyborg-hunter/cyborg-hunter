@@ -24,9 +24,11 @@
 //   in the tab does not continue the first. attr, the tag's
 //   data-qualtrics-survey-id (a researcher can pipe ${e://Field/SurveyID}
 //   into it), wins when it holds an id; piped text Qualtrics did not resolve
-//   is not one. Otherwise the page address: /jfe/form/SV_…, or
+//   is not one. Otherwise the page address: a path part /jfe/form/SV_…, or
 //   /jfe/preview/…/SV_… in preview, the same on every page of a response and
-//   after a reload. null when neither has an id. Never throws.
+//   after a reload; then an older link's ?SID=SV_… (no other query
+//   parameter: one may name another survey, a referrer or a redirect). null
+//   when neither has an id. Never throws.
 //
 // installQualtricsAdapter({ win, ctx, maxChars?, builder?, registerOnce?, writeOnRerun? }) → {
 //   write(reason) → null | { payload, written }   payload: what was checked
@@ -116,9 +118,10 @@ export function qualtricsSurveyId(win, attr) {
   try {
     var own = /^SV_[A-Za-z0-9]+$/.exec(String(attr === null || attr === undefined ? '' : attr).trim());
     if (own) return own[0];
-    // The path first: /jfe/form/SV_… and /jfe/preview/…/SV_…; then the query
-    // (an older link's ?SID=SV_…).
-    var m = /\b(SV_[A-Za-z0-9]+)\b/.exec(win.location.pathname + win.location.search);
+    // A path part first: /jfe/form/SV_… and /jfe/preview/…/SV_…; then the
+    // query's SID (an older link's ?SID=SV_…).
+    var m = /(?:^|\/)(SV_[A-Za-z0-9]+)(?=\/|$)/.exec(win.location.pathname) ||
+      /[?&]SID=(SV_[A-Za-z0-9]+)(?=&|$)/.exec(win.location.search);
     return m ? m[1] : null;
   } catch (_) {
     return null;
