@@ -281,8 +281,16 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
 
 // One result per response row of a Qualtrics export. Warnings carry the file
 // and the response, `data/export.csv (response R_2)`, so a researcher finds
-// the row. Each response is extracted on its own: a payload that makes the
+// the row, and a `response` key so the CLI can list the file-level ones
+// first. Each response is extracted on its own: a payload that makes the
 // extractor throw is reported under its response and the others still count.
+//
+// The participant id: participantIdField first, as for any file. When it
+// resolves to nothing or to ch.js's random `ch-…` id (a lab that keeps one
+// config for its jsPsych files and its Qualtrics export), the payload's own
+// top-level participantId, which the reader has already replaced with the
+// row's ResponseId when it was missing or random.
+const UNRESOLVED_ID_WARNING = 'participantId unresolved';   // extract-core.js's text
 function ingestQualtricsExport(text, path, config, participants, warnings) {
   const q = parseQualtricsExport(text, { field: config.qualtricsField });
   for (const r of q.responses) {
@@ -291,14 +299,18 @@ function ingestQualtricsExport(text, path, config, participants, warnings) {
     try {
       result = extractIntegrityData(r.raw, config);
     } catch (e) {
-      warnings.push({ file: label, warnings: [`Failed to parse: ${e.message}`] });
+      warnings.push({ file: label, response: r.responseId, warnings: [`Failed to parse: ${e.message}`] });
       continue;
+    }
+    if (result.participantId === 'unknown' || String(result.participantId).startsWith('ch-')) {
+      result.participantId = r.raw.participantId;
+      result.warnings = result.warnings.filter((w) => !w.startsWith(UNRESOLVED_ID_WARNING));
     }
     if (config.singleParticipant && result.participantId !== config.singleParticipant) continue;
     if (r.raw.metadata.participantIdFromResponseId) {
       result.warnings.push('participantId taken from the ResponseId column: the payload carried no linkable id (set data-participant-id to piped text, docs/qualtrics.md#participant-id)');
     }
-    if (result.warnings.length > 0) warnings.push({ file: label, warnings: result.warnings });
+    if (result.warnings.length > 0) warnings.push({ file: label, response: r.responseId, warnings: result.warnings });
     if (result.trials.length > 0) participants.push(result);
   }
   for (const w of q.warnings) warnings.push({ file: path, warnings: [w] });
@@ -307,7 +319,7 @@ function ingestQualtricsExport(text, path, config, participants, warnings) {
     warnings.push({ file: path, warnings: [`${q.empty.length} of ${total} responses carry no Cyborg Hunter data (empty ${q.column}): ch.js never ran on those responses (licence without custom JavaScript, header script removed, or preview before the tag was added), or the field was not declared in Survey Flow — docs/qualtrics.md#troubleshooting`] });
   }
   for (const bad of q.invalid) {
-    warnings.push({ file: `${path} (response ${bad.responseId})`, warnings: [`${q.column} is not JSON: ${bad.error}`] });
+    warnings.push({ file: `${path} (response ${bad.responseId})`, response: bad.responseId, warnings: [`${q.column} is not JSON: ${bad.error}`] });
   }
 }
 

@@ -105,3 +105,92 @@ describe('ingestFiles with a Qualtrics export', () => {
     assert.ok(!out.warnings.some((w) => w.warnings.some((t) => /carry no Cyborg Hunter data/.test(t))));
   });
 });
+
+// A payload cell as Qualtrics quotes it.
+const cell = (o) => '"' + JSON.stringify(o).replace(/"/g, '""') + '"';
+const oneTrial = [{ integrity: { trialId: 't0', pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] } }];
+
+describe('the ResponseId fallback under any participantIdField', () => {
+  for (const field of ['workerId', 'subject_ID']) {
+    it(`participantIdField ${field}: the payload's own id, else the ResponseId; no unresolved-id warning`, async () => {
+      const out = await ingestFiles({ participantFiles: [reader('export.csv', text)], replayFiles: [] }, { participantIdField: field }, deps);
+      assert.deepStrictEqual(out.participants.map((p) => p.participantId), ['P-ONE', 'R_2']);
+      assert.strictEqual(out.participants[1].metadata.participantIdFromResponseId, true);
+      assert.strictEqual(out.participants[0].metadata.participantIdFromResponseId, undefined);
+      const flat = out.warnings.flatMap((w) => w.warnings.map((t) => w.file + ': ' + t));
+      assert.ok(!flat.some((t) => /participantId unresolved/.test(t)), flat.join('\n'));
+      assert.ok(flat.some((t) => /\(response R_2\): .*participantId taken from the ResponseId column/.test(t)));
+      assert.ok(!flat.some((t) => /\(response R_1\): .*ResponseId column/.test(t)));
+    });
+  }
+  it('a configured field the payload carries wins', async () => {
+    const csv = 'StartDate,ResponseId,__js_cyborg_hunter\nx,R_8,' + cell({ participantId: 'ch-0123456789ab', workerId: 'W8', trials: oneTrial }) + '\n';
+    const out = await ingestFiles({ participantFiles: [reader('export.csv', csv)], replayFiles: [] }, { participantIdField: 'workerId' }, deps);
+    assert.deepStrictEqual(out.participants.map((p) => p.participantId), ['W8']);
+  });
+  it('a configured field that resolves to a random ch- id still falls back to the ResponseId', async () => {
+    const csv = 'StartDate,ResponseId,__js_cyborg_hunter\nx,R_8,' + cell({ participantId: 'ch-0123456789ab', trials: oneTrial, metadata: { sid: 'ch-0123456789ab' } }) + '\n';
+    const out = await ingestFiles({ participantFiles: [reader('export.csv', csv)], replayFiles: [] }, { participantIdField: 'metadata.sid' }, deps);
+    assert.deepStrictEqual(out.participants.map((p) => p.participantId), ['R_8']);
+  });
+});
+
+describe('header rows and detection', () => {
+  it('a label row it does not recognise is still dropped when the ImportId row follows it', () => {
+    const lines = text.split('\n');
+    lines[1] = lines[1].replace('"Response ID"', '"Antwort-ID"');
+    const q = parseQualtricsExport(lines.join('\n'), {});
+    assert.deepStrictEqual(q.responses.map((r) => r.responseId), ['R_1', 'R_2']);
+    assert.deepStrictEqual(q.invalid.map((r) => r.responseId), ['R_4']);
+    assert.deepStrictEqual(q.warnings, []);
+  });
+  it('an ImportId row with no label row before it is dropped', () => {
+    const lines = text.split('\n');
+    const q = parseQualtricsExport([lines[0], ...lines.slice(2)].join('\n'), {});
+    assert.deepStrictEqual(q.responses.map((r) => r.responseId), ['R_1', 'R_2']);
+    assert.deepStrictEqual(q.warnings, []);
+  });
+  it('a jsPsych CSV that happens to carry ResponseId and cyborg_hunter columns is not an export', () => {
+    assert.strictEqual(isQualtricsExport('participantId,ResponseId,trial_index,cyborg_hunter,integrity\nP1,R_1,0,,{}\n'), false);
+    assert.strictEqual(isQualtricsExport('ResponseId,trial_type,__js_cyborg_hunter\n'), false);
+  });
+  it('header names are trimmed the same way for detection and for reading', () => {
+    const csv = 'StartDate, ResponseId , __js_cyborg_hunter\nx,R_9,' + cell({ participantId: 'P9', trials: [] }) + '\n';
+    assert.strictEqual(isQualtricsExport(csv), true);
+    const q = parseQualtricsExport(csv, {});
+    assert.deepStrictEqual(q.responses.map((r) => r.responseId), ['R_9']);
+  });
+});
+
+describe('malformed cells', () => {
+  it('a broken quote is reported, with record numbers and no cell text', () => {
+    const csv = 'ResponseId,__js_cyborg_hunter\nR_a,"{""participantId"":""SECRET""\nR_b,' + cell({ participantId: 'P-B', trials: [] }) + '\n';
+    const q = parseQualtricsExport(csv, {});
+    const w = q.warnings.find((t) => /malformed/.test(t));
+    assert.ok(w, q.warnings.join('\n'));
+    assert.ok(!/SECRET/.test(w));
+  });
+  it('a cell that is not JSON is described by position and length, never quoted', () => {
+    const q = parseQualtricsExport('ResponseId,__js_cyborg_hunter\nR_1,not json\nR_2,"{""participantId"":""SECRET"",}"\n', {});
+    assert.deepStrictEqual(q.invalid.map((r) => r.responseId), ['R_1', 'R_2']);
+    for (const bad of q.invalid) {
+      assert.ok(!/not json|SECRET/.test(bad.error), bad.error);
+      assert.match(bad.error, /\d+ characters/);
+    }
+  });
+});
+
+describe('the shape of a real export', () => {
+  it('BOM, CRLF line ends and a free-text answer with a newline, a comma and quotes read like the plain fixture', () => {
+    const lines = text.replace(/\n$/, '').split('\n')
+      .map((l) => l.replace(',An answer,', ',"line one\r\nline, ""two""",'));
+    const real = '﻿' + lines.join('\r\n') + '\r\n';
+    assert.strictEqual(isQualtricsExport(real), true);
+    const q = parseQualtricsExport(real, {});
+    const plain = parseQualtricsExport(text, {});
+    assert.deepStrictEqual(q.responses.map((r) => [r.responseId, r.rowIndex, r.raw.participantId]), plain.responses.map((r) => [r.responseId, r.rowIndex, r.raw.participantId]));
+    assert.deepStrictEqual(q.empty, plain.empty);
+    assert.deepStrictEqual(q.invalid.map((r) => r.responseId), ['R_4']);
+    assert.deepStrictEqual(q.warnings, []);
+  });
+});
