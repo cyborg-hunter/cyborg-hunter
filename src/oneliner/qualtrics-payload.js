@@ -62,6 +62,8 @@ export var NOTE_MAX = 500;    // cyborgHunterError notes
 // which imports this module (a test pins the two equal).
 export var DEFAULT_MAX_CHARS = 12000;
 
+var VIOLATIONS = 'guard_assistance_violations_session';
+
 function isObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
 
 // The UTF-8 size of s, as TextEncoder counts it (a lone surrogate as the
@@ -223,6 +225,8 @@ function countDeltas(t, deltas) {
 
 // Level 1: walk the segments newest first; each key keeps entries until
 // KEEP_SESSION_ENTRIES are kept, the older ones are dropped and counted.
+// The honeypot's violation log (oldest first) keeps its newest
+// KEEP_SESSION_ENTRIES the same way; its count field keeps the full number.
 function keepNewestSessionEntries(p, t) {
   var left = {};
   segments(p).reverse().forEach(function (s) {
@@ -235,6 +239,11 @@ function keepNewestSessionEntries(p, t) {
       left[k] -= keep;
     });
   });
+  if (p[VIOLATIONS]) {
+    var log = JSON.parse(p[VIOLATIONS]);
+    countDropped(t, VIOLATIONS, log.length - KEEP_SESSION_ENTRIES);
+    p[VIOLATIONS] = JSON.stringify(log.slice(-KEEP_SESSION_ENTRIES));
+  }
 }
 
 // Level 2: every row but the newest loses its per-event detail.
@@ -321,11 +330,13 @@ function copy(to, from, keys) {
   return to;
 }
 
-// Level 4: the newest row with the schema's required fields only; every
-// value was bounded at level 0, so its size does not grow with the session.
+// Level 4: the newest row with the schema's required fields only, and no
+// violation log (its count field stays); every value was bounded at level 0,
+// so its size does not grow with the session.
 function newestOnly(p, t, all) {
   var last = p.trials[p.trials.length - 1];
   p.trials.forEach(function (r) { if (r.integritySegment) countDeltas(t, r.integritySegment.deltas); });
+  if (p[VIOLATIONS]) countDropped(t, VIOLATIONS, JSON.parse(p[VIOLATIONS]).length);
   t.pagesDropped += Math.max(0, p.trials.length - 1);
   t.pagesTrimmed = last ? 1 : 0;
   var out = copy({}, p, ['participantId', 'libraryVersion', 'cyborgHunterOneLiner', 'ai_use_session',

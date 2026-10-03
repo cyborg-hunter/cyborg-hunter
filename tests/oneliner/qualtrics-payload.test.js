@@ -480,6 +480,23 @@ describe('the ladder', () => {
     assert.strictEqual(out.payload.cyborgHunterOneLiner.truncated.droppedSessionEntries.tabAwaySums, 55);
     assert.ok(out.chars <= 9000);
   });
+  it('level 1 keeps the newest honeypot violations too, and level 4 counts the rest as dropped', () => {
+    // A participant who alt-tabs to a chatbot dozens of times: 80 entries
+    // alone push a 3-page session over the cap.
+    const b = blob({ violations: 80 });
+    const out = build(b, 12000);
+    assert.strictEqual(out.level, 1);
+    const kept = JSON.parse(out.payload.guard_assistance_violations_session);
+    assert.deepStrictEqual(kept.map((v) => v.start), Array.from({ length: KEEP_SESSION_ENTRIES }, (_, k) => 1055 + k));   // the newest
+    assert.strictEqual(out.payload.cyborgHunterOneLiner.truncated.droppedSessionEntries.guard_assistance_violations_session, 55);
+    assert.strictEqual(out.payload.guard_assistance_violation_count_session, 80);   // the full count stays
+    assert.strictEqual(out.payload.trials.length, 3);
+    assert.strictEqual(extractIntegrityData(JSON.parse(out.json), {}).guardFriction.violations.length, KEEP_SESSION_ENTRIES);
+    const last = atLevel(b, 4);
+    assert.ok(!('guard_assistance_violations_session' in last.payload));
+    assert.strictEqual(last.payload.guard_assistance_violation_count_session, 80);
+    assert.strictEqual(last.payload.cyborgHunterOneLiner.truncated.droppedSessionEntries.guard_assistance_violations_session, 80);
+  });
   it('level 2 empties older rows\' event arrays but keeps every count', () => {
     const b = blob({ pages: 6, events: 12, tabAways: 0 });   // levels 0-1 about 13,100 bytes, level 2 about 9,500
     const out = build(b, 10000);

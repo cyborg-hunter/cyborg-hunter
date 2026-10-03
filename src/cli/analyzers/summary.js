@@ -17,7 +17,12 @@ export function computeParticipantSummary(participant, config) {
   // keyboard shortcuts, viewport shifts, zoom) stay session-wide by design —
   // see phase-scope.js.
   const phaseScoped = participant.phaseScoped === true;
-  const sessionCount = key => (phaseScoped ? 0 : (participant.session?.[key] ?? 0));
+  // A session counter is used only when it is a finite, non-negative number;
+  // anything else (a damaged or hand-edited file) would make a total NaN.
+  const sessionCount = key => {
+    const n = phaseScoped ? 0 : participant.session?.[key];
+    return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : 0;
+  };
 
   // Three-way tab-away duration bins for display. The 3s boundary matches
   // config.thresholds.tabAwayDurationMs — the scoring engine's soft-score cutoff.

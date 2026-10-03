@@ -54,6 +54,14 @@ describe('summary', () => {
     assert.equal(computeParticipantSummary(participant, {}).totalPasteEvents, 1);
   });
 
+  it('ignores a session counter that is not a finite, non-negative number', () => {
+    const trials = [{ pasteEvents: [{ t: 1 }, { t: 2 }], copyEvents: [{ t: 3 }], dropEvents: [], tabAwayEvents: [] }];
+    for (const bad of ['oops', '7', NaN, -4, Infinity, null, {}, true]) {
+      const summary = computeParticipantSummary({ participantId: 'P1', trials, session: { pasteCount: bad, copyCount: bad, dropCount: bad } }, {});
+      assert.deepStrictEqual([summary.totalPasteEvents, summary.totalCopyEvents, summary.totalDropEvents], [2, 1, 0], String(bad));
+    }
+  });
+
   it('hard-flag fallback fires when cumulative sessionTotal crosses countThreshold', () => {
     const participant = {
       participantId: 'P1',
