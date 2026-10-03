@@ -106,6 +106,14 @@ for (const target of ONE_LINE_TARGETS) {
         assert.strictEqual(src.includes(marker), target.hosts.includes(host), target.file + ' / ' + host + ': ' + marker);
       }
     });
+
+    // rerun.js marks a same-file re-run before the guard cores evaluate: their
+    // "Not redefining" branches read the flag, so it must come first in the bundle.
+    it('evaluates the re-run check before the guard cores', () => {
+      const src = readFileSync(join(outDir, target.file), 'utf8');
+      const flag = src.indexOf('__cyborgHunterRerun');
+      assert.ok(flag >= 0 && flag < src.indexOf('Not redefining GuardFriction') && flag < src.indexOf('Not redefining GuardHoneypot'));
+    });
   });
 }
 

@@ -48,6 +48,14 @@ describe('markRerun', () => {
     win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';
     assert.strictEqual(markRerun(win), false);
   });
+  // cyborg-hunter.min.js's namespace carries the same VERSION, so only the
+  // sentinel tells min.js-then-ch.js (the loud double load) from a re-run.
+  it('is false after cyborg-hunter.min.js of the same version', () => {
+    win.__cyborgHunterLoaded = 'cyborg-hunter.min.js';
+    win.CyborgHunter = { VERSION };
+    assert.strictEqual(markRerun(win), false);
+    assert.strictEqual(win.__cyborgHunterRerun, false);
+  });
 });
 
 describe('a same-file re-run', () => {
