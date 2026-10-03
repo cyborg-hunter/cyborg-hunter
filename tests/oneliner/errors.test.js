@@ -208,6 +208,11 @@ const CASES = {
     fix: 'open an issue with this message and your <script> tag',
     link: DOCS + 'known-issues.md#one-line-setup'
   },
+  labjsStudyAlreadyRunning: {
+    args: [],
+    fix: 'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+    link: DOCS + 'labjs.md#placement'
+  },
   secondLabJsStudy: {
     args: [],
     fix: 'run one study per page, or reload the page between studies',

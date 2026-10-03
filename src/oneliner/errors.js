@@ -322,6 +322,14 @@ export const MESSAGES = {
   labjsHookFailed: function (msg) {
     return formatError('Cyborg Hunter could not hook a lab.js component', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
   },
+  // console.warn: a lab.js trial ended whose run() began before ch.js hooked
+  // lab.js (adapters/labjs.js); its events go into the next segment's gap.
+  labjsStudyAlreadyRunning: function () {
+    return formatError('The lab.js screen on display when ch.js started is not monitored',
+      'a lab.js study was already running when ch.js hooked lab.js, so that screen\'s row has no integrity columns, and what happens on it after ch.js started counts towards the next trial\'s gap',
+      'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+      DOCS + 'labjs.md#placement');
+  },
   // console.warn: ch.js keeps one session per page and ends it when the first
   // study's root component ends; components run after that get no columns.
   secondLabJsStudy: function () {
