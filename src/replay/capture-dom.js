@@ -434,9 +434,17 @@ export function attachDomCapture(rec, env) {
   // observer kept delivering and mapMutations kept numbering what it saw into
   // the span, but the recorder dropped every patch: the span now describes
   // nodes no player was sent. The page may also look different on return
-  // (the back/forward cache case). Clearing hasKeyframe makes rule 1 of
-  // `shouldKeyframe` fire, and the keyframe's span.reset() restarts the ids.
-  rec.onResume(function () { cadence.hasKeyframe = false; });
+  // (the back/forward cache case). The span is emptied HERE, not only at the
+  // keyframe: an event that arrives before the next startTrial resolves its
+  // ids at once, and the implicit segment it opens then keyframes (rule 1 of
+  // `shouldKeyframe`, hasKeyframe false). Against the stale span those ids
+  // would name different nodes of the new tree; against an empty one they
+  // are null, the documented first-keyframe loss (onTrialStart's comment),
+  // and a mutation batch maps to nothing.
+  rec.onResume(function () {
+    span.reset();
+    cadence.hasKeyframe = false;
+  });
 
   // A keyframe that was dropped or threw leaves the file with no tree for this
   // span, so the next segment must take one rather than continue from nothing:

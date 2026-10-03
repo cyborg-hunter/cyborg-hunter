@@ -22,6 +22,8 @@ import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
 
 import * as CHReplay from '../../src/replay/index.js';
+import { serializeTree } from '../../src/replay/snapshot.js';
+import { createSpan } from '../../src/replay/span.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 import { createPlayer } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
 import { FIXTURES_URL } from '@cyborg-hunter/sessionrecording-conformance/corpus';
@@ -1005,5 +1007,100 @@ describe('resume after a stop: a keyframe segment in the same recording', () => 
     assert.ok(recording.viewport_changes.some(v => v.w === 640),
       'the resume states the geometry the restored page is laid out at');
     assert.deepEqual(recording.extensions['cyborg-hunter'].capture_failures, []);
+  });
+});
+
+// Events between resumeSession() and the next startTrial(). While stopped,
+// mapMutations kept numbering nodes into the span; the first event after the
+// resume opens an implicit segment, whose keyframe renumbers the span. An id
+// resolved against the stale span before that keyframe would name a
+// different node of the new tree. A node is inserted BEFORE the targets
+// while stopped, so pre-order ids shift and a stale id cannot pass by luck.
+describe('resume: an event before the next startTrial resolves against the new span', () => {
+  async function stoppedWithShiftedIds() {
+    const doc = win.document;
+    const stage = doc.getElementById('stage');
+    const api = CHReplay.attach({
+      participantId: 'P-RESUME-02', tier: 'dom', root: '#stage',
+      keyframeEvery: 10, autoSave: { mode: 'none' },
+    });
+    api.startSession();
+    api.startTrial({ trialId: 't0' });
+    await settle();
+    api.stopSession('finished');
+    const away = doc.createElement('section');
+    away.id = 'away';
+    stage.insertBefore(away, stage.firstChild);
+    await settle();
+    api.resumeSession();
+    return { api, doc };
+  }
+
+  function nodeById(n, id) {
+    if (!n) return null;
+    if (n.id === id) return n;
+    for (const c of n.children || []) { const hit = nodeById(c, id); if (hit) return hit; }
+    return null;
+  }
+
+  it('a click names the element it hit, or nothing', async () => {
+    installWindow();
+    try {
+      const { api, doc } = await stoppedWithShiftedIds();
+      fire(doc.getElementById('go'), 'click');
+      await settle();
+      api.stopSession('finished');
+      const rec = api.getRecording();
+      api.destroy();
+      assert.deepEqual(validateStrict(rec).errors, []);
+      const seg = rec.segments[rec.segments.length - 1];
+      const click = seg.events.find(e => e.type === 'mouse.click');
+      assert.ok(click, 'the click is recorded');
+      for (const id of [click.target, click.anchor && click.anchor.node]) {
+        if (id == null) continue;
+        const node = nodeById(seg.initial_dom, id);
+        assert.ok(node && node.kind === 'element' && node.tag === click.anchor.tag,
+          `id ${id} names ${JSON.stringify(node && (node.tag || node.kind))}, not the clicked ${click.anchor.tag}`);
+      }
+    } finally {
+      restoreWindow();
+    }
+  });
+
+  it('a mutation batch replays as what the page did', async () => {
+    installWindow();
+    try {
+      const { api, doc } = await stoppedWithShiftedIds();
+      const kid = doc.createElement('span');
+      kid.textContent = 'x';
+      doc.getElementById('go').appendChild(kid);
+      doc.getElementById('msg').remove();
+      await settle();
+      fire(doc.getElementById('go'), 'click');   // a post-resume segment exists either way
+      await settle();
+      api.stopSession('finished');
+      const rec = api.getRecording();
+      api.destroy();
+      assert.deepEqual(validateStrict(rec).errors, []);
+      let player = null;
+      let keyframedAfterResume = false;
+      rec.segments.forEach((seg, i) => {
+        if (seg.initial_dom) { player = createPlayer(seg.initial_dom); keyframedAfterResume = i > 0; }
+        player.apply(seg.events.filter(e => e.type.startsWith('dom.')));
+      });
+      assert.ok(keyframedAfterResume, 'the segment after the resume is a keyframe');
+      {
+        // The replayed tree must be the page, node for node (ids aside: they
+        // are the span's numbering, not the page's).
+        const shape = (n) => ({ kind: n.kind, tag: n.tag, text: n.text,
+          attrs: n.attrs && Object.keys(n.attrs).length ? n.attrs : null,
+          children: (n.children || []).map(shape) });
+        const live = serializeTree(doc.getElementById('stage'), createSpan(),
+          { redactSelector: '[data-ch-redact]', keepBait: false });
+        assert.deepEqual(shape(player.tree()), shape(live));
+      }
+    } finally {
+      restoreWindow();
+    }
   });
 });

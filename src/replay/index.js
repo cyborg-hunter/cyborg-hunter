@@ -8,7 +8,8 @@
 //   rec.startSession();
 //   rec.startTrial({ trialId: 'r1' });  // optional bracketing
 //   rec.endTrial();
-//   rec.stopSession('finished');        // resumeSession() would record on
+//   rec.stopSession('finished');        // resumeSession() records on; call
+//                                       // startTrial() right after it
 //   await rec.autoSaveNow();            // or rec.getRecording() and DIY
 //   rec.destroy();
 
@@ -136,7 +137,10 @@ export function attach(userConfig) {
     startTrial: function (opts) { rec.startTrial(opts); return api; },
     endTrial: function () { rec.endTrial(); return api; },
     stopSession: function (reason) { rec.stopSession(reason); return api; },
-    // Records again after a stop, in the same recording (recorder.js).
+    // Records again after a stop, in the same recording (recorder.js). Call
+    // startTrial() right after: the first segment after a resume is a
+    // keyframe, and an event that arrives before it opens loses its target id
+    // (capture-dom.js empties the span at resume).
     resumeSession: function () { rec.resumeSession(); return api; },
 
     getRecording: function (opts) {

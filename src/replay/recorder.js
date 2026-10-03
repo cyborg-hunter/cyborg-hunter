@@ -418,8 +418,10 @@ export function createRecorder(userConfig) {
     // stopSession sets, cleared here and set again by the next stop. The
     // capture modules never detached (only destroy() does that), so they are
     // still wired; their resume hooks (onResume) bring whatever went stale
-    // while every record was dropped up to date: capture-dom forces a
-    // keyframe on the next segment, capture-trace states the viewport.
+    // while every record was dropped up to date: capture-dom empties the
+    // span and forces a keyframe on the next segment, capture-trace states
+    // the viewport. The caller should startTrial() right after: an event
+    // that arrives first opens an implicit segment and loses its target id.
     resumeSession: function () {
       if (state !== 'stopped') {
         throw new Error('[cyborg-hunter-replay] invalid lifecycle call: resumeSession() from ' + state +
