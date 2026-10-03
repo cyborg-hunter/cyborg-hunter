@@ -7,8 +7,9 @@
 // the zip, the time to open the last participant's replay, the browser's
 // peak resident memory, and whether the run completed.
 // Not a test; prints one row per run as it finishes (and appends it to the
-// output file, if given), then the table. The largest size whose three rows
-// are ok sets TESTED_PARTICIPANTS in demo/analyze/limits.js.
+// output file, if given), then the table. Run it several times: the largest
+// size whose three rows are ok in every run sets TESTED_PARTICIPANTS in
+// demo/analyze/limits.js (which records five runs).
 // Usage (site assembled and served first):
 //   node tools/assemble-demo-site.mjs && node tools/serve-demo.mjs 8177 &
 //   node tests/browser/analyze/load-measure.mjs [50,150,300] [http://localhost:8177] [out.txt]
