@@ -293,6 +293,47 @@ describe('matching rules', () => {
   });
 });
 
+// Experiments built on a case-insensitive file system often reference
+// card_a.png while the file is Card_A.png.
+describe('case-blind fallback', () => {
+  const a = 'https://h/study/img/a.png';
+  it('an exact match wins over a case-folded one, even a better-ranked one', () => {
+    const r = matchAssets([a], ['IMG/A.png', 'img/a.png']);
+    assert.strictEqual(r.matched.get(a), 'img/a.png');
+    assert.deepStrictEqual(r.ambiguous, []);
+    assert.strictEqual(matchAssets([a], ['IMG/A.png', 'x/a.png']).matched.get(a), 'x/a.png', 'exact filename over case-folded whole path');
+  });
+  it('a file differing only in case matches when it is the only candidate, under its own spelling', () => {
+    const url = 'https://h/study/img/card_a.png';
+    const r = matchAssets([url], ['exp/img/Card_A.png', 'exp/img/card_b.png']);
+    assert.strictEqual(r.matched.get(url), 'exp/img/Card_A.png');
+    assert.deepStrictEqual(r.missing, []);
+  });
+  it('two case variants and no exact file are ambiguous, never a guess', () => {
+    const r = matchAssets([a], ['Img/A.png', 'img/A.PNG']);
+    assert.deepStrictEqual(r.matched, new Map());
+    assert.deepStrictEqual(r.ambiguous, [{ url: a, candidates: ['Img/A.png', 'img/A.PNG'] }]);
+  });
+  it('ranks case-folded candidates as exact ones: a whole-path suffix beats a longer path with the same tail', () => {
+    assert.strictEqual(matchAssets([a], ['lib/Img/a.PNG', 'IMG/A.PNG']).matched.get(a), 'IMG/A.PNG');
+  });
+  it('nothing matching in any case is missing', () => {
+    const r = matchAssets([a], ['img/b.png', 'A.gif']);
+    assert.deepStrictEqual(r.missing, [a]);
+    assert.deepStrictEqual(r.ambiguous, []);
+  });
+  it('a font a supplied stylesheet references matches case-blind and is inlined', async () => {
+    const files = [
+      { path: 'study/css/style.css', read: async () => bytes(STYLE) },
+      { path: 'study/css/Fonts/A.WOFF2', read: async () => WOFF },
+    ];
+    const { assetMap, report } = await buildAssetMap([hrefOnly()], files);
+    assert.deepStrictEqual(report.matched.map((m) => m.path), ['study/css/style.css', 'study/css/Fonts/A.WOFF2']);
+    const model = applyAssetMap(buildViewerModel(hrefOnly()), assetMap);
+    assert.match(model.stylesheets[0].css, /src:url\("data:font\/woff2;base64,d09GMg=="\)/);
+  });
+});
+
 describe('CLI assetsDir', () => {
   it('inlines a matched stylesheet into replay/*.replay.js and notes it in index.html', async () => {
     const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync } = await import('node:fs');

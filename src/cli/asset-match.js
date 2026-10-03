@@ -16,6 +16,11 @@
 // { bytes: null, type: null, candidates } so the report note can say
 // "ambiguous" rather than "missing". Only entries with bytes are inlined.
 //
+// Paths compare exactly first. Only a URL no supplied file matches exactly
+// gets a second, case-blind pass (card_a.png ↔ Card_A.png, common for
+// experiments built on a case-insensitive file system), ranked the same way:
+// one best file is matched under its own spelling, a tie is ambiguous.
+//
 // A stylesheet supplied as a file brings its own references (fonts,
 // background images, @imports). They resolve against the sheet's RECORDED
 // URL, are matched like everything else, and are inlined; the ones not
@@ -177,12 +182,32 @@ const normalizePath = (p) => String(p).replace(/\\/g, '/').replace(/^(\.\/)+/, '
 
 // How many trailing path segments a supplied path shares with the URL's path
 // ('/study/css/a.css' and 'exp/css/a.css' share 2). 0 (not even the
-// filename) is no candidate.
-function sharedTail(urlSegs, path) {
+// filename) is no candidate. `fold` is applied to both sides of each
+// comparison: identity for the exact pass, lowercasing for the case-blind one.
+function sharedTail(urlSegs, path, fold) {
   const p = path.split('/');
   let n = 0;
-  while (n < p.length && n < urlSegs.length && p[p.length - 1 - n] === urlSegs[urlSegs.length - 1 - n]) n++;
+  while (n < p.length && n < urlSegs.length && fold(p[p.length - 1 - n]) === fold(urlSegs[urlSegs.length - 1 - n])) n++;
   return n;
+}
+
+const exact = (s) => s;
+const caseBlind = (s) => s.toLowerCase();
+
+// The supplied paths that rank best for one URL, in their own spelling.
+// Rank: a file whose WHOLE path is a suffix of the URL's path first
+// ('img/a.png' over 'lib/img/a.png' for /study/img/a.png), then the longer
+// shared tail ('node_modules/x/a.css' over 'x/a.css'). Only a tie at the top
+// rank is ambiguous.
+function bestCandidates(segs, dropped, fold) {
+  let best = 0, cands = [];
+  for (const p of dropped) {
+    const n = sharedTail(segs, p, fold);
+    if (n === 0) continue;
+    const rank = (n === p.split('/').length ? segs.length + 1 : 0) + n;
+    if (rank > best) { best = rank; cands = [p]; } else if (rank === best) cands.push(p);
+  }
+  return cands;
 }
 
 export function matchAssets(urls, droppedPaths) {
@@ -190,17 +215,9 @@ export function matchAssets(urls, droppedPaths) {
   const matched = new Map(), missing = [], ambiguous = [];
   for (const url of urls) {
     const segs = pathOf(url).split('/').filter(Boolean);
-    // Rank: a file whose WHOLE path is a suffix of the URL's path first
-    // ('img/a.png' over 'lib/img/a.png' for /study/img/a.png), then the
-    // longer shared tail ('node_modules/x/a.css' over 'x/a.css'). Only a tie
-    // at the top rank is ambiguous.
-    let best = 0, cands = [];
-    for (const p of dropped) {
-      const n = sharedTail(segs, p);
-      if (n === 0) continue;
-      const rank = (n === p.split('/').length ? segs.length + 1 : 0) + n;
-      if (rank > best) { best = rank; cands = [p]; } else if (rank === best) cands.push(p);
-    }
+    // Any exact candidate, however weak, wins over a case-blind one.
+    let cands = bestCandidates(segs, dropped, exact);
+    if (cands.length === 0) cands = bestCandidates(segs, dropped, caseBlind);
     if (cands.length === 1) matched.set(url, cands[0]);
     else if (cands.length > 1) ambiguous.push({ url, candidates: cands });
     else missing.push(url);
