@@ -1352,6 +1352,50 @@ describe('vanilla host: data-replay', () => {
     assert.deepStrictEqual(errors, []);
   });
 
+  it('back/forward cache after a span failed to reopen: the restored segment takes no closed span\'s name', async () => {
+    const log = fakeReplay();
+    const ctx = start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    // The monitor refused to open the next span: the segmenter is closed,
+    // and currentTrialId still names the span it just cut.
+    const state = ctx.segmenter.state;
+    ctx.segmenter.state = () => Object.assign(state(), { open: false });
+    pageshow(true);
+    assert.deepStrictEqual(log.slice(5), ['resumeSession', 'startTrial:null']);
+    assert.deepStrictEqual(log.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } }, 'still marked');
+  });
+
+  it('back/forward cache, three times over with the real recorder: one marked keyframe per restore, no doubled capture', async () => {
+    win.CyborgHunterReplay = { attach: attachRecorder };
+    start({ replay: 'dom' });
+    await tick();
+    const button = el('<button id="b">Next</button>');
+    for (let i = 0; i < 3; i++) {
+      win.dispatchEvent(new win.Event('pagehide'));
+      el('<p>away ' + i + '</p>');
+      await tick();
+      pageshow(true);
+      click(button);
+      await tick();
+    }
+    const rec = win.CyborgHunter.replay();
+    assert.deepStrictEqual(validateStrict(rec).errors, []);
+    const marked = rec.segments.filter((s) => s.extensions && s.extensions['cyborg-hunter'] &&
+      s.extensions['cyborg-hunter'].restored_from === 'bfcache');
+    assert.strictEqual(marked.length, 3);
+    for (const s of marked) {
+      assert.strictEqual(s.initial_dom && s.initial_dom.id, 1, 'segment ' + s.index + ' is a keyframe');
+      assert.strictEqual(s.events.filter((e) => e.type === 'mouse.click').length, 1,
+        'one click recorded once in segment ' + s.index + ' (no listener added per resume)');
+    }
+    assert.deepStrictEqual(rec.segments.map((s) => s.label),
+      ['span-0', 'span-1', 'span-1', 'span-2', 'span-2', 'span-3', 'span-3']);
+    assert.deepStrictEqual(rec.extensions['cyborg-hunter'].capture_failures, []);
+    assert.strictEqual(rec.end_reason, 'finished');
+    assert.deepStrictEqual(errors, []);
+  });
+
   it('without data-replay nothing is loaded and replay() warns', async () => {
     const log = fakeReplay();
     start();

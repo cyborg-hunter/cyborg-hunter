@@ -454,8 +454,15 @@ export function installVanillaAdapter(opts) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
     }
     // After the integrity state, and whatever became of it: restore() logs
-    // its own failures and never throws.
-    if (ctx.replay) ctx.replay.restore(ctx.segmenter.state().currentTrialId);
+    // its own failures and never throws. The restored segment is named after
+    // the open span, as followReplay names them; with no open span (it
+    // failed to reopen at the cut) currentTrialId still names the closed
+    // one, so the segment gets no name rather than that one, and keeps its
+    // marker and keyframe.
+    if (ctx.replay) {
+      var state = ctx.segmenter.state();
+      ctx.replay.restore(state.open ? state.currentTrialId : null);
+    }
   }
 
   function onPageHide() {
