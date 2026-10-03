@@ -10,6 +10,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   path differs from the recorded URL only in upper/lower case now matches
   when no file matches exactly and only one such file fits; several are
   reported as ambiguous.
+- The experiment-assets note no longer counts video and audio sources as
+  images that never match: it says how many video/audio elements are shown as
+  placeholders and that replays never load or play media. A video's poster is
+  still an image.
 
 ### Removed
 - Internal renderer wrappers removed

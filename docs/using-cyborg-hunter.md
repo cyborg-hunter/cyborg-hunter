@@ -413,6 +413,11 @@ matching works:
   the same way. The ones you did not supply are made absolute against the
   stylesheet's original URL, so they resolve where they did on the
   experiment's server (and are blocked on this page).
+- Video and audio are never matched: the replay shows each `<video>` or
+  `<audio>` as an empty box of its size and never loads or plays it, so the
+  card counts them apart from images ("2 video/audio elements shown as
+  placeholders; replays never load or play media"). A video's `poster` is an
+  image and is matched like one.
 
 The CLI does the same with `assetsDir`: set it to the experiment's folder
 (its stylesheets and images) and the report inlines what matches. This is

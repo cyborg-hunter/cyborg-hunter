@@ -48,10 +48,10 @@ describe('collectAssetUrls', () => {
       'https://exp.example.org/study/img/bg.png',
       'https://exp.example.org/study/img/stim-1.png',
       'https://exp.example.org/study/img/poster.jpg',
-      'https://exp.example.org/study/clip.webm',
       'https://exp.example.org/study/img/stim-2.png',
       'https://exp.example.org/study/img/stim-3.png',
-    ], 'an inline data: image is not an asset');
+    ], 'an inline data: image is not an asset; a video\'s poster is an image');
+    assert.deepStrictEqual(u.media, ['https://exp.example.org/study/clip.webm'], 'what a video plays is media, not an image');
   });
 });
 
@@ -115,9 +115,10 @@ describe('buildAssetMap + applyAssetMap', () => {
     const { assetMap } = await buildAssetMap([recording()], dropped);
     const s = assetMatchSummary(recording(), assetMap);
     assert.deepStrictEqual(s.stylesheets, { matched: 1, total: 2, missing: ['fonts.css'], ambiguous: [] });
-    assert.strictEqual(s.images.total, 6);
+    assert.strictEqual(s.images.total, 5);
     assert.strictEqual(s.images.matched, 2);
-    assert.strictEqual(assetNoteText(s), 'Experiment assets: 1 of 2 stylesheets matched (missing: fonts.css); 2 of 6 images matched (missing: poster.jpg, clip.webm, stim-2.png, stim-3.png).');
+    assert.deepStrictEqual(s.media, { total: 1 });
+    assert.strictEqual(assetNoteText(s), 'Experiment assets: 1 of 2 stylesheets matched (missing: fonts.css); 2 of 5 images matched (missing: poster.jpg, stim-2.png, stim-3.png); 1 video/audio element shown as placeholder; replays never load or play media.');
     assert.strictEqual(assetNoteText(assetMatchSummary({ stylesheets: [], segments: [] }, assetMap)), null);
   });
   it('contentTypeFor knows the asset extensions', () => {
@@ -290,6 +291,89 @@ describe('matching rules', () => {
       [{ type: 'dom.attr', t: 1, node: 2, name: 'src', value: 'https://survey.example.org/page2.html' },
         { type: 'dom.attr', t: 2, node: 3, name: 'src', value: 'https://exp.example.org/b.png' }]);
     assert.deepStrictEqual(collectAssetUrls(r).images, ['https://exp.example.org/a.png', 'https://exp.example.org/b.png']);
+  });
+});
+
+// A recording with no stylesheets, so the note holds only what the DOM
+// references.
+function domOnly(nodes, events = []) {
+  const r = hrefOnly(nodes, events);
+  r.stylesheets = [];
+  return r;
+}
+const el = (id, tag, attrs, children = [], extra = {}) => ({ id, kind: 'element', tag, attrs, children, ...extra });
+const X = 'https://exp.example.org/study/';
+
+// The viewer never loads or plays media, and media files are never matched:
+// the note gives them their own clause instead of counting them as images.
+describe('video and audio', () => {
+  it('media leaves the image counts; a video\'s poster stays an image and is inlined', async () => {
+    const nodes = () => [
+      el(2, 'img', { src: X + 'img/a.png' }),
+      el(3, 'video', { src: X + 'media/clip.mp4', poster: X + 'img/poster.png' }, [], { media_src: X + 'media/clip.mp4' }),
+      el(4, 'audio', {}, [el(5, 'source', { src: X + 'media/tone.mp3', type: 'audio/mpeg' })]),
+    ];
+    const files = [{ path: 'img/a.png', read: async () => PNG }, { path: 'img/poster.png', read: async () => PNG }];
+    const { assetMap, report } = await buildAssetMap([domOnly(nodes())], files);
+    assert.deepStrictEqual(report.missing, [], 'media is never offered to the matcher, so never missing');
+    const s = assetMatchSummary(domOnly(nodes()), assetMap);
+    assert.deepStrictEqual(s.images, { matched: 2, total: 2, missing: [], ambiguous: [] });
+    assert.deepStrictEqual(s.media, { total: 2 });
+    assert.strictEqual(assetNoteText(s),
+      'Experiment assets: 2 of 2 images matched; 2 video/audio elements shown as placeholders; replays never load or play media.');
+    const body = applyAssetMap(buildViewerModel(domOnly(nodes())), assetMap).segments[0].initialDom;
+    assert.strictEqual(body.children[1].attrs.poster, 'data:image/png;base64,iVBORw==');
+    assert.strictEqual(body.children[1].attrs.src, X + 'media/clip.mp4', 'a video\'s own source is never rewritten');
+  });
+  it('media alone gives a note of its own, singular for one', () => {
+    const s = assetMatchSummary(domOnly([el(2, 'video', { src: X + 'clip.webm' })]), new Map());
+    assert.deepStrictEqual(s.images, { matched: 0, total: 0, missing: [], ambiguous: [] });
+    assert.strictEqual(assetNoteText(s), 'Experiment assets: 1 video/audio element shown as placeholder; replays never load or play media.');
+  });
+  it('counts distinct media URLs, as for every other kind', () => {
+    const r = domOnly([el(2, 'video', { src: X + 'a.mp4' }, [], { media_src: X + 'a.mp4' }), el(3, 'video', { src: X + 'a.mp4' }), el(4, 'audio', { src: X + 'b.wav' })]);
+    assert.deepStrictEqual(collectAssetUrls(r).media, [X + 'a.mp4', X + 'b.wav']);
+    assert.strictEqual(assetNoteText(assetMatchSummary(r, new Map())), 'Experiment assets: 2 video/audio elements shown as placeholders; replays never load or play media.');
+  });
+  it('a <source> is media under <video> or <audio>, an image under <picture>, and goes by its extension when its parent is unknown', () => {
+    const r = domOnly(
+      [el(2, 'video', {}, [el(3, 'source', { src: X + 'v.png' })]),
+        el(4, 'picture', {}, [el(5, 'source', { src: X + 'p.mp4' }), el(6, 'img', { src: X + 'p.png' })])],
+      [{ type: 'dom.add', t: 1, parent: 99, before: null, node: el(7, 'source', { src: X + 'loose.ogg' }) },
+        { type: 'dom.add', t: 2, parent: 99, before: null, node: el(8, 'source', { src: X + 'loose.jpg' }) },
+        { type: 'dom.add', t: 3, parent: 4, before: null, node: el(9, 'source', { src: X + 'later.png' }) },
+        { type: 'dom.add', t: 4, parent: 2, before: null, node: el(10, 'source', { src: X + 'later.jpg' }) },
+        { type: 'dom.attr', t: 5, node: 3, name: 'src', value: X + 'swapped.png' },
+        { type: 'dom.attr', t: 6, node: 5, name: 'src', value: X + 'swapped.mp4' }]);
+    const u = collectAssetUrls(r);
+    assert.deepStrictEqual(u.images, [X + 'p.mp4', X + 'p.png', X + 'loose.jpg', X + 'later.png', X + 'swapped.mp4']);
+    assert.deepStrictEqual(u.media, [X + 'v.png', X + 'loose.ogg', X + 'later.jpg', X + 'swapped.png']);
+  });
+  it('an <img> pointing at a media extension is still an image; MEDIA extensions decide only for a parentless <source>', () => {
+    const u = collectAssetUrls(domOnly([el(2, 'img', { src: X + 'odd.mp4' })]));
+    assert.deepStrictEqual(u.images, [X + 'odd.mp4']);
+    assert.deepStrictEqual(u.media, []);
+  });
+});
+
+// The analyze page words its replay card's note in the worker
+// (demo/analyze/worker-entry.js: assetNoteText(assetMatchSummary(...)) through
+// the page bundle's entry, before the report pass); the CLI words the
+// report's replay section inside buildReplayAssets. The two must agree.
+describe('the analyze page and the CLI word the note the same', () => {
+  it('for a recording with stylesheets, images and media', async () => {
+    const entry = await import('../../src/cli/preview-entry.js');
+    const { buildReplayAssets } = await import('../../src/cli/renderers/replay-assets-core.js');
+    const files = [
+      { path: 'study/css/style.css', read: async () => bytes('p{margin:0}') },
+      { path: 'study/img/stim-1.png', read: async () => PNG },
+    ];
+    const { assetMap } = await entry.buildAssetMap([recording()], files);
+    const page = entry.assetNoteText(entry.assetMatchSummary(recording(), assetMap));
+    const p = { participantId: 'P1', replay: { recording: recording(), file: 'P1-replay.json' } };
+    buildReplayAssets([p], { sink: () => {}, assetMap });
+    assert.strictEqual(p.replay.assetNote, page);
+    assert.strictEqual(page, 'Experiment assets: 1 of 2 stylesheets matched (missing: fonts.css); 1 of 5 images matched (missing: bg.png, poster.jpg, stim-2.png, stim-3.png); 1 video/audio element shown as placeholder; replays never load or play media.');
   });
 });
 
