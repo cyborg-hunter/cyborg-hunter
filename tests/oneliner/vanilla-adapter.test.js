@@ -149,6 +149,21 @@ describe('vanilla host: marks', () => {
     assert.deepStrictEqual(ctx.segmenter.state().currentTrialId, 'span-1');
   });
 
+  // ch.js cuts at a mark from its own click listener on the document. The
+  // mouse button events are recorded before any document listener runs, so
+  // each mark click is in the span it ends (as a jsPsych response click is
+  // in the trial it ends), once.
+  it('each mark click is recorded once, in the span it ends', () => {
+    start();
+    const press = (node) => {
+      for (const type of ['mousedown', 'mouseup', 'click']) node.dispatchEvent(new win.MouseEvent(type, { bubbles: true, cancelable: true }));
+    };
+    press(el('<button data-ch-trial="q1">Start</button>'));
+    press(el('<button data-ch-trial="q2"><span>Next</span></button>').firstElementChild);
+    const kinds = win.CyborgHunter.data().trials.map((t) => t.trialId + ':' + t.integrity.mouseTrack.map((m) => m.type).join(','));
+    assert.deepStrictEqual(kinds, ['span-0:down,up,click', 'q1:down,up,click', 'q2:']);
+  });
+
   it('CyborgHunter.mark(id), startTrial({ trialId }) and endTrial() cut segments', () => {
     const ctx = start();
     win.CyborgHunter.mark('q1');

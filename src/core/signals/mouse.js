@@ -40,11 +40,14 @@ export function attachMouseSignals(ctx) {
     }, { passive: true });
 
     // Click/mousedown/mouseup — no throttling needed, low frequency.
-    // Recorded on the way down (capture phase), before the page handles the
-    // event: a page handler may end the trial (a jsPsych response button, a
-    // button whose onclick submits the form) and the next one may start
-    // within the same click, which then belongs to the trial it ended; and a
-    // handler that stops the event's propagation no longer hides it.
+    // Recorded on the way down, on the window (capture phase), before any
+    // listener on the document or below it handles the event: a handler may
+    // end the trial (a jsPsych response button, a button whose onclick
+    // submits the form, the one-line setup's own data-ch-trial listener on
+    // the document) and the next one may start within the same click, which
+    // then belongs to the trial it ended (the next trial's listener is not
+    // called for it); and a handler that stops the event's propagation no
+    // longer hides it.
     function mouseEventHandler(type) {
       return function (e) {
         if (trialData.mouseEvents.length >= mouseMaxEvents) return;
@@ -54,9 +57,9 @@ export function attachMouseSignals(ctx) {
         });
       };
     }
-    ctx.addTrialListener(document, "click", mouseEventHandler("click"), { passive: true, capture: true });
-    ctx.addTrialListener(document, "mousedown", mouseEventHandler("down"), { passive: true, capture: true });
-    ctx.addTrialListener(document, "mouseup", mouseEventHandler("up"), { passive: true, capture: true });
+    ctx.addTrialListener(window, "click", mouseEventHandler("click"), { passive: true, capture: true });
+    ctx.addTrialListener(window, "mousedown", mouseEventHandler("down"), { passive: true, capture: true });
+    ctx.addTrialListener(window, "mouseup", mouseEventHandler("up"), { passive: true, capture: true });
   }
 }
 

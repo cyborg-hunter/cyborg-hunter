@@ -232,6 +232,9 @@ test('single page: manual marks + custom fetch save via CyborgHunter.data(), rep
   expect(saved.data.participantId).toBe('E2E-VAN-2');
   expect(saved.data.trials.map((t) => t.trialId)).toEqual(['span-0', 'q1', 'q2', 'q3']);
   for (const t of saved.data.trials) expect(t.cyborgHunterError).toBeUndefined();
+  // Each click is recorded once, in the span it ends: the q1, q2 and q3 marks
+  // and Finish (whose handler calls CyborgHunter.data()).
+  expect(saved.data.trials.map((t) => t.integrity.mouseTrack.filter((m) => m.type === 'click').length)).toEqual([1, 1, 1, 1]);
 
   // The replay recording, loaded from next to dist/ch.js.
   expect(replayRequests).toEqual(['/dist/cyborg-hunter-replay.js']);
