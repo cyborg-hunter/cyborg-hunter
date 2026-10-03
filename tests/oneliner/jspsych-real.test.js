@@ -581,6 +581,54 @@ describe('ch.js on real jsPsych: two instances', () => {
   });
 });
 
+// The manual extension (src/jspsych/extension-cyborg-hunter.js) with no ch.js
+// on the page, every trial opted in by the forEach of
+// docs/advanced-integration.md step 4 (entries without params). A
+// call-function step's late load callback (see the top of this file) must not
+// start a monitor trial: it threw "cannot transition from 'trial'" into
+// jsPsych, and after a post_trial_gap the next trial's row took the step's
+// label.
+describe('manual extension on real jsPsych: a synchronous step', () => {
+  let core;
+  before(async () => { core = await import('../../src/core/index.js'); });
+
+  for (const [label, gap, Next] of [
+    ['next trial starts synchronously', undefined, Timer],
+    ['next trial starts after a post_trial_gap', 20, Timer],
+    ['the next trial returns a Promise', undefined, PromiseLoad],
+  ]) {
+    it(`throws nothing into jsPsych and the next trial keeps its own label (${label})`, async () => {
+      win.CyborgHunter = core;
+      const jsPsych = win.initJsPsych({ extensions: [{ type: CyborgHunterExtension, params: { participantId: 'P-MAN' } }] });
+      current = jsPsych.extensions['cyborg-hunter'];   // afterEach destroys its monitor
+      const cf = callFunction();
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const timeline = [{ type: Timer }, cf, { type: Next }, { type: Timer }];
+      timeline.forEach((t) => { t.extensions = (t.extensions || []).concat([{ type: CyborgHunterExtension }]); });
+      const rows = await runTimeline(jsPsych, timeline);
+      assert.equal(rows.length, 4);
+      assert.deepStrictEqual(rows.map((r) => (r.integrity ? r.integrity.trialId : null)), ['trial-0', null, 'trial-2', 'trial-3']);
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
+  // With a params object per trial (jsPsych copies each trial's parameters
+  // before it runs), a promise trial's monitor trial starts at its own load.
+  it('per-trial entries with params: the promise trial starts at its own on_load', async () => {
+    win.CyborgHunter = core;
+    const jsPsych = win.initJsPsych({ extensions: [{ type: CyborgHunterExtension, params: { participantId: 'P-MAN' } }] });
+    current = jsPsych.extensions['cyborg-hunter'];
+    const timeline = [{ type: Timer }, callFunction(), { type: PromiseLoad }];
+    timeline.forEach((t) => { t.extensions = [{ type: CyborgHunterExtension, params: {} }]; });
+    beforeLoad.length = 0;
+    const rows = await runTimeline(jsPsych, timeline);
+    assert.equal(rows[2].integrity.trialId, 'trial-2');
+    assert.ok(rows[2].integrity.trialStart_perfNow >= beforeLoad[0],
+      'anchor ' + rows[2].integrity.trialStart_perfNow + ' precedes the plugin\'s on_load at ' + beforeLoad[0]);
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
 // The response click ends the trial from the plugin's own listener, before
 // the click reaches the document: it is recorded on the way down, so it is in
 // the row of the trial it ends rather than in the gap span after it.

@@ -149,10 +149,12 @@ describe('decoyAnswer pass-through (F11)', () => {
     ext.monitor = { startTrial: (opts) => startTrialCalls.push(opts) };
     return { ext, startTrialCalls };
   }
+  // As jsPsych runs a trial: on_start, then on_load with the same params.
+  function load(ext, params) { ext.on_start(params); ext.on_load(params); }
 
   it('forwards decoyAnswer:false as false (explicit skip), not null', () => {
     const { ext, startTrialCalls } = makeExt();
-    ext.on_load({ trialId: 't1', decoyAnswer: false });
+    load(ext, { trialId: 't1', decoyAnswer: false });
     assert.equal(startTrialCalls.length, 1);
     assert.strictEqual(startTrialCalls[0].decoyAnswer, false,
       'an explicit false opt-out must reach the core as false, not null');
@@ -160,13 +162,59 @@ describe('decoyAnswer pass-through (F11)', () => {
 
   it('forwards an explicit decoy string unchanged', () => {
     const { ext, startTrialCalls } = makeExt();
-    ext.on_load({ trialId: 't2', decoyAnswer: 'the answer is 42' });
+    load(ext, { trialId: 't2', decoyAnswer: 'the answer is 42' });
     assert.strictEqual(startTrialCalls[0].decoyAnswer, 'the answer is 42');
   });
 
   it('forwards a missing decoyAnswer as null (auto-detection path)', () => {
     const { ext, startTrialCalls } = makeExt();
-    ext.on_load({ trialId: 't3' });
+    load(ext, { trialId: 't3' });
     assert.strictEqual(startTrialCalls[0].decoyAnswer, null);
+  });
+});
+
+// A synchronous trial's load callback comes late (jsPsych 7.3.1 :3101-3103):
+// on_load counts only after that trial's own on_start, with its params.
+describe('a late on_load is dropped', () => {
+  function makeExt() {
+    const started = [];
+    const fakeJsPsych = { getProgress: () => ({ current_trial_global: 4 }) };
+    const ext = new CyborgHunterExtension(fakeJsPsych);
+    ext.params = {};
+    ext.monitor = { startTrial: (opts) => started.push(opts.trialId), endTrial: () => ({}) };
+    return { ext, started };
+  }
+
+  it('after its own on_finish (a post_trial_gap order)', () => {
+    const { ext, started } = makeExt();
+    const step = { trialId: 'step' };
+    ext.on_start(step);
+    assert.deepStrictEqual(ext.on_finish(step), {}, 'the step never loaded: no row data');
+    ext.on_load(step);
+    assert.deepStrictEqual(started, []);
+  });
+
+  it('between the next trial\'s on_start and its own on_load (a promise trial)', () => {
+    const { ext, started } = makeExt();
+    const step = { trialId: 'step' };
+    const audio = { trialId: 'audio' };
+    ext.on_start(step);
+    ext.on_finish(step);
+    ext.on_start(audio);
+    ext.on_load(step);
+    ext.on_load(audio);
+    assert.deepStrictEqual(started, ['audio']);
+  });
+
+  it('after the next trial already loaded (the next trial starts synchronously)', () => {
+    const { ext, started } = makeExt();
+    const step = { trialId: 'step' };
+    const next = { trialId: 'next' };
+    ext.on_start(step);
+    ext.on_finish(step);
+    ext.on_start(next);
+    ext.on_load(next);
+    assert.doesNotThrow(() => ext.on_load(step));
+    assert.deepStrictEqual(started, ['next']);
   });
 });
