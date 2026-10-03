@@ -39,6 +39,7 @@
 
 import { VERSION } from '../../shared/constants.js';
 import { MESSAGES } from '../errors.js';
+import { startFrictionNow } from '../guards.js';
 
 function message(e) { return String((e && e.message) || e); }
 
@@ -260,43 +261,116 @@ export function installLabJsAdapter(opts) {
     try { if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh(); } catch (_) { /* a debug aid */ }
   }
 
-  // Before lab.js's own end() commits this component's row.
+  function finalFields(seg) {
+    return {
+      integritySegmentFinal: seg,
+      integrityPasteCountFinal: seg.counters.pasteCount,
+      integrityCopyCountFinal: seg.counters.copyCount,
+      integrityDropCountFinal: seg.counters.dropCount,
+      integritySoftScoreFinal: seg.score.softScore,
+      integrityAnyHardTriggeredFinal: seg.score.anyHardTriggered
+    };
+  }
+
+  // Onto the last row that carries a segment, found from the end: the flip
+  // generation's internals.logIndex is undefined (its datastore.set() returns
+  // nothing), and on the classic one the root's end runs inside the last
+  // leaf's end() promise, after that leaf's row was committed. Without a
+  // trial row, into the root's own data, which its end() commits.
+  function writeFinal(root, fields) {
+    try {
+      var ds = datastoreOf(root);
+      if (ds && Array.isArray(ds.data) && typeof ds.update === 'function') {
+        for (var i = ds.data.length - 1; i >= 0; i--) {
+          if (ds.data[i] && ds.data[i].integritySegment) {
+            ds.update(i, function (d) { return Object.assign({}, d, fields); });
+            return;
+          }
+        }
+      }
+    } catch (e) { console.error(MESSAGES.sessionEndFailed(message(e))); }
+    Object.assign(root.data || (root.data = {}), fields);
+  }
+
+  // The end of the session, from the root component's end(): before the
+  // researcher's own on('end') handlers, so a save there sees the final
+  // fields. Runs once; never throws. Friction is stopped before the honeypot
+  // writes its summary, so a violation still open at the end is closed first.
+  function runFinalHook(root) {
+    state.finalized = true;
+    var problems = [];
+    var marker = null;
+    var fields = {};
+    function step(fn) { try { fn(); } catch (e) { problems.push(message(e)); } }
+    step(function () {
+      var r = ctx.segmenter.finish({ source: 'final' });
+      if (r && r.segment) Object.assign(fields, finalFields(r.segment));
+      if (r && r.error) marker = r.error;   // the segmenter has logged it
+    });
+    // Whenever friction holds a token: a friction start mark starts it even
+    // when data-guards does not enable friction.
+    step(function () {
+      var token = win._guardFrictionToken;
+      if (win.GuardFriction && token) win.GuardFriction.stop(token);
+    });
+    if (ctx.config.guards.honeypot) {
+      step(function () {
+        var hp = win.GuardHoneypot;
+        if (hp && typeof hp.getSessionSummary === 'function') Object.assign(fields, hp.getSessionSummary());
+      });
+    }
+    step(function () { if (ctx.replay) ctx.replay.endTrial(); });
+    step(function () { ctx.monitor.destroy(); });
+    if (problems.length) {
+      console.error(MESSAGES.sessionEndFailed(problems.join('; ')));
+      marker = marker ? marker + '; ' + problems.join('; ') : problems.join('; ');
+    }
+    if (marker) fields.cyborgHunterError = marker;
+    writeFinal(root, fields);
+    try { if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh(); } catch (_) { /* a debug aid */ }
+  }
+
+  // Before lab.js's own end() commits this component's row. The root's end
+  // (no parent) also ends the session, once, after the cut: a leaf run on
+  // its own is both the trial and the root.
   function beforeEnd(c) {
     if (ctx.bootError) return;
     stamp(c);
     warnIfRunningBeforeInstall(c);
     var internals = c.internals;
-    if (!internals || !internals.chOpen) return;
-    internals.chOpen = false;
-    var t0 = ctx.debug ? performance.now() : 0;
-    var data = c.data || (c.data = {});
-    var r = ctx.segmenter.cut({ source: 'host', nextTrialId: 'gap-' + state.trialsRun });
-    if (r && r.segment) {
-      var report = r.trialReport || {};
-      report.trialStart_perfNow = internals.chStart;
-      data.integrity = report;
-      data.integritySegment = r.segment;
-      data.integrityPasteCount = r.segment.counters.pasteCount;
-      data.integrityCopyCount = r.segment.counters.copyCount;
-      data.integrityDropCount = r.segment.counters.dropCount;
-      data.integritySoftScore = r.segment.score.softScore;
-      data.integrityAnyHardTriggered = r.segment.score.anyHardTriggered;
-      state.segmentsWritten += 1;
-      state.lastTrial = c;
-      // A segment that comes with an error is complete; only the next span
-      // failed to open. Save it, and mark the row.
-      var err = r.error || internals.chError;
-      if (err) data.cyborgHunterError = err;
-    } else {
-      data.cyborgHunterError = (r && r.error) || internals.chError || 'no segment';
+    if (internals && internals.chOpen) {
+      internals.chOpen = false;
+      var t0 = ctx.debug ? performance.now() : 0;
+      var data = c.data || (c.data = {});
+      var r = ctx.segmenter.cut({ source: 'host', nextTrialId: 'gap-' + state.trialsRun });
+      if (r && r.segment) {
+        var report = r.trialReport || {};
+        report.trialStart_perfNow = internals.chStart;
+        data.integrity = report;
+        data.integritySegment = r.segment;
+        data.integrityPasteCount = r.segment.counters.pasteCount;
+        data.integrityCopyCount = r.segment.counters.copyCount;
+        data.integrityDropCount = r.segment.counters.dropCount;
+        data.integritySoftScore = r.segment.score.softScore;
+        data.integrityAnyHardTriggered = r.segment.score.anyHardTriggered;
+        state.segmentsWritten += 1;
+        state.lastTrial = c;
+        // A segment that comes with an error is complete; only the next span
+        // failed to open. Save it, and mark the row.
+        var err = r.error || internals.chError;
+        if (err) data.cyborgHunterError = err;
+      } else {
+        data.cyborgHunterError = (r && r.error) || internals.chError || 'no segment';
+      }
+      data.cyborgHunterParticipantId = ctx.participantId;
+      data.cyborgHunterVersion = VERSION;
+      followReplay();
+      try {
+        if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
+        if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh();
+      } catch (_) { /* debug counters are optional */ }
     }
-    data.cyborgHunterParticipantId = ctx.participantId;
-    data.cyborgHunterVersion = VERSION;
-    followReplay();
-    try {
-      if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
-      if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh();
-    } catch (_) { /* debug counters are optional */ }
+    if (!c.parent && !state.finalized) runFinalHook(c);
   }
 
   // Both generations' run() is async; a synchronous throw (not seen in
@@ -323,8 +397,22 @@ export function installLabJsAdapter(opts) {
     return origEnd.apply(self, arguments);
   }
 
+  // The friction start mark: the vanilla host's, since the vanilla adapter
+  // (which handles it there) is not installed on this host.
+  function startFriction() { startFrictionNow({ win: win, ctx: ctx }); }
+  function onClick(ev) {
+    try {
+      var t = ev.target;
+      if (t && typeof t.closest === 'function' && t.closest('[data-ch-friction-start]')) startFriction();
+    } catch (e) { hookError(e); }
+  }
+  win.document.addEventListener('click', onClick, true);
+  ctx.handlers.startFriction = startFriction;
+
   var handle = {
     restore: function () {
+      win.document.removeEventListener('click', onClick, true);
+      if (ctx.handlers.startFriction === startFriction) delete ctx.handlers.startFriction;
       if (proto.run === wrappedRun) proto.run = origRun;
       if (proto.end === wrappedEnd) proto.end = origEnd;
     },
