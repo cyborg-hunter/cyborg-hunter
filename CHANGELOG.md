@@ -3,6 +3,21 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- One-line setup on pages without jsPsych: more form submits that keep the
+  page no longer lose the data recorded after them. A form target with
+  spaces around it (`target=" "`, `" _self "`) names another window, as
+  browsers read it. A `submit` event the page dispatches itself
+  (`form.dispatchEvent(new Event('submit'))`) is no longer taken for a page
+  load; Chromium and WebKit submit nothing for it. Firefox does send the
+  form, and on such pages its participants get one extra, empty segment;
+  nothing is lost. A POST form with a control named `method` now gets the
+  `cyborgHunterData` hidden input, so its backend receives that field too;
+  a `method="dialog"` form with such a control counts as a dialog submit,
+  not a page load.
+
 ## [0.11.0] — 2026-10-02
 
 The report in the browser: the `/analyze/` page on the project site builds
