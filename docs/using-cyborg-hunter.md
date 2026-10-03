@@ -405,6 +405,10 @@ matching works:
   path segments, down to the filename alone.
 - If two files match equally well, the URL is reported as ambiguous and
   nothing is inlined for it.
+- Case counts first: a file spelled exactly as in the URL wins. Only when no
+  file matches exactly is one differing only in upper/lower case used
+  (`Card_A.png` for `card_a.png`), ranked the same way; if several such
+  files fit equally well, the URL is reported as ambiguous.
 - A matched stylesheet's own `url(...)` and `@import` references are matched
   the same way. The ones you did not supply are made absolute against the
   stylesheet's original URL, so they resolve where they did on the

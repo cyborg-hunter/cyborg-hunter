@@ -5,6 +5,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+### Changed
+- Experiment assets (`assetsDir`, files dropped on `/analyze/`): a file whose
+  path differs from the recorded URL only in upper/lower case now matches
+  when no file matches exactly and only one such file fits; several are
+  reported as ambiguous.
+
 ### Removed
 - Internal renderer wrappers removed
   (`src/cli/renderers/{trajectories,session-timeline,typing-profile,html-index,replay-assets}.js`).
