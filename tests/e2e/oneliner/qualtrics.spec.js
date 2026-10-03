@@ -470,3 +470,66 @@ for (const persist of [false, true]) {
     expect(chErrors(log)).toEqual([]);
   });
 }
+
+// The final-page line and the replay recipe are question scripts: they run
+// whether or not ch.js did, inside Qualtrics' own page code. Neither may
+// throw or leave Next hidden. The harness stops a submit whose callback
+// throws (whether a live survey does is not known), so a throw fails these
+// tests.
+async function finishWithoutCh(page, server) {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await ready(page, 1);
+  for (let n = 1; n <= 3; n++) await nextPage(page, n);
+  await expect(page.locator('#next')).toBeVisible();
+  await page.click('#next');
+  await page.getByText('Thank you').waitFor();
+  expect(server.posts.map((p) => [p.page, p.status])).toEqual([[1, 200], [2, 200], [3, 200], [4, 200]]);
+  for (const p of server.posts) expect(p.values[FIELD]).toBeUndefined();
+  expect(await headerRuns(page)).toBe(0);
+  expect(errors).toEqual([]);
+}
+
+test('ch.js fails to load, with the final-page line and the replay recipe: every page submits, Next is never left hidden', async ({ page }) => {
+  const server = await qualtricsServer(page);
+  const chStatus = [];
+  page.on('response', (r) => { if (r.url().endsWith('/ch.js')) chStatus.push(r.status()); });
+  await page.goto(at('chjs=missing&finalLine=1&recipe=1&replay=1'));
+  await finishWithoutCh(page, server);
+  expect(chStatus.length).toBeGreaterThan(0);
+  expect(chStatus.every((s) => s === 404)).toBe(true);
+  expect(await page.evaluate(() => typeof window.CyborgHunter)).toBe('undefined');
+});
+
+test('a CyborgHunter whose calls throw: the final-page line and the replay recipe still let every page submit', async ({ page }) => {
+  const server = await qualtricsServer(page);
+  await page.addInitScript(() => {
+    window.CyborgHunter = {
+      data: function () { throw new Error('data failed'); },
+      replay: function () { throw new Error('replay failed'); }
+    };
+  });
+  await page.goto(at('chjs=missing&finalLine=1&recipe=1'));
+  await finishWithoutCh(page, server);
+});
+
+test('the replay upload fails: the recipe shows Next again and the final page is written', async ({ page }) => {
+  const log = collectConsole(page);
+  const server = await qualtricsServer(page);
+  let tried = false;
+  await page.route('**/upload', (route) => { tried = true; return route.abort(); });
+  await page.goto(at('replay=1&recipe=1&debug=0'));
+  await ready(page, 1);
+  await page.waitForFunction(() => typeof window.CyborgHunterReplay !== 'undefined');
+  for (let n = 1; n <= 3; n++) {
+    await pasteInto(page, '#q' + n, 'page ' + n);
+    await nextPage(page, n);
+  }
+  await pasteInto(page, '#q4', 'page 4');
+  await page.click('#next');                                 // waits for the recipe to show Next again
+  await page.getByText('Thank you').waitFor();
+  expect(tried).toBe(true);
+  expect(server.posts).toHaveLength(4);
+  expect(payloadsOf(server)[3].trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1, 1, 1]);
+  expect(chErrors(log)).toEqual([]);
+});

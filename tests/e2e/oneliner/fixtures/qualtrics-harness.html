@@ -48,8 +48,12 @@
                                miss on the re-fetch would make it (with
                                blockNext=0, a page can be submitted first)
          finalLine=1           the final page runs the documented final-page
-                               question script,
-                               addOnPageSubmit(function () { CyborgHunter.data(); })
+                               question script (docs/qualtrics.md, guarded:
+                               it never throws, with or without ch.js)
+         chjs=missing          the header's ch.js tag points at a file that
+                               does not exist (404), as when a network or a
+                               blocker stops the script: the survey still
+                               runs, each page ready without a header run
          replay=1              data-replay on the tag
          recipe=1              the final page runs the replay upload question
                                script (#qx-replay-recipe below)
@@ -85,8 +89,10 @@
        (Question → JavaScript). It hides Next, posts CyborgHunter.replay() to
        the researcher's own server, and shows Next again when the upload has
        finished, failed, or taken longer than ten seconds, so a slow server
-       never keeps the participant on the page. The participant's own Next
-       then submits the page, which writes the last Cyborg Hunter payload.
+       never keeps the participant on the page. Without ch.js Next is never
+       hidden, and if anything in the script throws, Next comes back at once
+       and no error reaches Qualtrics. The participant's own Next then
+       submits the page, which writes the last Cyborg Hunter payload.
        docs/qualtrics.md#replay quotes this script; UPLOAD_URL is the only
        line a researcher changes. -->
   <script type="text/plain" id="qx-replay-recipe">
@@ -97,17 +103,21 @@ Qualtrics.SurveyEngine.addOnload(function () {
   function showNext() {
     if (shown) return;
     shown = true;
-    question.showNextButton();
+    try { question.showNextButton(); } catch (e) {}
   }
-  var recording = window.CyborgHunter ? window.CyborgHunter.replay() : null;
-  if (!recording) return;
-  question.hideNextButton();
-  setTimeout(showNext, 10000);
-  fetch(UPLOAD_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ participantId: recording.participant_id, data: recording })
-  }).then(showNext, showNext);
+  try {
+    var recording = window.CyborgHunter ? window.CyborgHunter.replay() : null;
+    if (!recording) return;
+    question.hideNextButton();
+    setTimeout(showNext, 10000);
+    fetch(UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantId: recording.participant_id, data: recording })
+    }).then(showNext, showNext);
+  } catch (e) {
+    showNext();
+  }
 });
   </script>
 
@@ -133,7 +143,8 @@ Qualtrics.SurveyEngine.addOnload(function () {
     var LEGACY_KEY = 'qx:ed';
 
     // The researcher's header: the ch.js tag, as pasted into Look & Feel.
-    var tag = '<script src="/dist/ch.js" data-participant-id="E2E-QX-1"' +
+    var missing = params.get('chjs') === 'missing';
+    var tag = '<script src="' + (missing ? '/dist/missing/ch.js' : '/dist/ch.js') + '" data-participant-id="E2E-QX-1"' +
       (params.get('debug') === '0' ? '' : ' data-debug') +
       (params.get('replay') === '1' ? ' data-replay' : '') +
       (params.get('guards') === 'none' ? ' data-guards="none"' : '') +
@@ -176,8 +187,14 @@ Qualtrics.SurveyEngine.addOnload(function () {
     // The header rendered again: Qualtrics replaces its HTML, so the script
     // runs again. Resolves once it has run, which is when the page is ready.
     function renderHeader(first) {
-      if (first || !headerDelay) return runHeader(first);
-      return new Promise(function (r) { setTimeout(r, headerDelay); }).then(function () { return runHeader(false); });
+      if (first || !headerDelay) return loaded(runHeader(first));
+      return new Promise(function (r) { setTimeout(r, headerDelay); }).then(function () { return loaded(runHeader(false)); });
+    }
+    // Qualtrics does not wait for a header script that fails to load: with
+    // chjs=missing that failure is expected and the page goes on. Any other
+    // failure stays a failure.
+    function loaded(run) {
+      return missing ? run.catch(function () { /* the survey runs without ch.js */ }) : run;
     }
     function runHeader(first) {
       header.innerHTML = '';
@@ -218,7 +235,7 @@ Qualtrics.SurveyEngine.addOnload(function () {
       // Question scripts run as the page renders, whether or not the header
       // has run again yet.
       if (finalLine && page === pages) {
-        (0, eval)('Qualtrics.SurveyEngine.addOnPageSubmit(function () { CyborgHunter.data(); });');
+        (0, eval)('Qualtrics.SurveyEngine.addOnPageSubmit(function () { try { if (window.CyborgHunter) CyborgHunter.data(); } catch (e) {} });');
       }
       if (recipe && page === pages) {
         (0, eval)(document.getElementById('qx-replay-recipe').textContent);
@@ -241,7 +258,9 @@ Qualtrics.SurveyEngine.addOnload(function () {
     function ready() { window.__qxPage = page; }
 
     // Next: the callbacks in one task, each one timed; the validation; the
-    // page's POST.
+    // page's POST. A callback that throws stops the submit here: whether a
+    // live survey carries on after one is not known, so the harness assumes
+    // it does not, and a question script must never throw.
     function next() {
       if (busy) return;
       busy = true;

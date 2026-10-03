@@ -124,12 +124,14 @@ This line, in the JavaScript of any question on the final page (the
 question's JavaScript editor), covers that case:
 
 ```js
-Qualtrics.SurveyEngine.addOnPageSubmit(function () { CyborgHunter.data(); });
+Qualtrics.SurveyEngine.addOnPageSubmit(function () { try { if (window.CyborgHunter) CyborgHunter.data(); } catch (e) {} });
 ```
 
 The question's script is in place as soon as the page renders. When ch.js's
 own callback also runs at that submit, the two share one write, so the line
-never adds a row. We recommend it for every survey. Whether a survey without
+never adds a row. The line never throws: if `ch.js` did not load (a network
+failure, a blocker), it does nothing, so it cannot stop the participant's
+submit. Keep it in this form. We recommend it for every survey. Whether a survey without
 it can lose its final page depends on whether Qualtrics drops page-submit
 callbacks between pages and enables Next before the header has run again; if
 the live check finds that it does, the line is required.
@@ -276,25 +278,31 @@ Qualtrics.SurveyEngine.addOnload(function () {
   function showNext() {
     if (shown) return;
     shown = true;
-    question.showNextButton();
+    try { question.showNextButton(); } catch (e) {}
   }
-  var recording = window.CyborgHunter ? window.CyborgHunter.replay() : null;
-  if (!recording) return;
-  question.hideNextButton();
-  setTimeout(showNext, 10000);
-  fetch(UPLOAD_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ participantId: recording.participant_id, data: recording })
-  }).then(showNext, showNext);
+  try {
+    var recording = window.CyborgHunter ? window.CyborgHunter.replay() : null;
+    if (!recording) return;
+    question.hideNextButton();
+    setTimeout(showNext, 10000);
+    fetch(UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantId: recording.participant_id, data: recording })
+    }).then(showNext, showNext);
+  } catch (e) {
+    showNext();
+  }
 });
 ```
 
 When the final page loads, the script hides Next, stops the recorder and
 posts the recording. It shows Next again when the upload has finished,
 failed, or taken longer than ten seconds, so a slow server never keeps the
-participant on the page. It does not press Next: the participant's own Next
-submits the page, and that submit writes the last Cyborg Hunter payload.
+participant on the page. Without `ch.js` it never hides Next, and if
+anything in it fails, it shows Next again at once and throws nothing into
+Qualtrics. It does not press Next: the participant's own Next submits the
+page, and that submit writes the last Cyborg Hunter payload.
 `CyborgHunter.replay()` stops the recorder, so the recording ends when the
 final page loads; put the script on a closing page with little to do. It can
 share the question's JavaScript with the [final-page line](#the-final-page).

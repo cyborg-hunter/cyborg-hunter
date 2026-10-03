@@ -722,7 +722,7 @@ describe('Qualtrics host: the fallbacks live verification can pick', () => {
     }
     fake.rerunHeader(win, null);                             // page four
     fake.submitHooks.length = 0;
-    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });   // the documented final-page line
+    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });   // the call the documented final-page line makes
     const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
     assert.deepStrictEqual(segments(p), [0, 1, 2, 3]);
     assert.deepStrictEqual(pastes(p), [1, 0, 1, 0]);
@@ -803,7 +803,7 @@ describe('Qualtrics host: the fallbacks live verification can pick', () => {
     assert.deepStrictEqual(segments(p1), [0]);
     assert.strictEqual(p1.trials[0].integrity.pasteEvents.length, 1);
     paste('last page');
-    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });   // the documented final-page line
+    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });   // the call the documented final-page line makes
     const p2 = JSON.parse(fake.submit('next')[STORED_FIELD]);
     assert.deepStrictEqual(segments(p2), [0, 1]);
     assert.strictEqual(p2.trials[1].integrity.pasteEvents.length, 1);
