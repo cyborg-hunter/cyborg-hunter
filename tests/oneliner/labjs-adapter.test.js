@@ -4,7 +4,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { Window } from 'happy-dom';
-import { detectLabJs, watchLabJsPlacement } from '../../src/oneliner/adapters/labjs.js';
+import { detectLabJs, watchLabJsPlacement, isContainer, isTrial, idOf, datastoreOf, trialOptions } from '../../src/oneliner/adapters/labjs.js';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 
 function fakeLab(opts) {
@@ -72,5 +72,101 @@ describe('watchLabJsPlacement', () => {
     watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'vanilla', bootError: 'x' } });
     watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'labjs' } });
     assert.deepStrictEqual(errors, []);
+  });
+});
+
+// A stand-in component: `meta` is constructor.metadata, `parent` the tree link.
+function comp(opts) {
+  class Fake {}
+  Fake.metadata = { module: ['x'], nestedComponents: (opts && opts.nested) || [] };
+  const c = new Fake();
+  c.options = Object.assign({ id: null, parameters: {} }, (opts && opts.options) || {});
+  c.internals = (opts && opts.internals) || {};
+  c.parent = (opts && opts.parent) || undefined;
+  c.data = {};
+  if (opts && 'id' in opts) Object.defineProperty(c, 'id', { get: opts.id });
+  if (opts && opts.aggregateParameters) Object.defineProperty(c, 'aggregateParameters', { get: () => opts.aggregateParameters });
+  return c;
+}
+class Parallel {}
+const labWithParallel = { flow: { Parallel } };
+
+describe('trial rules', () => {
+  it('a leaf is a trial; a container is not; a skipped leaf is decided by the caller from data.ended_on', () => {
+    assert.strictEqual(isContainer(comp({ nested: ['content'] })), true);
+    assert.strictEqual(isContainer(comp()), false);
+    assert.strictEqual(isTrial(comp(), labWithParallel), true);
+    assert.strictEqual(isTrial(comp({ nested: ['content'] }), labWithParallel), false);
+  });
+  it('a Parallel is the trial and its descendants are not', () => {
+    const par = new Parallel();
+    par.options = { id: '2' }; par.internals = {}; par.data = {};
+    assert.strictEqual(isTrial(par, labWithParallel), true);
+    const child = comp({ parent: par });
+    const grandchild = comp({ parent: comp({ nested: ['content'], parent: par }) });
+    assert.strictEqual(isTrial(child, labWithParallel), false);
+    assert.strictEqual(isTrial(grandchild, labWithParallel), false);
+    assert.strictEqual(isTrial(child, { flow: {} }), true, 'a lab without Parallel (23) has no such rule');
+  });
+});
+
+describe('idOf', () => {
+  it('reads options.id first, then the id getter, and joins an array id', () => {
+    assert.strictEqual(idOf(comp({ options: { id: '1_2' } })), '1_2');
+    assert.strictEqual(idOf(comp({ options: { id: undefined }, id: () => '3_0' })), '3_0');
+    assert.strictEqual(idOf(comp({ options: { id: 7 } })), '7');
+    assert.strictEqual(idOf(comp({ options: { id: undefined }, id: () => [1, 0] })), '1_0');
+  });
+  it('a throwing id getter (lab.js 20.x root) and a missing id give null', () => {
+    assert.strictEqual(idOf(comp({ id: () => { throw new Error('split of null'); } })), null);
+    assert.strictEqual(idOf(comp()), null);
+  });
+});
+
+describe('datastoreOf', () => {
+  const ds = { commit() {}, data: [] };
+  it('options.datastore (classic) or the controller global (flip); null without a commit()', () => {
+    assert.strictEqual(datastoreOf(comp({ options: { datastore: ds } })), ds);
+    assert.strictEqual(datastoreOf(comp({ internals: { controller: { global: { datastore: ds } } } })), ds);
+    assert.strictEqual(datastoreOf(comp({ options: { datastore: {} } })), null);
+    assert.strictEqual(datastoreOf(comp()), null);
+  });
+});
+
+describe('trialOptions', () => {
+  const o = { generation: 'classic', index: 4, rerun: 1 };
+  it('precedence: options.cyborgHunter, parameters, data-ch-trial in the content, the id, trial-<n>', () => {
+    const win = new Window();
+    const el = win.document.createElement('div');
+    el.innerHTML = '<form data-ch-trial="from-mark"></form>';
+    const all = comp({ options: { id: '0_1', el, cyborgHunter: { trialId: 'own', phase: 'p', decoyAnswer: false, experimentContainer: '#x' } },
+      aggregateParameters: { chTrialId: 'param', chPhase: 'pp', chDecoyAnswer: 'yes' } });
+    assert.deepStrictEqual(trialOptions(all, o), { trialId: 'own', phase: 'p', decoyAnswer: false, experimentContainer: '#x' });
+    const params = comp({ options: { id: '0_1', el }, aggregateParameters: { chTrialId: 'param', chPhase: 'pp', chDecoyAnswer: 'yes' } });
+    assert.deepStrictEqual(trialOptions(params, o), { trialId: 'param', phase: 'pp', decoyAnswer: 'yes', experimentContainer: null });
+    const mark = comp({ options: { id: '0_1', el } });
+    assert.strictEqual(trialOptions(mark, o).trialId, 'from-mark');
+    const own = comp({ options: { id: '0_1' } });
+    assert.deepStrictEqual(trialOptions(own, o), { trialId: '0_1', phase: null, decoyAnswer: null, experimentContainer: null });
+    assert.strictEqual(trialOptions(comp(), o).trialId, 'trial-4');
+    win.close();
+  });
+  it('the flip generation reads the element from internals.context.el', () => {
+    const win = new Window();
+    const el = win.document.createElement('div');
+    el.innerHTML = '<p data-ch-trial="flip-mark"></p>';
+    const c = comp({ options: { id: undefined }, internals: { context: { el } }, id: () => '1' });
+    assert.strictEqual(trialOptions(c, { generation: 'flip', index: 0, rerun: 1 }).trialId, 'flip-mark');
+    win.close();
+  });
+  it('a re-run leaf gets #<n> on a derived id, never on a given name', () => {
+    assert.strictEqual(trialOptions(comp({ options: { id: '2' } }), { generation: 'classic', index: 9, rerun: 2 }).trialId, '2#2');
+    assert.strictEqual(trialOptions(comp(), { generation: 'classic', index: 9, rerun: 3 }).trialId, 'trial-9#3');
+    assert.strictEqual(trialOptions(comp({ options: { id: '2', cyborgHunter: { trialId: 'named' } } }), { generation: 'classic', index: 9, rerun: 2 }).trialId, 'named');
+  });
+  it('a component outside a tree (no aggregateParameters) falls back to options.parameters', () => {
+    const c = comp({ options: { parameters: { chTrialId: 'own-params' } } });
+    Object.defineProperty(c, 'aggregateParameters', { get() { throw new Error('no parents'); } });
+    assert.strictEqual(trialOptions(c, o).trialId, 'own-params');
   });
 });
