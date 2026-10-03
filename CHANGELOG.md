@@ -29,8 +29,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   an image.
 - Experiment assets now also cover `srcset` candidates (on `<img>` and on a
   `<picture>`'s `<source>`), an SVG `<image>`'s `href`/`xlink:href`, and an
-  `<input type="image">`'s `src`: each is matched, inlined when supplied, and
-  counted among the images in the note.
+  `<input type="image">`'s `src` (also when the input becomes an image button
+  later in the session): each is matched, inlined when supplied, and counted
+  among the images in the note.
 - `/analyze/`: when a check or a build sends no progress for a minute, the
   page shows "Still working — this is taking longer than usual. If nothing
   changes in a few minutes, reload the page." under the step. The next

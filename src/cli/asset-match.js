@@ -141,13 +141,17 @@ function* segmentsOf(recording) {
   }
 }
 
-// Every element node seen so far, by id, as { tag, parent, type }: a
-// dom.attr event names its node only by id, a <source>'s kind depends on its
-// parent, and an <input>'s src is an image only when its type says so.
-// `parent` is the parent's id (a dom.add root's is the event's).
+// Every element node seen so far, by id, as { tag, parent, type, attrs,
+// srcEvent }: a dom.attr event names its node only by id, a <source>'s kind
+// depends on its parent, and an <input>'s src is an image only when its type
+// says so. `parent` is the parent's id (a dom.add root's is the event's);
+// `attrs` and `srcEvent` (the last dom.attr of its src) say where its src is
+// written, for an input that becomes an image button.
 function noteTree(elems, node, parent) {
   if (!node || typeof node !== 'object') return;
-  if (node.kind === 'element' && node.id != null) elems.set(node.id, { tag: node.tag, parent, type: attrsOf(node).type });
+  if (node.kind === 'element' && node.id != null) {
+    elems.set(node.id, { tag: node.tag, parent, type: attrsOf(node).type, attrs: attrsOf(node), srcEvent: null });
+  }
   for (const c of list(node.children)) noteTree(elems, c, node.id);
 }
 const parentTagOf = (elems, id) => {
@@ -268,8 +272,18 @@ function eachRef(segments, visit) {
       if (ev.type === 'dom.add') { noteTree(elems, ev.node, ev.parent); tree(ev.node); }
       else if (ev.type === 'dom.attr' && elems.has(ev.node)) {
         const el = elems.get(ev.node);
-        if (ev.name === 'type') el.type = ev.value;
-        else if (ev.value) ref(refKind(el, parentTagOf(elems, ev.node), ev.name, ev.value), ev.value, (x) => { ev.value = x; }, () => mediaAt(ev.node, el.tag, 'src'));
+        if (ev.name === 'type') {
+          el.type = ev.value;
+          // An input that becomes an image button shows the src it has.
+          const at = el.srcEvent;
+          const src = at ? at.value : el.attrs.src;
+          if (el.tag === 'input' && src && refKind(el, null, 'src', src) === 'image') {
+            ref('image', src, at ? (x) => { at.value = x; } : (x) => { el.attrs.src = x; });
+          }
+        } else {
+          if (ev.name === 'src') el.srcEvent = ev;
+          if (ev.value) ref(refKind(el, parentTagOf(elems, ev.node), ev.name, ev.value), ev.value, (x) => { ev.value = x; }, () => mediaAt(ev.node, el.tag, 'src'));
+        }
       }
     }
   }

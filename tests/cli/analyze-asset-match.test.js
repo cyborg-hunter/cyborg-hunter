@@ -457,6 +457,21 @@ describe('srcset, SVG <image> and <input type="image">', () => {
     assert.strictEqual(body.children[1].attrs.href, 'img/a.png');
     assert.strictEqual(body.children[2].attrs.src, D);
   });
+  it('an input that becomes an image button shows the src it already has: collected and inlined there', async () => {
+    const kf = () => domOnly([el(5, 'input', { type: 'text', src: 'img/a.png' })],
+      [{ type: 'dom.attr', t: 1, node: 5, name: 'type', value: 'image' }]);
+    assert.deepStrictEqual(collectAssetUrls(kf()).images, ['img/a.png']);
+    const { assetMap } = await buildAssetMap([kf()], files);
+    assert.strictEqual(assetNoteText(assetMatchSummary(kf(), assetMap)), 'Experiment assets: 1 of 1 images matched.');
+    assert.strictEqual(applyAssetMap(buildViewerModel(kf()), assetMap).segments[0].initialDom.children[0].attrs.src, D);
+    // The src a dom.attr set while it was a text field is rewritten in that event.
+    const ev = () => domOnly([el(5, 'input', { type: 'text' })],
+      [{ type: 'dom.attr', t: 1, node: 5, name: 'src', value: 'img/c.png' },
+        { type: 'dom.attr', t: 2, node: 5, name: 'type', value: 'image' }]);
+    const m = applyAssetMap(buildViewerModel(ev()), (await buildAssetMap([ev()], files)).assetMap);
+    assert.deepStrictEqual(m.segments[0].events.map((e) => e.value), [D, 'image']);
+  });
+
   it('follows a dom.attr that sets a srcset, an href or an image input\'s src later in the session', async () => {
     const rec = () => domOnly(
       [el(2, 'img', { src: X + 'img/x.png' }), el(3, 'svg', {}, [el(4, 'image', {})]), el(5, 'input', { type: 'text' })],
@@ -466,8 +481,8 @@ describe('srcset, SVG <image> and <input type="image">', () => {
         { type: 'dom.attr', t: 4, node: 5, name: 'type', value: 'image' },
         { type: 'dom.attr', t: 5, node: 5, name: 'src', value: 'img/a.png' },
         { type: 'dom.add', t: 6, parent: 1, before: null, node: el(6, 'picture', {}, [el(7, 'source', { srcset: 'img/c.png 2x' })]) }]);
-    assert.deepStrictEqual(collectAssetUrls(rec()).images, [X + 'img/x.png', 'img/a.png', 'img/b.png', 'img/c.png'],
-      'a src set while the input was a text field is not an image');
+    assert.deepStrictEqual(collectAssetUrls(rec()).images, [X + 'img/x.png', 'img/a.png', 'img/b.png', 'img/c.png', 'img/n.png'],
+      'a src set while the input was a text field becomes an image when the type does');
     const { assetMap } = await buildAssetMap([rec()], files);
     const events = applyAssetMap(buildViewerModel(rec()), assetMap).segments[0].events;
     assert.deepStrictEqual(events.map((e) => (e.type === 'dom.attr' ? e.value : e.node.children[0].attrs.srcset)),
