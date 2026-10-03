@@ -120,6 +120,8 @@ export function installVanillaAdapter(opts) {
   var submittingForm = null;    // the form whose form.submit() is running (wrappedSubmit)
   var cuts = 0;                 // segments cut so far on this page
   var written = null;           // the hidden input carry() last wrote: { form, cuts (when) }
+  var floor = 0;                // evidence the span a submit opened held when the submit's task ended
+  var floorTask = null;         // that task has not ended yet (settleFloorLater)
   var warnedSize = false;
   var noticedGet = false;       // the GET-form console.info, once per page
   var notes = [];               // cyborgHunterError notes, this page's and earlier pages'
@@ -249,6 +251,8 @@ export function installVanillaAdapter(opts) {
       trials.push(row);
       cuts += 1;
       submitted = false;
+      floor = 0;
+      floorTask = null;
       followReplay();
     }
     return r;
@@ -348,6 +352,29 @@ export function installVanillaAdapter(opts) {
     return keyword !== '_blank' && t === win.name;
   }
 
+  // The event that made the page submit goes on after the cut, in the same
+  // task: the click that a page's own onclick handler answered with
+  // form.submit() reaches the document's listeners, a checkbox's input and
+  // change events follow its click. What it adds to the span the submit
+  // opened is the submit's own, not something the participant did on a page
+  // that stayed, so the evidence that span holds when the task ends is its
+  // floor, and only what comes later counts (actedSinceSubmit()).
+  function settleFloorLater() {
+    var token = floorTask = {};
+    win.setTimeout(function () {
+      if (floorTask !== token) return;
+      floorTask = null;
+      var n = ctx.segmenter.evidence();
+      floor = isFinite(n) ? n : 0;   // unreadable: everything counts
+    }, 0);
+  }
+
+  // Whether the span a same-window submit opened holds something the
+  // participant did after that submit's task (see settleFloorLater).
+  function actedSinceSubmit() {
+    return !floorTask && ctx.segmenter.holdsEvidence(floor);
+  }
+
   // The work of a form submit: close the span, save the session, and put the
   // blob into a POST form's hidden input. `cutSpan` false keeps the span as it
   // is (form.submit() called right after a submit event closed it). A dialog
@@ -364,7 +391,7 @@ export function installVanillaAdapter(opts) {
     if (!submitsAnything(form, submitter)) return false;
     if (cutSpan) {
       carrying = true;
-      try { cut('page'); } finally { carrying = false; }
+      try { if (cut('page').segment) settleFloorLater(); } finally { carrying = false; }
     }
     var replaces = !form || replacesPage(form, submitter);
     submitted = replaces;
@@ -487,7 +514,7 @@ export function installVanillaAdapter(opts) {
       try {
         // Inside a submit event's task the event has already cut the span.
         var task = submitTask;
-        var cutSpan = !task && (!submitted || ctx.segmenter.holdsEvidence());
+        var cutSpan = !task && (!submitted || actedSinceSubmit());
         if (carry(this, null, cutSpan) && task) task.committed = true;
       } catch (e) {
         console.error(MESSAGES.vanillaEventFailed(message(e)));
@@ -510,6 +537,8 @@ export function installVanillaAdapter(opts) {
     try {
       submitted = false;
       submitTask = null;
+      floor = 0;
+      floorTask = null;
       var saved = readState();
       if (usable(saved)) {
         // A slim record (storage full) has no trials: keep the ones in memory.
@@ -536,7 +565,7 @@ export function installVanillaAdapter(opts) {
   // header), and an empty one would only add a segment.
   function onPageHide() {
     try {
-      if (!submitted || ctx.segmenter.holdsEvidence()) cut('page');
+      if (!submitted || actedSinceSubmit()) cut('page');
       persist();
       if (ctx.replay) ctx.replay.stop();
     } catch (e) {

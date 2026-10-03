@@ -34,8 +34,8 @@ function blobOf(body) {
 // `metaRedirect`: answer page 1's POST with a page that meta-refreshes to
 // page 2 instead of an HTTP redirect. Playwright does not route the request
 // an intercepted redirect leads to, so a rewritten page 2 needs a navigation
-// of its own.
-async function driveMultiPage(page, { pastes, metaRedirect = false }) {
+// of its own. `leave`: how page 1's #next is activated (a click by default).
+async function driveMultiPage(page, { pastes, metaRedirect = false, leave = (p) => p.click('#next') }) {
   const bodies = [];
   await page.route('**/submit', async (route) => {
     bodies.push(route.request().postData());
@@ -52,7 +52,7 @@ async function driveMultiPage(page, { pastes, metaRedirect = false }) {
   await page.goto(FIX + 'vanilla-form-page1.html');
   for (let i = 0; i < pastes; i++) await pasteInto(page, '#answer1', 'pasted text ');
   await page.locator('#answer1').pressSequentially('typed on page 1', { delay: 120 });
-  await page.click('#next');
+  await leave(page);
   await page.waitForURL('**/vanilla-form-page2.html');
 
   const formData = await page.evaluate((field) => {
@@ -115,6 +115,26 @@ test('multi-page form: hidden input on each submit, segments continue across pag
   expect(out.summaryCsv[0].totalPasteEvents).toBe('1');
   expect(out.summaryCsv[0].hardTriggered).toBe('no');   // 1 paste < standard threshold 2
 });
+
+// Page 1's button is type="button" and submits from its own onclick: the
+// cut comes inside the click, before the click reaches the document. The
+// click goes with page 1's span, and page 1 adds no segment after it.
+for (const [how, leave] of [
+  ['clicked', (p) => p.click('#next')],
+  ['activated with Enter', async (p) => { await p.focus('#next'); await p.keyboard.press('Enter'); }],
+]) {
+  test(`multi-page form whose button submits from its onclick (${how}): no extra segment, the click goes with page 1`, async ({ page }) => {
+    await rewriteFixture(page, '**/vanilla-form-page1.html', (html) =>
+      html.replace('<button type="submit" id="next">', '<button type="button" id="next" onclick="this.form.submit()">'));
+    const log = collectConsole(page);
+    const { bodies } = await driveMultiPage(page, { pastes: 1, leave });
+    const first = blobOf(bodies[0]);
+    expect(first.trials.map((t) => t.trialId)).toEqual(['span-0']);
+    expect(first.trials[0].integrity.mouseTrack.filter((m) => m.type === 'click')).toHaveLength(1);
+    expectTwoPageBlob(blobOf(bodies[1]));
+    expect(chErrors(log)).toEqual([]);
+  });
+}
 
 test('multi-page form: two pastes on page 1 and a clean page 2 flag the participant HARD', async ({ page }) => {
   const { bodies } = await driveMultiPage(page, { pastes: 2 });

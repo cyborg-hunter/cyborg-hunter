@@ -581,6 +581,23 @@ describe('ch.js on real jsPsych: two instances', () => {
   });
 });
 
+// The response click ends the trial from the plugin's own listener, before
+// the click reaches the document: it is recorded on the way down, so it is in
+// the row of the trial it ends rather than in the gap span after it.
+describe('ch.js on real jsPsych: the response click', () => {
+  it('a button response is in the mouse track of the trial it ends', async () => {
+    bootCh();
+    const jsPsych = win.initJsPsych({});
+    const done = runTimeline(jsPsych, [{ type: win.jsPsychHtmlButtonResponse, stimulus: '<p>q</p>', choices: ['Yes'] }]);
+    await new Promise((r) => setTimeout(r, 20));
+    win.document.querySelector('.jspsych-btn').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    const rows = await done;
+    assert.equal(rows.length, 1);
+    assert.deepStrictEqual(rows[0].integrity.mouseTrack.filter((m) => m.type === 'click').length, 1);
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
 // data-replay on real jsPsych. initJsPsych runs before cyborg-hunter-replay.js
 // could have loaded, so ch.js lists a proxy whose async initialize() loads it
 // and delegates; run() waits for it (loadExtensions awaits every

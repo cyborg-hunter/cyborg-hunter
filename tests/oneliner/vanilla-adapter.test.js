@@ -800,6 +800,81 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
   });
 
+  // A page that submits from its own click handler (onclick="form.submit()",
+  // a link's onclick, a listener added by the page's script): the handler
+  // runs before the click reaches the document, so the cut comes in the
+  // middle of the click. The click belongs to the span the submit closes,
+  // and the span it opens holds nothing: its pagehide adds no segment.
+  const clicksPerRow = (trials) => trials.map((t) => t.integrity.mouseTrack.filter((m) => m.type === 'click').length);
+  const selfSubmitting = {
+    'a button whose click handler calls form.submit()': (f) => {
+      const b = el('<button type="button">Next</button>');
+      b.addEventListener('click', () => f.submit());
+      return b;
+    },
+    'a link whose click handler calls form.submit()': (f) => {
+      const a = el('<a href="#next">Next</a>');
+      a.addEventListener('click', (e) => { e.preventDefault(); f.submit(); });
+      return a;
+    },
+  };
+  for (const [name, make] of Object.entries(selfSubmitting)) {
+    it(`${name}: the click is posted with the span it closes, and pagehide adds no segment`, async () => {
+      const posted = stubNativeSubmit();
+      const ctx = start();
+      const f = el('<form method="post" action="/next"></form>');
+      click(make(f));
+      assert.strictEqual(posted.length, 1);
+      assert.deepStrictEqual(clicksPerRow(JSON.parse(posted[0].data).trials), [1]);
+      await tick();
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 1, 'no extra segment');
+    });
+  }
+
+  // The click's own consequences in the same task (a checkbox's input and
+  // change events come after the click) are the submit's, not something the
+  // participant did on a page that stayed.
+  it('a checkbox whose click handler submits: its input event after the click adds no segment', async () => {
+    const posted = stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/next"><input type="checkbox" name="agree"></form>');
+    const box = f.querySelector('input');
+    box.addEventListener('click', () => f.submit());
+    click(box);   // happy-dom toggles it and fires input and change after the click, as browsers do
+    assert.strictEqual(posted.length, 1);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+  });
+
+  it('a second click on such a button submits again, with that click in the span it closes', async () => {
+    const posted = stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/next"></form>');
+    const b = selfSubmitting['a button whose click handler calls form.submit()'](f);
+    click(b);
+    await tick();
+    click(b);   // again, before the next page arrives
+    assert.strictEqual(posted.length, 2);
+    assert.deepStrictEqual(clicksPerRow(JSON.parse(posted[1].data).trials), [1, 1]);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+  });
+
+  it('a page that stays after such a submit: a later click is kept at pagehide', async () => {
+    stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/next"></form>');
+    click(selfSubmitting['a button whose click handler calls form.submit()'](f));
+    await tick();   // the answer was a 204: the page stays
+    click(el('<button type="button">Back to the task</button>'));
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    assert.deepStrictEqual(clicksPerRow(JSON.parse(win.sessionStorage.getItem(KEY)).trials), [1, 1]);
+  });
+
   // The browser reads a submission's method and target after the submit
   // handlers ran, and builds its entry list (the formdata event) in between.
   // happy-dom fires no formdata event: this dispatches the one the browser

@@ -39,7 +39,12 @@ export function attachMouseSignals(ctx) {
       });
     }, { passive: true });
 
-    // Click/mousedown/mouseup — no throttling needed, low frequency
+    // Click/mousedown/mouseup — no throttling needed, low frequency.
+    // Recorded on the way down (capture phase), before the page handles the
+    // event: a page handler may end the trial (a jsPsych response button, a
+    // button whose onclick submits the form) and the next one may start
+    // within the same click, which then belongs to the trial it ended; and a
+    // handler that stops the event's propagation no longer hides it.
     function mouseEventHandler(type) {
       return function (e) {
         if (trialData.mouseEvents.length >= mouseMaxEvents) return;
@@ -49,9 +54,9 @@ export function attachMouseSignals(ctx) {
         });
       };
     }
-    ctx.addTrialListener(document, "click", mouseEventHandler("click"), { passive: true });
-    ctx.addTrialListener(document, "mousedown", mouseEventHandler("down"), { passive: true });
-    ctx.addTrialListener(document, "mouseup", mouseEventHandler("up"), { passive: true });
+    ctx.addTrialListener(document, "click", mouseEventHandler("click"), { passive: true, capture: true });
+    ctx.addTrialListener(document, "mousedown", mouseEventHandler("down"), { passive: true, capture: true });
+    ctx.addTrialListener(document, "mouseup", mouseEventHandler("up"), { passive: true, capture: true });
   }
 }
 

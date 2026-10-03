@@ -6,7 +6,7 @@
 // to the core later flows through without touching this file.
 //
 // createSegmentDiffer(monitor) → { cut(meta) → segment, seen() → {[key]: number},
-//                                  grew(report) → boolean }
+//                                  newEntries(report) → number }
 //   monitor: anything with getSessionReport() and getSessionScore()
 //   meta: { segmentIndex, source: 'manual'|'host'|'page'|'final', trialId,
 //           pageOrigin, trialReport?, gapReports? }
@@ -29,7 +29,7 @@ export const ALIAS_KEYS = { layoutShifts: 'viewportWidthShifts' };
 // Session arrays the core fills on a timer whatever the participant does
 // (windowPositions: one sample every 2 s, src/core/signals/browser.js). A cut
 // saves them like any other, but their new entries alone do not make a span
-// worth cutting (see grew()).
+// worth cutting (see newEntries()).
 export const BACKGROUND_KEYS = { windowPositions: true };
 
 export function createSegmentDiffer(monitor) {
@@ -52,12 +52,12 @@ export function createSegmentDiffer(monitor) {
   }
   return {
     seen: function () { return Object.assign({}, lastSeen); },
-    // Whether a session array other than a background one has entries the
-    // next cut would take.
-    grew: function (report) {
-      return arrayKeys(report).some(function (k) {
-        return !(k in BACKGROUND_KEYS) && report[k].length > (lastSeen[k] || 0);
-      });
+    // How many entries the next cut would take from the session arrays,
+    // background ones left out.
+    newEntries: function (report) {
+      return arrayKeys(report).reduce(function (n, k) {
+        return k in BACKGROUND_KEYS ? n : n + Math.max(0, report[k].length - (lastSeen[k] || 0));
+      }, 0);
     },
     cut: function (meta) {
       var report = monitor.getSessionReport();   // one deep copy per cut (monitor.js getSessionReport); O(session size)

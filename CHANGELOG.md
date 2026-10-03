@@ -88,6 +88,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   recording of the restored visit, starting with that marked segment, instead
   of the earlier recording again; save every recording it returns. Before,
   everything after Back was missing from the replay.
+- Integrity monitor: mouse clicks (and mousedown/mouseup) are recorded
+  before the page's own handlers run. A click that ends a trial, such as a
+  jsPsych response button or a button whose `onclick` submits the form, is
+  now in that trial's `mouseTrack`; before, it was recorded in the span after
+  it or not at all. A click whose handler stops its propagation is recorded
+  too.
 - Session replay: an input value, scroll, touch move or viewport change in
   the last animation frame before a segment ends now stays in that segment.
   Before, it arrived a frame later in the next segment, timed before that
