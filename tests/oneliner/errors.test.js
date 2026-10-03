@@ -72,6 +72,11 @@ const CASES = {
     fix: 'open an issue with this message and your <script> tag',
     link: DOCS + 'known-issues.md#one-line-setup'
   },
+  rerunFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
   guardFailed: {
     args: ['honeypot', 'boom'],
     fix: 'open an issue with this message and your <script> tag',

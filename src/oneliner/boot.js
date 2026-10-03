@@ -43,7 +43,9 @@
 //      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla host (and
 //      on the not-hookable fallback) the standalone recorder, started after
 //      DOMContentLoaded. CyborgHunter.replay() is wired either way;
-//   9. window.CyborgHunter = the one-liner namespace; then the sentinel;
+//   9. window.CyborgHunter = the one-liner namespace; then the sentinel and
+//      the re-run hook (win.__cyborgHunterOnRerun, called by a same-file
+//      re-run of ch.js instead of a second boot: rerun.js, entry.js);
 //  10. data-debug only (debug.js): the badge and the console summary, shown
 //      once now and again when the jsPsych timeline is walked.
 //
@@ -54,8 +56,8 @@
 //   participantParams: URL parameter names for the participant id, in order
 // ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
 //         participantId, participantIdSource, monitor, differ, segmenter,
-//         host, scriptSrc, handlers, win, api, vanilla?, replaySrc?,
-//         replayProxy? (jsPsych), replay? (vanilla handle),
+//         host, scriptSrc, handlers, win, api, rerunCount, vanilla?,
+//         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
 //         debug? (data-debug) }
 //
 // boot never throws into the page: any failure is logged as bootFailed, a
@@ -222,6 +224,22 @@ export function boot(opts) {
     } catch (_) { /* a page's own locked name: a diagnostic mark must never stop monitoring */ }
     win.CyborgHunter = ctx.api;
     win.__cyborgHunterLoaded = 'ch.js';
+    // A host that re-renders its header runs this same ch.js again
+    // (rerun.js, entry.js): the re-run calls this hook instead of booting.
+    // Non-enumerable, so it stays out of the page's own window walks; not
+    // writable, so a plain assignment by page code cannot replace it.
+    ctx.rerunCount = 0;
+    Object.defineProperty(win, '__cyborgHunterOnRerun', {
+      value: function (info) {
+        ctx.rerunCount += 1;
+        var h = ctx.handlers.rerun;
+        if (h) {
+          try { h(info); } catch (e) { console.error(MESSAGES.rerunFailed(String((e && e.message) || e))); }
+        }
+        if (ctx.debug) ctx.debug.refresh();
+      },
+      writable: false, enumerable: false, configurable: true
+    });
     // One console summary per page: vanilla logs once the DOM is parsed;
     // jsPsych logs from the wrapped run() (after the walk), so here it only
     // shows the badge.

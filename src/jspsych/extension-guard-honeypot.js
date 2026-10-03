@@ -424,13 +424,15 @@
     // A second copy of this core on the page (ch.js bundles it, so ch.js plus
     // this file's own <script> tag, in either order) keeps the first
     // definition instead of throwing "Cannot redefine property".
+    // ch.js re-executed by a host that re-renders its header (Qualtrics): the
+    // running copy keeps its guards; src/oneliner/rerun.js sets the flag before this file evaluates.
     if (!global.GuardHoneypot) {
         Object.defineProperty(global, 'GuardHoneypot', {
             value: api,
             writable: false,
             configurable: false,
         });
-    } else {
+    } else if (!global.__cyborgHunterRerun) {
         console.error('[cyborg-hunter] Not redefining GuardHoneypot: GuardHoneypot is already defined, so two scripts on this page include the honeypot. Fix: keep one of them (ch.js already contains the honeypot). https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/advanced-integration.md#double-load');
     }
 })(window);

@@ -97,6 +97,11 @@ export const MESSAGES = {
   bootFailed: function (msg) {
     return formatError('Cyborg Hunter did not start', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
   },
+  // The running copy's re-run hook (boot.js): a host re-executed the same
+  // ch.js and a handler of the host adapter threw. The monitor keeps running.
+  rerunFailed: function (msg) {
+    return formatError('Cyborg Hunter could not handle a page change', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
   // The jsPsych host: wrapping initJsPsych, walking the timeline at run(),
   // and the end-of-session hook. jsPsych keeps running after each of them.
   hookFailed: function (msg) {

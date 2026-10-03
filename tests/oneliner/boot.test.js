@@ -117,6 +117,14 @@ describe('boot', () => {
     assert.deepStrictEqual(errors, []);
   });
 
+  it('installs a non-enumerable __cyborgHunterOnRerun hook and starts rerunCount at 0', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    const desc = Object.getOwnPropertyDescriptor(win, '__cyborgHunterOnRerun');
+    assert.ok(desc && typeof desc.value === 'function');
+    assert.strictEqual(desc.enumerable, false);
+    assert.strictEqual(ctx.rerunCount, 0);
+  });
+
   it('the boot span records a paste before any host trial exists', () => {
     ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
     paste('pasted text');
