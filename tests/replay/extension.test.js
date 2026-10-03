@@ -127,13 +127,19 @@ describe('jsPsych replay adapter', () => {
     };
   }
 
+  // One trial as jsPsych 7 runs it: on_start, on_load and on_finish, the
+  // first two with the same params object (extension.params of that trial).
+  function runTrial(ext, params = {}) {
+    ext.on_start(params);
+    ext.on_load(params);
+    return ext.on_finish(params);
+  }
+
   it('drives the recorder from on_load/on_finish and finalizes with CH merge', async () => {
     const { jsPsych, store } = mockJsPsych(true);
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_start({});
-    ext.on_load({});
-    const ret = ext.on_finish({});
+    const ret = runTrial(ext);
     assert.deepStrictEqual(ret, {}, 'per-trial return stays empty (no CSV bloat)');
     await ext.finalize();
     const meta = store.props.integrityReplayMeta;
@@ -158,8 +164,7 @@ describe('jsPsych replay adapter', () => {
     const { jsPsych } = mockJsPsych(true);
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P4', tier: 'dom', autoSave: { mode: 'none' } });
-    ext.on_load({});
-    ext.on_finish({});
+    runTrial(ext);
     await ext.finalize();
 
     const rec = ext.getLastRecording();
@@ -189,7 +194,7 @@ describe('jsPsych replay adapter', () => {
       const ext = new CyborgHunterReplayExtension(jsPsych);
       ext.initialize({ participantId: 'P5', tier: 'dom', keyframeEvery: 10,
                        autoSave: { mode: 'none' } });
-      for (const id of ['a', 'b', 'c']) { ext.on_load({ trialId: id }); ext.on_finish({}); }
+      for (const id of ['a', 'b', 'c']) runTrial(ext, { trialId: id });
       await ext.finalize();
       rec = ext.getLastRecording();
     } finally { console.warn = origWarn; }
@@ -211,8 +216,7 @@ describe('jsPsych replay adapter', () => {
       const { jsPsych } = mockJsPsych(true);
       const ext = new CyborgHunterReplayExtension(jsPsych);
       ext.initialize({ participantId: 'P6', tier: 'dom', autoSave: { mode: 'none' } });
-      ext.on_load({ trialId: 'a' });
-      ext.on_finish({});
+      runTrial(ext, { trialId: 'a' });
       await ext.finalize();
     } finally { console.warn = origWarn; }
     assert.ok(!warnings.some(w => /keyframeEvery/.test(w)));
@@ -229,8 +233,7 @@ describe('jsPsych replay adapter', () => {
     const { jsPsych } = mockJsPsych(true);
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_load({});
-    ext.on_finish({});
+    runTrial(ext);
     await ext.finalize();
     assert.deepStrictEqual(ext.getLastRecording().host,
       { name: 'jspsych', version: '8.2.1' });
@@ -246,8 +249,7 @@ describe('jsPsych replay adapter', () => {
     const { jsPsych } = mockJsPsych(true, null);
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_load({});
-    ext.on_finish({});
+    runTrial(ext);
     await ext.finalize();
     assert.strictEqual(ext.getLastRecording().host, null);
   });
@@ -261,8 +263,7 @@ describe('jsPsych replay adapter', () => {
     const { jsPsych } = mockJsPsych(true, () => undefined);
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_load({});
-    ext.on_finish({});
+    runTrial(ext);
     await ext.finalize();
     assert.strictEqual(ext.getLastRecording().host, null);
   });
@@ -275,8 +276,7 @@ describe('jsPsych replay adapter', () => {
     const { jsPsych, store } = mockJsPsych(true, () => { throw new Error('no version'); });
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_load({});
-    ext.on_finish({});
+    runTrial(ext);
     await ext.finalize();
     assert.strictEqual(store.props.integrityReplayMeta.saved_to, 'none',
       'the recording still saved');
@@ -298,8 +298,7 @@ describe('jsPsych replay adapter', () => {
     const { jsPsych, store } = mockJsPsych(false);
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P3', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_load({});
-    ext.on_finish({});
+    runTrial(ext);
     await ext.finalize();
     assert.ok(store.props.integrityReplayMeta);
     assert.strictEqual(
@@ -313,24 +312,50 @@ describe('jsPsych replay adapter', () => {
     jsPsych.data.addProperties = (o) => { if (o.integrityReplayMeta) saves++; return origAdd(o); };
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_load({}); ext.on_finish({});
+    runTrial(ext);
     await ext.finalize();
     await ext.finalize();   // second call must be a no-op
     assert.strictEqual(saves, 1, 'finalize must attach the meta pointer at most once');
   });
 
+  // A synchronous trial (call-function) gets no on_load before its
+  // on_finish; jsPsych runs its load callback afterwards. That late on_load,
+  // which used to open the "real trial" here, is dropped: jsPsych precedes a
+  // real trial's on_load with its on_start (runTrial).
   it('on_finish without on_load does not misattribute the next trial', async () => {
     const { jsPsych } = mockJsPsych(true);
     const ext = new CyborgHunterReplayExtension(jsPsych);
     ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
-    ext.on_start({});
-    ext.on_finish({});      // no on_load fired for this trial — must be a clean no-op
-    ext.on_load({});        // real trial starts
-    ext.on_finish({});
+    const sync = { trialId: 'sync' };
+    ext.on_start(sync);
+    ext.on_finish(sync);    // no on_load fired for this trial — must be a clean no-op
+    ext.on_load(sync);      // its late load callback (a post_trial_gap order)
+    runTrial(ext, { trialId: 'real' });
     await ext.finalize();
     const rec = ext.getLastRecording();
     const bracketed = rec.segments.filter(t => t.label !== '__session__');
-    assert.strictEqual(bracketed.length, 1, 'exactly one real trial, not a phantom');
+    assert.deepStrictEqual(bracketed.map(t => t.label), ['real'], 'exactly one real trial, not a phantom');
+    assert.deepStrictEqual(rec.extensions['cyborg-hunter'].capture_failures, []);
+  });
+
+  it('a late on_load between the next trial\'s on_start and its own on_load is dropped', async () => {
+    // A promise-returning next trial: jsPsych leaves its load callback to
+    // the plugin, so the synchronous trial's late callback comes first.
+    const { jsPsych } = mockJsPsych(true);
+    const ext = new CyborgHunterReplayExtension(jsPsych);
+    ext.initialize({ participantId: 'P2', tier: 'trace', autoSave: { mode: 'none' } });
+    const sync = { trialId: 'sync' };
+    const next = { trialId: 'audio' };
+    ext.on_start(sync);
+    ext.on_finish(sync);
+    ext.on_start(next);
+    ext.on_load(sync);      // late: must not start 'audio' early under 'sync'
+    ext.on_load(next);
+    ext.on_finish(next);
+    await ext.finalize();
+    const rec = ext.getLastRecording();
+    assert.deepStrictEqual(rec.segments.map(t => t.label), ['audio']);
+    assert.deepStrictEqual(rec.extensions['cyborg-hunter'].capture_failures, []);
   });
 
   it('finalize before any trial degrades to a no_session save (no throw, no loss)', async () => {

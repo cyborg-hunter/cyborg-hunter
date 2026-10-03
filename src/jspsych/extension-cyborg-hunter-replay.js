@@ -45,6 +45,8 @@ class CyborgHunterReplayExtension {
     this._chMonitor = null;
     this._lastRecording = null;
     this._monitoring = false;
+    this._loadArmed = false;
+    this._armedParams = undefined;
   }
 
   // Keyframe cadence on a jsPsych host: every TRIAL segment, always.
@@ -122,11 +124,33 @@ class CyborgHunterReplayExtension {
     }
   }
 
-  // jsPsych 7 calls on_start unconditionally for every trial that lists the
-  // extension — must exist even as a no-op (see extension-cyborg-hunter.js).
-  on_start(_params) {}
+  // A late on_load is dropped. A synchronous plugin (call-function) finishes
+  // inside its own trial() call, and jsPsych runs that trial's load callback
+  // only afterwards (jspsych.js 7.3.1 :3046-3056, :3101-3103): after the
+  // next trial's on_start and on_load, after its own on_finish (a
+  // post_trial_gap defers the next trial), or, when the next trial() returns
+  // a Promise, between that trial's on_start and its own on_load. Taken as
+  // a real one, it opened a segment for a trial that had ended, or started
+  // the next trial's segment early under the ended trial's trialId, and the
+  // real start then auto-closed it as a lifecycle failure.
+  //
+  // jsPsych calls on_start for every trial that lists the extension and
+  // hands one trial's on_start and on_load the same params object, so
+  // on_start arms the load for that object, on_load counts only while armed
+  // and only with it, and on_finish disarms. The one-line setup gives every
+  // trial its own copy of the entry. Trials that share one params object
+  // (or list the extension without params) still drop a late on_load that
+  // comes after on_finish, but before a promise trial's own on_load it
+  // passes for that trial's: its segment then starts slightly early.
+  on_start(params) {
+    this._loadArmed = true;
+    this._armedParams = params;
+  }
 
   on_load(params) {
+    if (!this._loadArmed || params !== this._armedParams) return;
+    this._loadArmed = false;
+    this._armedParams = undefined;
     if (!this.api) return;
     this._monitoring = true;
     var trialIndex = 0;
@@ -142,6 +166,8 @@ class CyborgHunterReplayExtension {
   }
 
   on_finish(_params) {
+    this._loadArmed = false;
+    this._armedParams = undefined;
     if (this.api && this._monitoring) {
       this._monitoring = false;
       this.api.endTrial();

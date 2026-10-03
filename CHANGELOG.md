@@ -98,6 +98,13 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the index page failed on such a recording, and with experiment assets so
   did the asset matching. A recording the matcher cannot read at all is left
   out of the matching with a warning, and keeps its replay without the note.
+- jsPsych replay extension: the late load callback of a synchronous step (a
+  `call-function`, say) no longer opens a replay segment. Followed by a
+  `post_trial_gap`, it opened a segment for the step that had ended;
+  followed by a trial that returns a Promise (audio plugins), it started that
+  trial's segment early, under the step's `trialId`. Either way the real
+  start then logged a `lifecycle` capture failure. With the one-line setup a
+  researcher's own per-trial replay entry without `params` is covered too.
 
 ### Removed
 - Internal renderer wrappers removed
