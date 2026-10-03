@@ -909,6 +909,20 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 0);
   });
 
+  // A guard against double submission: the page's handler disables every
+  // control, ch.js's hidden input included, and a disabled control is left
+  // out of the entry list. The blob goes in all the same.
+  it('a submit handler that disables every input: the post still carries cyborgHunterData', () => {
+    start();
+    paste('before');
+    const f = el('<form method="post" action="/sink"><input name="q" value="a"></form>');
+    f.addEventListener('submit', () => f.querySelectorAll('input').forEach((i) => { i.disabled = true; }));
+    submit(f);
+    const fd = formdata(f);
+    assert.strictEqual(fd.has('q'), false, 'the page\'s own field stays out, as it asked');
+    assert.deepStrictEqual(pasteCounts(JSON.parse(fd.get('cyborgHunterData')).trials), [1]);
+  });
+
   it('a formdata event outside a submission (the page\'s own FormData) is left alone', () => {
     start();
     const f = el('<form method="post" action="/submit"><input name="q" value="a"></form>');

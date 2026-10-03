@@ -68,8 +68,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   changes its method or target is handled as the browser sends it. Switched
   from GET to POST, it now carries `cyborgHunterData`; switched from POST to
   GET, the blob no longer goes into the URL; sent into a new window instead
-  of this one, the data recorded after it is kept. Browsers without the
-  `formdata` event keep the earlier behaviour for method changes.
+  of this one, the data recorded after it is kept. A handler that disables
+  the form's inputs (against double submission) no longer drops
+  `cyborgHunterData` either. Browsers without the `formdata` event keep the
+  earlier behaviour for these.
 - One-line setup: a boot that fails before the page has loaded (ch.js in
   `<head>`) logs one "Cyborg Hunter did not start" error with its cause;
   before, a second one followed, quoting a monitor lifecycle message that
