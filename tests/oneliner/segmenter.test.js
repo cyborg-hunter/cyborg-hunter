@@ -344,6 +344,46 @@ describe('segmenter', () => {
     assert.equal(seg.state().open, false, 'nothing was reopened');
     assert.doesNotThrow(() => { monitor.startTrial({ trialId: 'host' }); monitor.endTrial(); });
   });
+
+  // What makes a span worth cutting where the host would otherwise skip it
+  // (the vanilla host after a same-window submit, adapters/vanilla.js).
+  it('holdsEvidence: anything the participant did since the last cut, not movement or background samples', () => {
+    const fakeSession = { windowPositions: [], tabAwayEvents: [] };
+    let trial = null;
+    const seg = setup((real) => wrap(real, {
+      getTrialSnapshot: () => trial,
+      getSessionReport: () => Object.assign(real.getSessionReport(), fakeSession),
+    }));
+    assert.equal(seg.holdsEvidence(), false, 'no open span');
+    seg.start();
+    trial = { pasteEvents: [], mouseEvents: [], elementTrace: [], decoy: { level: 0 } };
+    assert.equal(seg.holdsEvidence(), false, 'an empty trial');
+    trial.mouseEvents.push({ type: 'move' });
+    trial.elementTrace.push({ tag: 'div' });
+    fakeSession.windowPositions.push({ x: 0 });
+    assert.equal(seg.holdsEvidence(), false, 'movement and window-position samples alone');
+    trial.mouseEvents.push({ type: 'click' });
+    assert.equal(seg.holdsEvidence(), true, 'a click');
+    trial.mouseEvents = [];
+    trial.pasteEvents.push({ pastedLength: 3 });
+    assert.equal(seg.holdsEvidence(), true, 'a paste');
+    trial.pasteEvents = [];
+    fakeSession.tabAwayEvents.push({ duration_ms: 50 });
+    assert.equal(seg.holdsEvidence(), true, 'a new session entry');
+    seg.cut({ source: 'host' });
+    trial = { pasteEvents: [] };
+    assert.equal(seg.holdsEvidence(), false, 'the cut took the session entry');
+    fakeSession.tabAwayEvents.push({ duration_ms: 60 });
+    assert.equal(seg.holdsEvidence(), true, 'one more after the cut');
+    seg.finish({ source: 'final' });
+    assert.equal(seg.holdsEvidence(), false, 'finished');
+  });
+
+  it('holdsEvidence: a monitor that cannot be read counts as evidence', () => {
+    const seg = setup((real) => wrap(real, { getTrialSnapshot: () => { throw new Error('boom'); } }));
+    seg.start();
+    assert.equal(seg.holdsEvidence(), true);
+  });
 });
 
 // ch.js monitors the whole page: what happens between two host trials falls

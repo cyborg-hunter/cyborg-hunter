@@ -332,6 +332,100 @@ test('a submit event the page dispatches itself sends nothing in Chromium, and t
   expect(chErrors(log)).toEqual([]);
 });
 
+// A same-window POST answered 204: the navigation never commits and nothing
+// on the page says so. What the participant does next is kept: in the
+// session when they leave, in the post when the page submits a form later.
+for (const exit of ['leave', 'form.submit()']) {
+  test(`a POST answered 204 keeps the page: the data after it is kept (${exit})`, async ({ page }) => {
+    const log = collectConsole(page);
+    let drafts = 0;
+    await page.route('**/post-draft', async (route) => { drafts++; await route.fulfill({ status: 204 }); });
+    const bodies = [];
+    await page.route('**/post-plain', async (route) => {
+      bodies.push(route.request().postData());
+      await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Thank you</p>' });
+    });
+    await page.goto(FIX + 'vanilla-submit-targets.html');
+    await pasteInto(page, '#answer', 'before ');
+    await page.click('#draft-submit');
+    await expect.poll(() => drafts).toBe(1);
+    await page.waitForTimeout(300);   // the 204 is in: the page stays
+    expect(await page.evaluate(() => document.getElementById('answer').value)).toBe('before ');
+    await pasteInto(page, '#answer', 'after');
+
+    let saved;
+    if (exit === 'leave') {
+      saved = await leaveAndReadSession(page);
+    } else {
+      await page.evaluate(() => document.getElementById('plain').submit());
+      await page.getByText('Thank you').waitFor();
+      expect(bodies).toHaveLength(1);
+      expect(blobOf(bodies[0]).trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+      saved = await readSession(page);
+    }
+    expect(saved.trials.map((t) => t.trialId)).toEqual(['span-0', 'span-1']);
+    expect(saved.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+    expect(chErrors(log)).toEqual([]);
+  });
+}
+
+// The page's own submit handler changes the form after ch.js's: the browser
+// sends it by the method and into the window the handler left.
+test('a submit handler that turns a GET form into a POST: the post carries cyborgHunterData', async ({ page }) => {
+  const log = collectConsole(page);
+  const bodies = [];
+  await page.route('**/post-to-post', async (route) => {
+    bodies.push(route.request().postData());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Thank you</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'pasted');
+  await page.click('#to-post-submit');
+  await page.getByText('Thank you').waitFor();
+  expect(new URLSearchParams(bodies[0]).get('q')).toBe('a');
+  expect(blobOf(bodies[0]).trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1]);
+  expect(chErrors(log)).toEqual([]);
+});
+
+test('a submit handler that turns a POST form into a GET: no cyborgHunterData in the URL', async ({ page }) => {
+  const log = collectConsole(page);
+  const urls = [];
+  await page.route('**/get-to-get*', async (route) => {
+    urls.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Results</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'pasted');
+  await page.click('#to-get-submit');
+  await page.getByText('Results').waitFor();
+  const params = new URL(urls[0]).searchParams;
+  expect(params.get('q')).toBe('b');
+  expect(params.has(FIELD)).toBe(false);
+  expect(chErrors(log)).toEqual([]);
+});
+
+test('a submit handler that sends a same-window POST into a new window: the data after it is kept', async ({ page }) => {
+  const log = collectConsole(page);
+  const bodies = [];
+  await page.context().route('**/post-to-blank', async (route) => {
+    bodies.push(route.request().postData());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Received</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'before ');
+  const popup = page.waitForEvent('popup');
+  await page.click('#to-blank-submit');
+  await expect.poll(() => bodies.length).toBe(1);
+  await (await popup).close();
+  expect(blobOf(bodies[0]).trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1]);
+
+  await pasteInto(page, '#answer', 'after');
+  const saved = await leaveAndReadSession(page);
+  expect(saved.trials.map((t) => t.trialId)).toEqual(['span-0', 'span-1']);
+  expect(saved.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+  expect(chErrors(log)).toEqual([]);
+});
+
 test('a POST form with a control named "method" still carries cyborgHunterData', async ({ page }) => {
   const log = collectConsole(page);
   const bodies = [];

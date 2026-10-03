@@ -747,6 +747,137 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[2].integrity.pasteEvents.length, 1);
   });
 
+  // A same-window submit whose navigation never commits: the answer is a 204
+  // or a download, the action is javascript:, or the participant answers a
+  // beforeunload prompt with "Stay". The page stays and nothing says so; what
+  // the participant does next must still reach the session and the next post.
+  const pasteCounts = (trials) => trials.map((t) => t.integrity.pasteEvents.length);
+
+  it('a same-window submit that never leaves: what comes after it is cut at pagehide', async () => {
+    start();
+    paste('before');
+    submit(el('<form method="post" action="/save"></form>'));   // not prevented: the page would go
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));   // the participant leaves by a link
+    assert.deepStrictEqual(pasteCounts(JSON.parse(win.sessionStorage.getItem(KEY)).trials), [1, 1]);
+  });
+
+  it('a same-window submit that never leaves, then form.submit(): the post carries what came after it', async () => {
+    const posted = stubNativeSubmit();
+    start();
+    paste('before');
+    submit(el('<form method="post" action="/save"></form>'));
+    await tick();
+    paste('after');
+    el('<form method="post" action="/final"></form>').submit();
+    assert.strictEqual(posted.length, 1);
+    assert.deepStrictEqual(pasteCounts(JSON.parse(posted[0].data).trials), [1, 1]);
+    win.dispatchEvent(new win.Event('pagehide'));   // that post leaves: no empty extra segment
+    assert.deepStrictEqual(pasteCounts(JSON.parse(win.sessionStorage.getItem(KEY)).trials), [1, 1]);
+  });
+
+  it('a same-window submit that never leaves, then a click: pagehide keeps the click', async () => {
+    const ctx = start();
+    submit(el('<form method="post" action="/save"></form>'));
+    await tick();
+    click(el('<button type="button">Next</button>'));
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    const clicks = JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.mouseTrack.filter((m) => m.type === 'click');
+    assert.strictEqual(clicks.length, 1);
+  });
+
+  // Mouse movement alone is not counted: a participant who moves the mouse
+  // while the next page loads would otherwise add a segment to every page.
+  it('a submit then pagehide with only mouse movement in between adds no segment', async () => {
+    const ctx = start();
+    submit(el('<form method="post" action="/submit"></form>'));
+    await tick();
+    win.document.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 40, clientY: 40 }));
+    assert.ok(ctx.monitor.getTrialSnapshot().mouseEvents.length > 0, 'the movement was recorded');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+  });
+
+  // The browser reads a submission's method and target after the submit
+  // handlers ran, and builds its entry list (the formdata event) in between.
+  // happy-dom fires no formdata event: this dispatches the one the browser
+  // would, with the FormData it would post.
+  function formdata(f) {
+    const fd = new win.FormData(f);
+    const ev = new win.Event('formdata', { bubbles: true });
+    Object.defineProperty(ev, 'formData', { value: fd });
+    f.dispatchEvent(ev);
+    return fd;
+  }
+
+  it('a submit handler that turns a GET form into a POST: the post carries cyborgHunterData', () => {
+    start();
+    paste('before');
+    const f = el('<form action="/sink"><input name="q" value="a"></form>');
+    f.addEventListener('submit', () => f.setAttribute('method', 'post'));
+    submit(f);
+    const fd = formdata(f);
+    assert.strictEqual(fd.get('q'), 'a');
+    assert.deepStrictEqual(pasteCounts(JSON.parse(fd.get('cyborgHunterData')).trials), [1]);
+  });
+
+  it('a submit handler that turns a POST form into a GET: the blob stays out of the URL', () => {
+    start();
+    const f = el('<form method="post" action="/sink"><input name="q" value="a"></form>');
+    f.addEventListener('submit', () => f.setAttribute('method', 'get'));
+    submit(f);
+    const fd = formdata(f);
+    assert.strictEqual(fd.get('q'), 'a');
+    assert.strictEqual(fd.has('cyborgHunterData'), false);
+    assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 0);
+  });
+
+  it('a formdata event outside a submission (the page\'s own FormData) is left alone', () => {
+    start();
+    const f = el('<form method="post" action="/submit"><input name="q" value="a"></form>');
+    assert.strictEqual(formdata(f).has('cyborgHunterData'), false);
+  });
+
+  // form.submit() posts by the form's own method: a submitter of the event
+  // whose handler called it has no say.
+  it('form.submit() from the handler of a formmethod="get" submit still posts the blob', () => {
+    const posted = [];
+    win.HTMLFormElement.prototype.submit = function () { posted.push(formdata(this).get('cyborgHunterData')); };
+    start();
+    const f = el('<form method="post" action="/submit"><button formmethod="get">Search</button></form>');
+    f.addEventListener('submit', (e) => { e.preventDefault(); f.submit(); });
+    f.dispatchEvent(new win.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: f.querySelector('button') }));
+    assert.strictEqual(posted.length, 1);
+    assert.strictEqual(JSON.parse(posted[0]).trials.length, 1);
+  });
+
+  for (const withFormdata of [true, false]) {
+    const how = withFormdata ? '' : ' (no formdata event)';
+    it('a submit handler that sends a same-window post into a new window: pagehide still cuts' + how, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit"></form>');
+      f.addEventListener('submit', () => f.setAttribute('target', '_blank'));
+      submit(f);
+      if (withFormdata) formdata(f);
+      await tick();
+      win.dispatchEvent(new win.Event('pagehide'));   // the page stayed: its span is cut like any page's
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    });
+
+    it('a submit handler that sends a new-window post into this window: no empty extra segment' + how, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit" target="_blank"></form>');
+      f.addEventListener('submit', () => f.removeAttribute('target'));
+      submit(f);
+      if (withFormdata) formdata(f);
+      await tick();
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    });
+  }
+
   it('form.submit() never throws into the page and always calls the browser\'s submit', () => {
     const posted = stubNativeSubmit();
     const ctx = start();

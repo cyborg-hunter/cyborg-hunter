@@ -26,6 +26,8 @@
 //                               → null | { error }
 //   state()                     { open, segmentIndex, currentTrialId }
 //   setSegmentIndex(n)          multi-page restore
+//   holdsEvidence()             whether a cut now would save something the
+//                               participant did (see below) → boolean
 // }
 //   differ: createSegmentDiffer(monitor) (src/oneliner/segment-diff.js)
 //   clock:  () => number, the page origin (performance.timeOrigin); injectable
@@ -51,6 +53,24 @@
 //     drop it, and endTrial's removeTrialListeners cleans up whatever attached;
 //   - a startTrial rejected "from 'trial'" means a trial we thought closed is
 //     still open → close it, keep its report as a gap, and retry once.
+
+// What counts for holdsEvidence(). Any entry in one of the open trial's arrays
+// (a paste, a copy, an edit, a click, a tab-away, an idle gap...) or a new
+// entry in a session array (segment-diff.js grew()), but not the samples that
+// accumulate with movement alone: mouse moves (a click, mousedown or mouseup
+// still counts) and the element trace, sampled under the pointer while it
+// moves. Nor the background window-position samples (BACKGROUND_KEYS). A
+// participant who moves the mouse while the next page loads would otherwise
+// add a segment to every page.
+var MOVEMENT_KEYS = { elementTrace: true };
+function trialHasEvidence(trial) {
+  return Object.keys(trial).some(function (k) {
+    var v = trial[k];
+    if (!Array.isArray(v) || v.length === 0 || MOVEMENT_KEYS[k]) return false;
+    if (k === 'mouseEvents') return v.some(function (m) { return !m || m.type !== 'move'; });
+    return true;
+  });
+}
 
 // Mirrors the message thrown by monitor.js transition(); null when `e` is not
 // a lifecycle rejection.
@@ -191,6 +211,17 @@ export function createSegmenter(opts) {
       return { open: open, segmentIndex: segmentIndex, currentTrialId: currentTrialId };
     },
 
-    setSegmentIndex: function (n) { segmentIndex = n; }
+    setSegmentIndex: function (n) { segmentIndex = n; },
+
+    // A read that fails counts as evidence: the host then cuts, which costs at
+    // most an extra segment, where a wrong "nothing" would lose one.
+    holdsEvidence: function () {
+      if (latched || !open) return false;
+      try {
+        var trial = monitor.getTrialSnapshot();
+        if (trial && trialHasEvidence(trial)) return true;
+        return differ.grew(monitor.getSessionReport());
+      } catch (e) { return true; }
+    }
   };
 }

@@ -53,6 +53,19 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   not a page load. A form with a control named `getAttribute` or
   `hasAttribute` no longer makes the submit handling throw; before, an error
   was logged and the post carried no `cyborgHunterData`.
+- One-line setup on pages without jsPsych: a same-window form submit after
+  which the page stays (the server answers 204 or with a download, the
+  action is `javascript:`, or the participant answers a "leave this page?"
+  prompt with Stay) no longer loses what the participant does next. It is
+  saved as its own segment when they leave, and a later `form.submit()`
+  posts it. A submit that the next page follows still adds no segment, and
+  neither does mouse movement alone in between.
+- One-line setup on pages without jsPsych: a form whose own `submit` handler
+  changes its method or target is handled as the browser sends it. Switched
+  from GET to POST, it now carries `cyborgHunterData`; switched from POST to
+  GET, the blob no longer goes into the URL; sent into a new window instead
+  of this one, the data recorded after it is kept. Browsers without the
+  `formdata` event keep the earlier behaviour for method changes.
 - One-line setup: a boot that fails before the page has loaded (ch.js in
   `<head>`) logs one "Cyborg Hunter did not start" error with its cause;
   before, a second one followed, quoting a monitor lifecycle message that
