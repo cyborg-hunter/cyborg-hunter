@@ -162,6 +162,31 @@ const CASES = {
     fix: 'remove the finalize() call from your on_finish (keep your own save code)',
     link: DOCS + 'advanced-integration.md#switching-to-the-one-liner'
   },
+  replayQualtrics: {
+    args: [],
+    fix: 'save CyborgHunter.replay() to your own server from a final-page question script',
+    link: DOCS + 'qualtrics.md#replay'
+  },
+  qualtricsLegacyLayout: {
+    args: [],
+    fix: 'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
+    link: DOCS + 'qualtrics.md#legacy-layout'
+  },
+  qualtricsFieldUndeclared: {
+    args: [],
+    fix: 'add an Embedded Data element named __js_cyborg_hunter at the top of Survey Flow',
+    link: DOCS + 'qualtrics.md#declare-the-field'
+  },
+  qualtricsWriteFailed: {
+    args: ['setJSEmbeddedData threw'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'qualtrics.md#troubleshooting'
+  },
+  qualtricsPayloadReduced: {
+    args: [2, 15000, 12000],
+    fix: 'nothing to fix for this participant; a report note says what was dropped. Shorter surveys, or fewer tab switches, keep the full summary',
+    link: DOCS + 'qualtrics.md#payload-size'
+  },
   extensionParamsIgnored: {
     args: [],
     fix: 'use data-participant-id / data-preset on the ch.js tag instead',
@@ -236,6 +261,16 @@ describe('error catalogue', () => {
 
   it('the random-id message carries the generated id', () => {
     assert.ok(MESSAGES.randomId('ch-0123456789ab').includes('using ch-0123456789ab. Fix:'));
+  });
+
+  it('the payload-reduced message carries the size, the cap and the level written', () => {
+    assert.ok(MESSAGES.qualtricsPayloadReduced(2, 15000, 12000)
+      .includes(': the full summary was 15000 characters, above the cap of 12000; level 2 of the ladder was written. Fix:'));
+  });
+
+  it('the Qualtrics write failure carries the setter\'s message as its cause', () => {
+    assert.ok(MESSAGES.qualtricsWriteFailed('setJSEmbeddedData threw')
+      .startsWith('[cyborg-hunter] Cyborg Hunter could not write to Qualtrics embedded data: setJSEmbeddedData threw. Fix:'));
   });
 
   it('loudError prints the formatted message through console.error', () => {

@@ -616,6 +616,69 @@ describe('guard cores on a second load', () => {
   }
 });
 
+// Qualtrics runs the header's ch.js inside its survey page: no jsPsych, so
+// the vanilla host, with the layout read from Qualtrics.SurveyEngine.
+describe('Qualtrics host detection', () => {
+  const engine = () => ({ addOnPageSubmit() {}, addOnload() {}, setJSEmbeddedData() {} });
+
+  it('the New Survey Taking Experience is the new layout on the vanilla host, without a warning', () => {
+    win.Qualtrics = { SurveyEngine: engine() };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.qualtricsLayout, 'new');
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.deepStrictEqual(warns, []);
+  });
+
+  it('without setJSEmbeddedData it is the legacy layout, and one warning names the field', () => {
+    const se = engine();
+    delete se.setJSEmbeddedData;
+    se.setEmbeddedData = function () {};
+    win.Qualtrics = { SurveyEngine: se };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.qualtricsLayout, 'legacy');
+    assert.ok(warns.includes(MESSAGES.qualtricsLegacyLayout()), warns.join('\n'));
+    assert.strictEqual(warns.filter((w) => w === MESSAGES.qualtricsLegacyLayout()).length, 1);
+  });
+
+  it('a Qualtrics object without the page-submit API, or none at all, is not Qualtrics', () => {
+    win.Qualtrics = {};
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.qualtricsLayout, null);
+    assert.strictEqual(ctx.host, 'vanilla');
+  });
+
+  it('a plain page has qualtricsLayout null', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.qualtricsLayout, null);
+  });
+
+  it('a Qualtrics global that throws on access reads as no Qualtrics, and boot carries on', () => {
+    Object.defineProperty(win, 'Qualtrics', { get() { throw new Error('locked'); }, configurable: true });
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.ok(ctx, 'booted');
+    assert.strictEqual(ctx.qualtricsLayout, null);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('data-replay under Qualtrics: the boot reminder says the recording is never written to Qualtrics', () => {
+    const infos = [];
+    console.info = (m) => infos.push(String(m));
+    const rec = { startSession() {}, startTrial() {}, endTrial() {}, stopSession() {}, getRecording() { return null; }, destroy() {} };
+    win.CyborgHunterReplay = { attach: () => rec };
+    win.Qualtrics = { SurveyEngine: engine() };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none', replay: '' }), win });
+    assert.deepStrictEqual(infos, [MESSAGES.replayQualtrics()]);
+    ctx.monitor.destroy();
+    delete win.__cyborgHunterLoaded;
+    delete win.CyborgHunter;
+    delete win.__cyborgHunterOnRerun;
+    infos.length = 0;
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none', replay: '', debug: '' }), win });
+    assert.strictEqual(infos.length, 1, infos.join('\n'));
+    assert.match(infos[0], /^Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · .* · replay is on: it is never written to Qualtrics; save CyborgHunter\.replay\(\) to your own server$/);
+  });
+});
+
 // Where ch.js sits relative to jspsych.js and the experiment code decides
 // whether initJsPsych can be wrapped. jsPsych 7.3.1 sets the <html jspsych>
 // attribute only once run() is past prepareDom (which waits for window load,

@@ -56,7 +56,9 @@ function recorderConfig(ctx, params) {
 // Whether the researcher must save CyborgHunter.replay() themselves: replay
 // is on and has a script URL, and the recorder does not save itself
 // (CyborgHunterConfig.replay.autoSave, which only the jsPsych host runs).
-// Read by debug.js for the summary.
+// Read by debug.js for the summary. The wording is the caller's: the
+// Qualtrics text (replayQualtrics, REPLAY_QUALTRICS_REMINDER) when
+// ctx.qualtricsLayout is set, the generic one otherwise.
 export function replaySaveReminderApplies(ctx) {
   if (!ctx.config.replay || !ctx.replaySrc) return false;
   var autoSave = ctx.config.replay.autoSave;
@@ -321,7 +323,11 @@ export function installReplay(opts) {
     console.warn(MESSAGES.replayAutoSaveVanilla());
   }
   // With data-debug the summary says it (debug.js), so the page gets one line.
-  if (!ctx.debug && replaySaveReminderApplies(ctx)) console.info(MESSAGES.replaySaveReminder(ctx.file));
+  // Under Qualtrics the reminder also says the recording never goes into
+  // embedded data (boot sets ctx.qualtricsLayout before this runs).
+  if (!ctx.debug && replaySaveReminderApplies(ctx)) {
+    console.info(ctx.qualtricsLayout ? MESSAGES.replayQualtrics() : MESSAGES.replaySaveReminder(ctx.file));
+  }
   if (HAS_JSPSYCH && ctx.host === 'jspsych') {
     ctx.replayProxy = makeReplayProxy({ doc: doc, src: ctx.replaySrc, ctx: ctx, timeoutMs: opts.timeoutMs });
   }

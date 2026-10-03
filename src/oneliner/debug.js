@@ -31,12 +31,25 @@
 //   A page whose framework this one-line file does not carry (ctx.wrongBuild,
 //   boot.js) ends both with " · wrong file: this page runs <host>, load <file>".
 //
+//   On a Qualtrics survey (ctx.qualtricsLayout, set by boot from
+//   adapters/qualtrics.js detectQualtrics) the host and count parts become
+//     Qualtrics detected · page <P> · field __js_cyborg_hunter <declared|NOT DECLARED|unknown>
+//   (legacy layout: "Qualtrics detected (legacy layout, field cyborg_hunter)"
+//   and "field cyborg_hunter <...>"). P and the field state come from the
+//   writer's handle ctx.qualtrics (page(), declared() true|false|null); with
+//   no handle yet they read page 1 and unknown. The badge also ends with
+//   " · header re-run ×<ctx.rerunCount>" when the header ran again and
+//   " · last write <chars>/<cap> chars" once ctx.qualtrics.lastWrite() is
+//   set. The replay reminder reads "replay is on: it is never written to
+//   Qualtrics; save CyborgHunter.replay() to your own server".
+//
 // The badge never takes focus or clicks (pointer-events: none) and nothing
 // here throws into the host page. update() and refresh() re-attach it when
 // the host has wiped it from the document (jsPsych's run() resets <body>).
 
-import { REPLAY_SAVE_REMINDER } from './errors.js';
+import { REPLAY_SAVE_REMINDER, REPLAY_QUALTRICS_REMINDER } from './errors.js';
 import { replaySaveReminderApplies } from './replay-loader.js';
+import { STORED_FIELD, LEGACY_FIELD } from './adapters/qualtrics.js';
 
 var BADGE_ID = 'ch-debug-badge';
 var BADGE_STYLE = 'position:fixed;left:8px;bottom:8px;z-index:2147483646;font:12px/1.4 system-ui;' +
@@ -69,7 +82,11 @@ export function createDebug(opts) {
       return ['Cyborg Hunter active', 'manual mode', 'the page\'s cyborg-hunter extension monitors the trials'].join(' · ');
     }
     var hostPart, countPart;
-    if (ctx.host === 'vanilla') {
+    var qx = ctx.host === 'vanilla' && ctx.qualtricsLayout ? qualtricsParts(live) : null;
+    if (qx) {
+      hostPart = qx.host;
+      countPart = qx.page + ' · ' + qx.field;
+    } else if (ctx.host === 'vanilla') {
       var marks = doc.querySelectorAll ? doc.querySelectorAll('[data-ch-trial]').length : 0;
       hostPart = 'vanilla mode';
       countPart = marks + ' mark elements';
@@ -85,8 +102,30 @@ export function createDebug(opts) {
       'ID from ' + idSource(ctx.participantIdSource),
       'honeypot ' + (ctx.config.guards.honeypot ? 'on' : 'off'),
       'friction ' + frictionMode(ctx)];
-    if (!live && replaySaveReminderApplies(ctx)) out.push(REPLAY_SAVE_REMINDER);
+    if (qx) out = out.concat(qx.live);
+    if (!live && replaySaveReminderApplies(ctx)) out.push(qx ? REPLAY_QUALTRICS_REMINDER : REPLAY_SAVE_REMINDER);
     return out.join(' · ');
+  }
+
+  // The Qualtrics pieces. ctx.qualtrics (the writer's handle) may be absent:
+  // the summary then shows page 1 and the field as unknown.
+  function qualtricsParts(live) {
+    var q = ctx.qualtrics;
+    var legacy = ctx.qualtricsLayout === 'legacy';
+    var declared = q ? q.declared() : null;
+    var out = {
+      host: legacy ? 'Qualtrics detected (legacy layout, field ' + LEGACY_FIELD + ')' : 'Qualtrics detected',
+      page: 'page ' + (q ? q.page() : 1),
+      field: 'field ' + (legacy ? LEGACY_FIELD : STORED_FIELD) + ' ' +
+        (declared === true ? 'declared' : declared === false ? 'NOT DECLARED' : 'unknown'),
+      live: []
+    };
+    if (live) {
+      if (ctx.rerunCount > 0) out.live.push('header re-run ×' + ctx.rerunCount);
+      var w = q ? q.lastWrite() : null;
+      if (w) out.live.push('last write ' + w.chars + '/' + w.cap + ' chars');
+    }
+    return out;
   }
   function wrongFile(text) {
     var w = ctx.wrongBuild;

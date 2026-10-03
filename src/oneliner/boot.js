@@ -19,9 +19,14 @@
 //   4. a monitor (its session starts at step 6);
 //   5. host: 'jspsych' when initJsPsych is already defined, in a file built
 //      with it (HAS_JSPSYCH), else 'vanilla' (the host adapters install their
-//      hooks into ctx.handlers). The vanilla adapter (adapters/vanilla.js) is
-//      installed before the first span opens: it restores a previous page's
-//      segment index, so the boot span is named after the continued index;
+//      hooks into ctx.handlers). On the
+//      vanilla host a Qualtrics survey is recognised first
+//      (adapters/qualtrics.js: ctx.qualtricsLayout 'new' | 'legacy' | null,
+//      with a console warning for the legacy layout), before replay, whose
+//      boot reminder depends on it. The vanilla
+//      adapter (adapters/vanilla.js) is installed before the first span
+//      opens: it restores a previous page's segment index, so the boot span
+//      is named after the continued index;
 //   6. the monitor's session starts and the segmenter keeps it inside a
 //      trial from this moment on ('span-<index>'), so a paste before the
 //      first host trial or mark is still recorded. The session start needs
@@ -56,7 +61,8 @@
 //   participantParams: URL parameter names for the participant id, in order
 // ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
 //         participantId, participantIdSource, monitor, differ, segmenter,
-//         host, scriptSrc, handlers, win, api, rerunCount, vanilla?,
+//         host, scriptSrc, handlers, win, api, qualtricsLayout,
+//         rerunCount, vanilla?,
 //         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
 //         debug? (data-debug) }
 //
@@ -100,6 +106,7 @@ import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, installInertWrapper, watchHostPlacement } from './adapters/jspsych.js';
 import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
+import { detectQualtrics } from './adapters/qualtrics.js';
 import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
 
@@ -176,13 +183,21 @@ export function boot(opts) {
       scriptNonce: (script && script.nonce) || null,   // copied onto the lazily loaded replay <script>
       handlers: {},
       win: win,
-      api: null
+      api: null,
+      qualtricsLayout: null
     };
     ctx.api = buildPublicApi(ctx);
     // data-debug only: the badge, the console summary and the perf counters.
     if (config.debug) {
       ctx.debug = createDebug({ doc: win.document, ctx: ctx });
       win.__cyborgHunterDebug = { stats: ctx.debug.stats };
+    }
+    // A Qualtrics survey (no jsPsych, so vanilla): read before installReplay,
+    // whose boot reminder names Qualtrics when this is set.
+    if (host === 'vanilla') {
+      var qualtrics = detectQualtrics(win);
+      ctx.qualtricsLayout = qualtrics ? qualtrics.layout : null;
+      if (ctx.qualtricsLayout === 'legacy') console.warn(MESSAGES.qualtricsLegacyLayout());
     }
     var replay = installReplay({ win: win, ctx: ctx });
     if (host === 'vanilla') ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });

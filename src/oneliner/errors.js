@@ -30,6 +30,8 @@ function own(file) { return file || 'ch.js'; }
 
 // The data-debug summary's part for MESSAGES.replaySaveReminder (debug.js).
 export const REPLAY_SAVE_REMINDER = 'data-replay is on: save CyborgHunter.replay() in your save code';
+// Its replacement under Qualtrics (MESSAGES.replayQualtrics).
+export const REPLAY_QUALTRICS_REMINDER = 'replay is on: it is never written to Qualtrics; save CyborgHunter.replay() to your own server';
 
 export const MESSAGES = {
   // first: the bundle that set the sentinel, by its own file name (boot.js
@@ -227,6 +229,45 @@ export const MESSAGES = {
       own(file) + ' records the session but does not save the recording',
       'save CyborgHunter.replay() in your save code',
       DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
+  // console.info, once at boot, in place of replaySaveReminder when the page
+  // is a Qualtrics survey (adapters/qualtrics.js): a recording is megabytes,
+  // an embedded-data field holds a few thousand characters.
+  replayQualtrics: function () {
+    return formatError('data-replay is on under Qualtrics',
+      'recordings never fit in embedded data, so ch.js does not write them',
+      'save CyborgHunter.replay() to your own server from a final-page question script',
+      DOCS + 'qualtrics.md#replay');
+  },
+  // console.warn, once at boot: the survey runs the legacy layout, which has
+  // setEmbeddedData but no setJSEmbeddedData, so the stored field is named
+  // without the __js_ prefix.
+  qualtricsLegacyLayout: function () {
+    return formatError('Qualtrics legacy layout detected',
+      'setJSEmbeddedData is missing, so the payload is written with setEmbeddedData to the field cyborg_hunter',
+      'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
+      DOCS + 'qualtrics.md#legacy-layout');
+  },
+  // console.error: the value written did not read back, so the field is
+  // missing from Survey Flow and every write is lost.
+  qualtricsFieldUndeclared: function () {
+    return formatError('The Qualtrics field __js_cyborg_hunter is not declared',
+      'values written to an undeclared embedded-data field are dropped by Qualtrics without an error',
+      'add an Embedded Data element named __js_cyborg_hunter at the top of Survey Flow',
+      DOCS + 'qualtrics.md#declare-the-field');
+  },
+  // console.error: the embedded-data setter threw. The survey carries on.
+  qualtricsWriteFailed: function (msg) {
+    return formatError('Cyborg Hunter could not write to Qualtrics embedded data', msg, REPORT_FIX,
+      DOCS + 'qualtrics.md#troubleshooting');
+  },
+  // console.warn, once per page: the payload was over the cap and a reduced
+  // level was written instead (the report notes what was dropped).
+  qualtricsPayloadReduced: function (level, chars, cap) {
+    return formatError('The Qualtrics payload was reduced',
+      'the full summary was ' + chars + ' characters, above the cap of ' + cap + '; level ' + level + ' of the ladder was written',
+      'nothing to fix for this participant; a report note says what was dropped. Shorter surveys, or fewer tab switches, keep the full summary',
+      DOCS + 'qualtrics.md#payload-size');
   },
   // console.warn, once, from the inert window.CyborgHunter that boot leaves
   // when ch.js failed (api.js buildInertApi): the call did nothing.
