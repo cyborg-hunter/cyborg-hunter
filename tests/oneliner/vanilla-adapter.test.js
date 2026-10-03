@@ -345,6 +345,26 @@ describe('vanilla host: forms and page loads', () => {
     });
   }
 
+  // The target is read the same way: a control named "getAttribute" or
+  // "hasAttribute" does not break the post into another window.
+  for (const name of ['getAttribute', 'hasAttribute']) {
+    it(`a target="_blank" POST with a control named "${name}" carries the blob; pagehide keeps the data after it`, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit" target="_blank"></form>');
+      const field = el(`<input name="${name}" value="by-hand">`);
+      f.appendChild(field);
+      Object.defineProperty(f, name, { value: field, configurable: true });
+      submit(f);
+      assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 1);
+      await tick();
+      paste('after');
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+      assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
   it('page loads: the next page restores the index, the earlier trials and the page count', () => {
     const ctx1 = start();
     paste('page one');

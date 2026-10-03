@@ -297,15 +297,18 @@ export function installVanillaAdapter(opts) {
     }
   }
 
-  // The form's method attribute, read through Element.prototype: a control
-  // named "method" in the form shadows form.method, and one named
-  // "getAttribute" shadows form.getAttribute. A value other than post or
-  // dialog is a GET.
+  // A form's attributes are read through Element.prototype: a control named
+  // "method" in the form shadows form.method, and one named "getAttribute"
+  // or "hasAttribute" shadows that method. null when the attribute is absent
+  // (or the node is not an element).
   var elementGetAttribute = win.Element && win.Element.prototype.getAttribute;
+  function attr(node, name) {
+    try { return elementGetAttribute.call(node, name); } catch (_) { return null; }
+  }
+
+  // A value other than post or dialog is a GET.
   function effectiveMethod(form, submitter) {
-    var method = null;
-    try { method = elementGetAttribute.call(form, 'method'); } catch (_) { /* not an element */ }
-    return String((submitter && submitter.formMethod) || method || 'get').toLowerCase();
+    return String((submitter && submitter.formMethod) || attr(form, 'method') || 'get').toLowerCase();
   }
 
   // Whether the submit replaces this page: its target (the submitter's
@@ -315,9 +318,8 @@ export function installVanillaAdapter(opts) {
   // leaves this page where it is. The value is compared as written, as
   // browsers do: " _self " is a window name, not the keyword.
   function replacesPage(form, submitter) {
-    var t = null;
-    if (submitter && submitter.hasAttribute && submitter.hasAttribute('formtarget')) t = submitter.getAttribute('formtarget');
-    if (t === null && form.hasAttribute && form.hasAttribute('target')) t = form.getAttribute('target');
+    var t = submitter ? attr(submitter, 'formtarget') : null;
+    if (t === null) t = attr(form, 'target');
     if (t === null) {
       var base = doc.querySelector ? doc.querySelector('base[target]') : null;
       t = base ? base.getAttribute('target') : '';
