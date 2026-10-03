@@ -315,6 +315,22 @@ describe('boot', () => {
     }
   });
 
+  // ch.js in <head>: the session start waits for DOMContentLoaded. A boot that
+  // failed before then has nothing left to start and is logged once.
+  it('a failure before DOMContentLoaded is logged once; the deferred session start does nothing', () => {
+    Object.defineProperty(win.document, 'body', { value: null, configurable: true });
+    Object.defineProperty(win, 'CyborgHunter', { configurable: true, get() { return undefined; }, set() { throw new Error('locked'); } });
+    try {
+      assert.strictEqual(boot({ script: script({ participantId: 'P1', guards: 'none' }), win }), null);
+      delete win.document.body;
+      win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+      assert.deepStrictEqual(errors, [MESSAGES.bootFailed('locked')]);
+    } finally {
+      delete win.document.body;
+      delete win.CyborgHunter;
+    }
+  });
+
   it('a failure after the monitor exists destroys it (no orphan listeners)', () => {
     let destroyed = 0;
     const fakeMonitor = {
