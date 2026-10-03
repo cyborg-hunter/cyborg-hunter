@@ -70,11 +70,11 @@ afterEach(() => {
 
 function start(fake, { maxChars, dataset } = {}) {
   win.Qualtrics = { SurveyEngine: fake.SE };
-  const ctx = boot({
+  const ctx = fake.runHeader(() => boot({
     script: { dataset: Object.assign({ participantId: 'P1', guards: 'none' }, dataset), src: 'https://cdn/x/ch.js' },
     win,
     qualtricsMaxChars: maxChars
-  });
+  }));
   contexts.push(ctx);
   return ctx;
 }
@@ -85,7 +85,7 @@ function start(fake, { maxChars, dataset } = {}) {
 function reinstall(ctx, fake, opts) {
   ctx.qualtrics.teardown();
   fake.submitHooks.length = 0;
-  ctx.qualtrics = installQualtricsAdapter(Object.assign({ win, ctx }, opts));
+  ctx.qualtrics = fake.runHeader(() => installQualtricsAdapter(Object.assign({ win, ctx }, opts)));
   return ctx.qualtrics;
 }
 
@@ -617,6 +617,26 @@ describe('Qualtrics host: the fallbacks live verification can pick', () => {
     assert.deepStrictEqual(segments(d), [0, 1]);
     assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(d));
   });
+
+  // The case the switch is for: the header's hook is taken and never fires.
+  it('write on re-run, with a header hook that never fires: the submit writes nothing, the re-run writes the page before, the final-page line the last', () => {
+    const fake = fakeSurveyEngine({ headerHooks: false });
+    const ctx = start(fake);
+    reinstall(ctx, fake, { writeOnRerun: true });
+    paste('page one');
+    fake.submit('next');
+    assert.strictEqual(fake.store[STORED_FIELD], undefined);
+    fake.rerunHeader(win, null);                             // page two's header writes page one
+    const p1 = JSON.parse(fake.store[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p1), [0]);
+    assert.strictEqual(p1.trials[0].integrity.pasteEvents.length, 1);
+    paste('last page');
+    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });   // the documented final-page line
+    const p2 = JSON.parse(fake.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p2), [0, 1]);
+    assert.strictEqual(p2.trials[1].integrity.pasteEvents.length, 1);
+    assert.strictEqual(ctx.qualtrics.page(), 2);
+  });
 });
 
 // Qualtrics keeps a response across a reload ("Allow respondents to finish
@@ -838,5 +858,140 @@ describe('Qualtrics host: the legacy layout', () => {
     const saved = JSON.parse(win.sessionStorage.getItem(KEY));
     assert.deepStrictEqual(saved.trials.map((t) => t.integritySegment.segmentIndex), [0, 1]);
     assert.strictEqual(saved.trials[1].integrity.pasteEvents.length, 1);
+  });
+});
+
+// Qualtrics keeps an embedded-data value only when the field is declared in
+// Survey Flow, and drops it silently otherwise: after the first write on each
+// page the writer reads the field back.
+describe('Qualtrics host: is the field declared', () => {
+  it('true once the value reads back; null before any write', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    assert.strictEqual(ctx.qualtrics.declared(), null);
+    fake.submit('next');
+    assert.strictEqual(ctx.qualtrics.declared(), true);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('false when the field is not declared, with one error for the whole session', async () => {
+    const fake = fakeSurveyEngine({ declared: [] });
+    const ctx = start(fake);
+    fake.submit('next');
+    await tick();
+    fake.rerunHeader(win, null);
+    fake.submit('next');
+    win.CyborgHunter.data();
+    assert.strictEqual(ctx.qualtrics.declared(), false);
+    assert.deepStrictEqual(errors, [MESSAGES.qualtricsFieldUndeclared(STORED_FIELD)]);
+  });
+
+  it('read once per page: the first write of each page is checked, later ones are not', async () => {
+    const fake = fakeSurveyEngine();
+    let reads = 0;
+    const get = fake.SE.getJSEmbeddedData;
+    fake.SE.getJSEmbeddedData = (name) => { reads += 1; return get(name); };
+    start(fake);
+    win.CyborgHunter.data();
+    fake.submit('next');
+    assert.strictEqual(reads, 1);
+    await tick();
+    fake.rerunHeader(win, null);
+    fake.submit('next');
+    assert.strictEqual(reads, 2);
+  });
+
+  it('a getter that is missing, throws or reads back something else is unknown, and nothing throws', () => {
+    const answers = [
+      ['missing', undefined],
+      ['throws', () => { throw new Error('locked'); }],
+      ['other string', () => 'something else'],
+      ['empty', () => ''],
+      ['a number', () => 42]
+    ];
+    let ctx = null;
+    for (const [label, getter] of answers) {
+      if (ctx) nextPage(ctx, 1000);                          // one ch.js per window
+      const fake = fakeSurveyEngine();
+      if (getter === undefined) delete fake.SE.getJSEmbeddedData; else fake.SE.getJSEmbeddedData = getter;
+      ctx = start(fake);
+      assert.doesNotThrow(() => fake.submit('next'), label);
+      assert.ok(fake.store[STORED_FIELD], label + ': the write is not held back');
+      assert.strictEqual(ctx.qualtrics.declared(), null, label);
+    }
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('a page whose write fails keeps the last answer', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    fake.submit('next');
+    await tick();
+    fake.rerunHeader(win, null);
+    fake.SE.setJSEmbeddedData = () => { throw new Error('nope'); };
+    fake.submit('next');
+    assert.strictEqual(ctx.qualtrics.declared(), true);
+  });
+
+  it('the error marker is checked like a payload', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    reinstall(ctx, fake, { builder: () => { throw new Error('boom'); } });
+    fake.submit('next');
+    assertMarker(fake.store[STORED_FIELD], 'build-failed');
+    assert.strictEqual(ctx.qualtrics.declared(), true);
+  });
+
+  it('legacy layout: getEmbeddedData(cyborg_hunter) answers, and the error names cyborg_hunter', () => {
+    const ok = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    const c1 = start(ok);
+    ok.submit('next');
+    assert.ok(ok.store[LEGACY_FIELD]);
+    assert.strictEqual(ok.store[STORED_FIELD], undefined);
+    assert.strictEqual(c1.qualtrics.declared(), true);
+    nextPage(c1, 30000);
+    const bad = fakeSurveyEngine({ layout: 'legacy', declared: [] });
+    const c2 = start(bad);
+    bad.submit('next');
+    assert.strictEqual(c2.qualtrics.declared(), false);
+    assert.deepStrictEqual(errors, [MESSAGES.qualtricsFieldUndeclared(LEGACY_FIELD)]);
+    // The one legacy warning is boot's, at detection.
+    assert.deepStrictEqual(warns.filter((w) => w.startsWith('[cyborg-hunter] Qualtrics legacy layout')), [MESSAGES.qualtricsLegacyLayout(), MESSAGES.qualtricsLegacyLayout()]);
+  });
+});
+
+describe('Qualtrics host: the debug badge', () => {
+  it('a submit alone updates the badge with the last write', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake, { dataset: { debug: '' } });
+    fake.submit('next');
+    const text = win.document.getElementById('ch-debug-badge').textContent;
+    assert.match(text, /^Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · .* · last write \d+\/12000 chars$/);
+    assert.ok(text.endsWith('last write ' + ctx.qualtrics.lastWrite().chars + '/12000 chars'), text);
+  });
+
+  it('after a re-run: page, field, re-runs and last write, on one badge', () => {
+    const fake = fakeSurveyEngine();
+    start(fake, { dataset: { debug: '' } });
+    fake.submit('next');
+    fake.rerunHeader(win, null);
+    const text = win.document.getElementById('ch-debug-badge').textContent;
+    assert.match(text, /Qualtrics detected · page 2 · field __js_cyborg_hunter declared · .* · header re-run ×1 · last write \d+\/12000 chars$/);
+    assert.strictEqual(win.document.querySelectorAll('#ch-debug-badge').length, 1);
+  });
+
+  it('an undeclared field reads NOT DECLARED on the badge', () => {
+    const fake = fakeSurveyEngine({ declared: [] });
+    start(fake, { dataset: { debug: '' } });
+    fake.submit('next');
+    assert.ok(win.document.getElementById('ch-debug-badge').textContent.includes('field __js_cyborg_hunter NOT DECLARED'));
+  });
+
+  it('a badge that throws cannot reach the submit', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake, { dataset: { debug: '' } });
+    ctx.debug.refresh = () => { throw new Error('badge'); };
+    assert.doesNotThrow(() => fake.submit('next'));
+    assert.ok(fake.store[STORED_FIELD]);
   });
 });

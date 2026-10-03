@@ -30,7 +30,7 @@
 //   parameter: one may name another survey, a referrer or a redirect). null
 //   when neither has an id. Never throws.
 //
-// installQualtricsAdapter({ win, ctx, maxChars?, builder?, registerOnce?, writeOnRerun? }) → {
+// installQualtricsAdapter({ win, ctx, maxChars?, builder?, registerOnce?, writeOnRerun?, onWrite? }) → {
 //   write(reason) → null | { payload, written }   payload: what was checked
 //                 and handed to Qualtrics (or the error marker); written:
 //                 whether the setter took it. null once torn down
@@ -38,11 +38,25 @@
 //                 the header on every page of the New Survey Taking
 //                 Experience); under the legacy layout, where each page is
 //                 a new boot, the session's page count
-//   declared()    whether the field reads back: null for now (no probe yet)
+//   declared()    whether the field is declared in Survey Flow: true |
+//                 false | null (unknown). After the first write the setter
+//                 takes on each page, the field is read back once
+//                 (getJSEmbeddedData('cyborg_hunter'); legacy:
+//                 getEmbeddedData('cyborg_hunter')): the string just written
+//                 is true; null or undefined is false, with one console
+//                 error per session naming the field to declare; anything
+//                 else (no getter, a getter that throws, another value) is
+//                 null. A page with no successful write keeps the last
+//                 answer. How Qualtrics answers for an undeclared field is
+//                 to be confirmed on a live survey; this is the rule until
+//                 then
 //   lastWrite()   null | { chars, cap, level, error? }, the last write the
 //                 setter took; chars in UTF-8 bytes, like the cap
 //   teardown()
 // }
+// onWrite, called after every write (boot passes the debug badge's
+// refresh with data-debug, so this module does not import debug.js); what it
+// throws is dropped.
 // The writer owns the page boundary, so boot installs the vanilla adapter
 // with pageBoundaries: false (its submit and pagehide cuts would leave an
 // empty extra segment per page). At each page submit the writer closes the
@@ -150,12 +164,16 @@ export function installQualtricsAdapter(opts) {
   var builder = opts.builder || buildQualtricsPayload;
   var registerOnce = opts.registerOnce === undefined ? REGISTER_ONCE : opts.registerOnce;
   var writeOnRerun = opts.writeOnRerun === undefined ? WRITE_ON_RERUN : opts.writeOnRerun;
+  var onWrite = opts.onWrite || null;
   var legacy = ctx.qualtricsLayout === 'legacy';
   var page = 1;
   var registeredPage = null;   // the page the last addOnPageSubmit call was for
   var submitting = false;      // this submit task has written
   var warnedPage = null;       // the page the reduced-payload warning was logged on
   var last = null;
+  var probedPage = null;       // the page the field was last read back on
+  var fieldState = null;       // declared(): true | false | null
+  var toldUndeclared = false;  // the undeclared-field error was logged
   var active = true;
   var vanillaData = ctx.handlers.data;
 
@@ -226,32 +244,64 @@ export function installQualtricsAdapter(opts) {
     }
   }
 
+  // Is the field declared? Read back once per page, right after the setter
+  // took json (see declared() above). Cannot throw.
+  function probe(json) {
+    if (probedPage === page) return;
+    probedPage = page;
+    var got;
+    try {
+      var se = win.Qualtrics.SurveyEngine;
+      got = legacy ? se.getEmbeddedData(LEGACY_FIELD) : se.getJSEmbeddedData(FIELD_NAME);
+    } catch (_) {
+      fieldState = null;   // no getter, or one that throws
+      return;
+    }
+    if (got === json) fieldState = true;
+    else if (got === null || got === undefined) {
+      fieldState = false;
+      if (!toldUndeclared) {
+        toldUndeclared = true;
+        log('error', MESSAGES.qualtricsFieldUndeclared(legacy ? LEGACY_FIELD : STORED_FIELD));
+      }
+    } else fieldState = null;
+  }
+
   // reason ('submit', 'data', 'rerun') is for reading the code only.
   function write(reason) {
     if (!active) return null;
-    try {
-      try { ctx.vanilla.cut('page'); } catch (e) {   // { error } alone (no open span): write what exists
-        log('error', MESSAGES.vanillaEventFailed(message(e)));
-      }
-      var b = build();
-      if (b.code) {
-        failed(b.code + (b.detail ? ': ' + b.detail : ''));
-        var m = marker(b.code);
-        var ok = m.bytes <= maxChars && set(m.json);
-        if (ok) last = { chars: m.bytes, cap: maxChars, level: null, error: b.code };
-        return { payload: m.payload, written: ok };
-      }
-      if (!set(b.json)) return { payload: b.payload, written: false };
-      last = { chars: b.bytes, cap: maxChars, level: b.level };
-      // After the setter, so a broken console cannot keep the payload back.
-      if (b.level > 0 && warnedPage !== page) {
-        warnedPage = page;
-        log('warn', MESSAGES.qualtricsPayloadReduced(b.level, b.full, maxChars));
-      }
-      return { payload: b.payload, written: true };
-    } catch (_) {
-      return null;
+    var r = null;
+    try { r = writeChecked(); } catch (_) { /* r stays null */ }
+    try { if (onWrite) onWrite(); } catch (_) { /* a debug aid never stops the survey */ }
+    return r;
+  }
+
+  // The cut, the checked build and the setter: write() calls this inside a
+  // catch-all.
+  function writeChecked() {
+    try { ctx.vanilla.cut('page'); } catch (e) {   // { error } alone (no open span): write what exists
+      log('error', MESSAGES.vanillaEventFailed(message(e)));
     }
+    var b = build();
+    if (b.code) {
+      failed(b.code + (b.detail ? ': ' + b.detail : ''));
+      var m = marker(b.code);
+      var ok = m.bytes <= maxChars && set(m.json);
+      if (ok) {
+        last = { chars: m.bytes, cap: maxChars, level: null, error: b.code };
+        probe(m.json);
+      }
+      return { payload: m.payload, written: ok };
+    }
+    if (!set(b.json)) return { payload: b.payload, written: false };
+    last = { chars: b.bytes, cap: maxChars, level: b.level };
+    probe(b.json);
+    // After the setter, so a broken console cannot keep the payload back.
+    if (b.level > 0 && warnedPage !== page) {
+      warnedPage = page;
+      log('warn', MESSAGES.qualtricsPayloadReduced(b.level, b.full, maxChars));
+    }
+    return { payload: b.payload, written: true };
   }
 
   function onPageSubmit() {
@@ -312,7 +362,7 @@ export function installQualtricsAdapter(opts) {
   return {
     write: write,
     page: pageNumber,
-    declared: function () { return null; },
+    declared: function () { return fieldState; },
     lastWrite: function () { return last; },
     teardown: function () {
       active = false;   // a hook Qualtrics already holds cannot be removed

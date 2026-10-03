@@ -221,9 +221,15 @@ export function boot(opts) {
     if (host === 'vanilla') {
       // Under Qualtrics the writer owns the page boundary: the vanilla
       // adapter cuts on marks only, and keeps the session per survey on the
-      // new layout. opts.qualtricsMaxChars is for tests.
+      // new layout. With data-debug the badge shows each write.
+      // opts.qualtricsMaxChars is for tests.
       ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: surveyId });
-      if (ctx.qualtricsLayout) ctx.qualtrics = installQualtricsAdapter({ win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars });
+      if (ctx.qualtricsLayout) {
+        ctx.qualtrics = installQualtricsAdapter({
+          win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars,
+          onWrite: ctx.debug ? function () { ctx.debug.refresh(); } : null
+        });
+      }
     }
 
     // The session start observes document.body (core signals/browser.js), so
