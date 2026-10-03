@@ -24,6 +24,18 @@ const present = v => v !== undefined && v !== null && v !== '';
 
 // Extracts integrity trial data from a single participant's raw JSON.
 // Returns { participantId, trials, warnings, metadata }.
+// The non-zero counts of a reduced payload's `truncated` record, e.g.
+// "55 tabAwayEvents entries dropped, 4 pages trimmed, 35 pages dropped".
+function describeTruncation(t) {
+  const parts = [];
+  for (const [key, n] of Object.entries(t.droppedSessionEntries || {})) {
+    if (n > 0) parts.push(`${n} ${key} entries dropped`);
+  }
+  if (t.pagesTrimmed > 0) parts.push(`${t.pagesTrimmed} pages trimmed`);
+  if (t.pagesDropped > 0) parts.push(`${t.pagesDropped} pages dropped`);
+  return parts.length ? parts.join(', ') : 'nothing listed';
+}
+
 export function extractIntegrityData(raw, config) {
   const warnings = [];
   const pidField = config.participantIdField || 'participantId';
@@ -213,6 +225,12 @@ export function extractIntegrityData(raw, config) {
         : undefined);
   if (oneLinerError) {
     warnings.push(`one-line setup reported an error for this participant (cyborgHunterError): ${oneLinerError} — data after that point may be incomplete`);
+  }
+  // The Qualtrics writer reduces the payload until it fits the embedded-data
+  // cap (src/oneliner/qualtrics-payload.js) and records what it took out.
+  const truncated = raw.cyborgHunterOneLiner?.truncated;
+  if (truncated && typeof truncated === 'object') {
+    warnings.push(`Qualtrics payload was reduced to fit the embedded-data cap (level ${truncated.level}: ${describeTruncation(truncated)}) — session totals come from the monitor's counters; per-trial event lists are incomplete`);
   }
 
   return {

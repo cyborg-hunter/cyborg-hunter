@@ -17,6 +17,7 @@ export function computeParticipantSummary(participant, config) {
   // keyboard shortcuts, viewport shifts, zoom) stay session-wide by design —
   // see phase-scope.js.
   const phaseScoped = participant.phaseScoped === true;
+  const sessionCount = key => (phaseScoped ? 0 : (participant.session?.[key] ?? 0));
 
   // Three-way tab-away duration bins for display. The 3s boundary matches
   // config.thresholds.tabAwayDurationMs — the scoring engine's soft-score cutoff.
@@ -39,10 +40,14 @@ export function computeParticipantSummary(participant, config) {
     participantId: participant.participantId,
     trialCount: n,
 
-    // Clipboard signals — paste is the strongest indicator of copy-paste from AI
-    totalPasteEvents: sum(trials, t => (t.pasteEvents || []).length),
-    totalCopyEvents: sum(trials, t => (t.copyEvents || []).length),
-    totalDropEvents: sum(trials, t => (t.dropEvents || []).length),
+    // Clipboard signals — paste is the strongest indicator of copy-paste from AI.
+    // The session counters floor the per-trial sums: a payload trimmed to fit
+    // Qualtrics embedded data empties older trials' event lists but keeps the
+    // monitor's counters (on untrimmed data the two agree). Not for a
+    // phase-scoped summary, whose trials cover only part of the session.
+    totalPasteEvents: Math.max(sum(trials, t => (t.pasteEvents || []).length), sessionCount('pasteCount')),
+    totalCopyEvents: Math.max(sum(trials, t => (t.copyEvents || []).length), sessionCount('copyCount')),
+    totalDropEvents: Math.max(sum(trials, t => (t.dropEvents || []).length), sessionCount('dropCount')),
 
     // Tab-away — leaving the experiment page (visibility change or blur).
     // Prefer session-level durations (cyborgHunter.tabAwaySums) which capture

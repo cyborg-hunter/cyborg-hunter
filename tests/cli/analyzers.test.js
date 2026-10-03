@@ -19,6 +19,41 @@ describe('summary', () => {
     assert.equal(summary.totalSoftScore, 3);
   });
 
+  it('takes clipboard totals from the session counters when a trimmed payload emptied the trial lists', () => {
+    const empty = { pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] };
+    const participant = {
+      participantId: 'P1',
+      trials: [{ ...empty }, { ...empty }],
+      session: { pasteCount: 7, copyCount: 2, dropCount: 1 }
+    };
+    const summary = computeParticipantSummary(participant, {});
+    assert.equal(summary.totalPasteEvents, 7);
+    assert.equal(summary.totalCopyEvents, 2);
+    assert.equal(summary.totalDropEvents, 1);
+  });
+
+  it('keeps the per-trial sums when they agree with the session counters', () => {
+    const participant = {
+      participantId: 'P1',
+      trials: [
+        { pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] },
+        { pasteEvents: [{ t: 2 }, { t: 3 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }
+      ],
+      session: { pasteCount: 3 }
+    };
+    assert.equal(computeParticipantSummary(participant, {}).totalPasteEvents, 3);
+  });
+
+  it('a phase-scoped summary ignores the whole-session counters', () => {
+    const participant = {
+      participantId: 'P1',
+      phaseScoped: true,
+      trials: [{ pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }],
+      session: { pasteCount: 9 }
+    };
+    assert.equal(computeParticipantSummary(participant, {}).totalPasteEvents, 1);
+  });
+
   it('hard-flag fallback fires when cumulative sessionTotal crosses countThreshold', () => {
     const participant = {
       participantId: 'P1',

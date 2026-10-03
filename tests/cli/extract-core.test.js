@@ -42,6 +42,32 @@ describe('extractIntegrityData (pure core)', () => {
   });
 });
 
+describe('a reduced one-line payload', () => {
+  const raw = (truncated) => ({
+    participantId: 'P1',
+    cyborgHunterOneLiner: { version: '0.12.0', host: 'qualtrics', pageCount: 4, truncated },
+    trials: [{ trialId: 't1', integrity: { trialId: 't1', libraryVersion: '0.12.0', participantId: 'P1', startTime: 0, duration_ms: 10,
+      pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {} } }]
+  });
+
+  it('warns once, naming the level and the non-zero counts', () => {
+    const r = extractIntegrityData(raw({ level: 2, droppedSessionEntries: {}, pagesTrimmed: 3, pagesDropped: 0 }), {});
+    const hits = r.warnings.filter(w => /embedded-data cap/.test(w));
+    assert.strictEqual(hits.length, 1);
+    assert.match(hits[0], /reduced to fit the embedded-data cap \(level 2: 3 pages trimmed\)/);
+  });
+
+  it('lists dropped session entries and dropped pages', () => {
+    const r = extractIntegrityData(raw({ level: 3, droppedSessionEntries: { tabAwayEvents: 55, keyboardShortcuts: 0 }, pagesTrimmed: 4, pagesDropped: 35 }), {});
+    assert.ok(r.warnings.some(w => w.includes('(level 3: 55 tabAwayEvents entries dropped, 4 pages trimmed, 35 pages dropped)')), r.warnings.join('\n'));
+  });
+
+  it('says nothing when the payload was not reduced', () => {
+    const r = extractIntegrityData(raw(false), {});
+    assert.ok(!r.warnings.some(w => /embedded-data cap/.test(w)));
+  });
+});
+
 describe('ruleChronologicalCompare (pure core)', () => {
   it('orders gallery before post_gallery_query before classification, end_requery last', () => {
     const trials = [
