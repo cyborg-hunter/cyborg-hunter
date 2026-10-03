@@ -21,7 +21,7 @@
 // public surface.
 //
 // FIVE consumers were surveyed and are routed as follows:
-//   html-index.js                      → this module (the shipped report)
+//   report.js                          → this module (the shipped report)
 //   tools/assemble-demo-site.mjs       → this module (writes the ASSEMBLED file,
 //                                        which demo/results.js fetches by name)
 //   cursor-alignment.battery.mjs       → this module (the browser battery's harness)

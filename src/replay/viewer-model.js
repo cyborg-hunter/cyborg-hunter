@@ -1,7 +1,7 @@
 // src/replay/viewer-model.js
-// SessionRecording v2 (spec r2) → viewer model. Pure — no Node APIs — so a
-// browser demo can bundle it directly (0.7.2 extraction from
-// cli/renderers/replay-assets.js, which re-exports this for existing callers).
+// SessionRecording v2 (spec r2) → viewer model. Pure — no Node APIs — so the
+// browser /analyze/ page and the demo bundle it directly; the CLI reaches it
+// through cli/renderers/replay-assets-core.js.
 //
 // This is one of exactly two allowed wire→viewer time-conversion points (the
 // other lives in the CLI ingest path): a SessionRecording carries ms since
@@ -13,7 +13,7 @@
 // `extensions['cyborg-hunter']` and guarded on its own key.
 //
 // The model is a frozen wire format between two files that ship together
-// (renderReplayAssets writes it as JSONP; the report inlines its own copy of
+// (replay-assets-core.js emits it as JSONP; the report inlines its own copy of
 // the viewer client), so there is no back-compat problem here — and no
 // back-compat either. There is no CH-v1 playback path: v1 recordings are
 // rejected by the §11 tolerant profile below and are played with the v0.7.1

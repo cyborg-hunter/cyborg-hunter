@@ -3,6 +3,14 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Removed
+- Internal renderer wrappers removed
+  (`src/cli/renderers/{trajectories,session-timeline,typing-profile,html-index,replay-assets}.js`).
+  The report is unchanged. Deep imports of these undocumented paths no longer
+  resolve.
+
 ## [0.11.0] — 2026-10-02
 
 The report in the browser: the `/analyze/` page on the project site builds

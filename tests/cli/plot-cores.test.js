@@ -276,7 +276,7 @@ snapshotTest('typing-profile core draw log (enriched)', 'drawlog-typing-profile-
 
 // Skip/bail branch: a participant with trials but no typing data at all (no
 // charsPerSec, no pasteEvents on any trial) draws nothing and returns null —
-// the fs wrapper's cue to skip the PNG write. Minimal clone: strip the two
+// report-core.js's cue to skip the PNG write. Minimal clone: strip the two
 // typing-signal fields from every trial. No fixture file — there's no canvas
 // or draw log to snapshot on the null path.
 test('typing-profile core returns null when no trial has typing data', () => {

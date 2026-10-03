@@ -1,11 +1,10 @@
 // src/cli/renderers/typing-profile-core.js
 //
 // Pure drawing core for per-participant typing-speed bar-chart images — no
-// Node APIs, so a browser demo can bundle it directly (0.7.2-style
-// extraction from cli/renderers/typing-profile.js, which is now a thin fs
-// wrapper around this module: it acquires node-canvas, calls
-// drawTypingProfile per participant, and writes the returned canvas to a
-// PNG). Mirrors the session-timeline-core.js / trajectories-core.js split.
+// Node APIs, so the browser /analyze/ page bundles it directly.
+// report-core.js calls drawTypingProfile per participant with an injected
+// canvas factory and hands the encoded PNG to its sink. Mirrors the
+// session-timeline-core.js / trajectories-core.js split.
 //
 // drawTypingProfile(p, config, createCanvas) draws one participant's typing
 // speed bar chart — one bar per trial's chars/sec, with a horizontal
@@ -24,7 +23,7 @@ const LEFT_PAD = 60;
 
 // ── Per-participant renderer ─────────────────────────────────────────────
 // Returns the drawn canvas, or null if there's no data to draw (caller
-// decides what "no data" means — the fs wrapper skips the PNG write).
+// decides what "no data" means — report-core.js writes no PNG).
 export function drawTypingProfile(p, config, createCanvas) {
   const trials = p.trials;
   if (trials.length === 0) return null;
@@ -205,7 +204,7 @@ function drawHatchedRect(ctx, x, y, w, h) {
   ctx.restore();
 }
 
-// Used by the fs wrapper to build the per-participant PNG filename.
+// report-core.js builds the per-participant PNG filename with this.
 export function sanitize(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
 }

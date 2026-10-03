@@ -1,8 +1,6 @@
 // tests/cli/html-index-core.test.js
 // Pins the pure render core: string return, injectable assets, no Node imports.
-// This is the 0.7.2 extraction from cli/renderers/html-index.js — the fs-
-// writing wrapper's own behavior (writeFileSync, default fallback string)
-// stays covered by tests/cli/html-index.test.js.
+// The default fallback string is covered by tests/cli/html-index.test.js.
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';

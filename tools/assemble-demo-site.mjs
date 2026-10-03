@@ -16,7 +16,7 @@
 //      index.html and the built bundle) and dist/ into .demo-site/.
 //   4. Write the ASSEMBLED replay viewer script to the site root —
 //      demo/results.js fetches it as text to embed in the in-browser
-//      report, and it must be the same assembly html-index.js inlines into
+//      report, and it must be the same assembly report.js inlines into
 //      the CLI report: the client alone is missing the §4 instantiation
 //      module it calls into (the build's concatenation decision).
 //   5. Write the analyze page as one offline file,

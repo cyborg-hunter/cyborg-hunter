@@ -8,7 +8,7 @@
 // `readTree` extraction set the precedent).
 //
 // It runs the ASSEMBLED script — `dom-instantiate.js` concatenated ahead of the
-// client, exactly what `html-index.js` inlines into a report — because the
+// client, exactly what `html-index-core.js` inlines into a report — because the
 // client calls `mountTree`/`applyPatch` out of that concatenation and a test
 // that evaluated the client alone would prove nothing about what ships.
 //

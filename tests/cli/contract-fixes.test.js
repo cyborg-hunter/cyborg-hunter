@@ -125,7 +125,7 @@ describe('session-timeline collectEvents', () => {
   });
 
   // Round 2 fix: the cutoff used a two-tier (saved ?? default) precedence while
-  // summary.js / typing-profile.js use three tiers (saved ?? CLI ?? default), so
+  // summary.js / typing-profile-core.js use three tiers (saved ?? CLI ?? default), so
   // a legacy cohort re-screened with a CLI override binned at 3s on the timeline
   // but at the override value in summary.csv.
   it('applies the CLI tab-away cutoff when the participant has no saved threshold', () => {

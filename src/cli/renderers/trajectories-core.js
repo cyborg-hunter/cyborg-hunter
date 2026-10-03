@@ -1,11 +1,11 @@
 // src/cli/renderers/trajectories-core.js
 //
 // Pure drawing core for per-participant mouse-trajectory grid images — no
-// Node APIs, so a browser demo can bundle it directly (0.7.2-style
-// extraction from cli/renderers/trajectories.js, which is now a thin fs
-// wrapper around this module: it acquires node-canvas, calls
-// drawTrajectoryGrid per participant, and writes the returned canvas to a
-// PNG). Mirrors the session-timeline-core.js split.
+// Node APIs, so the browser /analyze/ page bundles it directly.
+// report-core.js calls drawTrajectoryGrid per participant with an injected
+// canvas factory (node-canvas from report.js, OffscreenCanvas in the analyze
+// worker) and hands the encoded PNG to its sink. Mirrors the
+// session-timeline-core.js split.
 //
 // drawTrajectoryGrid(p, triageEntry, config, createCanvas) draws the full
 // grid of per-trial panels for one participant and returns the drawn canvas
@@ -62,7 +62,7 @@ const COLORS = {
 };
 
 // Panel-background tints by trial phase (0.6.1, retro item 9) — same palette
-// as the session-timeline phase strip (session-timeline.js C.phase*), so a
+// as the session-timeline phase strip (session-timeline-core.js C.phase*), so a
 // panel's tint and the timeline band for the same phase read as one system.
 // Trials without a recognized phase keep the neutral panelBg.
 const PHASE_TINTS = {
@@ -101,9 +101,8 @@ export function orderTrials(trials, config) {
 
 // Draws one participant's full trajectory grid (all per-trial panels) onto a
 // canvas obtained from the injected createCanvas factory. Returns the drawn
-// canvas, or null when the participant has no trials to plot — mirrors the
-// `continue` in the pre-extraction renderTrajectories loop; the fs wrapper
-// skips the PNG write in that case.
+// canvas, or null when the participant has no trials to plot; report-core.js
+// writes no PNG in that case.
 export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   const trials = orderTrials(p.trials, config);
   if (trials.length === 0) return null;
@@ -437,9 +436,7 @@ function drawTriangle(ctx, x, y, size, direction) {
   ctx.fill();
 }
 
-// Used by the fs wrapper to build the per-participant PNG filename. Exported
-// (rather than kept private) to match session-timeline-core.js's sanitize,
-// which the browser demo plot adapter is also expected to reuse.
+// report-core.js builds the per-participant PNG filename with this.
 export function sanitize(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
 }

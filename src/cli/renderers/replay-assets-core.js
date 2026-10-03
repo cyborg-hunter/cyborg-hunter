@@ -7,8 +7,8 @@
 // tags load fine. The report injects the script lazily when the analyst
 // opens a participant's Replay section.
 //
-// No fs or Buffer here: report-core.js hands every asset to its sink, and
-// replay-assets.js writes them to disk for renderReplayAssets.
+// No fs or Buffer here: report-core.js hands every asset to its sink (a disk
+// sink in report.js, a zip sink on the browser /analyze/ page).
 
 import { sanitizeId as sanitize } from '../../shared/constants.js';
 import { buildViewerModel } from '../../replay/viewer-model.js';
@@ -48,7 +48,7 @@ import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.
  * Repeated calls now return the same list (both classes are recognised from
  * the stamp), which retires the non-idempotence noted in review. One caller
  * today (`report-core.js`), which renders the index from the
- * same array; replay-assets.js's renderReplayAssets is its fs form.
+ * same array.
  *
  * `assetMap` (asset-match.js's styled-replay assets, or null) is applied to
  * each model, and `p.replay.assetNote` records what matched for the report.
