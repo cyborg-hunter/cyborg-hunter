@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: back/forward cache</title>
+  <!-- Fixture for tests/e2e/oneliner/bfcache.spec.js. One page with
+       data-replay="dom" and a link to a plain page (vanilla-bfcache-away.html).
+       The spec follows the link and goes back: a back/forward-cache restore
+       shows this page again with its memory intact. window.__visit is drawn
+       once per real load, and window.__shows lists every pageshow's
+       `persisted`, so the spec can tell a restore from a fresh load. No
+       unload listener: one would keep the page out of the cache. -->
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-BFC-1" data-replay="dom"></script>
+  <button type="button" data-ch-trial="q1">Question 1</button>
+  <textarea id="answer"></textarea>
+  <a id="away" href="vanilla-bfcache-away.html">Next page</a>
+  <script>
+    window.__visit = Math.random();
+    window.__shows = [];
+    addEventListener('pageshow', function (e) { window.__shows.push(e.persisted); });
+  </script>
+</body>
+</html>
