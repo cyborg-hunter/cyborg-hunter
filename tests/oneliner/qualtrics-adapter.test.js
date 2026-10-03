@@ -266,6 +266,31 @@ describe('Qualtrics host: the page-submit writer', () => {
     assert.strictEqual(d.cyborgHunterOneLiner.host, 'qualtrics');
     assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(d));
   });
+
+  // A test hook for the browser harness (tests/e2e/oneliner), which has no
+  // other way into boot: not a researcher option.
+  it('CyborgHunterConfig.qualtricsMaxChars sets the cap and never reaches the monitor', () => {
+    win.CyborgHunterConfig = { qualtricsMaxChars: 50000 };
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    for (let i = 0; i < 150; i++) tabAway(3500);
+    const v = fake.submit('next')[STORED_FIELD];
+    assert.strictEqual(ctx.qualtrics.lastWrite().cap, 50000);
+    assert.ok(bytes(v) > MAX_CHARS, 'written whole: ' + bytes(v) + ' bytes');
+    assert.strictEqual(JSON.parse(v).cyborgHunterOneLiner.truncated, false);
+    assert.ok(!('qualtricsMaxChars' in ctx.config.monitor));
+    assert.deepStrictEqual(warns.filter((w) => w.includes('qualtricsMaxChars')), []);
+  });
+
+  for (const bad of [0, -1, 1.5, '50000', NaN, Infinity, null]) {
+    it('CyborgHunterConfig.qualtricsMaxChars ' + String(bad) + ' leaves the cap at MAX_CHARS', () => {
+      win.CyborgHunterConfig = { qualtricsMaxChars: bad };
+      const fake = fakeSurveyEngine();
+      const ctx = start(fake);
+      fake.submit('next');
+      assert.strictEqual(ctx.qualtrics.lastWrite().cap, MAX_CHARS);
+    });
+  }
 });
 
 describe('Qualtrics host: what reaches the field', () => {

@@ -21,6 +21,13 @@
 //   qualtricsSurveyIdAttr,                   data-qualtrics-survey-id, or null
 //                                            (tag only; checked where it is
 //                                            used, adapters/qualtrics.js)
+//   qualtricsMaxChars,                       CyborgHunterConfig.qualtricsMaxChars
+//                                            when a positive integer, else
+//                                            undefined: the Qualtrics writer's
+//                                            cap. A test hook for the browser
+//                                            harness, not a researcher option
+//                                            (a cap above Qualtrics' limit
+//                                            would stop the participant)
 //   monitor                                  every other CyborgHunterConfig key,
 //                                            passed to init() as is (init's own
 //                                            validateConfig warns on typos);
@@ -34,7 +41,7 @@ import { MESSAGES } from './errors.js';
 
 export const DATA_KEYS = ['preset', 'participantId', 'guards', 'replay', 'replaySrc', 'debug', 'qualtricsSurveyId'];
 
-var ONE_LINER_KEYS = ['preset', 'guards', 'replay', 'replaySrc', 'debug'];
+var ONE_LINER_KEYS = ['preset', 'guards', 'replay', 'replaySrc', 'debug', 'qualtricsMaxChars'];
 var REMOVED_KEYS = ['autoMonitor', 'excludeTrialTypes'];
 var GUARD_NAMES = ['honeypot', 'friction'];
 var PRESETS = ['permissive', 'standard', 'strict'];
@@ -113,6 +120,7 @@ export function readConfig(opts) {
   var g = globalConfig.replay;
   if (replay && g && typeof g === 'object' && g.autoSave) replay.autoSave = g.autoSave;
   var debug = pick('debug');
+  var maxChars = globalConfig.qualtricsMaxChars;
   return {
     preset: parsePreset(pick('preset')),
     participantIdAttr: has(dataset, 'participantId') ? dataset.participantId : null,
@@ -121,6 +129,7 @@ export function readConfig(opts) {
     replaySrc: pick('replaySrc') || null,
     debug: debug === undefined ? false : flag(debug),
     qualtricsSurveyIdAttr: has(dataset, 'qualtricsSurveyId') ? dataset.qualtricsSurveyId : null,
+    qualtricsMaxChars: typeof maxChars === 'number' && maxChars > 0 && maxChars % 1 === 0 && isFinite(maxChars) ? maxChars : undefined,
     monitor: monitor
   };
 }

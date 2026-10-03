@@ -67,7 +67,10 @@
 //   win:               the window (the core monitor itself uses the globals)
 //   monitorFactory:    core init(); injectable for tests
 //   participantParams: URL parameter names for the participant id, in order
-//   qualtricsMaxChars: the Qualtrics writer's cap; injectable for tests
+//   qualtricsMaxChars: the Qualtrics writer's cap; injectable for tests (a
+//                      page reaches it through CyborgHunterConfig
+//                      .qualtricsMaxChars, config.js: the browser harness's
+//                      hook)
 // ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
 //         participantId, participantIdSource, monitor, differ, segmenter,
 //         host, scriptSrc, handlers, win, api, qualtricsLayout,
@@ -222,11 +225,11 @@ export function boot(opts) {
       // Under Qualtrics the writer owns the page boundary: the vanilla
       // adapter cuts on marks only, and keeps the session per survey on the
       // new layout. With data-debug the badge shows each write.
-      // opts.qualtricsMaxChars is for tests.
+      // The cap's two overrides are for tests.
       ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: surveyId });
       if (ctx.qualtricsLayout) {
         ctx.qualtrics = installQualtricsAdapter({
-          win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars,
+          win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars || config.qualtricsMaxChars,
           onWrite: ctx.debug ? function () { ctx.debug.refresh(); } : null
         });
       }
