@@ -628,6 +628,23 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(saved.trials[2].integrity.pasteEvents.length, 1);
   });
 
+  // The same post that never left, then form.submit() into a new window: that
+  // submit keeps the page too, so pagehide closes what came after the post.
+  // (Where the window post's own span ends is not pinned here: only that
+  // nothing after it is lost.)
+  it('a same-window submit that did not leave, then form.submit() into a new window: pagehide still cuts', async () => {
+    const posted = stubNativeSubmit();
+    start();
+    submit(el('<form method="post" action="/a"></form>'));
+    await tick();
+    el('<form method="post" action="/preview" target="_blank"></form>').submit();
+    assert.strictEqual(posted.length, 1);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    const trials = JSON.parse(win.sessionStorage.getItem(KEY)).trials;
+    assert.strictEqual(trials[trials.length - 1].integrity.pasteEvents.length, 1);
+  });
+
   it('a mark from the page\'s own submit handler leaves the next pagehide its cut', async () => {
     const ctx = start();
     const f = el('<form method="post" action="/a"></form>');
