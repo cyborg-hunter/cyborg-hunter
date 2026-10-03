@@ -19,6 +19,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   `<input type="image">`'s `src`: each is matched, inlined when supplied, and
   counted among the images in the note.
 
+### Fixed
+- `/analyze/`: selecting a participant without a replay recording in the
+  report no longer leaves the previous participant's replay on screen. The
+  replay card closes it and says `Participant <id> has no replay recording.`;
+  Load stays disabled until a participant with a recording is selected.
+
 ### Removed
 - Internal renderer wrappers removed
   (`src/cli/renderers/{trajectories,session-timeline,typing-profile,html-index,replay-assets}.js`).

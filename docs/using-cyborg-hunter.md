@@ -396,7 +396,9 @@ Requirements and limits:
 Replays cannot fetch an experiment's external stylesheets or images from the
 web. Drop the experiment's own CSS and image files alongside the data (a
 folder is fine): they are matched to the URLs the recording references and
-inlined, and the replay card says what matched and what is missing. How the
+inlined, and the replay card says what matched and what is missing. When
+you select a participant without a recording in the report, the replay card
+closes any replay it was showing and says that participant has none. How the
 matching works:
 
 - A file is matched to a URL by path. The file whose whole path is the end

@@ -401,6 +401,66 @@ test('a Load click counts as a choice the load-time selection leaves alone', asy
   assert.equal(t.sent.filter((m) => m.type === 'replay').length, 1);
 });
 
+// The report can select a participant who has no recording: the card must not
+// keep showing the previous participant's replay beside that selection.
+test('a report selection without a recording clears the replay card and says so; Load cannot bring the old replay back', async () => {
+  const t = boot();
+  await toResults(t);          // A has no recording, B has one
+  const frame = document.querySelector('iframe.analyze-report');
+  const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+  post('B');                   // the report's load-time pick
+  const loading = t.page.loadReplay();
+  await tick();
+  t.emit({ type: 'replay-model', participantId: 'B', model: { segments: [] } });
+  await loading;
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 1);
+
+  post('A');                   // a row click on a participant without a recording
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0, 'B\'s replay is gone');
+  assert.equal(role('asset-note').textContent, 'Participant A has no replay recording.');
+  assert.equal(action('load-replay').disabled, true);
+  assert.equal(replaySelect().value, 'A', 'the dropdown shows A\'s own (disabled) entry');
+  const requests = t.sent.filter((m) => m.type === 'replay').length;
+  action('load-replay').click();
+  await t.page.loadReplay();
+  await tick();
+  assert.equal(t.sent.filter((m) => m.type === 'replay').length, requests, 'nothing is requested for A, and B is not loaded again');
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0);
+
+  post('B');                   // back to a participant with a recording
+  assert.equal(replaySelect().value, 'B');
+  assert.equal(role('asset-note').textContent, '1 of 2 stylesheets matched');
+  assert.equal(action('load-replay').disabled, false);
+});
+
+test('a report selection the card does not know also clears it', async () => {
+  const t = boot();
+  await toResults(t);
+  const loading = t.page.loadReplay();
+  await tick();
+  t.emit({ type: 'replay-model', participantId: 'B', model: { segments: [] } });
+  await loading;
+  t.page.selectParticipant('Z');
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0);
+  assert.equal(role('asset-note').textContent, 'Participant Z has no replay recording.');
+  assert.equal(replaySelect().selectedIndex, -1);
+  assert.equal(action('load-replay').disabled, true);
+});
+
+test('in a run without any recording, a report selection keeps the run-level note', async () => {
+  const t = boot();
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, participants: [{ participantId: 'A', hasReplay: false }] });
+  await tick();
+  const frame = document.querySelector('iframe.analyze-report');
+  frame.dispatchEvent(new win.Event('load'));
+  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+  assert.equal(role('asset-note').textContent, 'No replay recordings in this run.');
+  assert.equal(action('load-replay').disabled, true);
+});
+
 test('after a worker failure the page retries on a fresh worker from the factory, and the retry completes', async () => {
   document.head.innerHTML = '';
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));

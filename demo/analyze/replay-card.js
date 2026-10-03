@@ -29,10 +29,15 @@ export function createReplayCard(container, assets, requestModel) {
 
   function current() { return participants.find(function (p) { return p.participantId === select.value; }) || null; }
   function teardown() { generation++; teardownReplayHost(mount); }
-  function showNote() {
+  // missing: the id of a participant the report selected who has no
+  // recording here. In a run without any recording the run-level note says
+  // more, and there is no other replay it could be mistaken for.
+  function showNote(missing) {
     var p = current();
     var none = !participants.some(function (x) { return x.hasReplay; });
-    note.textContent = none ? 'No replay recordings in this run.' : (p && p.assetNote ? p.assetNote : '');
+    note.textContent = none ? 'No replay recordings in this run.'
+      : missing ? 'Participant ' + missing + ' has no replay recording.'
+      : (p && p.assetNote ? p.assetNote : '');
     loadButton.disabled = !(p && p.hasReplay);
   }
 
@@ -60,8 +65,18 @@ export function createReplayCard(container, assets, requestModel) {
     userChose: function () { return chosen; },
     select: function (pid) {
       var p = participants.find(function (x) { return x.participantId === pid; });
-      if (!p || !p.hasReplay || select.value === pid) return;
-      select.value = pid; teardown(); showNote();
+      if (p && p.hasReplay) {
+        if (select.value === pid) return;
+        select.value = pid; teardown(); showNote();
+        return;
+      }
+      // No recording for this participant: whatever replay is mounted belongs
+      // to someone else, so it goes. The dropdown moves to the participant's
+      // own disabled entry (or to nothing for an id it does not list), which
+      // also leaves Load with nothing to load.
+      teardown();
+      if (p) select.value = pid; else select.selectedIndex = -1;
+      showNote(pid);
     },
     load: async function () {
       var p = current();
