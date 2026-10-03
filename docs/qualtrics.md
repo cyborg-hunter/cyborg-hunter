@@ -3,8 +3,9 @@
 `ch.js`, the one-line setup, runs in a Qualtrics survey from the survey's
 Look & Feel header. At every page submit it writes a summary of the session
 (scores, counts and event timings, never text the participant typed) into one
-embedded-data field. The CLI and the [browser analyzer](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)
-read the Qualtrics CSV export directly, one participant per response.
+embedded-data field. The CLI reads the Qualtrics CSV export directly, one
+participant per response (see [Reading the data](#reading-the-data) for the
+browser analyzer).
 
 Some details below depend on how Qualtrics behaves on a live survey and are
 written as conditions ("if …"). They are being checked on a licensed account.
@@ -16,8 +17,8 @@ written as conditions ("if …"). They are being checked on a licensed account.
   question JavaScript. On an institutional licence the brand administrator
   must allow JavaScript.
 - **The New Survey Taking Experience**, the default layout. The older layout
-  works for counts and scores with a different field name: see
-  [Legacy layout](#legacy-layout).
+  works for counts and scores with a different field name (tested in a
+  simulated survey, not on a live one): see [Legacy layout](#legacy-layout).
 
 ## Setup
 
@@ -39,14 +40,25 @@ written as conditions ("if …"). They are being checked on a licensed account.
 2. **Declare the field** `__js_cyborg_hunter` at the top of Survey Flow
    ([Declare the field](#declare-the-field)).
 3. **Add the final-page line** (recommended): one line of question
-   JavaScript on the survey's last page ([The final page](#the-final-page)).
+   JavaScript on the survey's last page with a Next button
+   ([The final page](#the-final-page)).
 4. **Smoke-test in Preview**, then remove `data-debug` before launch
    ([Smoke test](#smoke-test)).
+5. **Publish the survey.** Preview runs your draft; respondents get the last
+   published version. Publish after adding the tag, the field and the
+   final-page line, and publish again after removing `data-debug`.
+
+To add question JavaScript, select a question, then Question behavior →
+JavaScript. Paste each snippet from this page at the top level, outside the
+`addOnload`, `addOnReady` and `addOnUnload` functions the editor fills in:
+the [replay script](#replay) registers an `addOnload` of its own, which may
+never run when nested inside another.
 
 ## Declare the field
 
 Qualtrics drops values written to an embedded-data field that Survey Flow
-does not declare, without an error. In Survey Flow, choose Add a New Element
+does not declare, without an error. Open Survey Flow (the "Survey flow"
+button, or the survey editor's left-hand bar), choose Add a New Element
 Here → Embedded Data, type the field name exactly `__js_cyborg_hunter`, leave
 its value as "Value will be set from Panel or URL", move the element to the
 top of the flow, and save the flow.
@@ -90,17 +102,19 @@ it: `data-participant-id="${e://Field/PROLIFIC_PID}"`. With such an ID a retake
 in the same tab continues the first response's session
 ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)).
 
-If Qualtrics does not fill piped text inside the attribute, the same pipe in
-a script above the tag is the other form:
-
-```html
-<script>window.CyborgHunterConfig = { participantId: "${e://Field/ResponseID}" };</script>
-<script src="https://unpkg.com/cyborg-hunter/dist/ch.js" data-debug></script>
-```
-
 `ch.js` does not recognise an unfilled pipe: if Qualtrics leaves
 `${e://Field/ResponseID}` as it is, every response carries that literal text
-as its ID. The smoke test checks for this.
+as its ID, and the report treats all responses as one person. The smoke test
+checks for this. If it happens:
+
+- for responses already collected, set
+  `"participantIdField": "metadata.qualtricsResponseId"` in the CLI's config:
+  each response is then its own participant, under its `ResponseId`;
+- for new responses, remove `data-participant-id` from the tag. `ch.js` then
+  uses a random `ch-…` ID (with a console warning), and the CLI replaces it
+  with the row's `ResponseId` (below). A retake in the same tab then
+  continues the first response's session, as with a recruitment platform's
+  ID.
 
 In the export, the CLI records each row's `ResponseId` as
 `metadata.qualtricsResponseId`, whatever ID the payload carries. When the
@@ -128,11 +142,12 @@ Qualtrics.SurveyEngine.addOnPageSubmit(function () { try { if (window.CyborgHunt
 ```
 
 The question's script is in place as soon as the page renders. When ch.js's
-own callback also runs at that submit, the two share one write, so the line
-never adds a row. The line never throws: if `ch.js` did not load (a network
+own callback also runs at that submit, in the same task (as it does in our
+simulated survey; the live check confirms Qualtrics), the two share one
+write, so the line adds no row. The line never throws: if `ch.js` did not load (a network
 failure, a blocker), it does nothing, so it cannot stop the participant's
-submit. Keep it in this form. We recommend it for every survey. Whether a survey without
-it can lose its final page depends on whether Qualtrics drops page-submit
+submit. Keep it in this form. We recommend it for every survey. Whether a
+survey without it can lose its final page depends on whether Qualtrics drops page-submit
 callbacks between pages and enables Next before the header has run again; if
 the live check finds that it does, the line is required.
 
@@ -146,9 +161,12 @@ the live check finds that it does, the line is required.
    ```
 
    No badge: `ch.js` did not run ([Troubleshooting](#troubleshooting)).
-2. **Paste into a text box, switch tabs for a few seconds, press Next.** On
-   the second page the badge reads
-   `… page 2 · field __js_cyborg_hunter declared · … · header re-run ×1 · last write N/12000 chars`.
+2. **On a page with a text-entry question, paste into the text box, switch
+   to another tab for at least five seconds, come back and press Next.** On
+   the second page the badge should read
+   `… page 2 · field __js_cyborg_hunter declared · … · header re-run ×1 · last write N/12000 chars`,
+   or `unknown` in place of `declared`: Qualtrics' read-back is still being
+   checked on a live survey, and step 3's export is the check that counts.
    `NOT DECLARED`: [declare the field](#declare-the-field). `last write`
    gives the payload's size and the cap, both in UTF-8 bytes.
 3. **Finish the preview response and export it** ([Reading the data](#reading-the-data)).
@@ -156,7 +174,8 @@ the live check finds that it does, the line is required.
    is the response's `R_…` ID (not the text `${e://Field/ResponseID}`), and
    the report shows the paste and the tab switch.
 
-**Remove `data-debug` before launch.** Participants can see the badge.
+**Remove `data-debug` before launch, and publish again.** Participants can
+see the badge.
 
 ## Payload size
 
@@ -175,6 +194,13 @@ submit with about 20,000 characters of embedded data was stored and one with
 data. So `ch.js` caps its payload at 12,000 UTF-8 bytes (a safe bound whether
 Qualtrics counts characters or bytes) and never writes a longer string.
 
+The cap leaves room for a little embedded data of your own, not for a second
+large value. If the limit is per page submit, as it appeared in tests, keep
+what your own survey writes to embedded data on any one page small (well
+under about 5,000 characters): for example, do not also save a jsPsych
+experiment's data through embedded data on the same page. Together the two
+could pass the limit and stop the participant.
+
 When the summary is over the cap, `ch.js` writes the first level of this
 ladder that fits. The levels are cumulative:
 
@@ -185,7 +211,7 @@ ladder that fits. The levels are cumulative:
 | 2 | every page row but the newest loses its event lists (its counts stay) |
 | 3 | only the newest 5 page rows are kept |
 | 4 | only the newest page row, with the required fields |
-| 5 | everything but the participant ID: only when the session could not be read, or for a cap far below the default |
+| 5 | everything but the participant ID: only when the session could not be read |
 
 Session totals, scores and hard triggers come from the monitor's counters,
 which the newest row carries, so they stay exact at levels 0 to 4. The
@@ -199,11 +225,16 @@ of more than about eight pages (fewer with many events) is written at level
 3: totals and scores stay exact, and per-page detail is kept for the newest
 five pages.
 
-If the payload cannot be built or fails its check, `ch.js` writes a short
-error record in its place (the participant ID and
-`cyborgHunterError: "the Qualtrics payload could not be written (…)"`), logs
-"Cyborg Hunter could not write to Qualtrics embedded data", and the survey
-goes on.
+If the session cannot be read, the payload is level 5 with
+`cyborgHunterError: "the Qualtrics payload could not be built"`, and the
+console shows "The Qualtrics payload was reduced". If the summary fails the
+writer's own check, `ch.js` writes a short error record in its place (the
+participant ID and
+`cyborgHunterError: "the Qualtrics payload could not be written (…)"`) and
+logs "Cyborg Hunter could not write to Qualtrics embedded data". If
+Qualtrics' setter itself fails, nothing is written at that submit; `ch.js`
+logs the same message, and its next successful write carries a note. In
+every case the survey goes on.
 
 ## Sessions and surveys in one tab
 
@@ -231,11 +262,26 @@ For the same reason, `cyborgHunterOneLiner.pageCount` in the payload counts
 page loads, not survey pages. Under the New Survey Taking Experience a whole
 response is one page load, so `pageCount` is 1 plus the number of reloads.
 
+### Closing the tab and resuming a response
+
+`sessionStorage` belongs to one tab and is gone when the tab closes. If your
+survey lets respondents continue an unfinished response later, a participant
+who closes the tab (or the browser) and comes back starts a new `ch.js`
+session, and its next write replaces the field's value: the payload then
+holds only what happened after the return, and the earlier pages' data is
+lost. Nothing in the payload marks this. A participant could use it to clear
+what was recorded, so consider turning off finishing later for surveys where
+this matters.
+
 ## Reading the data
 
-In Qualtrics, export the responses as CSV (Data & Analysis → Export & Import
-→ Export Data → CSV). Put the file in a directory of its own and point the
-CLI at it. The default `filePattern` is `*.json`, so set it:
+Install the CLI first (`npm install -g cyborg-hunter`;
+[quickstart](quickstart.md#1-install-the-cli)). In Qualtrics, export the
+responses as CSV (Data & Analysis → Export & Import → Export Data → CSV).
+The export downloads as a `.zip`: unzip it, and put the CSV file in a
+directory of its own. Save this as `cyborg-hunter.config.json` in the
+directory you run the CLI from (the default `filePattern` is `*.json`, so set
+it):
 
 ```json
 {
@@ -250,12 +296,15 @@ CLI at it. The default `filePattern` is `*.json`, so set it:
 cyborg-hunter report
 ```
 
+Without a config file, flags do the same:
+`cyborg-hunter report --data ./qualtrics-export --file-pattern "*.csv"`.
+
 The CLI recognises a Qualtrics export by its header row (`ResponseId` and
 `__js_cyborg_hunter`, or `cyborg_hunter`) and reads one participant per
 response. It reports responses with an empty cell in one warning, and a cell
-that is not JSON under its response. The
+that is not JSON under its response. From version 0.12 the
 [browser analyzer](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)
-accepts the same file. If the column has another name in your file, set
+reads the same file (earlier versions do not). If the column has another name in your file, set
 `qualtricsField` ([configuration.md](configuration.md)).
 
 ## Replay
@@ -272,7 +321,7 @@ Add it to the JavaScript of a question on the final page, and change
 
 ```js
 Qualtrics.SurveyEngine.addOnload(function () {
-  var UPLOAD_URL = '/upload';   // your server's address
+  var UPLOAD_URL = 'https://your-server.example/upload';   // your server's address
   var question = this;
   var shown = false;
   function showNext() {
@@ -330,11 +379,11 @@ participant ID, continue one session), and the CLI reads the
 |---|---|---|
 | No badge in Preview with `data-debug` | `ch.js` did not run: the licence strips scripts, the tag was not saved, or the script could not load | Check the saved header source ([Requirements](#requirements)) and the browser console |
 | Badge: `NOT DECLARED`; console: "The Qualtrics field … is not declared" | The field is missing from Survey Flow | [Declare the field](#declare-the-field) |
-| CLI: "N of M responses carry no Cyborg Hunter data" | Those responses have an empty payload cell: `ch.js` never ran on them (licence without custom JavaScript, header script removed, preview before the tag was added), or the field was not declared | Check the header and Survey Flow; responses collected before the fix have no data |
+| CLI: "N of M responses carry no Cyborg Hunter data" | Those responses have an empty payload cell: `ch.js` never ran on them (licence without custom JavaScript, header script removed, survey not published after the tag was added, preview before the tag was added), or the field was not declared | Check the header and Survey Flow, and publish the survey; responses collected before the fix have no data |
 | CLI: "participantId taken from the ResponseId column" | The payload had no linkable participant ID | Set `data-participant-id` to piped text ([Participant ID](#participant-id)) |
-| Every response has the participant ID `${e://Field/ResponseID}` | Qualtrics did not fill the pipe | Use the script form in [Participant ID](#participant-id); `metadata.qualtricsResponseId` still links each row |
+| Every response has the participant ID `${e://Field/ResponseID}`; the report shows one person | Qualtrics did not fill the pipe | Set `"participantIdField": "metadata.qualtricsResponseId"` for the collected data, and remove `data-participant-id` for new responses ([Participant ID](#participant-id)) |
 | Console: "The Qualtrics payload was reduced"; CLI: "Qualtrics payload was reduced" | The summary was over the cap | Nothing to fix ([Payload size](#payload-size)) |
-| Console: "Cyborg Hunter could not write to Qualtrics embedded data" | The setter failed, or the payload could not be built within the cap; an error record was written in its place | [Open an issue](https://github.com/cyborg-hunter/cyborg-hunter/issues) with the console message and your `<script>` tag; never attach participant data |
+| Console: "Cyborg Hunter could not write to Qualtrics embedded data" | Qualtrics' setter failed (nothing was written at that submit; the next write carries a note), or the payload failed its check (an error record was written in its place) | [Open an issue](https://github.com/cyborg-hunter/cyborg-hunter/issues) with the console message and your `<script>` tag; never attach participant data |
 | Badge: `submits missed ×n`; CLI: "a Qualtrics page was submitted before Cyborg Hunter's page-submit hook was in place" | A page was submitted before the header ran again; `ch.js` wrote it at the next header run, so nothing was lost | Nothing to fix; add the [final-page line](#the-final-page) so the last page is covered too |
 | Console summary: "no survey id in the address or data-qualtrics-survey-id" | The page address has no `SV_…` ID | Add `data-qualtrics-survey-id="${e://Field/SurveyID}"` ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)) |
 | Badge: `page 1` on a later page | The page was reloaded: the badge counts pages since the last load | Nothing to fix; the payload keeps the earlier pages |

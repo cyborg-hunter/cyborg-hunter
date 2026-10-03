@@ -312,7 +312,7 @@ test('data-replay under Qualtrics: recorded, never written to the field, the rec
   const log = collectConsole(page);
   const server = await qualtricsServer(page);
   let upload = null;
-  await page.route('**/upload', async (route) => { upload = route.request().postDataJSON(); await route.fulfill({ status: 200, body: 'ok' }); });
+  await page.route('**/upload', async (route) => { upload = route.request().postDataJSON(); await route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, body: 'ok' }); });   // the researcher's server, on another origin
   // recipe=1: the final page runs the harness's replay question script; debug=0: the boot reminder is a
   // console line of its own (with data-debug the summary carries it).
   await page.goto(at('replay=1&recipe=1&debug=0'));
