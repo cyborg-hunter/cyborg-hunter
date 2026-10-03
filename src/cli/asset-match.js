@@ -13,8 +13,8 @@
 // a relative URL matches by its path like any other.
 //
 // What a <video> or <audio> plays is collected too, as media, but never
-// matched or inlined: the viewer shows the element at its size and never
-// loads or plays it, so the note counts media in a clause of its own rather
+// matched or inlined: the viewer shows the element as a placeholder and never
+// plays it, so the note counts media elements in a clause of its own rather
 // than as images that can never match. A video's poster is an image.
 //
 // Data URIs rather than blob URLs on purpose: the zip's replay/*.replay.js is
@@ -204,17 +204,25 @@ function srcsetUrls(text) {
   return spans;
 }
 
-// Calls visit(kind, value, replace) for every image or media reference in
-// the segments' keyframe trees, dom.add subtrees and dom.attr values, in
+// Calls visit(kind, value, replace, at) for every image or media reference
+// in the segments' keyframe trees, dom.add subtrees and dom.attr values, in
 // order; replace(v) writes a new value back where the old one was found.
 // Each srcset candidate is visited as an image of its own, and a replaced
 // candidate is spliced back in with the rest of the srcset as written.
 // `media_src` (the resolved URL a video or audio loaded) is always media.
+// A media reference's `at` names the element it belongs to and where on it
+// the URL sits: { owner, slot: 'media_src' | 'src' | 'source' }, the owner of
+// a <source> being its parent (or the source itself when it has none).
 function eachRef(segments, visit) {
   const elems = new Map();
-  const ref = (kind, value, write) => {
+  const mediaAt = (id, tag, slot) => {
+    if (tag !== 'source') return { owner: id, slot };
+    const e = elems.get(id);
+    return { owner: e && e.parent != null ? e.parent : id, slot: 'source' };
+  };
+  const ref = (kind, value, write, where) => {
     if (!kind || !value) return;
-    if (kind !== 'srcset') { visit(kind, value, write); return; }
+    if (kind !== 'srcset') { visit(kind, value, write, kind === 'media' ? where() : undefined); return; }
     const text = String(value);
     let out = '', at = 0, changed = false;
     for (const [start, end] of srcsetUrls(text)) {
@@ -230,11 +238,13 @@ function eachRef(segments, visit) {
       if (n.kind !== 'element') continue;
       const el = { tag: n.tag, type: n.attrs && n.attrs.type };
       const parentTag = parentTagOf(elems, n.id);
+      // An element without an id is its own owner.
+      const id = n.id != null ? n.id : n;
       for (const name of Object.keys(n.attrs || {})) {
         const v = n.attrs[name];
-        ref(v ? refKind(el, parentTag, name, v) : null, v, (x) => { n.attrs[name] = x; });
+        ref(v ? refKind(el, parentTag, name, v) : null, v, (x) => { n.attrs[name] = x; }, () => mediaAt(id, n.tag, 'src'));
       }
-      if (n.media_src) ref('media', n.media_src, (x) => { n.media_src = x; });
+      if (n.media_src) ref('media', n.media_src, (x) => { n.media_src = x; }, () => ({ owner: id, slot: 'media_src' }));
     }
   };
   for (const { dom, events } of segments) {
@@ -245,7 +255,7 @@ function eachRef(segments, visit) {
       else if (ev.type === 'dom.attr' && elems.has(ev.node)) {
         const el = elems.get(ev.node);
         if (ev.name === 'type') el.type = ev.value;
-        else if (ev.value) ref(refKind(el, parentTagOf(elems, ev.node), ev.name, ev.value), ev.value, (x) => { ev.value = x; });
+        else if (ev.value) ref(refKind(el, parentTagOf(elems, ev.node), ev.name, ev.value), ev.value, (x) => { ev.value = x; }, () => mediaAt(ev.node, el.tag, 'src'));
       }
     }
   }
@@ -281,9 +291,20 @@ function collect(recording, assetMap) {
     } else if (s.css) addCss(s.css, s.href);
   }
   for (const css of sheetUpdatesOf(recording)) addCss(css, null);
-  eachRef(segmentsOf(recording), (kind, url) => {
-    if (kind === 'media') { if (!inline(url)) add(media, url); } else addRef(url);
+  // Media is counted per element: one key each (its media_src, else its own
+  // src, else its first <source>'s src, whatever came first in the session),
+  // and elements sharing a key count once. A captured <video src="a.mp4">
+  // carries both the relative src and the resolved media_src; it is one
+  // element. An inline (data:/blob:) source is still an element shown as a
+  // placeholder, so it counts too.
+  const owners = new Map();
+  eachRef(segmentsOf(recording), (kind, url, replace, at) => {
+    if (kind !== 'media') { addRef(url); return; }
+    if (!owners.has(at.owner)) owners.set(at.owner, {});
+    const o = owners.get(at.owner);
+    if (o[at.slot] === undefined) o[at.slot] = url;
   });
+  for (const o of owners.values()) add(media, o.media_src || o.src || o.source);
   return { stylesheets: sheets, images, fonts, media };
 }
 
@@ -461,6 +482,6 @@ export function assetNoteText(summary) {
   if (summary.fonts.total > 0) parts.push(word(summary.fonts, 'fonts'));
   const m = summary.media.total;
   if (m > 0) parts.push((m === 1 ? '1 video/audio element shown as placeholder' : `${m} video/audio elements shown as placeholders`) +
-    '; replays never load or play media');
+    '; replays never play media');
   return parts.length ? 'Experiment assets: ' + parts.join('; ') + '.' : null;
 }

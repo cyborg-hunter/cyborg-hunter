@@ -423,10 +423,10 @@ matching works:
   `url(...)` in stylesheets. A srcset candidate you supply is inlined; the
   others stay as written.
 - Video and audio are never matched: the replay shows each `<video>` or
-  `<audio>` as an empty box of its size and never loads or plays it, so the
-  card counts them apart from images ("2 video/audio elements shown as
-  placeholders; replays never load or play media"). A video's `poster` is an
-  image and is matched like one.
+  `<audio>` as a placeholder and never plays it, so the card counts these
+  elements apart from images, once per element ("2 video/audio elements
+  shown as placeholders; replays never play media"). A video's `poster` is
+  an image and is matched like one.
 
 The CLI does the same with `assetsDir`: set it to the experiment's folder
 (its stylesheets and images) and the report inlines what matches. This is

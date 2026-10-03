@@ -12,8 +12,8 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   reported as ambiguous.
 - The experiment-assets note no longer counts video and audio sources as
   images that never match: it says how many video/audio elements are shown as
-  placeholders and that replays never load or play media. A video's poster is
-  still an image.
+  placeholders and that replays never play media. A video's poster is still
+  an image.
 - Experiment assets now also cover `srcset` candidates (on `<img>` and on a
   `<picture>`'s `<source>`), an SVG `<image>`'s `href`/`xlink:href`, and an
   `<input type="image">`'s `src`: each is matched, inlined when supplied, and
