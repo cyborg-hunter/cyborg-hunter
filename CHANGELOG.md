@@ -91,7 +91,7 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   of the earlier recording again; save every recording it returns. Before,
   everything after Back was missing from the replay.
 - Integrity monitor: mouse clicks (and mousedown/mouseup) are recorded
-  before the page's own handlers run. A click that ends a trial, such as a
+  before the page's own handlers on the document and its elements run. A click that ends a trial, such as a
   jsPsych response button, a `data-ch-trial` mark or a button whose `onclick`
   submits the form, is now in that trial's `mouseTrack`; before, it was
   recorded in the span after it or not at all. A click whose handler stops
