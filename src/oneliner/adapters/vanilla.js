@@ -305,7 +305,8 @@ export function installVanillaAdapter(opts) {
   // formtarget, the form's target, then <base target>) is empty, a keyword
   // for this window (_self; _top and _parent unload this page too), or this
   // window's own name. _blank, or a name for another window or a frame,
-  // leaves this page where it is.
+  // leaves this page where it is. The value is compared as written, as
+  // browsers do: " _self " is a window name, not the keyword.
   function replacesPage(form, submitter) {
     var t = null;
     if (submitter && submitter.hasAttribute && submitter.hasAttribute('formtarget')) t = submitter.getAttribute('formtarget');
@@ -314,7 +315,7 @@ export function installVanillaAdapter(opts) {
       var base = doc.querySelector ? doc.querySelector('base[target]') : null;
       t = base ? base.getAttribute('target') : '';
     }
-    t = String(t || '').trim();
+    t = String(t || '');
     var keyword = t.toLowerCase();
     if (t === '' || keyword === '_self' || keyword === '_top' || keyword === '_parent') return true;
     return keyword !== '_blank' && t === win.name;

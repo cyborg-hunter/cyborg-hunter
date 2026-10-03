@@ -295,6 +295,22 @@ describe('vanilla host: forms and page loads', () => {
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
   });
 
+  // Browsers read the target as written: with spaces around it, " _self " or
+  // " " is the name of another window, so the page stays.
+  for (const target of [' ', ' _self ']) {
+    it(`a form target of ${JSON.stringify(target)} names another window; pagehide keeps the data after it`, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit"></form>');
+      f.setAttribute('target', target);
+      submit(f);   // not prevented: the post goes to that other window
+      await tick();
+      paste('after');
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+      assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+    });
+  }
+
   it('page loads: the next page restores the index, the earlier trials and the page count', () => {
     const ctx1 = start();
     paste('page one');
