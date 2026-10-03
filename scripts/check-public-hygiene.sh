@@ -61,7 +61,7 @@ PAGES_ALLOWLIST='konukcan.github.io/cyborg-hunter'
 # files are allowed (filter_hits' second arg): the one-line files, dist/ch.js
 # and dist/ch-<name>.js (one per target in build-targets.js), and
 # analyze/analyze.bundle.js and analyze/cyborg-hunter-analyze.html.
-PID_ALLOW_RE='^(src/oneliner/participant-id\.js|tests/oneliner/participant-id\.test\.js|tests/oneliner/debug\.test\.js|tests/e2e/oneliner/[^:]*|docs/quickstart\.md|docs/advanced-integration\.md):'
+PID_ALLOW_RE='^(src/oneliner/participant-id\.js|tests/oneliner/participant-id\.test\.js|tests/oneliner/debug\.test\.js|tests/e2e/oneliner/[^:]*|docs/quickstart\.md|docs/advanced-integration\.md|docs/qualtrics\.md):'
 
 # Filters raw hit lines for a given pattern through the Pages allowlist when
 # the pattern is the personal-host ban, and through the PROLIFIC_PID path

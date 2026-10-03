@@ -1,6 +1,6 @@
 # cyborg-hunter
 
-Detects AI-tool use during browser-based behavioral experiments. Captures paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that compromise data quality on Prolific / MTurk / classroom studies. Produces a triage report ranking participants by suspiciousness.
+Detects AI-tool use during browser-based behavioral experiments. Captures paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that compromise data quality on Prolific / MTurk / classroom studies and Qualtrics surveys. Produces a triage report ranking participants by suspiciousness.
 
 Optional companion deterrence modules ship in the same package (`ch.js` bundles both; the separate `extension-guard-friction.js` and `extension-guard-honeypot.js` files are for manual mode): friction enforces fullscreen + blocks sidebars + scrambles content during violations + asks cooperative LLMs to refuse; honeypot exposes both hidden and visible bait fields that AI agents fill while human participants don't see them.
 
@@ -80,6 +80,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 - `data-replay`: records a session replay; save `CyborgHunter.replay()` in your save code.
 - `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
 - Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (a POST form gets it as a hidden `cyborgHunterData` field).
+- Qualtrics: paste the tag into the survey's Look & Feel header and declare one embedded-data field; the CLI reads the CSV export ([docs/qualtrics.md](docs/qualtrics.md)).
 
 Walk-through, placement and participant IDs: [docs/quickstart.md](docs/quickstart.md). Moving an experiment wired by hand: [docs/advanced-integration.md](docs/advanced-integration.md#switching-to-the-one-liner).
 
@@ -180,6 +181,7 @@ The optional **guard** extensions add: fullscreen / sidebar / focus enforcement 
 ## Documentation
 
 - [docs/quickstart.md](docs/quickstart.md) — zero to triage report
+- [docs/qualtrics.md](docs/qualtrics.md) — the one-line setup in a Qualtrics survey: header tag, embedded-data field, payload cap, reading the export
 - [docs/advanced-integration.md](docs/advanced-integration.md) — manual mode, switching to the one-line setup, the honeypot's ethics note, friction, pages without jsPsych, replay
 - [docs/worked-example.md](docs/worked-example.md) — full pipeline run on the bundled synthetic dataset, outputs interpreted
 - [docs/interpreting-signals.md](docs/interpreting-signals.md) — scores vs tiers, viewport shifts, phase scoping: the common misreadings
