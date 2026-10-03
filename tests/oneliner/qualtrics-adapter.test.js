@@ -618,6 +618,97 @@ describe('Qualtrics host: the fallbacks live verification can pick', () => {
     assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(d));
   });
 
+  // Write on re-run with a header hook that fires after all, on some pages or
+  // on all: a page its submit wrote is not written again by the re-run, so
+  // there is one row per page and no empty row between a submit and a re-run.
+  const pastes = (p) => p.trials.map((t) => t.integrity.pasteEvents.length);
+
+  it('write on re-run, with a header hook that fires on page one only: one row per page', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    reinstall(ctx, fake, { writeOnRerun: true });
+    let sets = 0;
+    const set = fake.SE.setJSEmbeddedData;
+    fake.SE.setJSEmbeddedData = (n, v) => { sets += 1; set(n, v); };
+    paste('page one');
+    fake.submit('next');                                     // the hook fires: page one written
+    await tick();
+    for (const pasted of [false, true]) {                    // pages two and three
+      fake.rerunHeader(win, null);
+      fake.submitHooks.length = 0;                           // from here the header's hook never fires
+      if (pasted) paste('page three');
+      fake.submit('next');
+      await tick();
+    }
+    fake.rerunHeader(win, null);                             // page four
+    fake.submitHooks.length = 0;
+    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });   // the documented final-page line
+    const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1, 2, 3]);
+    assert.deepStrictEqual(pastes(p), [1, 0, 1, 0]);
+    assert.strictEqual(sets, 4, 'one write per page');
+  });
+
+  it('write on re-run, with a header hook that fires on every page: one row per page', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    reinstall(ctx, fake, { writeOnRerun: true });
+    let sets = 0;
+    const set = fake.SE.setJSEmbeddedData;
+    fake.SE.setJSEmbeddedData = (n, v) => { sets += 1; set(n, v); };
+    for (let i = 1; i <= 4; i++) {
+      if (i > 1) fake.rerunHeader(win, null);
+      if (i % 2) paste('page ' + i);
+      fake.submit('next');
+      await tick();
+    }
+    const p = JSON.parse(fake.store[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1, 2, 3]);
+    assert.deepStrictEqual(pastes(p), [1, 0, 1, 0]);
+    assert.strictEqual(sets, 4);
+  });
+
+  it('write on re-run: CyborgHunter.data() mid-page does not stand in for the page\'s write', () => {
+    const fake = fakeSurveyEngine({ headerHooks: false });
+    const ctx = start(fake);
+    reinstall(ctx, fake, { writeOnRerun: true });
+    win.CyborgHunter.data();                                 // the researcher's own call
+    paste('after data()');
+    fake.rerunHeader(win, null);                             // the re-run still writes page one
+    const p = JSON.parse(fake.store[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1]);
+    assert.deepStrictEqual(pastes(p), [0, 1]);
+  });
+
+  it('write on re-run, hook firing: CyborgHunter.data() before the submit does not take the submit\'s write', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    reinstall(ctx, fake, { writeOnRerun: true });
+    win.CyborgHunter.data();
+    paste('after data()');
+    const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(pastes(p), [0, 1]);
+    fake.rerunHeader(win, null);                             // the submit wrote: nothing more
+    assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(p));
+  });
+
+  it('write on re-run: a submit whose setter threw is retried by the re-run', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    reinstall(ctx, fake, { writeOnRerun: true });
+    const set = fake.SE.setJSEmbeddedData;
+    fake.SE.setJSEmbeddedData = () => { throw new Error('nope'); };
+    paste('page one');
+    fake.submit('next');
+    await tick();
+    fake.SE.setJSEmbeddedData = set;
+    fake.rerunHeader(win, null);
+    const p = JSON.parse(fake.store[STORED_FIELD]);
+    // The failed submit's cut stays; the retry adds the span up to the re-run.
+    assert.deepStrictEqual(segments(p), [0, 1]);
+    assert.deepStrictEqual(pastes(p), [1, 0]);
+  });
+
   // The case the switch is for: the header's hook is taken and never fires.
   it('write on re-run, with a header hook that never fires: the submit writes nothing, the re-run writes the page before, the final-page line the last', () => {
     const fake = fakeSurveyEngine({ headerHooks: false });
@@ -966,8 +1057,8 @@ describe('Qualtrics host: the debug badge', () => {
     const ctx = start(fake, { dataset: { debug: '' } });
     fake.submit('next');
     const text = win.document.getElementById('ch-debug-badge').textContent;
-    assert.match(text, /^Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · .* · last write \d+\/12000 chars$/);
-    assert.ok(text.endsWith('last write ' + ctx.qualtrics.lastWrite().chars + '/12000 chars'), text);
+    assert.match(text, new RegExp('^Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · .* · last write \\d+/' + MAX_CHARS + ' chars$'));
+    assert.ok(text.endsWith('last write ' + ctx.qualtrics.lastWrite().chars + '/' + MAX_CHARS + ' chars'), text);
   });
 
   it('after a re-run: page, field, re-runs and last write, on one badge', () => {
@@ -976,7 +1067,7 @@ describe('Qualtrics host: the debug badge', () => {
     fake.submit('next');
     fake.rerunHeader(win, null);
     const text = win.document.getElementById('ch-debug-badge').textContent;
-    assert.match(text, /Qualtrics detected · page 2 · field __js_cyborg_hunter declared · .* · header re-run ×1 · last write \d+\/12000 chars$/);
+    assert.match(text, new RegExp('Qualtrics detected · page 2 · field __js_cyborg_hunter declared · .* · header re-run ×1 · last write \\d+/' + MAX_CHARS + ' chars$'));
     assert.strictEqual(win.document.querySelectorAll('#ch-debug-badge').length, 1);
   });
 

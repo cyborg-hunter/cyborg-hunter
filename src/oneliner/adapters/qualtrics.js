@@ -44,7 +44,8 @@
 //                 (getJSEmbeddedData('cyborg_hunter'); legacy:
 //                 getEmbeddedData('cyborg_hunter')): the string just written
 //                 is true; null or undefined is false, with one console
-//                 error per session naming the field to declare; anything
+//                 error per page load (per boot: the legacy layout boots on
+//                 every page) naming the field to declare; anything
 //                 else (no getter, a getter that throws, another value) is
 //                 null. A page with no successful write keeps the last
 //                 answer. How Qualtrics answers for an undeclared field is
@@ -169,6 +170,7 @@ export function installQualtricsAdapter(opts) {
   var page = 1;
   var registeredPage = null;   // the page the last addOnPageSubmit call was for
   var submitting = false;      // this submit task has written
+  var submitWrotePage = null;  // the page a submit callback's write was taken on
   var warnedPage = null;       // the page the reduced-payload warning was logged on
   var last = null;
   var probedPage = null;       // the page the field was last read back on
@@ -311,7 +313,8 @@ export function installQualtricsAdapter(opts) {
         submitting = true;
         // Without a timer there is no latch: an extra write beats none.
         try { win.setTimeout(function () { submitting = false; }, 0); } catch (_) { submitting = false; }
-        write('submit');
+        var r = write('submit');
+        if (r && r.written) submitWrotePage = page;
       }
       // Legacy pages are full page loads: the next page's boot restores the
       // session from here (adapters/vanilla.js), so every callback saves,
@@ -346,10 +349,13 @@ export function installQualtricsAdapter(opts) {
   win.addEventListener('pagehide', onPageHide);
   // A re-run is the next page, so any submit from here is a new one. With
   // writeOnRerun the page before it is written first, under its own page
-  // number.
+  // number, unless that page's submit callback fired after all and its
+  // write was taken: a second write would add an empty row. A write by
+  // CyborgHunter.data() does not count (the page may go on after it), and a
+  // submit whose setter failed gets the re-run's write as a retry.
   ctx.handlers.rerun = function () {
     try {
-      if (writeOnRerun) write('rerun');
+      if (writeOnRerun && submitWrotePage !== page) write('rerun');
       page += 1;
       submitting = false;
       ensureHook();
