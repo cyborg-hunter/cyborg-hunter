@@ -54,22 +54,35 @@ const viewerModelFromFixture = (name) =>
 const ANSWER = 'Canberra';
 const AUTOTYPE_TEXT = 'No one is typing this. It is being inserted.';
 
-// Waits for the playground's status line to show a FRESH "rebuilt in …ms"
-// message — i.e. one that's different from whatever it said before this
-// call. Necessary because two rebuilds in a row can both land on "rebuilt in
-// N ms" text: a bare /rebuilt in/ match can resolve against the PRIOR
-// rebuild's leftover text before the new (debounced, ~250ms) one has even
-// started — found by driving the live page with two sequential control
-// changes in one test.
-async function waitForFreshRebuild(page, prevText) {
-  await page.waitForFunction((prev) => {
+// Playground rebuild signal. The status line reads "rebuilt in N ms", and N
+// is a rounded duration, so two consecutive rebuilds can produce the very
+// same text; comparing the text before and after therefore cannot tell a
+// finished rebuild from a stale one (and never resolves when the numbers
+// match). Instead a MutationObserver counts every write of a "rebuilt in"
+// message into the status element. Call markRebuilds() before the action
+// that triggers a rebuild, then waitForFreshRebuild() with the returned mark.
+async function markRebuilds(page) {
+  return page.evaluate(() => {
+    if (!window.__pgRebuilds) {
+      const el = document.querySelector('[data-role="pg-status"]');
+      const state = { count: 0 };
+      new MutationObserver(() => {
+        if (/rebuilt in/.test(el.textContent || '')) state.count++;
+      }).observe(el, { childList: true, characterData: true, subtree: true });
+      window.__pgRebuilds = state;
+    }
+    return window.__pgRebuilds.count;
+  });
+}
+
+async function waitForFreshRebuild(page, mark) {
+  await page.waitForFunction((m) => {
     const el = document.querySelector('[data-role="pg-status"]');
-    const t = (el && el.textContent) || '';
-    return /rebuilt in/.test(t) && t !== prev;
-  }, prevText, { timeout: 15000 });
-  // 15s, not 5s: the debounce + recompute + iframe-swap cycle is sub-second
-  // locally but has blown a 5s budget on slow shared CI runners (PR #3's
-  // spurious red X). The budget is patience, not a performance assertion.
+    return window.__pgRebuilds.count > m && /rebuilt in/.test((el && el.textContent) || '');
+  }, mark, { timeout: 15000 });
+  // 15s: the debounce + recompute + iframe-swap cycle is sub-second locally
+  // but has blown a 5s budget on slow shared CI runners. The budget is
+  // patience, not a performance assertion.
 }
 
 // Baseline (step 2, typed) + two dispatched pastes of ANSWER (step 3, hard-
@@ -463,7 +476,7 @@ test('playground: paste threshold and tab-away/typing-speed cutoffs flip tiers',
   // resolves) — wait for the control to exist before touching it.
   const statusEl = page.locator('[data-role="pg-status"]');
   await page.locator('[data-k="pasteHardCount"]').waitFor({ timeout: 8000 });
-  const before1 = await statusEl.textContent();
+  const before1 = await markRebuilds(page);
   await page.locator('[data-k="pasteHardCount"]').fill('3');
   await page.locator('[data-k="pasteHardCount"]').dispatchEvent('change');
   await waitForFreshRebuild(page, before1);
@@ -474,7 +487,7 @@ test('playground: paste threshold and tab-away/typing-speed cutoffs flip tiers',
   // example-2 (all-clean fixture) into SOFT (verified scenario: a 1400ms
   // tab-away crosses a 1000ms cutoff, and 3 trials' ~4.6-5.3cps typing
   // crosses a 4cps threshold).
-  const before2 = await statusEl.textContent();
+  const before2 = await markRebuilds(page);
   await page.locator('[data-k="tabAwayCutoffMs"]').fill('1000');
   await page.locator('[data-k="tabAwayCutoffMs"]').dispatchEvent('change');
   await page.locator('[data-k="typingSpeedCps"]').fill('4');
@@ -600,14 +613,13 @@ test('blob hygiene: created - revoked === 2 (report + viewer-host) after results
   await installBlobCounter(page);
   await reachResultsWithSignals(page);
 
-  const statusEl = page.locator('[data-role="pg-status"]');
   // Wait on the CONTROL, not the status paragraph: pg-status starts as a
   // literally empty <p> (zero content -> zero-size box -> Playwright treats
   // it as not-visible) until the first rebuild ever writes text into it —
   // waitFor('visible') on it before any control interaction hangs. The
   // paste-count input, by contrast, is real content and visible from mount.
   await page.locator('[data-k="pasteHardCount"]').waitFor({ timeout: 8000 });
-  const before = await statusEl.textContent();
+  const before = await markRebuilds(page);
   await page.locator('[data-k="pasteHardCount"]').fill('1');
   await page.locator('[data-k="pasteHardCount"]').dispatchEvent('change');
   await waitForFreshRebuild(page, before);
