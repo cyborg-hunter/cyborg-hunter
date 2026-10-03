@@ -86,7 +86,11 @@
 // latch, in either order, so the page is one row; data() then returns the
 // payload this task wrote, and the submit still counts as one (see below).
 // A data() call of its own is its own task, so it never takes a submit's
-// write. Without a timer there is no latch: an extra cut beats none. A failed write is
+// write. User input (pointerdown, keydown, in the capture phase) also clears
+// the latch: it always starts a task of its own, and in a hidden tab, where
+// Chrome throttles timers, the latch's timer may still be pending at the
+// participant's next click. Without a timer there is no latch: an extra cut
+// beats none. A failed write is
 // logged and noted in the blob, and the survey goes on. At pagehide (a
 // reload, a closed tab) the session is saved without a cut, so a ch.js
 // booting again in the tab continues it; the legacy layout, where every page
@@ -396,8 +400,14 @@ export function installQualtricsAdapter(opts) {
     }
   }
 
+  // User input starts a new task: the latch from an earlier one is gone.
+  function onInput() { task = null; }
+  var INPUT = { capture: true, passive: true };
+
   ensureHook();
   win.addEventListener('pagehide', onPageHide);
+  win.document.addEventListener('pointerdown', onInput, INPUT);
+  win.document.addEventListener('keydown', onInput, INPUT);
   // A re-run is the next page, so any submit from here is a new one. With
   // writeOnRerun the page before it is written first, under its own page
   // number, unless that page's submit callback fired after all and its
@@ -443,6 +453,8 @@ export function installQualtricsAdapter(opts) {
     teardown: function () {
       active = false;   // a hook Qualtrics already holds cannot be removed
       win.removeEventListener('pagehide', onPageHide);
+      win.document.removeEventListener('pointerdown', onInput, INPUT);
+      win.document.removeEventListener('keydown', onInput, INPUT);
       delete ctx.handlers.rerun;
       ctx.handlers.data = vanillaData;
     }

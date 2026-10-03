@@ -620,6 +620,23 @@ describe('Qualtrics host: one write per submit task', () => {
     assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(p));
   });
 
+  // In a hidden tab the latch's timer may still be pending at the next user
+  // input; input always starts a new task, so it clears the latch.
+  for (const type of ['pointerdown', 'keydown']) {
+    it('a ' + type + ' clears the latch: CyborgHunter.data() then the participant\'s submit, with no timer between, cuts twice', () => {
+      const fake = fakeSurveyEngine();
+      const ctx = start(fake);
+      win.CyborgHunter.data();
+      paste('after data()');
+      win.document.dispatchEvent(new win.Event(type, { bubbles: true }));
+      const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
+      assert.deepStrictEqual(segments(p), [0, 1]);
+      assert.strictEqual(p.trials[1].integrity.pasteEvents.length, 1);
+      ctx.qualtrics.teardown();                              // the listener goes with the writer
+      assert.doesNotThrow(() => win.document.dispatchEvent(new win.Event(type, { bubbles: true })));
+    });
+  }
+
   it('a timer that cannot be set leaves no latch behind', () => {
     const fake = fakeSurveyEngine();
     const ctx = start(fake);
