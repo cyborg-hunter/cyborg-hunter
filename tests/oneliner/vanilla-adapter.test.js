@@ -329,6 +329,22 @@ describe('vanilla host: forms and page loads', () => {
     assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
   });
 
+  // In a browser a control named "method" shadows form.method (the form's
+  // named properties override its own); happy-dom does not do that, so the
+  // test puts the control in its place.
+  for (const name of ['method', 'getAttribute']) {
+    it(`a POST form with a control named "${name}" still gets the hidden input`, () => {
+      start();
+      const f = form();
+      const field = el(`<input name="${name}" value="by-hand">`);
+      f.appendChild(field);
+      Object.defineProperty(f, name, { value: field, configurable: true });
+      submit(f);
+      assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 1);
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
   it('page loads: the next page restores the index, the earlier trials and the page count', () => {
     const ctx1 = start();
     paste('page one');

@@ -297,8 +297,15 @@ export function installVanillaAdapter(opts) {
     }
   }
 
+  // The form's method attribute, read through Element.prototype: a control
+  // named "method" in the form shadows form.method, and one named
+  // "getAttribute" shadows form.getAttribute. A value other than post or
+  // dialog is a GET.
+  var elementGetAttribute = win.Element && win.Element.prototype.getAttribute;
   function effectiveMethod(form, submitter) {
-    return String((submitter && submitter.formMethod) || form.method || 'get').toLowerCase();
+    var method = null;
+    try { method = elementGetAttribute.call(form, 'method'); } catch (_) { /* not an element */ }
+    return String((submitter && submitter.formMethod) || method || 'get').toLowerCase();
   }
 
   // Whether the submit replaces this page: its target (the submitter's
