@@ -53,6 +53,8 @@
 //                 then
 //   lastWrite()   null | { chars, cap, level, error? }, the last write the
 //                 setter took; chars in UTF-8 bytes, like the cap
+//   missed()      how many page submits ran no callback of this writer (see
+//                 "A submit before the header ran again" below)
 //   teardown()
 // }
 // onWrite, called after every write (boot passes the debug badge's
@@ -85,6 +87,25 @@
 // booting again in the tab continues it; the legacy layout, where every page
 // is a new boot, also saves it at every submit callback.
 //
+// A submit before the header ran again. Qualtrics shows the next page at
+// once, but the header's script may be fetched again and land later, and a
+// participant can submit the page in between. A callback Qualtrics kept from
+// an earlier page then writes it as usual (the latch above, nothing keyed to
+// the page number, which lags until the late re-runs land). When Qualtrics
+// drops the callbacks after each submit, nothing in the page runs at that
+// submit: its post carries the previous value. Every header re-run is a page
+// change, so a re-run that finds fewer submit tasks than re-runs knows a page
+// went without a callback: it cuts that page's span as a row of its own,
+// writes it (the next submit posts it), and notes the gap in the payload
+// (cyborgHunterError, which the CLI reports) and on the data-debug badge.
+// Counted in totals, not page numbers, so late re-runs after a kept callback
+// wrote never count as a miss. A stopped (force response) or refused submit
+// runs the callbacks without a page change, which can hide a later miss but
+// never invents one; only a header re-run without a page change, which no
+// Qualtrics page is known to do, would add a near-empty row. The final page
+// has no re-run after it: there the documented final-page question script
+// (CyborgHunter.data() from addOnPageSubmit) is the only writer.
+//
 // Nothing here throws into the page: the submit callback, the re-run hook
 // and data() each end in a catch-all, and the error text, the console calls
 // and the note they make cannot throw either.
@@ -116,6 +137,8 @@ export var REGISTER_ONCE = false;
 export var WRITE_ON_RERUN = false;
 var ID_MAX = 128;    // the error marker's participant id, in UTF-16 code units
 var NOTE_MAX = 200;  // an error's text: it becomes a note every later payload carries
+var MISSED_NOTE = 'a Qualtrics page was submitted before Cyborg Hunter\'s page-submit hook was in place ' +
+  '(the header script ran late); its activity was written when the header ran again';
 
 export function detectQualtrics(win) {
   try {
@@ -176,6 +199,9 @@ export function installQualtricsAdapter(opts) {
   var probedPage = null;       // the page the field was last read back on
   var fieldState = null;       // declared(): true | false | null
   var toldUndeclared = false;  // the undeclared-field error was logged
+  var reruns = 0;              // header re-runs: page changes
+  var submitTasks = 0;         // submit tasks that ran a callback of this writer (catch-ups included)
+  var missed = 0;              // page changes with no such submit task
   var active = true;
   var vanillaData = ctx.handlers.data;
 
@@ -311,6 +337,7 @@ export function installQualtricsAdapter(opts) {
       if (!active) return;
       if (!submitting) {
         submitting = true;
+        submitTasks += 1;
         // Without a timer there is no latch: an extra write beats none.
         try { win.setTimeout(function () { submitting = false; }, 0); } catch (_) { submitting = false; }
         var r = write('submit');
@@ -355,7 +382,15 @@ export function installQualtricsAdapter(opts) {
   // submit whose setter failed gets the re-run's write as a retry.
   ctx.handlers.rerun = function () {
     try {
-      if (writeOnRerun && submitWrotePage !== page) write('rerun');
+      reruns += 1;
+      if (writeOnRerun) {
+        if (submitWrotePage !== page) write('rerun');
+      } else if (submitTasks < reruns) {
+        missed += reruns - submitTasks;
+        submitTasks = reruns;
+        try { ctx.vanilla.noteError(MISSED_NOTE); } catch (_) { /* the write below still goes */ }
+        write('rerun');
+      }
       page += 1;
       submitting = false;
       ensureHook();
@@ -370,6 +405,7 @@ export function installQualtricsAdapter(opts) {
     page: pageNumber,
     declared: function () { return fieldState; },
     lastWrite: function () { return last; },
+    missed: function () { return missed; },
     teardown: function () {
       active = false;   // a hook Qualtrics already holds cannot be removed
       win.removeEventListener('pagehide', onPageHide);

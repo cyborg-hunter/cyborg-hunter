@@ -38,7 +38,9 @@
 //   and "field cyborg_hunter <...>"). P and the field state come from the
 //   writer's handle ctx.qualtrics (page(), declared() true|false|null); with
 //   no handle yet they read page 1 and unknown. The badge also ends with
-//   " · header re-run ×<ctx.rerunCount>" when the header ran again and
+//   " · header re-run ×<ctx.rerunCount>" when the header ran again,
+//   " · submits missed ×<n>" when a page was submitted before the writer's
+//   hook was in place (ctx.qualtrics.missed()), and
 //   " · last write <chars>/<cap> chars" once ctx.qualtrics.lastWrite() is
 //   set. The replay reminder reads "replay is on: it is never written to
 //   Qualtrics; save CyborgHunter.replay() to your own server". On the new
@@ -128,6 +130,8 @@ export function createDebug(opts) {
     };
     if (live) {
       if (ctx.rerunCount > 0) out.live.push('header re-run ×' + ctx.rerunCount);
+      var missed = q && typeof q.missed === 'function' ? q.missed() : 0;
+      if (missed > 0) out.live.push('submits missed ×' + missed);
       var w = q ? q.lastWrite() : null;
       if (w) out.live.push('last write ' + w.chars + '/' + w.cap + ' chars');
     }

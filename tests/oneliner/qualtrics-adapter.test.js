@@ -1121,3 +1121,91 @@ describe('Qualtrics host: the debug badge', () => {
     assert.ok(fake.store[STORED_FIELD]);
   });
 });
+
+// A page submitted before the header ran again on it: Qualtrics renders the
+// next page at once, and the header's script (fetched again) may land late.
+// The fake's submit() then runs whatever callbacks are live: a kept one
+// (persistCallbacks), or none when Qualtrics drops them after each submit.
+describe('Qualtrics host: a submit before the header ran again', () => {
+  const note = (p) => String(p.cyborgHunterError || '');
+
+  it('kept callbacks: the old hook writes the page, and the late re-runs add nothing', async () => {
+    const fake = fakeSurveyEngine({ persistCallbacks: true });
+    const ctx = start(fake, { dataset: { debug: '' } });
+    paste('page one');
+    fake.submit('next');
+    await tick();
+    paste('page two');                                       // page 2, its header still loading
+    const p2 = JSON.parse(fake.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p2), [0, 1]);
+    assert.deepStrictEqual(p2.trials.map((t) => t.integrity.pasteEvents.length), [1, 1]);
+    await tick();
+    fake.rerunHeader(win, null);                             // page 2's header, late
+    fake.rerunHeader(win, null);                             // page 3's
+    paste('page three');
+    const p3 = JSON.parse(fake.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p3), [0, 1, 2]);         // no extra row
+    assert.deepStrictEqual(p3.trials.map((t) => t.integrity.pasteEvents.length), [1, 1, 1]);
+    assert.strictEqual(ctx.qualtrics.missed(), 0);
+    assert.strictEqual(note(p3), '');
+    assert.ok(!win.document.getElementById('ch-debug-badge').textContent.includes('missed'));
+  });
+
+  it('dropped callbacks: the missed page is written at the next re-run, as a row of its own, with a note', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake, { dataset: { debug: '' } });
+    paste('page one');
+    const p1 = fake.submit('next')[STORED_FIELD];
+    await tick();
+    paste('page two');                                       // page 2, its header still loading: no hook
+    assert.strictEqual(fake.submit('next')[STORED_FIELD], p1, 'Qualtrics posts the stale value');
+    await tick();
+    fake.rerunHeader(win, null);                             // page 2's header, after page 2 went
+    assert.strictEqual(fake.store[STORED_FIELD], p1, 'nothing is known to be missed yet');
+    fake.rerunHeader(win, null);                             // page 3's: one page change without a submit
+    const caught = JSON.parse(fake.store[STORED_FIELD]);
+    assert.deepStrictEqual(segments(caught), [0, 1]);
+    assert.deepStrictEqual(caught.trials.map((t) => t.integrity.pasteEvents.length), [1, 1]);
+    assert.match(note(caught), /submitted before Cyborg Hunter's page-submit hook was in place/);
+    assert.strictEqual(ctx.qualtrics.missed(), 1);
+    assert.match(win.document.getElementById('ch-debug-badge').textContent, / · submits missed ×1 · last write /);
+    paste('page three');
+    const p3 = JSON.parse(fake.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p3), [0, 1, 2]);         // one row per page
+    assert.deepStrictEqual(p3.trials.map((t) => t.integrity.pasteEvents.length), [1, 1, 1]);
+    assert.strictEqual(p3.trials[2].integritySegment.counters.pasteCount, 3);
+    await tick();
+    fake.rerunHeader(win, null);
+    assert.strictEqual(ctx.qualtrics.missed(), 1, 'a page whose submit wrote is not caught up again');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('on time, a stopped submit and a retry: no catch-up, no note', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    fake.submit('next', { blocked: true });
+    await tick();
+    fake.submit('next');
+    await tick();
+    fake.rerunHeader(win, null);
+    fake.submit('next');
+    await tick();
+    fake.rerunHeader(win, null);
+    const p = JSON.parse(fake.store[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1, 2]);          // the stopped submit's cut, page 1, page 2
+    assert.strictEqual(ctx.qualtrics.missed(), 0);
+    assert.strictEqual(note(p), '');
+  });
+
+  it('write on re-run keeps its own rule: every re-run writes the page before, without a missed note', () => {
+    const fake = fakeSurveyEngine({ headerHooks: false });
+    const ctx = start(fake);
+    reinstall(ctx, fake, { writeOnRerun: true });
+    fake.rerunHeader(win, null);
+    fake.rerunHeader(win, null);
+    const p = JSON.parse(fake.store[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1]);
+    assert.strictEqual(ctx.qualtrics.missed(), 0);
+    assert.strictEqual(note(p), '');
+  });
+});
