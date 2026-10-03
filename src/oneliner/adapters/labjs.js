@@ -187,23 +187,17 @@ export function installLabJsAdapter(opts) {
     try { (c.data || (c.data = {})).cyborgHunterError = message(e); } catch (_) { /* the error is logged */ }
   }
 
-  // The researcher's own participantId (in the component's data, a
-  // parameter, or the datastore's state) is never overwritten: ch.js's id
-  // always goes into cyborgHunterParticipantId, and into participantId only
-  // where the study sets none. lab.js's commit() copies every row into the
-  // datastore's state, so a state value equal to ch.js's id is the one an
-  // earlier row of ch.js's put there.
-  function researcherSetsId(c, ds) {
+  // The study's own participantId is never overwritten, in a row or in the
+  // datastore's state. lab.js's commit() merges every row into the state, and
+  // a researcher's end handler (which runs after this hook, before the
+  // commit) may set the id there, so ch.js writes participantId into no
+  // row's data: trial rows carry ch.js's id as cyborgHunterParticipantId.
+  // Row 0 alone gets participantId too (stamp), through the datastore's
+  // staging, which reaches the next committed row and never the state.
+  function studySetsId(c, ds) {
     if (c.data && given(c.data.participantId)) return true;
     if (given(paramsOf(c).participantId)) return true;
-    var st = ds && ds.state;
-    return !!(st && given(st.participantId) && st.participantId !== ctx.participantId);
-  }
-  function idFields(c, ds, into) {
-    into.cyborgHunterParticipantId = ctx.participantId;
-    if (!researcherSetsId(c, ds)) into.participantId = ctx.participantId;
-    into.cyborgHunterVersion = VERSION;
-    return into;
+    return !!(ds && ds.state && given(ds.state.participantId));
   }
 
   // data-replay: the standalone recorder follows the segmenter (set by
@@ -215,16 +209,21 @@ export function installLabJsAdapter(opts) {
     if (s.open) ctx.replay.startTrial(s.currentTrialId);
   }
 
-  // Once per page, from the first end() of any component: datastore.set()
-  // stages its fields into the next commit only, and every row (a skipped
-  // component's and a Dummy's included) is committed inside its own end(), so
-  // the first end() puts the participant id on row 0 (the CLI's CSV reader
-  // hoists the id from row 0).
+  // Once per page, from the first end() of any component: the staging holds
+  // fields for the next commit only, and every row (a skipped component's and
+  // a Dummy's included) is committed inside its own end(), so the first end()
+  // puts the participant id on row 0 (the CLI's CSV reader hoists the id from
+  // row 0). An id the study stages after this (an end handler) lands later
+  // in the staging and wins.
   function stamp(c) {
     var ds = datastoreOf(c);
-    if (state.stamped || !ds || typeof ds.set !== 'function') return;
+    if (state.stamped || !ds || !ds.staging || typeof ds.staging !== 'object') return;
     state.stamped = true;
-    try { ds.set(idFields(c, ds, {})); } catch (_) { /* the rows carry it too */ }
+    try {
+      var fields = { cyborgHunterParticipantId: ctx.participantId, cyborgHunterVersion: VERSION };
+      if (!studySetsId(c, ds)) fields.participantId = ctx.participantId;
+      Object.assign(ds.staging, fields);
+    } catch (_) { /* the trial rows carry cyborgHunterParticipantId */ }
   }
 
   // A trial that ends without its run() having passed through the hook was
@@ -291,7 +290,8 @@ export function installLabJsAdapter(opts) {
     } else {
       data.cyborgHunterError = (r && r.error) || internals.chError || 'no segment';
     }
-    idFields(c, datastoreOf(c), data);
+    data.cyborgHunterParticipantId = ctx.participantId;
+    data.cyborgHunterVersion = VERSION;
     followReplay();
     try {
       if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
