@@ -41,7 +41,10 @@
 //   " · header re-run ×<ctx.rerunCount>" when the header ran again and
 //   " · last write <chars>/<cap> chars" once ctx.qualtrics.lastWrite() is
 //   set. The replay reminder reads "replay is on: it is never written to
-//   Qualtrics; save CyborgHunter.replay() to your own server".
+//   Qualtrics; save CyborgHunter.replay() to your own server". On the new
+//   layout without a survey id (ctx.qualtricsSurveyId, boot.js) the summary
+//   ends with "no survey id in the address or data-qualtrics-survey-id: the
+//   saved session is shared by every survey in this tab".
 //
 // The badge never takes focus or clicks (pointer-events: none) and nothing
 // here throws into the host page. update() and refresh() re-attach it when
@@ -103,6 +106,9 @@ export function createDebug(opts) {
       'honeypot ' + (ctx.config.guards.honeypot ? 'on' : 'off'),
       'friction ' + frictionMode(ctx)];
     if (qx) out = out.concat(qx.live);
+    if (!live && qx && !ctx.qualtricsSurveyId && ctx.qualtricsLayout === 'new') {
+      out.push('no survey id in the address or data-qualtrics-survey-id: the saved session is shared by every survey in this tab');
+    }
     if (!live && replaySaveReminderApplies(ctx)) out.push(qx ? REPLAY_QUALTRICS_REMINDER : REPLAY_SAVE_REMINDER);
     return out.join(' · ');
   }

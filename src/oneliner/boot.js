@@ -15,7 +15,13 @@
 //   3. participant id (warns when it has to fall back to a random id). The
 //      id is kept for the tab in sessionStorage, so a later page without an
 //      id of its own reuses the first page's random id (source 'session')
-//      and continues its session; a URL, attribute or config id still wins;
+//      and continues its session; a URL, attribute or config id still wins.
+//      Under Qualtrics' New Survey Taking Experience the kept id and the
+//      saved session are per survey (ctx.qualtricsSurveyId, the SV_… id:
+//      adapters/qualtrics.js qualtricsSurveyId): every survey on a brand
+//      domain shares the tab's sessionStorage, and a second survey in the tab
+//      must not continue the first. The Qualtrics check (step 5) is read
+//      here already for that;
 //   4. a monitor (its session starts at step 6);
 //   5. host: 'jspsych' when initJsPsych is already defined, in a file built
 //      with it (HAS_JSPSYCH), else 'vanilla' (the host adapters install their
@@ -65,6 +71,7 @@
 // ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
 //         participantId, participantIdSource, monitor, differ, segmenter,
 //         host, scriptSrc, handlers, win, api, qualtricsLayout,
+//         qualtricsSurveyId ('SV_…' on the new layout when found, else null),
 //         rerunCount, vanilla?, qualtrics? (Qualtrics writer),
 //         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
 //         debug? (data-debug) }
@@ -109,7 +116,7 @@ import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, installInertWrapper, watchHostPlacement } from './adapters/jspsych.js';
 import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
-import { detectQualtrics, installQualtricsAdapter } from './adapters/qualtrics.js';
+import { detectQualtrics, qualtricsSurveyId, installQualtricsAdapter } from './adapters/qualtrics.js';
 import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
 
@@ -152,6 +159,14 @@ export function boot(opts) {
     var jsPsychPage = typeof win.initJsPsych === 'function';
     var wrongBuild = jsPsychPage && !HAS_JSPSYCH ? { host: 'jsPsych', file: 'ch.js' } : null;
     if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
+    // A Qualtrics survey (no jsPsych, so the vanilla host; the layout goes on
+    // ctx at step 5). Under the new layout the kept id and the saved session
+    // are per survey. Not under the legacy layout, where every page is a new
+    // load: an address without the survey id on a later page would lose the
+    // earlier pages.
+    var qualtrics = typeof win.initJsPsych === 'function' ? null : detectQualtrics(win);
+    var surveyId = qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
+    var pidKey = surveyId ? PID_KEY + ':' + surveyId : PID_KEY;
 
     var pid = resolveParticipantId({
       search: (win.location && win.location.search) || '',
@@ -161,11 +176,11 @@ export function boot(opts) {
       random: function () { return randomParticipantId(win.crypto || globalThis.crypto); }
     });
     if (pid.source === 'random') {
-      var kept = sessionGet(win, PID_KEY);
+      var kept = sessionGet(win, pidKey);
       if (kept) pid = { id: kept, source: 'session' };
       else console.warn(MESSAGES.randomId(pid.id, CH_FILE));
     }
-    sessionSet(win, PID_KEY, pid.id);
+    sessionSet(win, pidKey, pid.id);
 
     monitor = monitorFactory(Object.assign({}, config.monitor, { participantId: pid.id, preset: config.preset }));
     var differ = createSegmentDiffer(monitor);
@@ -187,7 +202,8 @@ export function boot(opts) {
       handlers: {},
       win: win,
       api: null,
-      qualtricsLayout: null
+      qualtricsLayout: null,
+      qualtricsSurveyId: surveyId
     };
     ctx.api = buildPublicApi(ctx);
     // data-debug only: the badge, the console summary and the perf counters.
@@ -195,18 +211,18 @@ export function boot(opts) {
       ctx.debug = createDebug({ doc: win.document, ctx: ctx });
       win.__cyborgHunterDebug = { stats: ctx.debug.stats };
     }
-    // A Qualtrics survey (no jsPsych, so vanilla): read before installReplay,
-    // whose boot reminder names Qualtrics when this is set.
+    // The Qualtrics layout (read above): set before installReplay, whose boot
+    // reminder names Qualtrics when this is set.
     if (host === 'vanilla') {
-      var qualtrics = detectQualtrics(win);
       ctx.qualtricsLayout = qualtrics ? qualtrics.layout : null;
       if (ctx.qualtricsLayout === 'legacy') console.warn(MESSAGES.qualtricsLegacyLayout());
     }
     var replay = installReplay({ win: win, ctx: ctx });
     if (host === 'vanilla') {
       // Under Qualtrics the writer owns the page boundary: the vanilla
-      // adapter cuts on marks only. opts.qualtricsMaxChars is for tests.
-      ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout });
+      // adapter cuts on marks only, and keeps the session per survey on the
+      // new layout. opts.qualtricsMaxChars is for tests.
+      ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: surveyId });
       if (ctx.qualtricsLayout) ctx.qualtrics = installQualtricsAdapter({ win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars });
     }
 

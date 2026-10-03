@@ -18,12 +18,14 @@ function jsCtx(extra) {
   }, extra);
 }
 
-// A Qualtrics page: the vanilla host with ctx.qualtricsLayout set at boot and
-// the adapter handle (page, declared field, last write) on ctx.qualtrics.
+// A Qualtrics page: the vanilla host with ctx.qualtricsLayout (and, on the
+// new layout, the survey id) set at boot and the adapter handle (page,
+// declared field, last write) on ctx.qualtrics.
 function qxCtx(extra) {
   return Object.assign({
     host: 'vanilla',
     qualtricsLayout: 'new',
+    qualtricsSurveyId: 'SV_test',
     rerunCount: 0,
     qualtrics: { page: () => 1, declared: () => true, lastWrite: () => null },
     participantIdSource: 'attribute',
@@ -213,6 +215,20 @@ describe('createDebug under Qualtrics', () => {
   it('an undeclared field is shouted in the summary', () => {
     var c = qxCtx({ win: win, qualtrics: { page: () => 1, declared: () => false, lastWrite: () => null } });
     assert.match(createDebug({ doc: win.document, ctx: c, log: log }).summary(), / · field __js_cyborg_hunter NOT DECLARED · /);
+  });
+
+  // The saved session is kept per survey only when boot found the survey id.
+  it('new layout without a survey id: the summary, not the badge, says the saved session is shared', () => {
+    var d = createDebug({ doc: win.document, ctx: qxCtx({ win: win, qualtricsSurveyId: null }), log: log });
+    assert.strictEqual(d.summary(),
+      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · ID from data-participant-id · honeypot on · friction off · ' +
+      'no survey id in the address or data-qualtrics-survey-id: the saved session is shared by every survey in this tab');
+    assert.ok(!d.badgeText().includes('survey id'), d.badgeText());
+  });
+
+  it('the legacy layout, which keeps no session per survey, has no survey-id note', () => {
+    var c = qxCtx({ win: win, qualtricsLayout: 'legacy', qualtricsSurveyId: null });
+    assert.ok(!createDebug({ doc: win.document, ctx: c, log: log }).summary().includes('survey id'));
   });
 
   it('legacy layout names its field', () => {

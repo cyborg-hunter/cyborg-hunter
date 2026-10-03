@@ -18,6 +18,9 @@
 //                                            even when data-replay sets the tier)
 //   replaySrc,                               data-replay-src, or null
 //   debug,                                   data-debug present (and not "false")
+//   qualtricsSurveyIdAttr,                   data-qualtrics-survey-id, or null
+//                                            (tag only; checked where it is
+//                                            used, adapters/qualtrics.js)
 //   monitor                                  every other CyborgHunterConfig key,
 //                                            passed to init() as is (init's own
 //                                            validateConfig warns on typos);
@@ -29,7 +32,7 @@
 
 import { MESSAGES } from './errors.js';
 
-export const DATA_KEYS = ['preset', 'participantId', 'guards', 'replay', 'replaySrc', 'debug'];
+export const DATA_KEYS = ['preset', 'participantId', 'guards', 'replay', 'replaySrc', 'debug', 'qualtricsSurveyId'];
 
 var ONE_LINER_KEYS = ['preset', 'guards', 'replay', 'replaySrc', 'debug'];
 var REMOVED_KEYS = ['autoMonitor', 'excludeTrialTypes'];
@@ -117,6 +120,7 @@ export function readConfig(opts) {
     replay: replay,
     replaySrc: pick('replaySrc') || null,
     debug: debug === undefined ? false : flag(debug),
+    qualtricsSurveyIdAttr: has(dataset, 'qualtricsSurveyId') ? dataset.qualtricsSurveyId : null,
     monitor: monitor
   };
 }

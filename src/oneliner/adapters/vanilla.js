@@ -69,7 +69,7 @@
 // prototype), which exist while ch.js runs in <head>; nothing here needs <body> before a click or a submit. The guards
 // (honeypot bait, friction) wait for DOMContentLoaded in guards.js.
 //
-// installVanillaAdapter({ win, ctx, clock?, warnChars?, pageBoundaries? }) → {
+// installVanillaAdapter({ win, ctx, clock?, warnChars?, pageBoundaries?, keyScope? }) → {
 //   blob(), cut(source, nextTrialId?), persist(), restore(), teardown(),
 //   noteError(text)   adds a cyborgHunterError note to this and later blobs
 // }
@@ -85,6 +85,10 @@
 //               (adapters/qualtrics.js). Marks, data() and the friction start
 //               work as before; the recorder then runs until
 //               CyborgHunter.replay() is called.
+//   keyScope:   keeps the session under
+//               cyborg-hunter:oneliner:session:<keyScope>:<participantId>, so
+//               a host can keep one session per scope (a Qualtrics survey id:
+//               boot.js); without it the key is as above.
 // install restores the saved state first, so the boot span opened after it is
 // named after the continued index. Nothing here throws into the page.
 
@@ -114,7 +118,7 @@ export function installVanillaAdapter(opts) {
   var clock = opts.clock || function () { return performance.timeOrigin; };
   var warnChars = opts.warnChars || WARN_CHARS;
   var pageBoundaries = opts.pageBoundaries !== false;
-  var key = KEY_PREFIX + ctx.participantId;
+  var key = KEY_PREFIX + (opts.keyScope ? opts.keyScope + ':' : '') + ctx.participantId;
   var doc = win.document;
 
   var trials = [];

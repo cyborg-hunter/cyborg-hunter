@@ -516,6 +516,31 @@ describe('vanilla host: forms and page loads', () => {
     assert.deepStrictEqual(warns.filter((w) => w.includes('sessionStorage')), [MESSAGES.storageNearlyFull()]);
     small.teardown();
   });
+
+  // A host adapter can keep one session per scope (Qualtrics: per survey).
+  it('keyScope saves and restores under a scoped key; without it the key is unchanged', async () => {
+    const { installVanillaAdapter } = await import('../../src/oneliner/adapters/vanilla.js');
+    const ctx = start();
+    ctx.vanilla.teardown();
+    const plain = installVanillaAdapter({ win, ctx });
+    plain.persist();
+    plain.teardown();
+    assert.ok(win.sessionStorage.getItem(KEY), 'cyborg-hunter:oneliner:session:P1');
+    win.sessionStorage.removeItem(KEY);
+
+    const scoped = installVanillaAdapter({ win, ctx, keyScope: 'SV_abc' });
+    scoped.persist();
+    scoped.teardown();
+    assert.strictEqual(win.sessionStorage.getItem(KEY), null);
+    assert.ok(win.sessionStorage.getItem('cyborg-hunter:oneliner:session:SV_abc:P1'));
+
+    const same = installVanillaAdapter({ win, ctx, keyScope: 'SV_abc' });
+    assert.strictEqual(same.blob().cyborgHunterOneLiner.pageCount, 2, 'the same scope restores');
+    same.teardown();
+    const other = installVanillaAdapter({ win, ctx, keyScope: 'SV_other' });
+    assert.strictEqual(other.blob().cyborgHunterOneLiner.pageCount, 1, 'another scope starts fresh');
+    other.teardown();
+  });
 });
 
 describe('vanilla host: page-load edge cases', () => {

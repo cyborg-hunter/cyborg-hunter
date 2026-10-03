@@ -11,7 +11,7 @@ import { Window } from 'happy-dom';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 import { fakeSurveyEngine } from './support/fake-qualtrics.js';
 import { buildQualtricsPayload } from '../../src/oneliner/qualtrics-payload.js';
-import { MAX_CHARS, STORED_FIELD, LEGACY_FIELD, installQualtricsAdapter } from '../../src/oneliner/adapters/qualtrics.js';
+import { MAX_CHARS, STORED_FIELD, LEGACY_FIELD, installQualtricsAdapter, qualtricsSurveyId } from '../../src/oneliner/adapters/qualtrics.js';
 
 class StubResizeObserver {
   constructor(cb) { this.cb = cb; }
@@ -19,7 +19,11 @@ class StubResizeObserver {
   disconnect() {}
 }
 
+// The tab's saved session: per survey under the New Survey Taking Experience
+// (the test survey is SV_test), unscoped under the legacy layout.
 const KEY = 'cyborg-hunter:oneliner:session:P1';
+const keyFor = (survey, pid = 'P1') => 'cyborg-hunter:oneliner:session:' + survey + ':' + pid;
+const SCOPED = keyFor('SV_test');
 let win, boot, errors, warns, orig, contexts, nativeFormSubmit, clock;
 
 // Before the dynamic import: core signals/focus.js listens on the global
@@ -85,12 +89,13 @@ function reinstall(ctx, fake, opts) {
   return ctx.qualtrics;
 }
 
-// A new page load in the same tab (a reload, or the next legacy page): the
-// page's ch.js is gone and a new one boots. happy-dom's sessionStorage is
-// per Window, so the tab's storage is copied over; one node process has one
-// performance.timeOrigin, so the new page gets its own.
+// A new page load in the same tab (a reload, the next legacy page, or
+// another survey at `url`): the page's ch.js is gone and a new one boots.
+// happy-dom's sessionStorage is per Window, so the tab's storage is copied
+// over; one node process has one performance.timeOrigin, so the new page
+// gets its own.
 const realOrigin = performance.timeOrigin;
-function nextPage(ctx, ms) {
+function nextPage(ctx, ms, url = 'https://survey.example/jfe/form/SV_test') {
   ctx.qualtrics.teardown();
   ctx.vanilla.teardown();
   ctx.monitor.destroy();
@@ -99,11 +104,18 @@ function nextPage(ctx, ms) {
     const k = win.sessionStorage.key(i);
     saved[k] = win.sessionStorage.getItem(k);
   }
-  const page = new Window({ url: 'https://survey.example/jfe/form/SV_test' });
+  const page = new Window({ url });
   for (const [k, v] of Object.entries(saved)) page.sessionStorage.setItem(k, v);
   win.close();
   useWindow(page);
   Object.defineProperty(performance, 'timeOrigin', { value: realOrigin + ms, configurable: true });
+}
+
+// The test starts at another address, before anything boots.
+function openAt(url) {
+  const page = new Window({ url });
+  win.close();
+  useWindow(page);
 }
 
 // Two user actions never share a task: the writer's latch clears on a
@@ -624,7 +636,7 @@ describe('Qualtrics host: a reload', () => {
     fake1.rerunHeader(win, null);                            // page three, then the reload
     win.dispatchEvent(new win.Event('pagehide'));
     assert.deepStrictEqual(ctx1.segmenter.state(), { open: true, segmentIndex: 2, currentTrialId: 'span-2' }, 'no cut');
-    assert.deepStrictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials.map((t) => t.integritySegment.segmentIndex), [0, 1]);
+    assert.deepStrictEqual(JSON.parse(win.sessionStorage.getItem(SCOPED)).trials.map((t) => t.integritySegment.segmentIndex), [0, 1]);
 
     nextPage(ctx1, 30000);
     const fake2 = fakeSurveyEngine();
@@ -642,7 +654,107 @@ describe('Qualtrics host: a reload', () => {
     win.CyborgHunter.mark('q2');
     ctx.qualtrics.teardown();
     win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(win.sessionStorage.getItem(SCOPED), null);
     assert.strictEqual(win.sessionStorage.getItem(KEY), null);
+  });
+});
+
+// sessionStorage is per origin and tab, and every survey on a Qualtrics brand
+// domain shares the origin: under the New Survey Taking Experience the saved
+// session (and a kept random id) are per survey, so a second survey in the
+// tab, under the same participant id, does not continue the first.
+describe('Qualtrics host: one saved session per survey', () => {
+  it('the survey id comes from the address, a preview address, or the tag', () => {
+    const at = (path, attr) => {
+      const w = new Window({ url: 'https://brand.qualtrics.com' + path });
+      try { return qualtricsSurveyId(w, attr); } finally { w.close(); }
+    };
+    assert.strictEqual(at('/jfe/form/SV_1AbC2dEf3GhI4jK'), 'SV_1AbC2dEf3GhI4jK');
+    assert.strictEqual(at('/jfe/form/SV_1AbC2dEf3GhI4jK?Q_DL=xyz_SV_1AbC2dEf3GhI4jK_MLRP_abc&Q_CHL=gl'), 'SV_1AbC2dEf3GhI4jK');
+    assert.strictEqual(at('/jfe/preview/previewId/0a1b2c3d-4e5f-6789/SV_1AbC2dEf3GhI4jK?Q_CHL=preview&Q_SurveyVersionID=current'), 'SV_1AbC2dEf3GhI4jK');
+    assert.strictEqual(at('/SE/?SID=SV_1AbC2dEf3GhI4jK'), 'SV_1AbC2dEf3GhI4jK');
+    assert.strictEqual(at('/jfe/form/my-study'), null);
+    assert.strictEqual(at('/jfe/form/SV_1AbC2dEf3GhI4jK', 'SV_FromTag9'), 'SV_FromTag9');
+    assert.strictEqual(at('/jfe/form/my-study', ' SV_FromTag9 '), 'SV_FromTag9');
+    // Piped text Qualtrics did not resolve, or anything else, is not an id.
+    assert.strictEqual(at('/jfe/form/SV_1AbC2dEf3GhI4jK', '${e://Field/SurveyID}'), 'SV_1AbC2dEf3GhI4jK');
+    assert.strictEqual(at('/jfe/form/my-study', 'study-2'), null);
+    assert.strictEqual(qualtricsSurveyId({ get location() { throw new Error('locked'); } }, null), null);
+  });
+
+  it('survey B in the same tab, under the same participant id, starts empty', async () => {
+    const fakeA = fakeSurveyEngine();
+    const ctxA = start(fakeA);
+    assert.strictEqual(ctxA.qualtricsSurveyId, 'SV_test');
+    paste('survey A');
+    fakeA.submit('next');
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.ok(win.sessionStorage.getItem(SCOPED), 'survey A is saved under its own key');
+
+    nextPage(ctxA, 30000, 'https://survey.example/jfe/form/SV_other');
+    const fakeB = fakeSurveyEngine();
+    const ctxB = start(fakeB);
+    assert.strictEqual(ctxB.vanilla.blob().trials.length, 0);
+    const p = JSON.parse(fakeB.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0]);
+    assert.strictEqual(p.trials[0].integrity.pasteEvents.length, 0, 'nothing of survey A');
+    assert.strictEqual(p.cyborgHunterOneLiner.pageCount, 1);
+    assert.ok(win.sessionStorage.getItem(SCOPED), 'survey A\'s record is left as it was');
+  });
+
+  it('without a configured id: a reload of survey A keeps A\'s random id; survey B gets its own and starts empty', async () => {
+    const anon = { dataset: { participantId: undefined } };
+    const fakeA = fakeSurveyEngine();
+    const ctxA = start(fakeA, anon);
+    const idA = ctxA.participantId;
+    assert.strictEqual(ctxA.participantIdSource, 'random');
+    fakeA.submit('next');
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+
+    nextPage(ctxA, 30000);
+    const ctxA2 = start(fakeSurveyEngine(), anon);
+    assert.strictEqual(ctxA2.participantId, idA);
+    assert.strictEqual(ctxA2.participantIdSource, 'session');
+    assert.strictEqual(ctxA2.vanilla.blob().trials.length, 1, 'the reload continues survey A');
+    win.dispatchEvent(new win.Event('pagehide'));
+
+    nextPage(ctxA2, 60000, 'https://survey.example/jfe/form/SV_other');
+    const fakeB = fakeSurveyEngine();
+    const ctxB = start(fakeB, anon);
+    assert.notStrictEqual(ctxB.participantId, idA);
+    assert.strictEqual(ctxB.participantIdSource, 'random');
+    assert.strictEqual(ctxB.vanilla.blob().trials.length, 0);
+    assert.deepStrictEqual(segments(JSON.parse(fakeB.submit('next')[STORED_FIELD])), [0]);
+  });
+
+  it('data-qualtrics-survey-id scopes the session in place of the address', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake, { dataset: { qualtricsSurveyId: 'SV_FromTag9' } });
+    assert.strictEqual(ctx.qualtricsSurveyId, 'SV_FromTag9');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.ok(win.sessionStorage.getItem(keyFor('SV_FromTag9')));
+    assert.strictEqual(win.sessionStorage.getItem(SCOPED), null);
+  });
+
+  it('no survey id: the key is unscoped, as before, and the debug summary says so', () => {
+    openAt('https://brand.qualtrics.com/jfe/form/my-study');
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake, { dataset: { debug: '' } });
+    assert.strictEqual(ctx.qualtricsSurveyId, null);
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.ok(win.sessionStorage.getItem(KEY));
+    assert.ok(ctx.debug.summary().includes('no survey id in the address or data-qualtrics-survey-id'), ctx.debug.summary());
+  });
+
+  it('the legacy layout keeps the unscoped key', () => {
+    const fake = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    const ctx = start(fake);
+    assert.strictEqual(ctx.qualtricsSurveyId, null);
+    fake.submit('next');
+    assert.ok(win.sessionStorage.getItem(KEY));
+    assert.strictEqual(win.sessionStorage.getItem(SCOPED), null);
   });
 });
 
