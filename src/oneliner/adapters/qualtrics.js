@@ -22,7 +22,8 @@
 //                 whether the setter took it. null once torn down
 //   page()        1 at install, +1 per header re-run (Qualtrics re-renders
 //                 the header on every page of the New Survey Taking
-//                 Experience; under the legacy layout each page is a new boot)
+//                 Experience); under the legacy layout, where each page is
+//                 a new boot, the session's page count
 //   declared()    whether the field reads back: null for now (no probe yet)
 //   lastWrite()   null | { chars, cap, level, error? }, the last write the
 //                 setter took; chars in UTF-8 bytes, like the cap
@@ -130,9 +131,17 @@ export function installQualtricsAdapter(opts) {
   var active = true;
   var vanillaData = ctx.handlers.data;
 
+  // The page for people (the debug summary, the failure note). Every legacy
+  // page is a new boot, so the header-run count is 1 on each; there the
+  // vanilla session's page count is the page.
+  function pageNumber() {
+    if (!legacy) return page;
+    try { return ctx.vanilla.blob().cyborgHunterOneLiner.pageCount; } catch (_) { return page; }
+  }
+
   function failed(cause) {
     log('error', MESSAGES.qualtricsWriteFailed(cause));
-    try { ctx.vanilla.noteError('Qualtrics write failed on page ' + page + ': ' + cause); } catch (_) { /* logged above */ }
+    try { ctx.vanilla.noteError('Qualtrics write failed on page ' + pageNumber() + ': ' + cause); } catch (_) { /* logged above */ }
   }
 
   // The builder's result, checked. Each field is read once: a getter could
@@ -274,7 +283,7 @@ export function installQualtricsAdapter(opts) {
 
   return {
     write: write,
-    page: function () { return page; },
+    page: pageNumber,
     declared: function () { return null; },
     lastWrite: function () { return last; },
     teardown: function () {

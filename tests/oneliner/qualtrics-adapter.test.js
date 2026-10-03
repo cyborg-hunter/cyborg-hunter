@@ -64,10 +64,10 @@ afterEach(() => {
   delete global.ResizeObserver;
 });
 
-function start(fake, { maxChars } = {}) {
+function start(fake, { maxChars, dataset } = {}) {
   win.Qualtrics = { SurveyEngine: fake.SE };
   const ctx = boot({
-    script: { dataset: { participantId: 'P1', guards: 'none' }, src: 'https://cdn/x/ch.js' },
+    script: { dataset: Object.assign({ participantId: 'P1', guards: 'none' }, dataset), src: 'https://cdn/x/ch.js' },
     win,
     qualtricsMaxChars: maxChars
   });
@@ -682,6 +682,23 @@ describe('Qualtrics host: the legacy layout', () => {
     assert.deepStrictEqual(segments(p), [0, 1]);
     assert.strictEqual(p.trials[0].integrity.pasteEvents.length, 1);
     assert.strictEqual(p.cyborgHunterOneLiner.pageCount, 2);
+  });
+
+  // Every legacy page is a new boot, so the header-run count is 1 on each.
+  it('page(), the debug summary and the failure note count the page loads', () => {
+    const fake1 = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    const ctx1 = start(fake1, { dataset: { debug: '' } });
+    assert.strictEqual(ctx1.qualtrics.page(), 1);
+    fake1.submit('next');
+    win.dispatchEvent(new win.Event('pagehide'));
+    nextPage(ctx1, 30000);
+    const fake2 = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    fake2.SE.setEmbeddedData = () => { throw new Error('nope'); };
+    const ctx2 = start(fake2, { dataset: { debug: '' } });
+    assert.strictEqual(ctx2.qualtrics.page(), 2);
+    assert.ok(ctx2.debug.summary().includes(' · page 2 · '), ctx2.debug.summary());
+    fake2.submit('next');
+    assert.ok(ctx2.vanilla.blob().cyborgHunterError.includes('Qualtrics write failed on page 2: nope'), ctx2.vanilla.blob().cyborgHunterError);
   });
 
   it('pagehide saves a cut no submit saved', () => {
