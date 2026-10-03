@@ -257,16 +257,21 @@ export const MESSAGES = {
       'add an Embedded Data element named ' + field + ' at the top of Survey Flow',
       DOCS + 'qualtrics.md#declare-the-field');
   },
-  // console.error: the embedded-data setter threw. The survey carries on.
+  // console.error: the embedded-data setter threw, or the payload could not
+  // be built within the cap (msg starts with a code: build-failed, no-json,
+  // invalid-json, over-cap; an error marker then takes its place). The
+  // survey carries on.
   qualtricsWriteFailed: function (msg) {
     return formatError('Cyborg Hunter could not write to Qualtrics embedded data', msg, REPORT_FIX,
       DOCS + 'qualtrics.md#troubleshooting');
   },
   // console.warn, once per page: the payload was over the cap and a reduced
-  // level was written instead (the report notes what was dropped).
-  qualtricsPayloadReduced: function (level, chars, cap) {
+  // level was written instead (the report notes what was dropped). `full`,
+  // the size before reduction, only when the builder reports it.
+  qualtricsPayloadReduced: function (level, full, cap) {
     return formatError('The Qualtrics payload was reduced',
-      'the full summary was ' + chars + ' characters, above the cap of ' + cap + '; level ' + level + ' of the ladder was written',
+      'the full summary was ' + (typeof full === 'number' ? full + ' bytes, ' : '') + 'above the cap of ' + cap +
+        ' bytes; level ' + level + ' of the ladder was written',
       'nothing to fix for this participant; a report note says what was dropped. Shorter surveys, or fewer tab switches, keep the full summary',
       DOCS + 'qualtrics.md#payload-size');
   },

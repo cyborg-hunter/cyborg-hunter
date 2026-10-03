@@ -8,9 +8,12 @@
 //   store         { [storedField]: string }, declared fields only
 //   submitHooks   the live addOnPageSubmit callbacks
 //   otherHooks    addOnload / addOnReady / addOnUnload callbacks (never called)
-//   submit(type)  runs the hooks with type ('next' by default), returns a copy
-//                 of store (what the page's POST carried), then clears the
-//                 hooks unless persistCallbacks
+//   submit(type, { blocked })  runs the hooks with type ('next' by default),
+//                 returns a copy of store (what the page's POST carried), then
+//                 clears the hooks unless persistCallbacks. blocked: the
+//                 page's validation (force response) stops the submit after
+//                 the hooks ran, so nothing is posted (null) and the page
+//                 keeps its hooks
 //   rerunHeader(win, script)  the header running again on the next page, as
 //                 entry.js handles a same-file re-run
 //   totalChars()  the summed length of the stored values
@@ -48,8 +51,9 @@ export function fakeSurveyEngine({ declared = ['__js_cyborg_hunter'], persistCal
     store,
     submitHooks,
     otherHooks,
-    submit(type = 'next') {
+    submit(type = 'next', { blocked = false } = {}) {
       for (const fn of submitHooks.slice()) fn(type);
+      if (blocked) return null;
       const posted = { ...store };
       if (!persistCallbacks) submitHooks.length = 0;
       return posted;

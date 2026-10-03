@@ -272,7 +272,14 @@ describe('error catalogue', () => {
 
   it('the payload-reduced message carries the size, the cap and the level written', () => {
     assert.ok(MESSAGES.qualtricsPayloadReduced(2, 15000, 12000)
-      .includes(': the full summary was 15000 characters, above the cap of 12000; level 2 of the ladder was written. Fix:'));
+      .includes(': the full summary was 15000 bytes, above the cap of 12000 bytes; level 2 of the ladder was written. Fix:'));
+  });
+
+  // The writer does not build a second time to learn the full size: without
+  // one from the builder the message leaves it out.
+  it('the payload-reduced message without a full size names the cap and the level only', () => {
+    assert.ok(MESSAGES.qualtricsPayloadReduced(2, undefined, 12000)
+      .includes(': the full summary was above the cap of 12000 bytes; level 2 of the ladder was written. Fix:'));
   });
 
   it('the Qualtrics write failure carries the setter\'s message as its cause', () => {
