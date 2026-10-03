@@ -309,12 +309,12 @@ export const MESSAGES = {
   loadedAboveLabJs: function () {
     return formatError('Not monitoring lab.js components',
       'ch.js was loaded before lib/lab.js, so lab.js\'s components could not be hooked',
-      'move the ch.js <script> below lib/lab.js and above your study script (script.js or study.js)',
+      'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
       DOCS + 'labjs.md#placement');
   },
   labjsNotHookable: function () {
     return formatError('Not monitoring lab.js components',
-      'the page has a data-labjs-section element but no window.lab (a bundled lab.js build never defines it)',
+      'the page has a data-labjs-section element but no window.lab (lib/lab.js did not load, or lab.js is bundled, which never defines it)',
       'load lab.js from a <script> tag (lib/lab.js, as the builder exports it) above the ch.js tag; a bundled lab.js build cannot be hooked',
       DOCS + 'labjs.md#placement');
   },

@@ -9,7 +9,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { createLabWindow, closeLabWindow, datastoreOf } from './support/labjs-window.js';
 import { VERSION } from '../../src/shared/constants.js';
-import { installLabJsAdapter } from '../../src/oneliner/adapters/labjs.js';
+import { installLabJsAdapter, detectLabJs } from '../../src/oneliner/adapters/labjs.js';
 
 const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
 
@@ -41,6 +41,12 @@ for (const build of ['20.2.4', '23.0.0-alpha9']) {
       assert.deepStrictEqual(rows.map((r) => r.sender), ['a', 'b', 'root']);
       assert.deepStrictEqual(rows.slice(0, 2).map((r) => r.sender_id), ['0', '1']);
       assert.strictEqual(rows[0].ended_on, 'timeout');
+    });
+
+    // Literal expectations: the harness computes its own generation with the
+    // same rule, so it cannot stand in for one.
+    it('detectLabJs reads the version and the generation', () => {
+      assert.deepStrictEqual(detectLabJs(win), { lab, version: build, generation: build === '20.2.4' ? 'classic' : 'flip' });
     });
   });
 }

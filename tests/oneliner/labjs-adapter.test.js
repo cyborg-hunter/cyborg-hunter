@@ -66,11 +66,41 @@ describe('watchLabJsPlacement', () => {
     watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'vanilla' } });   // DOM already parsed: checks now
     assert.deepStrictEqual(errors, [MESSAGES.labjsNotHookable()]);
   });
-  it('a plain page says nothing; so do a failed boot and a page that stopped being vanilla', () => {
+  it('a plain page says nothing; neither does a failed boot or a host that is not vanilla', () => {
     watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'vanilla' } });
     win.lab = fakeLab();
     watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'vanilla', bootError: 'x' } });
     watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'labjs' } });
+    assert.deepStrictEqual(errors, []);
+  });
+  // The tag above a builder export's lib/lab.js: by DOMContentLoaded the page
+  // has both the global and the section. The global decides.
+  it('both the global and a data-labjs-section element: loadedAboveLabJs only', () => {
+    win.document.body.innerHTML = '<main data-labjs-section="main"></main>';
+    win.lab = fakeLab();
+    watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'vanilla' } });
+    assert.deepStrictEqual(errors, [MESSAGES.loadedAboveLabJs()]);
+  });
+  it('a host that changes, or a boot that fails, between registering and DOMContentLoaded: nothing', () => {
+    const doc = win.document;
+    Object.defineProperty(doc, 'readyState', { configurable: true, get: () => 'loading' });
+    const changed = { host: 'vanilla' };
+    const failed = { host: 'vanilla' };
+    watchLabJsPlacement({ win, doc, ctx: changed });
+    watchLabJsPlacement({ win, doc, ctx: failed });
+    win.lab = fakeLab();
+    changed.host = 'labjs';
+    failed.bootError = 'x';
+    doc.dispatchEvent(new win.Event('DOMContentLoaded'));
+    assert.deepStrictEqual(errors, []);
+  });
+  it('never throws, whatever it is given', () => {
+    assert.doesNotThrow(() => watchLabJsPlacement());
+    assert.doesNotThrow(() => watchLabJsPlacement({ win, ctx: { host: 'vanilla' } }));
+    assert.doesNotThrow(() => watchLabJsPlacement({ win, doc: null, ctx: { host: 'vanilla' } }));
+    const doc = {};
+    Object.defineProperty(doc, 'readyState', { get() { throw new Error('locked'); } });
+    assert.doesNotThrow(() => watchLabJsPlacement({ win, doc, ctx: { host: 'vanilla' } }));
     assert.deepStrictEqual(errors, []);
   });
 });

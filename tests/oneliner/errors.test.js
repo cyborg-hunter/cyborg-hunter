@@ -195,7 +195,7 @@ const CASES = {
   },
   loadedAboveLabJs: {
     args: [],
-    fix: 'move the ch.js <script> below lib/lab.js and above your study script (script.js or study.js)',
+    fix: 'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
     link: DOCS + 'labjs.md#placement'
   },
   labjsNotHookable: {
@@ -289,6 +289,14 @@ describe('error catalogue', () => {
     assert.ok(msg.includes('ch.js loaded after initJsPsych() ran'), msg);
     assert.ok(msg.includes('jsPsychModule.initJsPsych'), msg);
     assert.ok(msg.includes('new JsPsych'), msg);
+  });
+
+  // A lib/lab.js that did not load (a 404, a wrong path, a blocked request)
+  // leaves the same page as a bundled build: the section, no global.
+  it('the lab.js not-hookable message names both causes', () => {
+    const msg = MESSAGES.labjsNotHookable();
+    assert.ok(msg.includes('lib/lab.js did not load'), msg);
+    assert.ok(msg.includes('bundled'), msg);
   });
 
   it('the random-id message carries the generated id', () => {

@@ -58,19 +58,22 @@ export function detectLabJs(win) {
 
 // Vanilla host only. The two diagnoses are decided once the DOM is parsed.
 export function watchLabJsPlacement(opts) {
-  var win = opts.win, doc = opts.doc, ctx = opts.ctx;
   var done = false;
   function check() {
     if (done) return;
     done = true;
     try {
+      var ctx = opts.ctx, doc = opts.doc;
       if (ctx.bootError || ctx.host !== 'vanilla') return;
-      if (detectLabJs(win)) console.error(MESSAGES.loadedAboveLabJs());
+      if (detectLabJs(opts.win)) console.error(MESSAGES.loadedAboveLabJs());
       else if (doc.querySelector && doc.querySelector('[data-labjs-section]')) console.error(MESSAGES.labjsNotHookable());
     } catch (_) { /* a diagnosis only */ }
   }
-  if (doc.readyState === 'loading' && doc.addEventListener) doc.addEventListener('DOMContentLoaded', check, { once: true });
-  else check();
+  try {
+    var doc = opts.doc;
+    if (doc.readyState === 'loading' && doc.addEventListener) doc.addEventListener('DOMContentLoaded', check, { once: true });
+    else check();
+  } catch (_) { /* no document to watch */ }
 }
 
 var PATCHED = '__cyborgHunterLabJs';   // the handle, on the wrapped prototype methods
