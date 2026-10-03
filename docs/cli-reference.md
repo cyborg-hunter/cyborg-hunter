@@ -26,10 +26,13 @@ Running `cyborg-hunter` with no subcommand defaults to `report`.
 | `--file-pattern <glob>` | Override `filePattern` |
 | `--integrity-field <name>` | Override `integrityField` |
 | `--session-integrity-path <path>` | Dotted path to the session-level integrity object (e.g. `payload.cyborgHunter`) |
+| `--qualtrics-field <name>` | Override `qualtricsField`, the Qualtrics export column holding the payload (default `__js_cyborg_hunter`) |
 | `--participant <id>` | Filter to a single participant |
 | `--no-visuals` | Skip image generation (no `canvas` package required) |
 
 Unknown flags exit with an error rather than silently falling back to whatever config file is in cwd (fixed in v0.3.0).
+
+Qualtrics exports are detected by their header row; one participant per response. A `.csv` whose first header row has `ResponseId` and `__js_cyborg_hunter` (or `cyborg_hunter`, or the column named by `qualtricsField`) is read row by row, each response's payload cell as one participant. Rows with an empty cell are counted in one warning, a cell that is not JSON is reported under its response, and a payload with no linkable participant ID takes the row's `ResponseId`. Every other CSV is still one participant per file.
 
 ### `cyborg-hunter init`
 

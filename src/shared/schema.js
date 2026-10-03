@@ -42,6 +42,7 @@ export const DEFAULT_CLI_CONFIG = {
   trialOrderField: "trialIndex",
   integrityField: "integrity",
   sessionIntegrityPath: null,
+  qualtricsField: "__js_cyborg_hunter",   // Qualtrics export column holding ch.js's payload (cli/qualtrics-csv.js)
   trialsPerParticipant: null,
   platformIdField: null,
   showPlatformId: false,

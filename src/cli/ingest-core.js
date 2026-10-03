@@ -9,6 +9,9 @@
 //   3. CSV — jsPsych default save format. Each row is a trial; nested objects
 //      (integrity, integritySession, integrityScore) are JSON-stringified into
 //      single cells. We unwrap them and route through Shape 1.
+//   A Qualtrics CSV export is the exception to one file, one participant: it
+//   is recognised by its header row (qualtrics-csv.js) and each response
+//   row's payload cell is a Shape-1 object of its own.
 //
 // This module is the pure core of that step: it reads nothing on its own.
 // Files arrive as lazy readers, and the two platform steps (gunzip, sha256)
@@ -30,6 +33,7 @@ import Papa from 'papaparse';
 import { sanitizeId } from '../shared/constants.js';
 import { getByPath } from '../shared/paths.js';
 import { extractIntegrityData } from './extract-core.js';
+import { isQualtricsExport, parseQualtricsExport } from './qualtrics-csv.js';
 // Spec §14 makes conversion the migration path for jsPsych-v1 recordings
 // (players are v2-only, there is no dual-read), so the converter is a runtime
 // dependency of the CLI rather than a developer tool. Its pure core is a
@@ -224,6 +228,12 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
   for (const reader of files) {
     try {
       const text = decodeUtf8(await reader.read());
+      // A Qualtrics export is one file holding many participants, one per
+      // response row (qualtrics-csv.js); every other file is one participant.
+      if (extOf(reader.name) === '.csv' && isQualtricsExport(text, config.qualtricsField)) {
+        ingestQualtricsExport(text, reader.path, config, participants, warnings);
+        continue;
+      }
       // Branch by extension. CSV is jsPsych's default save format; JSON is what
       // server-side-saving experiments use.
       const raw = extOf(reader.name) === '.csv'
@@ -267,6 +277,38 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
   await attachReplayArtifacts(participants, config, warnings, replayFiles, participantFiles, deps);
 
   return { participants, warnings };
+}
+
+// One result per response row of a Qualtrics export. Warnings carry the file
+// and the response, `data/export.csv (response R_2)`, so a researcher finds
+// the row. Each response is extracted on its own: a payload that makes the
+// extractor throw is reported under its response and the others still count.
+function ingestQualtricsExport(text, path, config, participants, warnings) {
+  const q = parseQualtricsExport(text, { field: config.qualtricsField });
+  for (const r of q.responses) {
+    const label = `${path} (response ${r.responseId})`;
+    let result;
+    try {
+      result = extractIntegrityData(r.raw, config);
+    } catch (e) {
+      warnings.push({ file: label, warnings: [`Failed to parse: ${e.message}`] });
+      continue;
+    }
+    if (config.singleParticipant && result.participantId !== config.singleParticipant) continue;
+    if (r.raw.metadata.participantIdFromResponseId) {
+      result.warnings.push('participantId taken from the ResponseId column: the payload carried no linkable id (set data-participant-id to piped text, docs/qualtrics.md#participant-id)');
+    }
+    if (result.warnings.length > 0) warnings.push({ file: label, warnings: result.warnings });
+    if (result.trials.length > 0) participants.push(result);
+  }
+  for (const w of q.warnings) warnings.push({ file: path, warnings: [w] });
+  if (q.empty.length) {
+    const total = q.empty.length + q.responses.length + q.invalid.length;
+    warnings.push({ file: path, warnings: [`${q.empty.length} of ${total} responses carry no Cyborg Hunter data (empty ${q.column}): ch.js never ran on those responses (licence without custom JavaScript, header script removed, or preview before the tag was added), or the field was not declared in Survey Flow — docs/qualtrics.md#troubleshooting`] });
+  }
+  for (const bad of q.invalid) {
+    warnings.push({ file: `${path} (response ${bad.responseId})`, warnings: [`${q.column} is not JSON: ${bad.error}`] });
+  }
 }
 
 // Finds and attaches each participant's replay artifact (if any) as
