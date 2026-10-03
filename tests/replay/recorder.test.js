@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createRecorder } from '../../src/replay/recorder.js';
 import { markRedacted } from '../../src/replay/redaction.js';
 import { serialize } from '../../src/replay/serializer.js';
+import { validateStrict } from '@cyborg-hunter/sessionrecording-conformance/validator';
 
 // Minimal window stub: startSession reads viewport geometry if available.
 beforeEach(() => {
@@ -363,6 +364,45 @@ describe('recorder: resumeSession', () => {
     assert.deepStrictEqual(wire.segments[0].extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
     assert.strictEqual(wire.segments[1].extensions, null);
     assert.deepStrictEqual(rec.getState().captureFailures.map((f) => f.channel), ['segment_extensions']);
+  });
+
+  it('startTrial writes only extensions the format allows: an object keyed by lowercase vendor slugs', () => {
+    // Anything else would make the file fail strict validation (spec §9), so
+    // it is a capture failure and the segment carries null, like a cycle.
+    const rejected = {
+      string: 'x',
+      array: [1],
+      number: 5,
+      false: false,
+      'vendor key not a slug': { 'Cyborg Hunter': 1 },
+      'toJSON giving a string': { toJSON() { return 'x'; } },
+      'a Date': new Date(0),
+    };
+    for (const [name, ext] of Object.entries(rejected)) {
+      const rec = freshRecorder();
+      rec.startSession();
+      assert.doesNotThrow(() => rec.startTrial({ trialId: 't1', extensions: ext }), name);
+      rec.stopSession('finished');
+      const wire = serialize(rec.getState(), {});
+      assert.strictEqual(wire.segments[0].extensions, null, name);
+      assert.deepStrictEqual(rec.getState().captureFailures.map((f) => f.channel), ['segment_extensions'], name);
+      assert.deepStrictEqual(validateStrict(wire).errors, [], name);
+    }
+    const accepted = [
+      { 'cyborg-hunter': { restored_from: 'bfcache' } },
+      { 'cyborg-hunter': 5, lab2: [1, 'a'] },
+      {},
+    ];
+    for (const ext of accepted) {
+      const rec = freshRecorder();
+      rec.startSession();
+      rec.startTrial({ trialId: 't1', extensions: ext });
+      rec.stopSession('finished');
+      const wire = serialize(rec.getState(), {});
+      assert.deepStrictEqual(wire.segments[0].extensions, ext);
+      assert.deepStrictEqual(rec.getState().captureFailures, []);
+      assert.deepStrictEqual(validateStrict(wire).errors, []);
+    }
   });
 
   it('fires onResume hooks; a throwing hook is a capture failure, not a throw', () => {

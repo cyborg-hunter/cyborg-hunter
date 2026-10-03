@@ -226,10 +226,22 @@ export function createRecorder(userConfig) {
   // A JSON copy of the host's segment extensions, taken at startTrial: the
   // host can change or reuse its object afterwards without changing the
   // recording, and anything the file could not carry (a cycle, a BigInt)
-  // fails HERE, as a capture failure, rather than in getRecording().
+  // fails HERE, as a capture failure, rather than in getRecording(). So does
+  // a copy the format forbids (spec §9: an object keyed by lowercase vendor
+  // slugs, the pattern the strict validator checks): a string, an array or
+  // a "Cyborg Hunter" key would make the whole file fail strict validation.
   function hostExtensions(ext) {
-    if (!ext) return null;
-    try { return JSON.parse(JSON.stringify(ext)); } catch (e) {
+    if (ext === undefined || ext === null) return null;
+    try {
+      var copy = JSON.parse(JSON.stringify(ext));
+      if (copy === null || typeof copy !== 'object' || Array.isArray(copy)) {
+        throw new Error('extensions must be an object keyed by vendor');
+      }
+      for (var k in copy) {
+        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(k)) throw new Error('vendor key "' + k + '" is not a lowercase slug');
+      }
+      return copy;
+    } catch (e) {
       recorder.captureFailure('segment_extensions', e);
       return null;
     }
