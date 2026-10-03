@@ -34,6 +34,8 @@ Unknown flags exit with an error rather than silently falling back to whatever c
 
 Qualtrics exports are detected by their header row; one participant per response. A `.csv` whose first header row has `ResponseId` and `__js_cyborg_hunter` (or `cyborg_hunter`, or the column named by `qualtricsField`) is read row by row, each response's payload cell as one participant. Rows with an empty cell are counted in one warning, a cell that is not JSON is reported under its response, and a payload with no linkable participant ID takes the row's `ResponseId`. Every other CSV is still one participant per file.
 
+Warnings found while reading the data (a file without session data, an unresolved participant ID, a Qualtrics export's empty or malformed responses) are printed to stderr after the `Found N participants` line: one line per warning, file-level ones first, at most 20, then a count of the rest. stdout and the output files do not include them.
+
 ### `cyborg-hunter init`
 
 Generate a starter config file in the current directory.

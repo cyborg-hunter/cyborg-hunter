@@ -13,6 +13,19 @@ import { buildReport } from './report-core.js';
 import { VERSION } from '../shared/constants.js';
 import { checkForUpdate, formatUpdateNotice, formatCollectedVersionNotice } from './update-check.js';
 
+// The ingest warnings as stderr lines: one per warning, file-level entries
+// before per-response ones (a Qualtrics export's empty-rows count must survive
+// the cap), at most `max` of them, then a count of the rest. Entries that are
+// not per-response keep their order.
+export function ingestWarningLines(warnings, max = 20) {
+  const ordered = [...warnings.filter((w) => !('response' in w)), ...warnings.filter((w) => 'response' in w)];
+  const all = ordered.flatMap((w) => w.warnings.map((t) => `    - ${w.file}: ${t}`));
+  if (all.length === 0) return [];
+  const lines = [`  Per-file warnings (${all.length}):`, ...all.slice(0, max)];
+  if (all.length > max) lines.push(`    ... and ${all.length - max} more`);
+  return lines;
+}
+
 export async function run(args) {
   console.log(`cyborg-hunter report v${VERSION}\n`);
 
@@ -46,6 +59,10 @@ export async function run(args) {
     }
     process.exit(1);
   }
+  // On a successful run the warnings go to stderr, so stdout and every output
+  // file are what they were. A Qualtrics export's diagnosis (how many
+  // responses carry no data) is only visible here on the CLI.
+  ingestWarningLines(warnings).forEach((line) => console.error(line));
 
   // Offline staleness note: payloads stamp the library version that collected
   // them, so an experiment still serving an old bundle is visible without any

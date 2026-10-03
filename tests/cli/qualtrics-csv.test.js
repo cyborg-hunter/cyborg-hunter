@@ -10,6 +10,11 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { isQualtricsExport, parseQualtricsExport } from '../../src/cli/qualtrics-csv.js';
 import { ingestFiles } from '../../src/cli/ingest-core.js';
+import { ingestWarningLines } from '../../src/cli/report.js';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const text = readFileSync(new URL('./fixtures/qualtrics-export.csv', import.meta.url), 'utf8');
 const reader = (name, t) => ({ name, path: 'data/' + name, size: t.length, read: async () => new TextEncoder().encode(t) });
@@ -192,5 +197,45 @@ describe('the shape of a real export', () => {
     assert.deepStrictEqual(q.empty, plain.empty);
     assert.deepStrictEqual(q.invalid.map((r) => r.responseId), ['R_4']);
     assert.deepStrictEqual(q.warnings, []);
+  });
+});
+
+describe('ingest warnings on a successful run', () => {
+  it('lists file-level entries first, one line per warning, capped with a count of the rest', () => {
+    const ws = [
+      { file: 'd/x.csv (response R_1)', response: 'R_1', warnings: ['a', 'b'] },
+      { file: 'd/x.csv', warnings: ['3 of 9 responses carry no Cyborg Hunter data'] },
+      ...Array.from({ length: 30 }, (_, i) => ({ file: `d/x.csv (response R_${i + 2})`, response: `R_${i + 2}`, warnings: ['c'] }))
+    ];
+    const lines = ingestWarningLines(ws, 20);
+    assert.strictEqual(lines[0], '  Per-file warnings (33):');
+    assert.strictEqual(lines[1], '    - d/x.csv: 3 of 9 responses carry no Cyborg Hunter data');
+    assert.strictEqual(lines[2], '    - d/x.csv (response R_1): a');
+    assert.strictEqual(lines.length, 22);
+    assert.strictEqual(lines[21], '    ... and 13 more');
+    assert.deepStrictEqual(ingestWarningLines([]), []);
+  });
+  it('a file list without responses keeps its order', () => {
+    const lines = ingestWarningLines([{ file: 'b.json', warnings: ['x'] }, { file: 'a.json', warnings: ['y'] }]);
+    assert.deepStrictEqual(lines, ['  Per-file warnings (2):', '    - b.json: x', '    - a.json: y']);
+  });
+  it('the report command prints them to stderr after the participant count, stdout unchanged', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ch-qx-'));
+    try {
+      mkdirSync(join(dir, 'data'));
+      writeFileSync(join(dir, 'data', 'export.csv'), text);
+      writeFileSync(join(dir, 'cyborg-hunter.config.json'), JSON.stringify({ dataDir: 'data', filePattern: '*.csv' }));
+      const bin = new URL('../../bin/cyborg-hunter.js', import.meta.url).pathname;
+      const run = spawnSync(process.execPath, [bin, 'report', '--no-visuals'], { cwd: dir, encoding: 'utf8', env: { ...process.env, CI: '1' } });
+      assert.strictEqual(run.status, 0, run.stderr);
+      assert.match(run.stdout, /Found 2 participants \(3 files had warnings\)/);
+      assert.ok(!/carry no Cyborg Hunter data/.test(run.stdout));
+      const err = run.stderr.split('\n');
+      assert.match(err[0], /^  Per-file warnings \(\d+\):$/);
+      assert.match(err[1], /export\.csv: 1 of 4 responses carry no Cyborg Hunter data/);
+      assert.ok(err.some((l) => /\(response R_4\): __js_cyborg_hunter is not JSON/.test(l)));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
