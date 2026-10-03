@@ -139,27 +139,45 @@ test('over the cap: the payload is reduced before the write, the participant is 
   expect(chErrors(log)).toEqual([]);
 });
 
-test('negative control for the harness: with the cap raised, the same session is refused, and the kept callbacks write the retry', async ({ page }) => {
-  // Not a property of ch.js. The cap is raised far above the server's limit through the test hook
-  // (?maxChars, CyborgHunterConfig.qualtricsMaxChars), so the write goes out whole and the harness server
-  // answers 400: it pins that the harness's limit is real, i.e. the over-cap test above passes because the
-  // payload was reduced, not because the server accepts anything. Then the limit is lifted and Next is
-  // clicked again: Qualtrics kept the callback, so the retry is written too.
-  const server = await qualtricsServer(page, { limit: 6000, refusalExpected: true });
-  await page.goto(at('maxChars=50000'));
+test('negative control for the harness: a server limit below the payload refuses the submit, and the kept callbacks write the retry', async ({ page }) => {
+  // Not a property of ch.js. The server's limit is set below the size of a quiet page's payload (about
+  // 1.8 KB, under the default cap), so the harness server answers 400: it pins that the harness's limit
+  // is real and that a refusal stops the participant on the page, so the afterEach refusal check can fail.
+  // (The over-cap test above shows the unreduced payload would have been refused at LIMIT.) Then the limit
+  // is lifted and Next is clicked again: Qualtrics kept the callback, so the retry is written too.
+  const server = await qualtricsServer(page, { limit: 1000, refusalExpected: true });
+  await page.goto(at());
   await ready(page, 1);
-  await page.evaluate(() => { for (let i = 0; i < 400; i++) { window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus')); } });
   await page.click('#next');
   await expect(page.locator('#qx-error')).toHaveText('Something went wrong');
   expect(server.posts).toHaveLength(1);
   expect(server.posts[0].status).toBe(400);
-  expect(server.posts[0].bytes).toBeGreaterThan(6000);
+  expect(server.posts[0].bytes).toBeGreaterThan(1000);
+  expect(server.posts[0].bytes).toBeLessThanOrEqual(CAP);
   expect(await page.evaluate(() => [window.__qxPage, window.__qxHeaderRuns])).toEqual([1, 1]);   // stayed on the page
 
-  server.limit = Infinity;
+  server.limit = LIMIT;
   await nextPage(page, 1);
   expect(server.posts.map((p) => p.status)).toEqual([400, 200]);
   expect(JSON.parse(server.posts[1].values[FIELD]).trials.map((t) => t.integritySegment.segmentIndex)).toEqual([0, 1]);
+});
+
+test('the cap seam only lowers: maxChars=3000 caps the write at 3000, maxChars=50000 leaves it at the default', async ({ page }) => {
+  const server = await qualtricsServer(page);
+  const tabAways = () => page.evaluate(() => { for (let i = 0; i < 200; i++) { window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus')); } });
+  await page.goto(at('maxChars=3000'));
+  await ready(page, 1);
+  await tabAways();
+  await nextPage(page, 1);
+  expect(server.posts[0].bytes).toBeLessThanOrEqual(3000);
+  expect(await badgeText(page)).toMatch(/last write \d+\/3000 chars$/);
+
+  await page.goto(at('maxChars=50000', SURVEY_B));
+  await ready(page, 1);
+  await tabAways();
+  await nextPage(page, 1);
+  expect(server.posts[1].bytes).toBeLessThanOrEqual(CAP);
+  expect(await badgeText(page)).toMatch(new RegExp('last write \\d+/' + CAP + ' chars$'));
 });
 
 test('undeclared field: the value is dropped, the summary and the console say so', async ({ page }) => {
