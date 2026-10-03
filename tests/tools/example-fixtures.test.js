@@ -16,7 +16,7 @@ import { rankTriage } from '../../src/cli/analyzers/triage.js';
 import { drawSessionTimeline } from '../../src/cli/renderers/session-timeline-core.js';
 import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js';
 import { drawTypingProfile } from '../../src/cli/renderers/typing-profile-core.js';
-import { makeRecordingCanvasFactory } from '../cli/plot-cores.test.js';
+import { makeRecordingCanvasFactory } from '../cli/recording-canvas.js';
 
 const OUT = 'demo/assets/example-participants.json';
 
