@@ -5,11 +5,22 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+### Added
+- Standalone replay recorder (`CyborgHunterReplay.attach()`):
+  `resumeSession()` records again after `stopSession()`, in later segments of
+  the same recording; call `startTrial()` right after it.
+  `startTrial({ extensions })` sets a segment's vendor `extensions`. The
+  one-line setup uses both for a page restored from the back/forward cache,
+  marking its segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
+  A value that is not an object keyed by lowercase vendor names (`"my-lab"`)
+  is left out and logged as a `segment_extensions` capture failure.
+
 ### Changed
 - Experiment assets (`assetsDir`, files dropped on `/analyze/`): a file whose
   path differs from the recorded URL only in upper/lower case now matches
-  when no file matches exactly and only one such file fits; several are
-  reported as ambiguous.
+  when no file matches exactly. Such files are ranked the same way as exact
+  ones: the best-fitting one is used; if several fit equally well, the URL
+  is reported as ambiguous.
 - The experiment-assets note no longer counts video and audio sources as
   images that never match: it says how many video/audio elements are shown as
   placeholders and that replays never play media. A video's poster is still
@@ -39,16 +50,27 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   nothing is lost. A POST form with a control named `method` now gets the
   `cyborgHunterData` hidden input, so its backend receives that field too;
   a `method="dialog"` form with such a control counts as a dialog submit,
-  not a page load.
+  not a page load. A form with a control named `getAttribute` or
+  `hasAttribute` no longer makes the submit handling throw; before, an error
+  was logged and the post carried no `cyborgHunterData`.
+- One-line setup: a boot that fails before the page has loaded (ch.js in
+  `<head>`) logs one "Cyborg Hunter did not start" error with its cause;
+  before, a second one followed, quoting a monitor lifecycle message that
+  hid the cause.
 - `/analyze/`: selecting a participant without a replay recording in the
   report no longer leaves the previous participant's replay on screen. The
   replay card closes it and says `Participant <id> has no replay recording.`;
   Load stays disabled until a participant with a recording is selected.
 - One-line setup with `data-replay` on pages without jsPsych: a page the
-  browser shows again from the back/forward cache (Back) now records on, in
-  the same recording, from a keyframe segment marked
-  `extensions["cyborg-hunter"].restored_from: "bfcache"`; before, everything
-  after Back was missing from the replay.
+  browser shows again from the back/forward cache (Back) now records on, from
+  a keyframe segment marked
+  `extensions["cyborg-hunter"].restored_from: "bfcache"`. If
+  `CyborgHunter.replay()` was not called before the participant left,
+  recording continues in the same recording. If it was (for example in the
+  submit handler, as the docs recommend), `replay()` after Back returns a new
+  recording of the restored visit, starting with that marked segment, instead
+  of the earlier recording again; save every recording it returns. Before,
+  everything after Back was missing from the replay.
 
 ### Removed
 - Internal renderer wrappers removed
