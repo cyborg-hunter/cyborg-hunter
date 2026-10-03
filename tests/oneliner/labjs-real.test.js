@@ -27,7 +27,7 @@ for (const build of ['20.2.4', '23.0.0-alpha9']) {
   describe('the vendored lab.js ' + build + ' runs under happy-dom', () => {
     let win, lab;
     beforeEach(() => { ({ win, lab } = createLabWindow({ build })); });
-    afterEach(() => closeLabWindow(win));
+    afterEach(async () => { await closeLabWindow(win); });
 
     it('a two-screen sequence commits three rows with sender ids', async () => {
       assert.strictEqual(lab.version, build);
@@ -42,3 +42,41 @@ for (const build of ['20.2.4', '23.0.0-alpha9']) {
     });
   });
 }
+
+// Teardown: Node's own globals the window shadowed come back, and a frame still
+// pending from an unfinished study never fires against a closed window. The
+// natives are read at import time, before any window existed.
+const NATIVE = ['fetch', 'Event', 'EventTarget', 'CustomEvent', 'navigator', 'Blob', 'FormData'];
+const NODE_GLOBALS = new Map(NATIVE.map((k) => [k, globalThis[k]]));
+
+describe('closeLabWindow restores the process', () => {
+  for (const build of ['20.2.4', '23.0.0-alpha9']) {
+    it('lab.js ' + build + ': Node globals are back and no frame fires after close', async () => {
+      const { win, lab } = createLabWindow({ build });
+      let closed = false;
+      let firedAfterClose = 0;
+      let onFirstRequest;
+      const firstRequest = new Promise((r) => { onFirstRequest = r; });
+      const raf = win.requestAnimationFrame;
+      globalThis.requestAnimationFrame = win.requestAnimationFrame = (cb) => {
+        const id = raf((t) => { if (closed) { firedAfterClose++; return; } cb(t); });
+        onFirstRequest();
+        return id;
+      };
+      new lab.flow.Sequence({ title: 'root', content: [
+        new lab.html.Screen({ title: 'a', content: '<p>a</p>', timeout: 10000 })
+      ] }).run();
+      await firstRequest;            // a frame is now pending (it fires 4 ms later)
+      closed = true;
+      await closeLabWindow(win);
+      await tick(40);
+      assert.strictEqual(firedAfterClose, 0, 'no frame fired after close');
+      for (const k of NATIVE) {
+        assert.ok(NODE_GLOBALS.get(k) !== undefined, k + ' is a Node global');
+        assert.strictEqual(globalThis[k], NODE_GLOBALS.get(k), k + ' is Node\'s again');
+      }
+      assert.strictEqual(globalThis.window, undefined);
+      assert.strictEqual(globalThis.document, undefined);
+    });
+  }
+});
