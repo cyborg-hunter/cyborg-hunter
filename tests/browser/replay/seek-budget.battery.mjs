@@ -115,7 +115,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 
-import { buildViewerModel } from '../../../src/cli/renderers/replay-assets.js';
+import { buildViewerModel } from '../../../src/replay/viewer-model.js';
 import { readReplayClientSrc } from '../../../src/cli/renderers/replay-client-source.js';
 // The probe apparatus the baseline committed: one reading of how these harnesses
 // resolve a browser and serve an isolated origin. The COOP+COEP server is the

@@ -10,7 +10,7 @@ import { readFileSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { rankTriage } from '../../src/cli/analyzers/triage.js';
-import { renderHtmlIndex } from '../../src/cli/renderers/html-index.js';
+import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import { renderTriage } from '../../src/cli/renderers/triage-md.js';
 import { renderSummaryCSV } from '../../src/cli/renderers/summary-csv.js';
 import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js';
@@ -36,10 +36,9 @@ const summary = (pid, overrides = {}) => ({
 const participant = pid => ({ participantId: pid, trials: [{ trialId: 't1', pasteEvents: [] }], session: {} });
 const noEdges = n => Array.from({ length: n }, () => ({ edgeExits: [] }));
 
-async function html(summaries, config, triageOverride) {
+function html(summaries, config, triageOverride) {
   const triage = triageOverride || rankTriage(summaries, noEdges(summaries.length), config);
-  await renderHtmlIndex(summaries, triage, summaries.map(s => participant(s.participantId)), { outputDir, ...config }, false);
-  return readFileSync(join(outputDir, 'index.html'), 'utf8');
+  return renderIndexHtml(summaries, triage, summaries.map(s => participant(s.participantId)), config, false);
 }
 const breakdownOf = (page, pid) => {
   const start = page.indexOf(`id="p-${pid}"`);

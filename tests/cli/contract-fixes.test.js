@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { renderExtensions } from '../../src/cli/renderers/extensions.js';
-import { deriveSessionOffset, collectEvents } from '../../src/cli/renderers/session-timeline.js';
+import { deriveSessionOffset, collectEvents } from '../../src/cli/renderers/session-timeline-core.js';
 
 // Round 1 fix: extensions.csv read a dead per-trial `sidebarGapPx`; the current
 // library records sidebars session-scoped in session.sidebarEvents.

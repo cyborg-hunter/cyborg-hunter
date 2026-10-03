@@ -92,22 +92,19 @@ describe('report fonts: plumbing into index.html', () => {
     };
   };
 
-  it('the CLI report (renderHtmlIndex) embeds the @font-face block once, inside the first <style>', async () => {
-    const { renderHtmlIndex } = await import('../../src/cli/renderers/html-index.js');
-    const { mkdtempSync, rmSync } = await import('fs');
-    const { tmpdir } = await import('os');
-    const outputDir = mkdtempSync(join(tmpdir(), 'ch-fonts-'));
-    try {
-      const { summaries, triage, participants } = tiny();
-      await renderHtmlIndex(summaries, triage, participants, { outputDir }, false);
-      const html = readFileSync(join(outputDir, 'index.html'), 'utf8');
-      const fontCss = buildFontFaceCss();
-      assert.equal(html.split(fontCss).length - 1, 1, 'embedded exactly once');
-      const firstStyle = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
-      assert.ok(firstStyle.includes(fontCss), 'inside the report <style>');
-    } finally {
-      rmSync(outputDir, { recursive: true, force: true });
-    }
+  // buildReport with the fontFaceCss report.js hands it; analyze-parity.test.js
+  // pins the CLI's index.html byte-equal to this same call.
+  it('the CLI report (buildReport) embeds the @font-face block once, inside the first <style>', async () => {
+    const { buildReport } = await import('../../src/cli/report-core.js');
+    const { mergeConfig } = await import('../../src/cli/config-core.js');
+    const files = new Map();
+    const { config } = mergeConfig({});
+    await buildReport(tiny().participants, config, { sink: (path, data) => files.set(path, data), fontFaceCss: buildFontFaceCss() });
+    const html = files.get('index.html');
+    const fontCss = buildFontFaceCss();
+    assert.equal(html.split(fontCss).length - 1, 1, 'embedded exactly once');
+    const firstStyle = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    assert.ok(firstStyle.includes(fontCss), 'inside the report <style>');
   });
 
   it('renderIndexHtml without opts.fontFaceCss emits no @font-face (demo and snapshot path)', async () => {

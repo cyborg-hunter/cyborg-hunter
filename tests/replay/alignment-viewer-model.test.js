@@ -32,7 +32,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'fs';
-import { buildViewerModel } from '../../src/cli/renderers/replay-assets.js';
+import { buildViewerModel } from '../../src/replay/viewer-model.js';
 import { boot, withProto } from './support/viewer-harness.js';
 
 import { FIXTURES_URL as FIXTURES } from '@cyborg-hunter/sessionrecording-conformance/corpus';

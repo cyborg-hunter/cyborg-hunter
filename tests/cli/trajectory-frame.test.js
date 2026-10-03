@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { chooseScreenFrame, computeZoomTag } from '../../src/cli/renderers/trajectories.js';
+import { chooseScreenFrame, computeZoomTag } from '../../src/cli/renderers/trajectories-core.js';
 
 // P7: the renderer's geometry-frame chooser. Three branches:
 //   - 'screen-api': trusts metadata.screens (Window Management API), always draws both rects

@@ -5,7 +5,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { orderTrials } from '../../src/cli/renderers/trajectories.js';
+import { orderTrials } from '../../src/cli/renderers/trajectories-core.js';
 
 const ids = (trials) => trials.map(t => t.trialId);
 
