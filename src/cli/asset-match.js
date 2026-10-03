@@ -299,18 +299,40 @@ function collect(recording, assetMap) {
   for (const css of sheetUpdatesOf(recording)) addCss(css, null);
   // Media is counted per element: one key each (its media_src, else its own
   // src, else its first <source>'s src, whatever came first in the session),
-  // and elements sharing a key count once. A captured <video src="a.mp4">
+  // and elements sharing any URL count once. A captured <video src="a.mp4">
   // carries both the relative src and the resolved media_src; it is one
-  // element. An inline (data:/blob:) source is still an element shown as a
-  // placeholder, so it counts too.
+  // element. So is one video in two keyframes when only the later keyframe
+  // has its media_src (currentSrc is empty in the task that inserts it): the
+  // two owners share their src or <source> URL. An inline (data:/blob:)
+  // source is still an element shown as a placeholder, so it counts too.
   const owners = new Map();
   eachRef(segmentsOf(recording), (kind, url, replace, at) => {
     if (kind !== 'media') { addRef(url); return; }
-    if (!owners.has(at.owner)) owners.set(at.owner, {});
+    if (!owners.has(at.owner)) owners.set(at.owner, { urls: new Set() });
     const o = owners.get(at.owner);
     if (o[at.slot] === undefined) o[at.slot] = url;
+    o.urls.add(url);
   });
-  for (const o of owners.values()) add(media, o.media_src || o.src || o.source);
+  // Union the owners that share a URL (transitively), then list one key per
+  // group, in the order of its first owner.
+  const list = [...owners.values()];
+  const root = list.map((_, i) => i);
+  const find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+  const ownerOf = new Map();
+  list.forEach((o, i) => {
+    for (const u of o.urls) {
+      if (ownerOf.has(u)) root[find(i)] = find(ownerOf.get(u));
+      else ownerOf.set(u, i);
+    }
+  });
+  const groups = new Map();
+  list.forEach((o, i) => {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, {});
+    const g = groups.get(r);
+    for (const slot of ['media_src', 'src', 'source']) if (g[slot] === undefined && o[slot] !== undefined) g[slot] = o[slot];
+  });
+  for (const g of groups.values()) add(media, g.media_src || g.src || g.source);
   return { stylesheets: sheets, images, fonts, media };
 }
 

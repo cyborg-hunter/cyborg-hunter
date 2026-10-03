@@ -388,6 +388,21 @@ describe('video and audio', () => {
       { dom: null, events: [{ type: 'dom.add', t: 1, parent: 3, before: null, node: el(5, 'source', { src: 'a.webm' }) }] })), 1,
     'a segment without a keyframe continues the same elements');
   });
+  it('one element kept across keyframes counts once when only a later keyframe has its media_src', () => {
+    // media_src is the element's currentSrc, empty when the keyframe is taken
+    // in the task that inserts the element and set at the next one.
+    const source = () => el(3, 'video', {}, [el(4, 'source', { src: 'clip.mp4' })]);
+    const r = keyframes(body(source()), body({ ...source(), media_src: X + 'clip.mp4' }));
+    assert.deepStrictEqual(collectAssetUrls(r).media, [X + 'clip.mp4']);
+    assert.strictEqual(assetNoteText(assetMatchSummary(r, new Map())),
+      'Experiment assets: 1 video/audio element shown as placeholder; replays never play media.');
+    // The same with the src attribute, and with the element's src changed in
+    // the first span before the second keyframe resolves it.
+    const viaSrc = keyframes(
+      { dom: body(el(3, 'video', { src: 'a.mp4' })), events: [{ type: 'dom.attr', t: 1, node: 3, name: 'src', value: 'b.mp4' }] },
+      body(el(3, 'video', { src: 'b.mp4' }, [], { media_src: X + 'b.mp4' })));
+    assert.deepStrictEqual(collectAssetUrls(viaSrc).media, [X + 'b.mp4']);
+  });
   it('an <img> pointing at a media extension is still an image; MEDIA extensions decide only for a parentless <source>', () => {
     const u = collectAssetUrls(domOnly([el(2, 'img', { src: X + 'odd.mp4' })]));
     assert.deepStrictEqual(u.images, [X + 'odd.mp4']);
