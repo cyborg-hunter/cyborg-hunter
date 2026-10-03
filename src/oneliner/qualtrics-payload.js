@@ -3,7 +3,7 @@
 // rejects a submit whose embedded data is too long (the participant sees an
 // error and cannot go on), so the payload is a summary of the vanilla blob
 // and, when that is still too long, is reduced level by level until the
-// serialized string fits the cap. Pure: no DOM, no monitor.
+// serialized string fits the cap. Pure: no DOM, no monitor; never throws.
 //
 // The summary is built from allowlists, not by deleting known fields: each
 // object (the blob, a row, a trial report, a segment and its deltas, a score,
@@ -17,10 +17,22 @@
 // (a test pins these lists against the monitor's own fields), whereas
 // segment-diff.js ships every array the monitor has.
 //
-// buildQualtricsPayload({ blob, maxChars }) → { payload, json, chars, level }
+// buildQualtricsPayload({ blob, maxChars }) → {
+//   payload    the object to write, or null
+//   json       JSON.stringify(payload), or null: write nothing
+//   chars      json's size in UTF-8 bytes (0 when json is null)
+//   level      0-5, below
+//   fullChars  the level-0 summary's size in UTF-8 bytes (0 when the blob
+//              could not be read)
+//   reason     level 5 only: why no ladder level was used
+// }
 //   blob      the vanilla adapter's blob() (Shape 1 rows, one integritySegment
 //             per row); never mutated
-//   maxChars  the cap on json.length
+//   maxChars  the cap, counted in UTF-8 bytes, which holds whether Qualtrics
+//             counts characters or bytes (every character is at least one
+//             byte); missing, or not a positive integer: DEFAULT_MAX_CHARS
+// Whenever json is a string, chars <= maxChars: a caller writes json as it
+// is, and writes nothing when it is null.
 //   payload.cyborgHunterOneLiner.host = 'qualtrics'
 //   payload.cyborgHunterOneLiner.truncated = false at level 0, otherwise
 //     { level, droppedSessionEntries: { key: n }, pagesTrimmed, pagesDropped }
@@ -35,15 +47,37 @@
 //   3  only the newest KEEP_PAGES rows
 //   4  the newest row alone, reduced to the schema's required fields, its
 //      segment with no deltas
+//   5  a cap too small for level 4, or a blob that cannot be read: only
+//      { participantId, cyborgHunterOneLiner: { host, truncated: { level: 5 } },
+//      trials: [] }, plus cyborgHunterError when the blob could not be read;
+//      json null when even that does not fit
 // The newest row's segment carries the monitor's cumulative counters and
-// score, which is what the CLI reads them from, so every level keeps them.
+// score, which is what the CLI reads them from, so levels 0-4 keep them.
 
 export var KEEP_SESSION_ENTRIES = 25;
 export var KEEP_PAGES = 5;
 export var LABEL_MAX = 128;   // ids, names, types: UTF-16 code units
 export var NOTE_MAX = 500;    // cyborgHunterError notes
+// The cap when the caller gives none: MAX_CHARS of adapters/qualtrics.js,
+// which imports this module (a test pins the two equal).
+export var DEFAULT_MAX_CHARS = 12000;
 
 function isObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+
+// The UTF-8 size of s, as TextEncoder counts it (a lone surrogate as the
+// three bytes of U+FFFD).
+function utf8Length(s) {
+  if (!/[^\u0000-\u007f]/.test(s)) return s.length;
+  var n = 0;
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c < 0xdc00 && (s.charCodeAt(i + 1) & 0xfc00) === 0xdc00) { n += 4; i++; }
+    else n += 3;
+  }
+  return n;
+}
 
 // The kinds of value a field can hold: each returns what to keep, or
 // undefined to leave the field out.
@@ -61,7 +95,7 @@ function text(v, max) {
       out += v.slice(i, i + 2);
       i++;
     } else {
-      out += c >= 0xd800 && c < 0xe000 ? '�' : v[i];   // a lone surrogate would serialize as an escape
+      out += c >= 0xd800 && c < 0xe000 ? '\ufffd' : v[i];   // a lone surrogate would serialize as an escape
     }
   }
   return out;
@@ -233,8 +267,9 @@ function keepNewestRows(p, t) {
   t.pagesTrimmed = p.trials.length - 1;
 }
 
+// Own fields only: a key a page script put on Object.prototype is not data.
 function copy(to, from, keys) {
-  keys.forEach(function (k) { if (k in from) to[k] = from[k]; });
+  keys.forEach(function (k) { if (Object.prototype.hasOwnProperty.call(from, k)) to[k] = from[k]; });
   return to;
 }
 
@@ -266,24 +301,60 @@ function newestOnly(p, t) {
   return out;
 }
 
-export function buildQualtricsPayload(opts) {
-  var maxChars = opts.maxChars;
-  var p = summary(opts.blob);
-  var json = JSON.stringify(p);
-  if (json.length <= maxChars) return { payload: p, json: json, chars: json.length, level: 0 };
+function result(payload, json, chars, level, full) {
+  return { payload: payload, json: json, chars: chars, level: level, fullChars: full };
+}
 
-  // Every later level works on a parsed copy of level 0 (the raw traces are
-  // already gone, so the copy is small) and is free to change it in place.
-  var work = JSON.parse(json);
-  var t = { level: 1, droppedSessionEntries: {}, pagesTrimmed: 0, pagesDropped: 0 };
-  work.cyborgHunterOneLiner.truncated = t;
-  var steps = [keepNewestSessionEntries, emptyOlderRows, keepNewestRows, newestOnly];
-  var out;
-  for (var i = 0; i < steps.length; i++) {
-    t.level = i + 1;
-    out = steps[i](work, t) || work;
-    json = JSON.stringify(out);
-    if (json.length <= maxChars) break;
+// Level 5: a fixed shape, so the CLI still links the response and reports
+// the reduction; when even this does not fit the cap, no payload at all.
+function minimal(pid, cap, full, reason, failed) {
+  var p = {};
+  if (pid) p.participantId = pid;
+  p.cyborgHunterOneLiner = { host: 'qualtrics', truncated: { level: 5 } };
+  p.trials = [];
+  if (failed) p.cyborgHunterError = 'the Qualtrics payload could not be built';
+  var json = JSON.stringify(p);
+  var n = utf8Length(json);
+  var out = n <= cap ? result(p, json, n, 5, full)
+    : result(null, null, 0, 5, full);
+  out.reason = n <= cap ? reason : reason + '; nor does the minimal payload (' + n + ' bytes)';
+  return out;
+}
+
+export function buildQualtricsPayload(opts) {
+  var cap = DEFAULT_MAX_CHARS;
+  var pid;
+  var full = 0;
+  try {
+    var o = opts || {};
+    if (Number.isInteger(o.maxChars) && o.maxChars > 0) cap = o.maxChars;
+    var b = o.blob;
+    if (!isObject(b)) return minimal(pid, cap, full, 'no blob to summarize', true);
+    pid = label(b.participantId);
+    var p = summary(b);
+    var json = JSON.stringify(p);
+    var n = full = utf8Length(json);
+    if (n <= cap) return result(p, json, n, 0, full);
+
+    // Every later level works on a parsed copy of level 0 (the raw traces are
+    // already gone, so the copy is small) and is free to change it in place.
+    var work = JSON.parse(json);
+    var t = { level: 1, droppedSessionEntries: {}, pagesTrimmed: 0, pagesDropped: 0 };
+    work.cyborgHunterOneLiner.truncated = t;
+    var steps = [keepNewestSessionEntries, emptyOlderRows, keepNewestRows, newestOnly];
+    for (var i = 0; i < steps.length; i++) {
+      t.level = i + 1;
+      var out = steps[i](work, t) || work;
+      json = JSON.stringify(out);
+      n = utf8Length(json);
+      if (n <= cap) return result(out, json, n, t.level, full);
+    }
+    return minimal(pid, cap, full, 'level 4 (' + n + ' bytes) does not fit the cap (' + cap + ' bytes)', false);
+  } catch (e) {
+    // A blob that is not plain data (a getter that throws, say). The message
+    // goes to the caller only, never into the payload.
+    var why = 'the payload could not be built';
+    try { why += ': ' + label(String(e && e.message)); } catch (_) { /* a thrown value that cannot be printed */ }
+    return minimal(pid, cap, full, why, true);
   }
-  return { payload: out, json: json, chars: json.length, level: t.level };
 }

@@ -7,7 +7,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { Window } from 'happy-dom';
-import { buildQualtricsPayload, trimTrialReport, KEEP_SESSION_ENTRIES, KEEP_PAGES, LABEL_MAX } from '../../src/oneliner/qualtrics-payload.js';
+import { buildQualtricsPayload, trimTrialReport, KEEP_SESSION_ENTRIES, KEEP_PAGES, LABEL_MAX, DEFAULT_MAX_CHARS } from '../../src/oneliner/qualtrics-payload.js';
+import { MAX_CHARS } from '../../src/oneliner/adapters/qualtrics.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 
 const bytes = (s) => Buffer.byteLength(s, 'utf8');
@@ -157,15 +158,18 @@ describe('the payload is built from allowlists', () => {
     const b = leaky(8);
     const before = JSON.stringify(b);
     const levels = new Set();
-    for (let cap = 100; cap < 400000; cap = Math.ceil(cap * 1.04)) {
+    let nothing = 0;
+    for (let cap = 20; cap < 400000; cap = Math.ceil(cap * 1.04)) {
       const out = build(b, cap);
       levels.add(out.level);
-      if (out.json === null) continue;
+      if (out.json === null) { nothing++; continue; }
+      assert.ok(out.chars <= cap);
       assert.ok(!out.json.includes(SECRET), 'level ' + out.level + ' at cap ' + cap + ': ' + out.json.slice(out.json.indexOf(SECRET) - 80, out.json.indexOf(SECRET) + 40));
       const r = extractIntegrityData(JSON.parse(out.json), {});
       assert.ok(!JSON.stringify(r).includes(SECRET));
     }
-    for (const level of [0, 1, 2, 3, 4]) assert.ok(levels.has(level), 'the sweep reaches level ' + level + ': ' + [...levels]);
+    for (const level of [0, 1, 2, 3, 4, 5]) assert.ok(levels.has(level), 'the sweep reaches level ' + level + ': ' + [...levels]);
+    assert.ok(nothing > 0, 'the smallest caps get no payload at all');
     assert.strictEqual(JSON.stringify(b), before);   // no level changes the input
   });
 
@@ -229,7 +233,7 @@ describe('the payload is built from allowlists', () => {
     assert.ok(build(b, 3000).chars <= 3000, 'level 4 with a 20,000-character participant id');
     const ctl = build(blob({ pid: '\u0001'.repeat(20000) + 'P2' }), 12000);
     assert.strictEqual(ctl.payload.participantId, 'P2');
-    assert.strictEqual(build(blob({ pid: 'a\ud800b' }), 12000).payload.participantId, 'a�b');
+    assert.strictEqual(build(blob({ pid: 'a\ud800b' }), 12000).payload.participantId, 'a\ufffdb');
   });
 
   it('unknown session keys and outsized values in unknown places never reach the payload', () => {
@@ -241,6 +245,121 @@ describe('the payload is built from allowlists', () => {
       const out = build(b, cap);
       assert.ok(out.chars <= cap, cap + ': ' + out.chars);
       assert.ok(!out.json.includes('kkkk') && !out.json.includes('zzzz'));
+    }
+  });
+});
+
+// The writer writes `json` only when it is a string, and Qualtrics blocks
+// the participant when a submit is too long, so no result may be longer
+// than its cap, whatever the cap and whatever the blob holds.
+describe('the cap', () => {
+  it('a missing cap, or one that is not a positive integer, means DEFAULT_MAX_CHARS, the adapter\'s MAX_CHARS', () => {
+    assert.strictEqual(DEFAULT_MAX_CHARS, MAX_CHARS);
+    const b = blob({ pages: 30, events: 4, tabAways: 4 });
+    const ref = build(b, MAX_CHARS);
+    assert.ok(ref.level >= 1 && ref.chars <= MAX_CHARS, 'the fixture is over the cap at level 0');
+    for (const maxChars of [null, NaN, -1, 0, 0.5, 1.5, Infinity, -Infinity, '9000', {}]) {
+      assert.strictEqual(build(b, maxChars).json, ref.json, String(maxChars));
+    }
+    assert.strictEqual(buildQualtricsPayload({ blob: b }).json, ref.json, 'omitted');
+    assert.strictEqual(buildQualtricsPayload({ blob: blob() }).level, 0);
+  });
+
+  it('counts UTF-8 bytes, not UTF-16 code units', () => {
+    const b = blob({ pages: 6, pid: '参加者'.repeat(40), tid: '頁'.repeat(100) + '\u{1F600}'.repeat(10) + '-' });
+    const level0 = build(b, 10000000);
+    assert.strictEqual(level0.level, 0);
+    assert.strictEqual(level0.chars, bytes(level0.json));
+    assert.ok(level0.chars > level0.json.length);
+    const out = build(b, level0.json.length);   // a payload measured in code units would fit here
+    assert.ok(out.level >= 1, 'level ' + out.level);
+    assert.strictEqual(out.chars, bytes(out.json));
+    assert.ok(out.chars <= level0.json.length);
+  });
+
+  it('reports the unreduced summary\'s size as fullChars at every level', () => {
+    const b = blob({ pages: 40, events: 10, tabAways: 10 });
+    const level0 = build(b, 10000000);
+    assert.strictEqual(level0.fullChars, level0.chars);
+    for (const cap of [12000, 3000, 300, 10]) assert.strictEqual(build(b, cap).fullChars, level0.chars, String(cap));
+  });
+
+  it('a cap too small for level 4 gets a fixed minimal payload, and a cap too small for that gets no payload', () => {
+    const b = blob({ pages: 40, events: 20, tabAways: 20 });
+    const small = build(b, 300);
+    assert.strictEqual(small.level, 5);
+    assert.ok(small.chars <= 300);
+    assert.deepStrictEqual(JSON.parse(small.json),
+      { participantId: 'P1', cyborgHunterOneLiner: { host: 'qualtrics', truncated: { level: 5 } }, trials: [] });
+    assert.ok(/level 4 \(\d+ bytes\) does not fit the cap \(300 bytes\)/.test(small.reason), small.reason);
+    const r = extractIntegrityData(JSON.parse(small.json), {});
+    assert.strictEqual(r.participantId, 'P1');
+    assert.ok(r.warnings.some((w) => /reduced to fit the embedded-data cap \(level 5/.test(w)));
+    assert.strictEqual(build(b, small.chars).level, 5);
+    const none = build(b, small.chars - 1);
+    assert.deepStrictEqual([none.payload, none.json, none.chars, none.level], [null, null, 0, 5]);
+    assert.ok(/nor does the minimal payload/.test(none.reason), none.reason);
+  });
+
+  it('never throws, whatever the options and the blob hold', () => {
+    const cyclic = blob();
+    cyclic.trials[0].integrity.self = cyclic;
+    cyclic.trials[0].integritySegment.score.loop = cyclic.trials[0];
+    const big = blob();
+    big.trials[0].integrity.startTime = 10n;
+    big.trials[0].integritySegment.counters.pasteCount = 3n;
+    big.extra = 1n;
+    const odd = blob();
+    odd.trials.splice(1, 0, null, undefined, 42, 'row', []);
+    const thrower = blob();
+    Object.defineProperty(thrower.trials[0], 'integrity', { enumerable: true, get() { throw new Error('getter failed'); } });
+    const cases = [undefined, null, {}, { blob: null }, { blob: 'x' }, { blob: [] }, { blob: cyclic }, { blob: big }, { blob: odd }, { blob: thrower }];
+    for (const opts of cases) {
+      let out;
+      assert.doesNotThrow(() => { out = buildQualtricsPayload(opts); });
+      assert.ok(out.json === null || (out.chars === bytes(out.json) && out.chars <= MAX_CHARS));
+      if (out.json !== null) JSON.parse(out.json);
+    }
+    // What the summary cannot hold is left out and the rest is summarized.
+    assert.strictEqual(build(cyclic, 12000).level, 0);
+    const first = build(big, 12000).payload.trials[0];
+    assert.strictEqual(first.integrity.startTime, undefined);
+    assert.strictEqual(first.integritySegment.counters.pasteCount, undefined);
+    assert.strictEqual(build(odd, 12000).payload.trials.length, 3);
+    // A blob that cannot be read gives the minimal payload, which says so.
+    for (const opts of [undefined, {}, { blob: null }, { blob: thrower }]) {
+      const out = buildQualtricsPayload(opts);
+      assert.strictEqual(out.level, 5);
+      assert.strictEqual(JSON.parse(out.json).cyborgHunterError, 'the Qualtrics payload could not be built');
+    }
+    assert.ok(buildQualtricsPayload({ blob: thrower }).reason.includes('getter failed'));
+  });
+
+  it('random blobs and caps: never over the cap, always valid JSON, never the input changed', () => {
+    let seed = 20261002;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+    const PIECES = ['a', '日本語', '\u{1F600}', 'é', '\u0000', '\u001f', '"', '\\', '\ud800', '\udc00', '\u2028'];
+    const str = (n) => { let s = ''; while (s.length < n) s += PIECES[ri(0, PIECES.length - 1)]; return s; };
+    for (let n = 0; n < 150; n++) {
+      const b = blob({ pages: ri(0, 30), events: ri(0, 15), tabAways: ri(0, 30), mouse: ri(0, 20), legacy: rnd() < 0.3,
+        rowsPerPage: ri(1, 3), pid: rnd() < 0.3 ? str(ri(1, 3000)) : 'P' + n, tid: rnd() < 0.3 ? str(ri(1, 400)) : 'span-',
+        violations: ri(0, 60), text: rnd() < 0.5 ? SECRET + str(20) : null, aiReport: SECRET + str(ri(0, 900)) });
+      if (rnd() < 0.3) b.cyborgHunterError = str(ri(1, 4000));
+      for (const r of b.trials) if (rnd() < 0.2) r.integritySegment.deltas['x' + str(ri(1, 60))] = [{ note: SECRET }];
+      const before = JSON.stringify(b);
+      for (const cap of [ri(0, 400), ri(400, 3000), ri(3000, 15000), 12000, ri(15000, 200000)]) {
+        const out = build(b, cap);
+        if (out.json === null) { assert.strictEqual(out.level, 5); continue; }
+        assert.strictEqual(out.chars, bytes(out.json));
+        assert.ok(out.chars <= (cap > 0 ? cap : MAX_CHARS), cap + ': ' + out.chars);
+        const parsed = JSON.parse(out.json);
+        assert.strictEqual(JSON.stringify(out.payload), out.json);
+        assert.ok(!out.json.includes(SECRET));
+        const t = parsed.cyborgHunterOneLiner.truncated;
+        assert.ok(out.level === 0 ? t === false : t.level === out.level);
+      }
+      assert.strictEqual(JSON.stringify(b), before);
     }
   });
 });
