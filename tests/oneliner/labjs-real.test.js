@@ -95,6 +95,10 @@ async function bootOn(win, dataset) {
   ({ boot: bootCh } = await import('../../src/oneliner/boot.js'));
   const ctx = bootCh({ script: { dataset: Object.assign({ participantId: 'P1', guards: 'none' }, dataset || {}), src: 'https://x/ch.js' }, win });
   assert.ok(ctx, 'ch.js booted');
+  // The vanilla adapter is not installed on the lab.js host (it would cut a
+  // segment on every Form submit and start friction a second time). Torn
+  // down before the lab.js adapter installs: teardown deletes the handlers.
+  if (ctx.vanilla) { ctx.vanilla.teardown(); ctx.vanilla = null; }
   if (!ctx.labjsAdapter) ctx.labjsAdapter = installLabJsAdapter({ win, ctx, lab: win.lab, version: win.lab.version, generation: typeof win.lab.core.Component.prototype.lock === 'function' ? 'flip' : 'classic' });
   current = ctx;
   return ctx;
@@ -366,5 +370,128 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
       new lab.core.Component({ title: 'iti', timeout: 15 })
     ] }));
     assert.deepStrictEqual(withSegment(rows).map((r) => r.integritySegment.trialId), ['mark-m', '1']);
+  });
+});
+
+function fakeHoneypot(violations, aiUse, aiReport) {
+  return {
+    init() {},
+    getSessionSummary: () => ({
+      guard_assistance_violations_session: JSON.stringify(violations),
+      guard_assistance_violation_count_session: violations.length,
+      ai_use_session: !!aiUse,
+      ai_report_session: aiReport || ''
+    })
+  };
+}
+function fakeRecorder() {
+  const calls = [];
+  return { calls, startTrial: (id) => calls.push('start:' + id), endTrial: () => calls.push('end'), stop: () => calls.push('stop') };
+}
+
+describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
+  let win, lab;
+  beforeEach(() => { ({ win, lab } = createLabWindow({ build: '20.2.4' })); captureConsole(); });
+  afterEach(async () => {
+    releaseConsole();
+    try { if (current) current.monitor.destroy(); } catch { /* destroyed by the final hook */ }
+    current = null;
+    await closeLabWindow(win);
+  });
+
+  it('the root end writes the final segment, the *Final totals and the honeypot summary onto the last trial row, before on(end)', async () => {
+    win.GuardHoneypot = fakeHoneypot([{ start: 12, duration: 3, reason: 'tab-away' }], true, 'I used ChatGPT');
+    const ctx = await bootOn(win, { guards: 'honeypot' });
+    const study = new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b'), new lab.core.Dummy({ title: 'bye' })] });
+    let seenAtEnd = null;
+    study.on('end', () => { seenAtEnd = datastoreOf(study).data.map((r) => Object.assign({}, r)); });
+    const rows = await runToEnd(study);
+    const last = rows.find((r) => r.sender === 'b');
+    assert.strictEqual(last.integritySegmentFinal.segmentIndex, 2);
+    assert.strictEqual(last.integritySegmentFinal.source, 'final');
+    assert.strictEqual(last.integrityPasteCountFinal, 0);
+    assert.strictEqual(typeof last.integritySoftScoreFinal, 'number');
+    assert.strictEqual(last.ai_use_session, true);
+    assert.strictEqual(last.ai_report_session, 'I used ChatGPT');
+    assert.strictEqual(JSON.parse(last.guard_assistance_violations_session).length, 1);
+    assert.ok(!('integritySegmentFinal' in rows.find((r) => r.sender === 'bye')), 'the skipped row after it is not the target');
+    assert.ok(!('integritySegmentFinal' in rows.find((r) => r.sender === 'root')));
+    const atEnd = seenAtEnd.find((r) => r.sender === 'b');
+    assert.ok(atEnd && atEnd.integritySegmentFinal, 'an on(end) save sees the final fields');
+    assert.strictEqual(seenAtEnd.length, 3, 'on(end) runs before the root row commits');
+    assert.strictEqual(ctx.labjs.finalized, true);
+    assert.throws(() => ctx.monitor.startSession(), /destroy/, 'the monitor is torn down');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('a study without a leaf row: the final fields land on the root row', async () => {
+    await bootOn(win);
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [new lab.core.Dummy({ title: 'bye' })] }));
+    assert.strictEqual(rows.length, 2);
+    assert.ok(rows[1].integritySegmentFinal, 'root row');
+    assert.strictEqual(rows[1].integritySegmentFinal.segmentIndex, 0);
+  });
+
+  it('a leaf run on its own is both the trial and the root', async () => {
+    await bootOn(win);
+    const c = screen(lab, 'solo');
+    const rows = await runToEnd(c);
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].integritySegment.trialId, 'trial-0');
+    assert.ok(rows[0].integritySegmentFinal);
+  });
+
+  it('a second study after the first ended: one warning, no columns on its rows', async () => {
+    await bootOn(win);
+    await runToEnd(new lab.flow.Sequence({ title: 'first', content: [screen(lab, 'a')] }));
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'second', content: [screen(lab, 'b')] }));
+    assert.strictEqual(withSegment(rows).length, 0);
+    assert.deepStrictEqual(warns, [MESSAGES.secondLabJsStudy()]);
+  });
+
+  it('data-replay: the recorder follows every boundary and its trial is ended at the end', async () => {
+    const ctx = await bootOn(win);
+    ctx.replay = fakeRecorder();
+    await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a', { cyborgHunter: { trialId: 'A' } }), screen(lab, 'b', { cyborgHunter: { trialId: 'B' } })] }));
+    assert.deepStrictEqual(ctx.replay.calls, ['end', 'start:A', 'end', 'start:gap-1', 'end', 'start:B', 'end', 'start:gap-2', 'end']);
+  });
+
+  // Boot starts friction observe-only (startGuards); the mark starts enforcement.
+  it('data-ch-friction-start and CyborgHunter.startFriction() start enforcement (the vanilla path, without the vanilla adapter)', async () => {
+    const started = [];
+    win.GuardFriction = {
+      injectRefusalNotices() {},
+      requestFullscreen() { started.push('fullscreen'); },
+      start(o) { started.push('start:' + o.observeOnly); return 'tok'; },
+      stop() { started.push('stop'); }
+    };
+    await bootOn(win, { guards: 'friction' });
+    await tick();
+    assert.deepStrictEqual(started, ['start:true']);
+    const btn = win.document.createElement('button');
+    btn.setAttribute('data-ch-friction-start', '');
+    win.document.body.appendChild(btn);
+    btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await tick(120);
+    assert.deepStrictEqual(started, ['start:true', 'fullscreen', 'start:false']);
+    assert.strictEqual(win._guardFrictionToken, 'tok');
+    await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a')] }));
+    assert.deepStrictEqual(started, ['start:true', 'fullscreen', 'start:false', 'stop'], 'the final hook stops friction');
+    win.CyborgHunter.startFriction();
+    await tick(120);
+    assert.deepStrictEqual(started.slice(4), ['fullscreen', 'start:false']);
+  });
+
+  it('restore() removes the friction mark listener and the handler', async () => {
+    const started = [];
+    win.GuardFriction = { injectRefusalNotices() {}, requestFullscreen() { started.push('fullscreen'); }, start() { return 'tok'; }, stop() {} };
+    const ctx = await bootOn(win);
+    ctx.labjsAdapter.restore();
+    assert.strictEqual(ctx.handlers.startFriction, undefined);
+    const btn = win.document.createElement('button');
+    btn.setAttribute('data-ch-friction-start', '');
+    win.document.body.appendChild(btn);
+    btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    assert.deepStrictEqual(started, []);
   });
 });

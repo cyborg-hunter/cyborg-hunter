@@ -65,3 +65,27 @@ export function startGuards(opts) {
   if (doc.body) run();
   else doc.addEventListener('DOMContentLoaded', run, { once: true });
 }
+
+var FULLSCREEN_SETTLE_MS = 100;   // the friction entry trial's own delay before start()
+
+// A host's friction start mark (data-ch-friction-start, CyborgHunter
+// .startFriction()): mirrors the jsPsych entry trial. Fullscreen is requested
+// inside the click (the user gesture); enforcement starts once it has
+// settled. observeOnly: false explicitly, since start() keeps an earlier
+// observe-only setting when the option is absent. Shared by the vanilla and
+// lab.js hosts; never throws.
+export function startFrictionNow(opts) {
+  var win = opts.win, ctx = opts.ctx;
+  var F = win.GuardFriction;
+  if (!F) return;
+  if (!ctx.config.guards.friction) console.warn(MESSAGES.frictionStartWithoutFriction());
+  attempt('friction', function () { F.requestFullscreen(); });
+  win.setTimeout(function () {
+    attempt('friction', function () {
+      var token = F.start({ jsPsych: null, observeOnly: false, debug: !!ctx.config.debug });
+      Object.defineProperty(win, '_guardFrictionToken', {
+        value: token, writable: false, enumerable: false, configurable: true
+      });
+    });
+  }, FULLSCREEN_SETTLE_MS);
+}
