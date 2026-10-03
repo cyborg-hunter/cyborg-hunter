@@ -90,6 +90,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   segment began; at a stop (`stopSession()`, `CyborgHunter.replay()`, leaving
   the page) it was lost; and on a page restored from the back/forward cache
   it landed in the restored segment.
+- Report (CLI and `/analyze/`): a replay recording with a list field of the
+  wrong shape that the viewer still plays (`stylesheets: {}`, a node's
+  `children: {}`, a `null` event) no longer stops the whole report. Before,
+  the index page failed on such a recording, and with experiment assets so
+  did the asset matching. A recording the matcher cannot read at all is left
+  out of the matching with a warning, and keeps its replay without the note.
 
 ### Removed
 - Internal renderer wrappers removed

@@ -573,4 +573,99 @@ describe('CLI assetsDir', () => {
       assert.ok(!index.includes('also fetch'), 'nothing left to fetch');
     } finally { rmSync(tmp, { recursive: true, force: true }); }
   });
+
+  it('a recording with fields of the wrong shape, which the viewer keeps, still gets its report and replay', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync, existsSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    process.env.NO_UPDATE_NOTIFIER = '1';
+    const tmp = mkdtempSync(join(tmpdir(), 'ch-assets-'));
+    try {
+      const data = join(tmp, 'data'); mkdirSync(data);
+      cpSync('tests/fixtures/demo/DEMO-FIXT.json', join(data, 'DEMO-FIXT.json'));
+      const rec = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT-replay-1785352263344.json', 'utf8'));
+      rec.stylesheets = {};
+      rec.segments[0].initial_dom.children = {};
+      writeFileSync(join(data, 'DEMO-FIXT-replay-1785352263344.json'), JSON.stringify(rec));
+      mkdirSync(join(tmp, 'exp')); writeFileSync(join(tmp, 'exp', 'demo.css'), 'body{outline:1px solid lime}');
+      writeFileSync(join(tmp, 'config.json'), JSON.stringify({ dataDir: data, filePattern: 'DEMO-*.json', participantIdField: 'participantId', assetsDir: join(tmp, 'exp') }));
+      const { run } = await import('../../src/cli/report.js');
+      const origLog = console.log; console.log = () => {};
+      try { await run(['report', '--config', join(tmp, 'config.json'), '--output', join(tmp, 'out'), '--no-visuals']); }
+      finally { console.log = origLog; }
+      assert.ok(existsSync(join(tmp, 'out', 'replay', 'DEMO-FIXT.replay.js')));
+      assert.ok(readFileSync(join(tmp, 'out', 'index.html'), 'utf8').includes('DEMO-FIXT'));
+    } finally { rmSync(tmp, { recursive: true, force: true }); }
+  });
+});
+
+// Ingest admits any JSON with schema_version 2, recorder.name and a segments
+// array, and the viewer's tolerant loader keeps fields of the wrong shape. One
+// such recording must not stop the cohort's report.
+describe('recordings with malformed fields', () => {
+  const files = [
+    { path: 'study/img/stim-1.png', read: async () => PNG },
+    { path: 'study/css/style.css', read: async () => bytes('p{margin:0}') },
+  ];
+  const STIM = 'https://exp.example.org/study/img/stim-1.png';
+  const cases = {
+    'stylesheets: {}': (r) => { r.stylesheets = {}; },
+    'stylesheet_events: [null, 5, {}]': (r) => { r.stylesheet_events = [null, 5, {}]; },
+    'initial_dom.children: {}': (r) => { r.segments[0].initial_dom.children[1].children = {}; },
+    'a node\'s children: 5': (r) => { r.segments[0].initial_dom.children[0].children = 5; },
+    'events: [null, 7, a dom.add without a node]': (r) => { r.segments[0].events.unshift(null, 7, { type: 'dom.add', t: 1, parent: 1, before: null, node: null }); },
+    'a segment\'s events: {}': (r) => { r.segments.push({ index: 1, label: null, t_load: 5, t_end: 6, initial_dom: null, events: {} }); },
+    'segments: [null, ...]': (r) => { r.segments.unshift(null); },
+    'attrs: "src"': (r) => { r.segments[0].initial_dom.children[3].attrs = 'src'; },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    it(`${name}: every entry point goes on, and the rest still matches`, async () => {
+      const r = recording(); mutate(r);
+      assert.ok(collectAssetUrls(r).images.includes(STIM));
+      const { assetMap, report } = await buildAssetMap([r], files);
+      assert.ok(report.matched.some((m) => m.url === STIM));
+      assert.strictEqual(assetMatchSummary(r, assetMap).images.matched >= 1, true);
+      let model;
+      try { model = buildViewerModel(JSON.parse(JSON.stringify(r))); } catch { return; }   // the viewer refuses it: nothing to apply
+      applyAssetMap(model, assetMap);
+      assert.strictEqual(model.segments.find((s) => s && s.initialDom).initialDom.children[0].attrs.src, 'data:image/png;base64,iVBORw==');
+    });
+  }
+
+  it('buildAssetMap keeps going past a recording it cannot read, and says which', async () => {
+    const bad = recording();
+    bad.participant_id = 'P-BAD';
+    Object.defineProperty(bad, 'segments', { get() { throw new Error('unreadable'); } });
+    const { assetMap, report } = await buildAssetMap([bad, recording()], files);
+    assert.ok(assetMap.get(STIM) && assetMap.get(STIM).bytes, 'the other recording still matched');
+    assert.strictEqual(report.warnings.length, 1);
+    assert.match(report.warnings[0], /P-BAD/);
+    assert.match(report.warnings[0], /unreadable/);
+    const clean = await buildAssetMap([recording()], files);
+    assert.deepStrictEqual(clean.report.warnings, []);
+  });
+
+  it('a participant whose asset note fails keeps its replay; the others keep their notes', async () => {
+    const { buildReplayAssets } = await import('../../src/cli/renderers/replay-assets-core.js');
+    const { assetMap } = await buildAssetMap([recording()], files);
+    // A map that cannot answer for one URL only P-ODD references.
+    const ODD = 'https://exp.example.org/study/img/odd.png';
+    const picky = new Map(assetMap);
+    picky.get = function (url) { if (url === ODD) throw new Error('lookup failed'); return Map.prototype.get.call(this, url); };
+    picky.has = function (url) { if (url === ODD) throw new Error('lookup failed'); return Map.prototype.has.call(this, url); };
+    const odd = recording();
+    odd.segments[0].initial_dom.children.push({ id: 30, kind: 'element', tag: 'img', attrs: { src: ODD }, children: [] });
+    const ps = [
+      { participantId: 'P-ODD', replay: { recording: odd, file: 'odd.json' } },
+      { participantId: 'P-OK', replay: { recording: recording(), file: 'ok.json' } },
+    ];
+    const written = [];
+    const res = buildReplayAssets(ps, { sink: (path) => written.push(path), assetMap: picky });
+    assert.strictEqual(res.count, 2, 'both replays are written');
+    assert.deepStrictEqual(written, ['replay/P-ODD.replay.js', 'replay/P-OK.replay.js']);
+    assert.strictEqual(ps[0].replay.assetNote, null);
+    assert.match(ps[1].replay.assetNote, /^Experiment assets: /);
+    assert.deepStrictEqual(res.assetErrors.map((e) => e.participantId), ['P-ODD']);
+    assert.match(res.assetErrors[0].reason, /lookup failed/);
+  });
 });

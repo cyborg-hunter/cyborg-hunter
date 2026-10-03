@@ -106,15 +106,21 @@ function cssRefs(css, href) {
   return { imports, urls };
 }
 
+// A recording's lists as the viewer's tolerant loader keeps them: a field of
+// the wrong shape (stylesheets: {}, children: 5) reads as empty, and an entry
+// that is not an object is skipped where it is read.
+const list = (v) => (Array.isArray(v) ? v : []);
+const attrsOf = (n) => (n.attrs && typeof n.attrs === 'object' ? n.attrs : {});
+
 function* walkNodes(node) {
   if (!node || typeof node !== 'object') return;
   yield node;
-  for (const c of node.children || []) yield* walkNodes(c);
+  for (const c of list(node.children)) yield* walkNodes(c);
 }
 
 function* sheetsOf(recording) {
-  for (const s of recording.stylesheets || []) if (s) yield s;
-  for (const ev of recording.stylesheet_events || recording.stylesheetEvents || []) {
+  for (const s of list(recording.stylesheets)) if (s) yield s;
+  for (const ev of list(recording.stylesheet_events || recording.stylesheetEvents)) {
     if (ev && ev.type === 'stylesheet.add' && ev.sheet) yield ev.sheet;
   }
 }
@@ -123,15 +129,15 @@ function* sheetsOf(recording) {
 // is read with no base URL (applyAssetMap rewrites it the same way), so only
 // its absolute references count.
 function* sheetUpdatesOf(recording) {
-  for (const ev of recording.stylesheet_events || recording.stylesheetEvents || []) {
+  for (const ev of list(recording.stylesheet_events || recording.stylesheetEvents)) {
     if (ev && ev.type === 'stylesheet.update' && ev.css) yield ev.css;
   }
 }
 
 function* segmentsOf(recording) {
-  for (const seg of recording.segments || []) {
-    if (!seg) continue;
-    yield { dom: seg.initial_dom !== undefined ? seg.initial_dom : seg.initialDom, events: seg.events || [] };
+  for (const seg of list(recording.segments)) {
+    if (!seg || typeof seg !== 'object') continue;
+    yield { dom: seg.initial_dom !== undefined ? seg.initial_dom : seg.initialDom, events: list(seg.events) };
   }
 }
 
@@ -141,8 +147,8 @@ function* segmentsOf(recording) {
 // `parent` is the parent's id (a dom.add root's is the event's).
 function noteTree(elems, node, parent) {
   if (!node || typeof node !== 'object') return;
-  if (node.kind === 'element' && node.id != null) elems.set(node.id, { tag: node.tag, parent, type: node.attrs && node.attrs.type });
-  for (const c of node.children || []) noteTree(elems, c, node.id);
+  if (node.kind === 'element' && node.id != null) elems.set(node.id, { tag: node.tag, parent, type: attrsOf(node).type });
+  for (const c of list(node.children)) noteTree(elems, c, node.id);
 }
 const parentTagOf = (elems, id) => {
   const e = elems.get(id);
@@ -241,13 +247,14 @@ function eachRef(segments, visit) {
   const tree = (root) => {
     for (const n of walkNodes(root)) {
       if (n.kind !== 'element') continue;
-      const el = { tag: n.tag, type: n.attrs && n.attrs.type };
+      const attrs = attrsOf(n);
+      const el = { tag: n.tag, type: attrs.type };
       const parentTag = parentTagOf(elems, n.id);
       // An element without an id is its own owner.
       const id = n.id != null ? n.id : n;
-      for (const name of Object.keys(n.attrs || {})) {
-        const v = n.attrs[name];
-        ref(v ? refKind(el, parentTag, name, v) : null, v, (x) => { n.attrs[name] = x; }, () => mediaAt(id, n.tag, 'src'));
+      for (const name of Object.keys(attrs)) {
+        const v = attrs[name];
+        ref(v ? refKind(el, parentTag, name, v) : null, v, (x) => { attrs[name] = x; }, () => mediaAt(id, n.tag, 'src'));
       }
       if (n.media_src) ref('media', n.media_src, (x) => { n.media_src = x; }, () => ({ owner: owner(id), slot: 'media_src' }));
     }
@@ -257,6 +264,7 @@ function eachRef(segments, visit) {
     noteTree(elems, dom, null);
     tree(dom);
     for (const ev of events) {
+      if (!ev || typeof ev !== 'object') continue;
       if (ev.type === 'dom.add') { noteTree(elems, ev.node, ev.parent); tree(ev.node); }
       else if (ev.type === 'dom.attr' && elems.has(ev.node)) {
         const el = elems.get(ev.node);
@@ -385,18 +393,33 @@ export function matchAssets(urls, droppedPaths) {
   return { matched, missing, ambiguous };
 }
 
+// The participant a recording names, for a warning.
+function recordingName(rec) {
+  try { if (rec && typeof rec.participant_id === 'string' && rec.participant_id) return rec.participant_id; } catch { /* unreadable too */ }
+  return 'a participant';
+}
+
 // Two passes: the URLs the recordings reference, then the references inside
-// the stylesheets the first pass supplied. Each file is read once.
+// the stylesheets the first pass supplied. Each file is read once. A
+// recording that cannot be read is left out with a line in report.warnings;
+// the others are matched as usual.
 export async function buildAssetMap(recordings, droppedFiles) {
   const byPath = new Map(droppedFiles.map((f) => [normalizePath(f.path), f]));
   const assetMap = new Map();
   const bytesByPath = new Map();
-  const report = { matched: [], missing: [], ambiguous: [] };
+  const report = { matched: [], missing: [], ambiguous: [], warnings: [] };
   const seen = new Set();
+  const unreadable = new Set();
   for (const pass of [null, assetMap]) {
     const urls = [];
     for (const rec of recordings) {
-      const u = collect(rec, pass);
+      if (unreadable.has(rec)) continue;
+      let u;
+      try { u = collect(rec, pass); } catch (e) {
+        unreadable.add(rec);
+        report.warnings.push(`Experiment assets: the replay of ${recordingName(rec)} could not be read (${e && e.message}); its references are not matched.`);
+        continue;
+      }
       for (const url of [...u.stylesheets, ...u.images, ...u.fonts]) if (!seen.has(url)) { seen.add(url); urls.push(url); }
     }
     const { matched, missing, ambiguous } = matchAssets(urls, [...byPath.keys()]);
@@ -472,8 +495,9 @@ export function applyAssetMap(model, assetMap) {
     if (e) s.css = decodeUtf8(e.bytes);
     if (s.css) s.css = rewriteCss(s.css, s.href, false);
   };
-  for (const s of model.stylesheets || []) sheet(s);
-  for (const ev of model.stylesheetEvents || []) {
+  for (const s of list(model.stylesheets)) sheet(s);
+  for (const ev of list(model.stylesheetEvents)) {
+    if (!ev) continue;
     if (ev.type === 'stylesheet.add') sheet(ev.sheet);
     else if (ev.type === 'stylesheet.update' && ev.css) ev.css = rewriteCss(ev.css, null, false);
   }

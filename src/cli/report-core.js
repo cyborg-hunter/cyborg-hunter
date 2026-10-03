@@ -154,6 +154,9 @@ export async function buildReport(participants, config, deps) {
   // replay section says why), but an analyst watching the CLI must not have
   // to open the HTML to learn a recording did not make it.
   for (const s of replayAssets.skipped) log(`  replay/ — skipped ${s.participantId}: ${s.reason}`);
+  for (const a of replayAssets.assetErrors) {
+    warn(`  [warn] experiment assets not applied to the replay of ${shortId(a.participantId)}: ${a.reason}`);
+  }
 
   // HTML index page — references images/ and replay/ by path (not embedded).
   const html = await renderIndexHtml(summaries, triage, participants, config, visualsRendered,

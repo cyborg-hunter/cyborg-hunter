@@ -113,9 +113,11 @@ async function run(msg) {
   // Notes BEFORE the report pass: applyAssetMap (inside buildReplayAssets)
   // rewrites the recordings the models alias, after which matched sheets no
   // longer look external and the summary would undercount.
+  // One recording the matcher cannot read loses its note, not the run.
   var assetNotes = {};
   participants.forEach(function (p) {
-    if (p.replay && p.replay.recording) assetNotes[p.participantId] = assetNoteText(assetMatchSummary(p.replay.recording, assets.assetMap));
+    if (!p.replay || !p.replay.recording) return;
+    try { assetNotes[p.participantId] = assetNoteText(assetMatchSummary(p.replay.recording, assets.assetMap)); } catch (_) { assetNotes[p.participantId] = null; }
   });
   // Copied before transfer: a pass-through chunk aliases the bytes the sink
   // was given, and keepImages still needs those for the in-page data URIs.
@@ -141,7 +143,7 @@ async function run(msg) {
         assetNote: has ? assetNotes[p.participantId] : null,
         replayError: p.replay && p.replay.error ? (p.replay.reason || p.replay.error) : null };
     }),
-    warnings: ingested.warnings, reportWarnings: built.warnings, assetReport: assets.report,
+    warnings: ingested.warnings.concat(assets.report.warnings), reportWarnings: built.warnings, assetReport: assets.report,
     files: fileTexts, configUsed: config, zipBytes: zip.bytes });
 }
 
@@ -150,7 +152,9 @@ function replay(msg) {
   if (!p || !p.replay || !p.replay.recording) { post({ type: 'error', phase: 'replay', message: 'No replay for ' + msg.participantId }); return; }
   // Built fresh on every request: the zip pass consumed its own model, and
   // holding every cohort model would defeat reading one artifact at a time.
-  var model = applyAssetMap(buildViewerModel(p.replay.recording), lastRun.assetMap);
+  var model = buildViewerModel(p.replay.recording);
+  // A recording the matcher cannot read is shown styled as far as the apply got.
+  try { applyAssetMap(model, lastRun.assetMap); } catch (_) { /* the model stays loadable */ }
   post({ type: 'replay-model', participantId: msg.participantId, model: model });
 }
 

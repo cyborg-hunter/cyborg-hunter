@@ -173,6 +173,30 @@ test('a dropped file whose name differs from the recorded URL only in case still
   assert.ok(strFromU8(zipped['replay/DEMO-FIXT.replay.js']).includes('data:image/png;base64,' + Buffer.from(png).toString('base64')));
 });
 
+test('a recording with fields of the wrong shape, which the viewer keeps, does not stop the run', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets = {};
+  rec.segments[0].initial_dom.children = {};
+  const files = [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/data/DEMO-FIXT.json'),
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/img/bg.png', file: new File([new Uint8Array([1])], 'bg.png') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  w.send({ type: 'run', files, config: checked.config, participantIdField: checked.idSuggestion.suggested });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.participants.map((p) => [p.participantId, p.hasReplay]), [['DEMO-FIXT', true]]);
+  w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
+  const served = await w.next('replay-model', 'error');
+  assert.equal(served.type, 'replay-model', served.message);
+});
+
 test('dropped files sent as bytes (a page opened from file:) check and run as File handles do', async () => {
   const dir = 'examples/synthetic-pilot';
   const paths = readdirSync(dir + '/data').filter((f) => f.endsWith('.csv')).sort().map((f) => 'data/' + f).concat(['cyborg-hunter.config.json']);

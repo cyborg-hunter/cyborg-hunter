@@ -1106,8 +1106,9 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
     // in-viewer opt-in went unread through a whole session (2026-09-03).
     // Rendered only when it applies, so recordings with inlined CSS keep the
     // exact markup the snapshot tests pin.
-    const externalSheets = replay && replay.recording
-      ? (replay.recording.stylesheets || []).filter((sh) => sh && sh.kind === 'link' && sh.css == null).length
+    // Read as the viewer's tolerant loader reads it: a non-list counts none.
+    const externalSheets = replay && replay.recording && Array.isArray(replay.recording.stylesheets)
+      ? replay.recording.stylesheets.filter((sh) => sh && sh.kind === 'link' && sh.css == null).length
       : 0;
     const fetchCssLabel = externalSheets > 0
       ? `
