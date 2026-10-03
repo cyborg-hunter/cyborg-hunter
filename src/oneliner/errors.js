@@ -303,5 +303,31 @@ export const MESSAGES = {
       'ch.js reads the participant ID and the preset from its own <script> tag',
       'use data-participant-id / data-preset on the ch.js tag instead',
       DOCS + 'advanced-integration.md#switching-to-the-one-liner');
+  },
+  // lab.js host. Placement is decided at DOMContentLoaded (adapters/labjs.js
+  // watchLabJsPlacement): window.lab must exist when ch.js boots.
+  loadedAboveLabJs: function () {
+    return formatError('Not monitoring lab.js components',
+      'ch.js was loaded before lib/lab.js, so lab.js\'s components could not be hooked',
+      'move the ch.js <script> below lib/lab.js and above your study script (script.js or study.js)',
+      DOCS + 'labjs.md#placement');
+  },
+  labjsNotHookable: function () {
+    return formatError('Not monitoring lab.js components',
+      'the page has a data-labjs-section element but no window.lab (a bundled lab.js build never defines it)',
+      'load lab.js from a <script> tag (lib/lab.js, as the builder exports it) above the ch.js tag; a bundled lab.js build cannot be hooked',
+      DOCS + 'labjs.md#placement');
+  },
+  // One per page: a hook failure marks the row (cyborgHunterError) and lab.js runs on.
+  labjsHookFailed: function (msg) {
+    return formatError('Cyborg Hunter could not hook a lab.js component', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn: ch.js keeps one session per page and ends it when the first
+  // study's root component ends; components run after that get no columns.
+  secondLabJsStudy: function () {
+    return formatError('A second lab.js study ran after the first ended',
+      'ch.js records one session per page and ended it when the first study\'s root component ended, so components run after that are not monitored',
+      'run one study per page, or reload the page between studies',
+      DOCS + 'known-issues.md#one-line-setup');
   }
 };

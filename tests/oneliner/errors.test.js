@@ -192,6 +192,26 @@ const CASES = {
     args: [],
     fix: 'use data-participant-id / data-preset on the ch.js tag instead',
     link: DOCS + 'advanced-integration.md#switching-to-the-one-liner'
+  },
+  loadedAboveLabJs: {
+    args: [],
+    fix: 'move the ch.js <script> below lib/lab.js and above your study script (script.js or study.js)',
+    link: DOCS + 'labjs.md#placement'
+  },
+  labjsNotHookable: {
+    args: [],
+    fix: 'load lab.js from a <script> tag (lib/lab.js, as the builder exports it) above the ch.js tag; a bundled lab.js build cannot be hooked',
+    link: DOCS + 'labjs.md#placement'
+  },
+  labjsHookFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  secondLabJsStudy: {
+    args: [],
+    fix: 'run one study per page, or reload the page between studies',
+    link: DOCS + 'known-issues.md#one-line-setup'
   }
 };
 
