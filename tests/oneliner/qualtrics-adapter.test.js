@@ -475,7 +475,7 @@ describe('Qualtrics host: nothing throws into the survey', () => {
     assert.ok(errors[0].startsWith('[cyborg-hunter] Cyborg Hunter could not write to Qualtrics embedded data'), errors[0]);
   });
 
-  it('CyborgHunter.data() with a throwing builder returns the error marker and builds once', () => {
+  it('CyborgHunter.data() with a throwing builder returns the error marker and builds once', async () => {
     const fake = fakeSurveyEngine();
     const ctx = start(fake);
     let builds = 0;
@@ -487,6 +487,7 @@ describe('Qualtrics host: nothing throws into the survey', () => {
     assert.strictEqual(d.cyborgHunterOneLiner.error, 'build-failed');
     assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(d));
     // The setter refusing the marker too: still the marker, still one build.
+    await tick();                                            // a later call: a task of its own
     fake.SE.setJSEmbeddedData = () => { throw new Error('nope'); };
     builds = 0;
     assert.doesNotThrow(() => { d = win.CyborgHunter.data(); });
@@ -572,24 +573,51 @@ describe('Qualtrics host: one write per submit task', () => {
     assert.strictEqual(p.trials[1].integrity.pasteEvents.length, 1);
   });
 
-  it('CyborgHunter.data() cuts and writes on every call, and the submit after it still writes', () => {
+  it('CyborgHunter.data() cuts and writes on every call, and the submit after it still writes', async () => {
     const fake = fakeSurveyEngine();
     start(fake);
     assert.deepStrictEqual(segments(win.CyborgHunter.data()), [0]);
+    await tick();                                            // the participant's submit is a task of its own
+    assert.deepStrictEqual(segments(win.CyborgHunter.data()), [0, 1]);
+    await tick();
     paste('after data()');
     const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
-    assert.deepStrictEqual(segments(p), [0, 1]);
-    assert.strictEqual(p.trials[1].integrity.pasteEvents.length, 1);
+    assert.deepStrictEqual(segments(p), [0, 1, 2]);
+    assert.strictEqual(p.trials[2].integrity.pasteEvents.length, 1);
   });
 
-  it('CyborgHunter.data() inside the submit (the final-page line) adds a short segment and loses nothing', () => {
+  // The final-page line and the writer's own hook run in one submit task, in
+  // either order: whichever runs first cuts and writes, the other adds
+  // nothing, so the page is one row.
+  it('CyborgHunter.data() inside the submit, after the writer\'s hook: no second cut, data() returns what was written', () => {
     const fake = fakeSurveyEngine();
     start(fake);
-    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });
+    let d = null;
+    fake.SE.addOnPageSubmit(function () { d = win.CyborgHunter.data(); });
     paste('final page');
+    const v = fake.submit('next')[STORED_FIELD];
+    const p = JSON.parse(v);
+    assert.deepStrictEqual(segments(p), [0]);
+    assert.strictEqual(p.trials[0].integrity.pasteEvents.length, 1);
+    assert.strictEqual(JSON.stringify(d), v);
+  });
+
+  it('CyborgHunter.data() inside the submit, before the writer\'s hook: the hook adds no cut, and the page counts as submitted', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    paste('page one');
+    fake.submit('next');
+    await tick();
+    fake.SE.addOnPageSubmit(function () { win.CyborgHunter.data(); });   // the question script, as page 2 renders
+    fake.rerunHeader(win, null);                                         // then the header: its hook comes second
+    paste('page two');
     const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
     assert.deepStrictEqual(segments(p), [0, 1]);
-    assert.strictEqual(p.trials[0].integrity.pasteEvents.length, 1);
+    assert.deepStrictEqual(p.trials.map((t) => t.integrity.pasteEvents.length), [1, 1]);
+    await tick();
+    fake.rerunHeader(win, null);
+    assert.strictEqual(ctx.qualtrics.missed(), 0, 'a submit task whose cut data() made is not a miss');
+    assert.strictEqual(fake.store[STORED_FIELD], JSON.stringify(p));
   });
 
   it('a timer that cannot be set leaves no latch behind', () => {
@@ -715,11 +743,12 @@ describe('Qualtrics host: the fallbacks live verification can pick', () => {
     assert.deepStrictEqual(pastes(p), [0, 1]);
   });
 
-  it('write on re-run, hook firing: CyborgHunter.data() before the submit does not take the submit\'s write', () => {
+  it('write on re-run, hook firing: CyborgHunter.data() before the submit does not take the submit\'s write', async () => {
     const fake = fakeSurveyEngine();
     const ctx = start(fake);
     reinstall(ctx, fake, { writeOnRerun: true });
     win.CyborgHunter.data();
+    await tick();
     paste('after data()');
     const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
     assert.deepStrictEqual(pastes(p), [0, 1]);
@@ -975,10 +1004,11 @@ describe('Qualtrics host: the legacy layout', () => {
     assert.deepStrictEqual(saved.trials.map((t) => t.integritySegment.segmentIndex), [0]);
   });
 
-  it('the submit after CyborgHunter.data() saves what came between', () => {
+  it('the submit after CyborgHunter.data() saves what came between', async () => {
     const fake = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
     start(fake);
     win.CyborgHunter.data();
+    await tick();                                            // the submit is a task of its own
     paste('after data()');
     fake.submit('next');
     const saved = JSON.parse(win.sessionStorage.getItem(KEY));
@@ -1207,5 +1237,71 @@ describe('Qualtrics host: a submit before the header ran again', () => {
     assert.deepStrictEqual(segments(p), [0, 1]);
     assert.strictEqual(ctx.qualtrics.missed(), 0);
     assert.strictEqual(note(p), '');
+  });
+});
+
+// What the count of re-runs against submit tasks cannot see, and the note.
+describe('Qualtrics host: the limits of the missed-submit count', () => {
+  const pastes = (p) => p.trials.map((t) => t.integrity.pasteEvents.length);
+
+  it('every header re-run late, callbacks dropped: no page is caught up, two pages share a row, no note', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    paste('page one');
+    fake.submit('next');                                     // page 1: the boot's hook
+    await tick();
+    paste('page two');
+    fake.submit('next');                                     // page 2, before its header: no hook
+    await tick();
+    fake.rerunHeader(win, null);                             // page 2's header lands on page 3
+    paste('page three');
+    fake.submit('next');                                     // page 3, before its own header: page 2's hook
+    await tick();
+    fake.rerunHeader(win, null);                             // page 3's header lands on page 4
+    const p = JSON.parse(fake.store[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1]);
+    assert.deepStrictEqual(pastes(p), [1, 2]);               // nothing lost, but pages 2 and 3 are one row
+    assert.strictEqual(ctx.qualtrics.missed(), 0);
+    assert.strictEqual(p.cyborgHunterError, undefined);
+  });
+
+  it('a stopped submit and its retry, then a page without a hook: the miss is hidden, the pages share a row', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    fake.submit('next', { blocked: true });                  // force response: callbacks ran, no page change
+    await tick();
+    fake.submit('next');
+    await tick();
+    fake.rerunHeader(win, null);                             // page 2
+    fake.submitHooks.length = 0;                             // its hook is gone before the submit
+    paste('page two');
+    fake.submit('next');
+    await tick();
+    fake.rerunHeader(win, null);                             // page 3: two re-runs, three submit tasks
+    paste('page three');
+    const p = JSON.parse(fake.submit('next')[STORED_FIELD]);
+    assert.deepStrictEqual(segments(p), [0, 1, 2]);
+    assert.deepStrictEqual(pastes(p), [0, 0, 2]);
+    assert.strictEqual(ctx.qualtrics.missed(), 0);
+    assert.strictEqual(p.cyborgHunterError, undefined);
+  });
+
+  it('the missed-page note is one note with a count, however many pages were missed', async () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake, { dataset: { debug: '' } });
+    for (let i = 0; i < 3; i++) {                            // three pages submitted with no hook
+      fake.submitHooks.length = 0;
+      fake.submit('next');
+      await tick();
+      fake.rerunHeader(win, null);
+    }
+    const p = JSON.parse(fake.store[STORED_FIELD]);
+    assert.strictEqual(ctx.qualtrics.missed(), 3);
+    const notes = String(p.cyborgHunterError).split('; ');
+    assert.strictEqual(notes.filter((n) => /page-submit hook was in place/.test(n)).length, 1);
+    assert.match(p.cyborgHunterError, /\(×3\)$/);
+    ctx.vanilla.noteError('a later note');
+    assert.match(ctx.vanilla.blob().cyborgHunterError, /\(×3\); a later note$/);
+    assert.match(win.document.getElementById('ch-debug-badge').textContent, / · submits missed ×3 · /);
   });
 });

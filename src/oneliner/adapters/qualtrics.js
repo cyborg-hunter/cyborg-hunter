@@ -75,13 +75,18 @@
 // fixed shape, a few hundred bytes, measured like any payload: a cap too
 // small even for that gets nothing.
 //
-// One write per submit task: Qualtrics runs every addOnPageSubmit callback
-// of a submit in one task, so a callback it kept from an earlier page cannot
-// cut and write a second time; a zero-delay timer, or the next page, clears
-// the latch. A submit that force-response validation then stops is a task of
-// its own, and the submit after it writes again, with what came in between.
-// CyborgHunter.data() cuts, writes and returns the checked payload (or the
-// marker) on every call, and never takes a submit's write. A failed write is
+// One cut and write per submit task: Qualtrics runs every addOnPageSubmit
+// callback of a submit in one task, so a callback it kept from an earlier
+// page cannot cut and write a second time; a zero-delay timer, or the next
+// page, clears the latch. A submit that force-response validation then stops
+// is a task of its own, and the submit after it writes again, with what came
+// in between. CyborgHunter.data() cuts, writes and returns the checked
+// payload (or the marker), once per task too: inside a submit (the
+// final-page question script) it and the writer's own callback share the
+// latch, in either order, so the page is one row; data() then returns the
+// payload this task wrote, and the submit still counts as one (see below).
+// A data() call of its own is its own task, so it never takes a submit's
+// write. Without a timer there is no latch: an extra cut beats none. A failed write is
 // logged and noted in the blob, and the survey goes on. At pagehide (a
 // reload, a closed tab) the session is saved without a cut, so a ch.js
 // booting again in the tab continues it; the legacy layout, where every page
@@ -102,7 +107,13 @@
 // wrote never count as a miss. A stopped (force response) or refused submit
 // runs the callbacks without a page change, which can hide a later miss but
 // never invents one; only a header re-run without a page change, which no
-// Qualtrics page is known to do, would add a near-empty row. The final page
+// Qualtrics page is known to do, would add a near-empty row. A miss also goes
+// unseen when every re-run is late (each page's submit runs the hook the
+// previous page's late re-run registered, so the counts stay level): then,
+// as after a stopped or refused submit and its retry, the missed page and
+// the next one share a row, with nothing lost and no note. The note is one
+// note whose count goes up ("(×n)"), so misses cannot crowd the payload's
+// other notes out of its cyborgHunterError field. The final page
 // has no re-run after it: there the documented final-page question script
 // (CyborgHunter.data() from addOnPageSubmit) is the only writer.
 //
@@ -192,7 +203,7 @@ export function installQualtricsAdapter(opts) {
   var legacy = ctx.qualtricsLayout === 'legacy';
   var page = 1;
   var registeredPage = null;   // the page the last addOnPageSubmit call was for
-  var submitting = false;      // this submit task has written
+  var task = null;             // this task's latch: { submitted, cut, payload, written }
   var submitWrotePage = null;  // the page a submit callback's write was taken on
   var warnedPage = null;       // the page the reduced-payload warning was logged on
   var last = null;
@@ -202,6 +213,7 @@ export function installQualtricsAdapter(opts) {
   var reruns = 0;              // header re-runs: page changes
   var submitTasks = 0;         // submit tasks that ran a callback of this writer (catch-ups included)
   var missed = 0;              // page changes with no such submit task
+  var missedNote = -1;         // the index of the missed-page note (vanilla noteError)
   var active = true;
   var vanillaData = ctx.handlers.data;
 
@@ -332,17 +344,29 @@ export function installQualtricsAdapter(opts) {
     return { payload: b.payload, written: true };
   }
 
+  // The running task's latch, made on first use and cleared by a zero-delay
+  // timer (or the next page). null when no timer can be set.
+  function currentTask() {
+    if (task) return task;
+    var t = { submitted: false, cut: false, payload: null, written: false };
+    try { win.setTimeout(function () { if (task === t) task = null; }, 0); } catch (_) { return null; }
+    task = t;
+    return t;
+  }
+
   function onPageSubmit() {
     try {
       if (!active) return;
-      if (!submitting) {
-        submitting = true;
+      var t = currentTask();
+      if (!t || !t.submitted) {
         submitTasks += 1;
-        // Without a timer there is no latch: an extra write beats none.
-        try { win.setTimeout(function () { submitting = false; }, 0); } catch (_) { submitting = false; }
-        var r = write('submit');
-        if (r && r.written) submitWrotePage = page;
+        if (t) t.submitted = true;
       }
+      if (!t || !t.cut) {
+        var r = write('submit');
+        if (t && r) { t.cut = true; t.payload = r.payload; t.written = r.written; }
+        if (r && r.written) submitWrotePage = page;
+      } else if (t.written) submitWrotePage = page;   // data() made this submit's cut, and it was written
       // Legacy pages are full page loads: the next page's boot restores the
       // session from here (adapters/vanilla.js), so every callback saves,
       // latched or not. Not on the new layout, where the page stays and this
@@ -388,16 +412,26 @@ export function installQualtricsAdapter(opts) {
       } else if (submitTasks < reruns) {
         missed += reruns - submitTasks;
         submitTasks = reruns;
-        try { ctx.vanilla.noteError(MISSED_NOTE); } catch (_) { /* the write below still goes */ }
+        try {
+          var text = MISSED_NOTE + ' (×' + missed + ')';
+          if (missedNote < 0) missedNote = ctx.vanilla.noteError(text);
+          else ctx.vanilla.updateNote(missedNote, text);
+        } catch (_) { /* the write below still goes */ }
         write('rerun');
       }
       page += 1;
-      submitting = false;
+      task = null;
       ensureHook();
     } catch (_) { /* never into the header's re-run */ }
   };
   ctx.handlers.data = function () {
-    try { return write('data').payload; } catch (_) { return marker('build-failed').payload; }
+    try {
+      var t = currentTask();
+      if (t && t.cut && t.payload) return t.payload;   // this task already cut and wrote
+      var r = write('data');
+      if (t && r) { t.cut = true; t.payload = r.payload; t.written = r.written; }
+      return r.payload;
+    } catch (_) { return marker('build-failed').payload; }
   };
 
   return {

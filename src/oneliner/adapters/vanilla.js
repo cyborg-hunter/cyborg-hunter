@@ -71,7 +71,9 @@
 //
 // installVanillaAdapter({ win, ctx, clock?, warnChars?, pageBoundaries?, keyScope? }) → {
 //   blob(), cut(source, nextTrialId?), persist(), restore(), teardown(),
-//   noteError(text)   adds a cyborgHunterError note to this and later blobs
+//   noteError(text)   adds a cyborgHunterError note to this and later blobs;
+//                     returns its index
+//   updateNote(index, text)  replaces a note noteError added on this page
 // }
 //   ctx:        boot's context; gains ctx.handlers.mark / data / startFriction;
 //               ctx.replay (data-replay, set later by replay-loader.js) follows
@@ -603,7 +605,8 @@ export function installVanillaAdapter(opts) {
     cut: cut,
     persist: persist,
     restore: restore,
-    noteError: function (text) { notes.push(String(text)); },
+    noteError: function (text) { notes.push(String(text)); return notes.length - 1; },
+    updateNote: function (index, text) { if (index >= 0 && index < notes.length) notes[index] = String(text); },
     teardown: function () {
       doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('submit', onSubmit, true);
