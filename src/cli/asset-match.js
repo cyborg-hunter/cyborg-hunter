@@ -213,12 +213,17 @@ function srcsetUrls(text) {
 // A media reference's `at` names the element it belongs to and where on it
 // the URL sits: { owner, slot: 'media_src' | 'src' | 'source' }, the owner of
 // a <source> being its parent (or the source itself when it has none).
+// Node ids restart at every keyframe, so an owner is keyed by the keyframe's
+// span and the id ('2:3'); a segment without a keyframe continues the span
+// before it, and the element table starts afresh at each keyframe.
 function eachRef(segments, visit) {
-  const elems = new Map();
+  let elems = new Map();
+  let span = 0;
+  const owner = (id) => (typeof id === 'object' ? id : span + ':' + id);
   const mediaAt = (id, tag, slot) => {
-    if (tag !== 'source') return { owner: id, slot };
+    if (tag !== 'source') return { owner: owner(id), slot };
     const e = elems.get(id);
-    return { owner: e && e.parent != null ? e.parent : id, slot: 'source' };
+    return { owner: owner(e && e.parent != null ? e.parent : id), slot: 'source' };
   };
   const ref = (kind, value, write, where) => {
     if (!kind || !value) return;
@@ -244,10 +249,11 @@ function eachRef(segments, visit) {
         const v = n.attrs[name];
         ref(v ? refKind(el, parentTag, name, v) : null, v, (x) => { n.attrs[name] = x; }, () => mediaAt(id, n.tag, 'src'));
       }
-      if (n.media_src) ref('media', n.media_src, (x) => { n.media_src = x; }, () => ({ owner: id, slot: 'media_src' }));
+      if (n.media_src) ref('media', n.media_src, (x) => { n.media_src = x; }, () => ({ owner: owner(id), slot: 'media_src' }));
     }
   };
   for (const { dom, events } of segments) {
+    if (dom && typeof dom === 'object') { span++; elems = new Map(); }
     noteTree(elems, dom, null);
     tree(dom);
     for (const ev of events) {

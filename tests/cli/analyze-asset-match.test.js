@@ -369,6 +369,25 @@ describe('video and audio', () => {
     assert.strictEqual(assetNoteText(assetMatchSummary(r, new Map())),
       'Experiment assets: 4 video/audio elements shown as placeholders; replays never play media.');
   });
+  // Node ids restart at every keyframe: id 3 in one keyframe and id 3 in the
+  // next are different elements. A segment without a keyframe continues the
+  // last one's ids.
+  const keyframes = (...doms) => {
+    const r = domOnly([]);
+    r.segments = doms.map((d, i) => ({ ...r.segments[0], index: i, initial_dom: d.dom === undefined ? d : d.dom, events: d.events || [] }));
+    return r;
+  };
+  const body = (...kids) => el(1, 'body', {}, kids);
+  it('elements sharing an id in different keyframes are different elements', () => {
+    const count = (r) => assetMatchSummary(r, new Map()).media.total;
+    assert.strictEqual(count(keyframes(body(el(3, 'video', { src: 'a.mp4' })), body(el(3, 'video', { src: 'b.mp4' })))), 2, 'two trials, two files');
+    assert.strictEqual(count(keyframes(body(el(3, 'video', { src: 'a.mp4' })), body(el(3, 'video', { src: 'a.mp4' })))), 1, 'a video kept across keyframes counts once');
+    assert.strictEqual(count(keyframes(body(el(3, 'video', { src: 'a.mp4' })), body(el(3, 'audio', { src: 'b.mp3' })))), 2, 'a video, then an audio with the same id');
+    assert.strictEqual(count(keyframes(
+      body(el(3, 'video', {}, [el(4, 'source', { src: 'a.mp4' })])),
+      { dom: null, events: [{ type: 'dom.add', t: 1, parent: 3, before: null, node: el(5, 'source', { src: 'a.webm' }) }] })), 1,
+    'a segment without a keyframe continues the same elements');
+  });
   it('an <img> pointing at a media extension is still an image; MEDIA extensions decide only for a parentless <source>', () => {
     const u = collectAssetUrls(domOnly([el(2, 'img', { src: X + 'odd.mp4' })]));
     assert.deepStrictEqual(u.images, [X + 'odd.mp4']);
