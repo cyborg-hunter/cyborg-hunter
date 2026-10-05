@@ -234,9 +234,11 @@ function segments(p) {
 //   sidebarOpenings  sidebarEvents counted as incidents (sidebarOpenings())
 //   keyboardShortcuts, viewportWidthShifts, zoomChanges, extensionInjections,
 //   devToolsEvents, aiExtensions  how many entries each session array has
-//   trialsWithTabAway, fastTypingTrials (charsPerSec above the config's
-//   typingSpeedCps, else 10), idleGaps, syntheticInsertions, foreignInputs
-//       over the rows' trial reports
+//   trialCount, trialSoftScoreSum, trialsWithTabAway, fastTypingTrials
+//   (charsPerSec above the config's typingSpeedCps, else 10), idleGaps,
+//   syntheticInsertions, foreignInputs
+//       over the rows' trial reports: how many there are, their
+//       trialSoftScore summed, and the rest counted
 // A session array that no segment has is left out, and the CLI then counts
 // what the payload kept.
 var LONG_TAB_AWAY_MS = 10000;   // the report's long tab-away
@@ -296,6 +298,8 @@ function sessionTotals(p) {
   var reports = p.trials.map(function (r) { return r.integrity; }).filter(Boolean);
   var cps = typeof th.typingSpeedCps === 'number' ? th.typingSpeedCps : 10;
   var entries = function (k) { return reports.reduce(function (n, r) { return n + (r[k] ? r[k].length : 0); }, 0); };
+  t.trialCount = reports.length;
+  t.trialSoftScoreSum = reports.reduce(function (n, r) { return n + (r.trialSoftScore || 0); }, 0);
   t.trialsWithTabAway = reports.filter(function (r) { return r.tabAwayEvents && r.tabAwayEvents.length > 0; }).length;
   t.fastTypingTrials = reports.filter(function (r) { return (r.charsPerSec || 0) > cps; }).length;
   t.idleGaps = entries('idleGaps');

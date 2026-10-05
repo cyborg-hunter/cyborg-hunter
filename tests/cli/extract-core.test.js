@@ -67,7 +67,7 @@ describe('a reduced one-line payload', () => {
   // the writer carried them) keeps only its clipboard counters whole.
   it('says which numbers are the whole session\'s, with and without carried totals', () => {
     const withTotals = extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2, totals: { tabAways: 3 } }), {});
-    assert.ok(withTotals.warnings.some(w => w.endsWith("— its counts, scores and tier are the whole session's; the trial count, the per-page rows, the event lists and the names of AI extensions cover only what it kept")), withTotals.warnings.join('\n'));
+    assert.ok(withTotals.warnings.some(w => w.endsWith("— its counts, scores and tier are the whole session's; the page rows, the means taken over them (typing speed, mouse metrics), the event lists and the names of AI extensions cover only what it kept")), withTotals.warnings.join('\n'));
     const without = extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2 }), {});
     assert.ok(without.warnings.some(w => w.endsWith("— its paste, copy and drop counts, scores and tier are the whole session's; its other counts, per-page rows and event lists cover only what it kept")), without.warnings.join('\n'));
     const five = extractIntegrityData({ participantId: 'P1', cyborgHunterOneLiner: { host: 'qualtrics', truncated: { level: 5 } }, trials: [] }, {});

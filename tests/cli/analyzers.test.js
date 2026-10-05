@@ -70,7 +70,7 @@ describe('summary', () => {
   // A reduced payload also carries the whole session's other counts
   // (src/oneliner/qualtrics-payload.js truncated.totals); they replace the
   // counts made from the entries and rows it kept.
-  const TOTALS = { tabAways: 40, tabAwayMs: 320000, tabAwayFlicker: 4, tabAwayMedium: 30, tabAwayLong: 6, tabAwayCutoffMs: 5000,
+  const TOTALS = { trialCount: 20, trialSoftScoreSum: 11, tabAways: 40, tabAwayMs: 320000, tabAwayFlicker: 4, tabAwayMedium: 30, tabAwayLong: 6, tabAwayCutoffMs: 5000,
     trialsWithTabAway: 20, fastTypingTrials: 3, idleGaps: 7, syntheticInsertions: 2, foreignInputs: 5, sidebarOpenings: 4,
     keyboardShortcuts: 6, viewportWidthShifts: 8, zoomChanges: 9, extensionInjections: 1, devToolsEvents: 0, aiExtensions: 2 };
   const keptOnly = () => ({
@@ -81,6 +81,7 @@ describe('summary', () => {
   });
   it('a reduced payload\'s carried totals replace the counts made from what it kept', () => {
     const s = computeParticipantSummary({ ...keptOnly(), reducedPayload: { level: 3, totals: TOTALS } }, {});
+    assert.deepStrictEqual([s.trialCount, s.totalSoftScore, s.meanTypingSpeed], [20, 11, 2]);   // the mean stays over the kept rows
     assert.deepStrictEqual(
       [s.totalTabAways, s.totalTabAwayDuration_ms, s.tabAwayFlickerCount, s.tabAwayMediumCount, s.tabAwayLongCount, s.tabAwayCutoffMs,
         s.trialsWithTabAway, s.trialsWithFastTyping, s.totalIdleGaps, s.totalSyntheticInsertions, s.totalForeignInputEvents,

@@ -141,6 +141,11 @@ One row per participant:
 > while the session-derived columns are snake_case (`sidebar_event_count`, …).
 > The header names above match the emitted CSV exactly.
 
+For a Qualtrics response written at a reduced level ([Payload size](qualtrics.md#payload-size)),
+the counts, `trialCount` and `totalSoftScore` cover the whole session, while `meanTypingSpeed`,
+`meanMouseEvents` and `meanPathEfficiency` average only the pages the payload kept; the CLI's
+note for that response says so.
+
 ### `triage.md`
 
 Ranked markdown table sorted **tier-first** (hard-triggered, then soft-flagged, then

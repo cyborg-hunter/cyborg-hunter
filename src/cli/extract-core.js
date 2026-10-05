@@ -237,7 +237,7 @@ export function extractIntegrityData(raw, config) {
   if (reduced) {
     const whole = trials.length === 0 ? 'no page of the session was kept, so the response is not in the report'
       : truncated.totals && typeof truncated.totals === 'object'
-        ? "its counts, scores and tier are the whole session's; the trial count, the per-page rows, the event lists and the names of AI extensions cover only what it kept"
+        ? "its counts, scores and tier are the whole session's; the page rows, the means taken over them (typing speed, mouse metrics), the event lists and the names of AI extensions cover only what it kept"
         : "its paste, copy and drop counts, scores and tier are the whole session's; its other counts, per-page rows and event lists cover only what it kept";
     warnings.push(`Qualtrics payload was reduced to fit the embedded-data cap (level ${truncated.level}: ${describeTruncation(truncated)}) — ${whole}`);
   }

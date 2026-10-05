@@ -212,14 +212,15 @@ ladder that fits. The levels are cumulative:
 
 At levels 1 to 4 the payload also carries the whole session's counts, a
 fixed set of numbers, so the report's tier, triage score and reason, and
-every count it shows stay those of the whole session: pastes, copies and
-drops, tab-aways (how many, how long, and the length bins), sidebar openings,
+every count it shows stay those of the whole session: the number of pages
+(the trial count) and the sum of their soft scores, pastes, copies and drops,
+tab-aways (how many, how long, and the length bins), sidebar openings,
 keyboard shortcuts, viewport and zoom changes, injected extension elements,
 AI extensions found, idle gaps, synthetic and foreign input, pages with fast
 typing and pages with a tab-away. The hard triggers and the soft score come
 from the monitor's own counters, which the newest row carries. What covers
-only the pages and entries the payload kept: the trial count, the page rows
-with their mean typing speed and mouse metrics, the event lists, timelines
+only the pages and entries the payload kept: the page rows and the means
+taken over them (typing speed, mouse metrics), the event lists, timelines
 and event log, the honeypot's list of violations (their count stays), the
 names of AI extensions found on dropped pages, and at level 4 the preset
 name. The payload's `cyborgHunterOneLiner.truncated` is `false` at level 0;

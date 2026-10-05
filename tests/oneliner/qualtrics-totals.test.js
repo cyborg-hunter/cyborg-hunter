@@ -82,7 +82,7 @@ async function survey(pages, away) {
 
 // What the report shows for one participant file: the tier, the triage
 // score and reason, and every count in the summary.
-const COUNTS = ['totalTabAways', 'tabAwayFlickerCount', 'tabAwayMediumCount', 'tabAwayLongCount', 'totalTabAwayDuration_ms',
+const COUNTS = ['trialCount', 'totalSoftScore', 'totalTabAways', 'tabAwayFlickerCount', 'tabAwayMediumCount', 'tabAwayLongCount', 'totalTabAwayDuration_ms',
   'tabAwayCutoffMs', 'trialsWithTabAway', 'trialsWithFastTyping', 'totalIdleGaps', 'totalSyntheticInsertions',
   'totalForeignInputEvents', 'sidebarEventCount', 'keyboardShortcutCount', 'layoutShiftCount', 'zoomChangeCount',
   'extensionInjectionCount', 'devToolsEventCount', 'totalPasteEvents', 'totalCopyEvents', 'totalDropEvents',

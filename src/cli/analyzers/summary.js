@@ -10,10 +10,12 @@ export function computeSummary(participants, config) {
 // A reduced Qualtrics payload (extract-core.js reducedPayload) kept only some
 // of the session's rows and entries, and carries the whole session's counts
 // (src/oneliner/qualtrics-payload.js truncated.totals): each summary field
-// below is taken from the carried count named next to it. aiExtensionCount
-// exists only then (the names of the AI extensions found stay those kept).
+// below is taken from the carried count named next to it, so the trial count
+// and the per-trial soft scores' sum cover the same session as the other
+// counts. aiExtensionCount exists only then (the names of the AI extensions
+// found stay those kept), and the means over trials stay over the kept rows.
 const CARRIED_TOTALS = {
-  totalTabAways: 'tabAways', totalTabAwayDuration_ms: 'tabAwayMs', tabAwayFlickerCount: 'tabAwayFlicker',
+  trialCount: 'trialCount', totalSoftScore: 'trialSoftScoreSum', totalTabAways: 'tabAways', totalTabAwayDuration_ms: 'tabAwayMs', tabAwayFlickerCount: 'tabAwayFlicker',
   tabAwayMediumCount: 'tabAwayMedium', tabAwayLongCount: 'tabAwayLong', tabAwayCutoffMs: 'tabAwayCutoffMs',
   trialsWithTabAway: 'trialsWithTabAway', trialsWithFastTyping: 'fastTypingTrials', totalIdleGaps: 'idleGaps',
   totalSyntheticInsertions: 'syntheticInsertions', totalForeignInputEvents: 'foreignInputs',

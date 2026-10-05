@@ -538,7 +538,7 @@ function countsBlob(opts = {}) {
 }
 
 // Every number the report shows for a participant, from a payload.
-const REPORTED = ['totalTabAways', 'tabAwayFlickerCount', 'tabAwayMediumCount', 'tabAwayLongCount', 'totalTabAwayDuration_ms',
+const REPORTED = ['trialCount', 'totalSoftScore', 'totalTabAways', 'tabAwayFlickerCount', 'tabAwayMediumCount', 'tabAwayLongCount', 'totalTabAwayDuration_ms',
   'tabAwayCutoffMs', 'trialsWithTabAway', 'trialsWithFastTyping', 'totalIdleGaps', 'totalSyntheticInsertions',
   'totalForeignInputEvents', 'sidebarEventCount', 'keyboardShortcutCount', 'layoutShiftCount', 'zoomChangeCount',
   'extensionInjectionCount', 'devToolsEventCount', 'totalPasteEvents', 'totalCopyEvents', 'totalDropEvents',
@@ -557,8 +557,9 @@ describe('a reduced payload carries the whole session\'s counts', () => {
       const full = build(b, 10000000);
       assert.strictEqual(full.level, 0);
       const truth = reported(full.json);
-      assert.deepStrictEqual([truth.totalTabAways, truth.tabAwayFlickerCount, truth.tabAwayMediumCount, truth.tabAwayLongCount,
-        truth.tabAwayCutoffMs, truth.sidebarEventCount, truth.trialsWithFastTyping, truth.aiExtensions], [56, 24, 16, 16, 5000, 8, 2, 1]);
+      assert.deepStrictEqual([truth.trialCount, truth.totalSoftScore, truth.totalTabAways, truth.tabAwayFlickerCount, truth.tabAwayMediumCount,
+        truth.tabAwayLongCount, truth.tabAwayCutoffMs, truth.sidebarEventCount, truth.trialsWithFastTyping, truth.aiExtensions],
+      [8, 8, 56, 24, 16, 16, 5000, 8, 2, 1]);
       for (const level of [1, 2, 3, 4]) {
         const out = atLevel(b, level);
         assert.deepStrictEqual(reported(out.json), truth, 'level ' + level);
