@@ -118,6 +118,39 @@ test('lab.js 20.2.4: a clean run is not flagged', async ({ page }) => {
   expect(out.summaryCsv[0].hardTriggered).toBe('no');
 });
 
+// A form field named like one of ch.js's columns (labjs-columns.html): the
+// participant's answer stays under its name, in the row and in lab.js's
+// state; ch.js's report goes under cyborgHunter_integrity, where the CLI
+// reads it.
+test('lab.js 20.2.4: a form field named integrity keeps the participant\'s answer; ch.js writes cyborgHunter_integrity and the CLI reads it', async ({ page }) => {
+  const log = collectConsole(page);
+  await page.goto(FIX + 'labjs-columns.html');
+  await page.locator('#integrity').waitFor();
+  await pasteInto(page, '#integrity', 'pasted text ');
+  await pasteInto(page, '#integrity', 'pasted text ');
+  await page.locator('#integrity').pressSequentially('typed', { delay: 60 });
+  await page.click('#next');
+  await page.waitForFunction(() => typeof window.__csv === 'string');
+  expect(chErrors(log)).toEqual([]);
+  expect(chWarnings(log)).toEqual([MESSAGES.labjsColumnTaken('integrity')]);
+  const csv = await page.evaluate(() => window.__csv);
+  const rows = parseCsv(csv);
+  expect(rows.map((r) => r.sender)).toEqual(['q', 'done', 'root']);
+  const answer = 'pasted text pasted text typed';
+  expect(rows[0].integrity).toBe(answer);
+  expect(await page.evaluate(() => window.__stateIntegrity)).toBe(answer);
+  expect(json(rows[0].cyborgHunter_integrity).pasteEvents).toHaveLength(2);
+  expect(json(rows[1].cyborgHunter_integrity).trialId).toBe('1');
+  expect(rows[1].integrity ?? '').toBe('');
+
+  const out = saveAndReport(newTmpDir('lab-columns'), 'E2E-LAB-4.csv', csv);
+  expect(out.stdout).toContain('Found 1 participants');
+  expect(out.stdout).not.toContain('files had warnings');
+  expect(out.summaryCsv[0].participantId).toBe('E2E-LAB-4');
+  expect(out.summaryCsv[0].totalPasteEvents).toBe('2');
+  expect(out.summaryCsv[0].hardTriggered).toBe('YES');
+});
+
 test('lab.js Transmit plugin: the incremental slices and the full upload carry the rows; the CLI reads the full upload and warns on a slice', async ({ page }) => {
   const bodies = [];
   await page.route('**/__transmit', async (route) => {
