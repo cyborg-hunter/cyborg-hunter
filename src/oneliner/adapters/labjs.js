@@ -57,7 +57,9 @@ export function detectLabJs(win) {
   } catch (_) { return null; }   // a locked or throwing global: not lab.js
 }
 
-// Vanilla host only. The two diagnoses are decided once the DOM is parsed.
+// Vanilla host only. The diagnoses are decided once the DOM is parsed. A
+// lab.js 23 build is not hooked wherever the tag sits, so its version is
+// what is reported, as boot does when it finds one.
 export function watchLabJsPlacement(opts) {
   var done = false;
   function check() {
@@ -66,7 +68,9 @@ export function watchLabJsPlacement(opts) {
     try {
       var ctx = opts.ctx, doc = opts.doc;
       if (ctx.bootError || ctx.host !== 'vanilla') return;
-      if (detectLabJs(opts.win)) console.error(MESSAGES.loadedAboveLabJs());
+      var found = detectLabJs(opts.win);
+      if (found && found.generation !== 'classic') console.warn(MESSAGES.labjsVersionUnsupported(found.version));
+      else if (found) console.error(MESSAGES.loadedAboveLabJs());
       else if (doc.querySelector && doc.querySelector('[data-labjs-section]')) console.error(MESSAGES.labjsNotHookable());
     } catch (_) { /* a diagnosis only */ }
   }
