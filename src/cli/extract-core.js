@@ -158,11 +158,14 @@ export function extractIntegrityData(raw, config) {
       `) — defaulted to "unknown". Check participantIdField.`
     );
   }
-  // Rows that carry more than one ch.js id, or more than one id of the
-  // study's own, hold more than one session (a concatenated export). ch.js's
-  // id then names no single session, so it is not kept as a second name for
-  // the participant's replay recording (ingest-core.js attaches by it).
-  const severalIds = !!fromRows.chIds && (fromRows.chIds.length > 1 || fromRows.ownIds.length > 1);
+  // Rows from the one-line setup on lab.js that carry more than one ch.js id,
+  // or more than one id of the study's own, hold more than one session (a
+  // concatenated export). ch.js's id then names no single session, so it is
+  // not kept as a second name for the participant's replay recording
+  // (ingest-core.js attaches by it). Rows without ch.js's id have no such
+  // name, and are keyed by their first id as before.
+  const severalIds = !!fromRows.chIds && fromRows.chIds.length > 0 &&
+    (fromRows.chIds.length > 1 || fromRows.ownIds.length > 1);
   if (severalIds) {
     const list = ids => ids.slice(0, 5).join(', ') + (ids.length > 5 ? ', …' : '');
     const named = [];

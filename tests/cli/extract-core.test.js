@@ -371,6 +371,13 @@ describe('lab.js rows that carry more than one participant', () => {
     assert.strictEqual(r.metadata.cyborgHunterParticipantId, 'CH-1');
     assert.strictEqual(idWarning(r), undefined);
   });
+  // Rows without ch.js's id (jsPsych's exportJson(), say) have no alias to
+  // refuse: keyed by the first id, as before, and no warning about ch.js.
+  it('a top-level array without ch.js ids whose rows carry two participantIds: keyed by the first, no warning', () => {
+    const r = extractIntegrityData([row('a', { participantId: 'J-1' }), row('b', { participantId: 'J-2' })], {});
+    assert.strictEqual(r.participantId, 'J-1');
+    assert.strictEqual(idWarning(r), undefined);
+  });
   it('a lab.js CSV with two ch.js ids: the same warning, and no alias', () => {
     const csv = [
       'sender,participantId,cyborgHunterParticipantId,integrity',
