@@ -185,7 +185,9 @@ and events as times, durations and lengths (pastes, copies, drops, tab
 switches, idle gaps, keyboard shortcuts, sidebar and developer-tools
 openings). It never contains text the participant typed or pasted (a paste
 is kept as its length), the honeypot's free-text answer (only its length),
-mouse or element traces, keystroke timings, or window positions.
+the id or class of a field typed into outside the survey (only its tag name
+and the kind of input), mouse or element traces, keystroke timings, or window
+positions.
 
 Qualtrics refuses a page submit whose embedded data is too long: the
 participant sees "Something went wrong" and cannot continue. In tests a

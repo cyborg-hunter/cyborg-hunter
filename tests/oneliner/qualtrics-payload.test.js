@@ -249,6 +249,113 @@ describe('the payload is built from allowlists', () => {
   });
 });
 
+// Every string the payload can carry, by path ('[]' marks an array entry).
+// A string is the one kind of value that can hold what a participant typed,
+// so this list pins the allowlists: a string field added to the builder has
+// to be added here on purpose, after checking that no page can put a
+// participant's text in it. Left out on purpose: a foreign-input event's
+// targetId and targetClass (a widget can mirror its value into them).
+const STRING_PATHS = [
+  'participantId', 'libraryVersion', 'cyborgHunterOneLiner.version', 'cyborgHunterError',
+  'guard_assistance_violations_session[].reason',
+  'trials[].trialId', 'trials[].cyborgHunterError',
+  'trials[].integrity.trialId', 'trials[].integrity.phase', 'trials[].integrity.libraryVersion',
+  'trials[].integrity.participantId', 'trials[].integrity.timestamp',
+  'trials[].integrity.pasteEvents[].type', 'trials[].integrity.copyEvents[].type', 'trials[].integrity.dropEvents[].type',
+  'trials[].integrity.tabAwayEvents[].type', 'trials[].integrity.tabAwayEvents[].timestamp',
+  'trials[].integrity.syntheticInsertions[].type',
+  'trials[].integrity.foreignInputEvents[].targetTag', 'trials[].integrity.foreignInputEvents[].inputType',
+  'trials[].integritySegment.source', 'trials[].integritySegment.trialId', 'trials[].integritySegment.libraryVersion',
+  'trials[].integritySegment.deltas.tabAwayEvents[].type', 'trials[].integritySegment.deltas.tabAwayEvents[].timestamp',
+  'trials[].integritySegment.deltas.sidebarEvents[].type', 'trials[].integritySegment.deltas.sidebarEvents[].method',
+  'trials[].integritySegment.deltas.aiExtensionsFound[].name', 'trials[].integritySegment.deltas.keyboardShortcuts[].combo',
+  'trials[].integritySegment.deltas.extensionInjections[].tag',
+  'trials[].integritySegment.gap[].pasteEvents[].type', 'trials[].integritySegment.gap[].copyEvents[].type',
+  'trials[].integritySegment.gap[].dropEvents[].type', 'trials[].integritySegment.gap[].syntheticInsertions[].type',
+  'trials[].integritySegment.config.preset', 'trials[].integritySegment.config.participantId'
+];
+// Strings the builder writes itself, the same whatever the blob holds.
+const BUILDER_STRINGS = { 'cyborgHunterOneLiner.host': 'qualtrics', 'integritySegments[].source': 'rollup' };
+
+// v with every string replaced by 'S:' + its path.
+function sentinels(v, path) {
+  if (typeof v === 'string') return 'S:' + path;
+  if (Array.isArray(v)) return v.map((x) => sentinels(x, path + '[]'));
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, sentinels(x, path ? path + '.' + k : k)]));
+  return v;
+}
+// Every string in a payload: path → the set of values found there. The
+// honeypot's violation log is a JSON string, read as the list it holds.
+function strings(v, path = '', out = new Map()) {
+  if (path === 'guard_assistance_violations_session' && typeof v === 'string') return strings(JSON.parse(v), path, out);
+  if (typeof v === 'string') { if (!out.has(path)) out.set(path, new Set()); out.get(path).add(v); }
+  else if (Array.isArray(v)) v.forEach((x) => strings(x, path + '[]', out));
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) strings(x, path ? path + '.' + k : k, out);
+  return out;
+}
+
+// A blob holding every kind of entry the monitor writes, with free text and
+// ids in the fields the allowlists leave out, every string then replaced by
+// its sentinel. 8 rows, 30 tab-aways and 6 pastes a row: every level 0-5 is
+// reachable.
+function sentinelBlob() {
+  const b = blob({ pages: 8, events: 6, tabAways: 30 });
+  b.cyborgHunterError = 'note';
+  for (const r of b.trials) {
+    r.cyborgHunterError = 'note';
+    const t = r.integrity;
+    t.pasteEvents.forEach((e) => { e.text = 'typed'; });
+    t.copyEvents = [{ type: 'copy', t: 1, selectedLength: 3, selection: 'typed' }];
+    t.dropEvents = [{ type: 'drop', t: 2, droppedLength: 3, isKnownInput: true, text: 'typed' }];
+    t.tabAwayEvents = [{ start: 3, duration_ms: 4000, type: 'windowBlur', timestamp: STAMP }];
+    t.syntheticInsertions = [{ type: 'synthetic_insertion', t: 4, dataLength: 3, data: 'typed' }];
+    t.foreignInputEvents = [{ t: 5, targetTag: 'TEXTAREA', targetId: 'mirror-of-the-answer', targetClass: 'mirror', inputType: 'insertText', data: 'typed' }];
+    t.decoy = { level: 1, injectedText: 'page text', survivedTrial: true };
+    t.responseText = 'typed';
+    const d = r.integritySegment.deltas;
+    d.sidebarEvents = [{ type: 'opened', method: 'innerWidth_delta', deltaIW: -300, innerWidth: 900, baselineIW: 1200, gap: 300, duration_ms: 0, t: 6 }];
+    d.aiExtensionsFound = [{ name: 'Merlin', t: 7 }];
+    d.keyboardShortcuts = [{ combo: 'F12', t: 8 }];
+    d.extensionInjections = [{ tag: 'merlin-root', hasShadow: true, t: 9 }];
+    r.integritySegment.gap = [{ duration_ms: 5,
+      pasteEvents: [{ type: 'paste', t: 1, pastedLength: 3, isKnownInput: true, text: 'typed' }],
+      copyEvents: [{ type: 'copy', t: 1, selectedLength: 3 }],
+      dropEvents: [{ type: 'drop', t: 1, droppedLength: 3, isKnownInput: true, text: 'typed' }],
+      syntheticInsertions: [{ type: 'synthetic_insertion', t: 1, dataLength: 3, data: 'typed' }] }];
+  }
+  const filled = sentinels(b, '');
+  filled.guard_assistance_violations_session = JSON.stringify(sentinels(Array.from({ length: 30 }, (_, k) =>
+    ({ reason: 'window_blurred', start: k, end: k + 1, duration: 1, in_progress: false, pageOrigin: ORIGIN, note: 'typed' })),
+  'guard_assistance_violations_session'));
+  return filled;
+}
+
+describe('every string field the payload allows, at every level', () => {
+  it('each holds only its own field\'s value, and the fields per level are exactly the pinned ones', () => {
+    const b = sentinelBlob();
+    // Levels 0-2 keep every kind of string; level 3 drops the first page,
+    // and with it the segment libraryVersion only the first segment carries
+    // (its config moves forward); level 4 keeps the newest row's required
+    // fields; level 5 the participant id.
+    const all = STRING_PATHS.slice().sort();
+    const level4 = ['participantId', 'libraryVersion', 'cyborgHunterOneLiner.version', 'cyborgHunterError', 'trials[].trialId',
+      'trials[].integrity.trialId', 'trials[].integrity.libraryVersion', 'trials[].integrity.participantId',
+      'trials[].integritySegment.source', 'trials[].integritySegment.trialId'].sort();
+    const expected = [all, all, all, all.filter((p) => p !== 'trials[].integritySegment.libraryVersion'), level4, ['participantId']];
+    const results = [0, 1, 2, 3, 4].map((level) => atLevel(b, level));
+    results.push(build(b, results[4].chars - 1));
+    for (const [level, out] of results.entries()) {
+      assert.strictEqual(out.level, level);
+      const found = strings(out.payload);
+      for (const [path, values] of found) {
+        assert.deepStrictEqual([...values], [BUILDER_STRINGS[path] || 'S:' + path], 'level ' + level + ': ' + path);
+      }
+      const paths = [...found.keys()].filter((p) => !(p in BUILDER_STRINGS)).sort();
+      assert.deepStrictEqual(paths, expected[level], 'level ' + level);
+    }
+  });
+});
+
 // The writer writes `json` only when it is a string, and Qualtrics blocks
 // the participant when a submit is too long, so no result may be longer
 // than its cap, whatever the cap and whatever the blob holds.

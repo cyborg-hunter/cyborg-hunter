@@ -133,7 +133,10 @@ var DROP = listOf({ type: label, t: num, droppedLength: num, isKnownInput: bool 
 var TAB_AWAY = listOf({ start: num, duration_ms: num, type: label, timestamp: label });
 var IDLE = listOf({ duration_ms: num, t: num });
 var INSERTION = listOf({ type: label, t: num, dataLength: num });
-var FOREIGN = listOf({ t: num, targetTag: label, targetId: label, targetClass: label, inputType: label });   // never `data`: the typed text
+// Never `data` (the typed text), nor the target's id or class: a page widget
+// can set those from what was typed. The tag and the kind of input are fixed
+// sets.
+var FOREIGN = listOf({ t: num, targetTag: label, inputType: label });
 
 // The trial report's event arrays (level 2 empties them on older rows).
 var EVENTS = { pasteEvents: PASTE, copyEvents: COPY, dropEvents: DROP, tabAwayEvents: TAB_AWAY,
