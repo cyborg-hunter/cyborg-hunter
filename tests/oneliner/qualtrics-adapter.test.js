@@ -301,6 +301,42 @@ describe('Qualtrics host: the page-submit writer', () => {
       assert.strictEqual(ctx.qualtrics.lastWrite().cap, MAX_CHARS);
     });
   }
+
+  // The writer clamps its own cap, so neither boot's test option nor an
+  // install option can raise it above MAX_CHARS with the real builder.
+  it('boot\'s qualtricsMaxChars above MAX_CHARS is clamped by the writer', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake, { maxChars: 50000 });
+    for (let i = 0; i < 150; i++) tabAway(3500);
+    const v = fake.submit('next')[STORED_FIELD];
+    assert.strictEqual(ctx.qualtrics.lastWrite().cap, MAX_CHARS);
+    assert.ok(bytes(v) <= MAX_CHARS, bytes(v) + ' bytes');
+    assert.ok(JSON.parse(v).cyborgHunterOneLiner.truncated.level >= 1, 'reduced to the default cap');
+  });
+
+  it('installQualtricsAdapter({ maxChars }) above MAX_CHARS is clamped; a lower one is kept', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    reinstall(ctx, fake, { maxChars: 50000 });
+    for (let i = 0; i < 150; i++) tabAway(3500);
+    const v = fake.submit('next')[STORED_FIELD];
+    assert.strictEqual(ctx.qualtrics.lastWrite().cap, MAX_CHARS);
+    assert.ok(bytes(v) <= MAX_CHARS, bytes(v) + ' bytes');
+    reinstall(ctx, fake, { maxChars: 3000 });
+    const low = fake.submit('next')[STORED_FIELD];
+    assert.strictEqual(ctx.qualtrics.lastWrite().cap, 3000);
+    assert.ok(bytes(low) <= 3000, bytes(low) + ' bytes');
+  });
+
+  for (const bad of [0, -1, 1.5, '5000', NaN, Infinity, null, {}]) {
+    it('installQualtricsAdapter({ maxChars: ' + String(bad) + ' }) writes under MAX_CHARS', () => {
+      const fake = fakeSurveyEngine();
+      const ctx = start(fake);
+      reinstall(ctx, fake, { maxChars: bad });
+      fake.submit('next');
+      assert.strictEqual(ctx.qualtrics.lastWrite().cap, MAX_CHARS);
+    });
+  }
 });
 
 describe('Qualtrics host: what reaches the field', () => {

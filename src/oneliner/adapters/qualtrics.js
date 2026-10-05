@@ -135,6 +135,8 @@
 // installQualtricsAdapter also takes registerOnce / writeOnRerun, and a
 // builder in place of buildQualtricsPayload, so tests cover both paths and
 // every kind of bad builder output whatever the constants and the builder do.
+// maxChars can only lower the cap: above MAX_CHARS, or not a positive
+// integer, it is MAX_CHARS.
 
 import { VERSION } from '../../shared/constants.js';
 import { MESSAGES } from '../errors.js';
@@ -199,7 +201,10 @@ function utf8Bytes(s) {
 
 export function installQualtricsAdapter(opts) {
   var win = opts.win, ctx = opts.ctx;
-  var maxChars = opts.maxChars || MAX_CHARS;
+  // The cap is clamped here, the one place every caller goes through: a
+  // positive integer can lower it (tests do), nothing can raise it above
+  // MAX_CHARS, and anything else means MAX_CHARS.
+  var maxChars = Number.isInteger(opts.maxChars) && opts.maxChars > 0 ? Math.min(opts.maxChars, MAX_CHARS) : MAX_CHARS;
   var builder = opts.builder || buildQualtricsPayload;
   var registerOnce = opts.registerOnce === undefined ? REGISTER_ONCE : opts.registerOnce;
   var writeOnRerun = opts.writeOnRerun === undefined ? WRITE_ON_RERUN : opts.writeOnRerun;
