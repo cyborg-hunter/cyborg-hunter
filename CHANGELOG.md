@@ -19,6 +19,16 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the whole session from the carried totals while their event cells list
   only the kept entries, so a cell's count can be lower than its tile's.
   See docs/qualtrics.md.
+- One-line setup: a lab.js host. With the ch.js tag below `lib/lab.js` (lab.js
+  20.x, what the builder exports), every lab.js component that is shown is a
+  trial, named from the `cyborgHunter` component option, the `chTrialId` /
+  `chPhase` parameters or a `data-ch-trial` element, and its integrity
+  columns are written into lab.js's own rows. ch.js never overwrites the
+  study's `participantId`; its own ID goes into `cyborgHunterParticipantId`.
+  When the root component ends, the final fields are written onto the last
+  trial row and the root row, before `on('end')` handlers run. A lab.js 23
+  pre-release is not hooked yet: one warning, and the page runs as one
+  without lab.js. See docs/labjs.md.
 - Standalone replay recorder (`CyborgHunterReplay.attach()`):
   `resumeSession()` records again after `stopSession()`, in later segments of
   the same recording; call `startTrial()` right after it.

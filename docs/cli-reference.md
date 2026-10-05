@@ -22,7 +22,7 @@ Running `cyborg-hunter` with no subcommand defaults to `report`.
 | `--config <path>` / `--config-file <path>` | Config file path (default: `./cyborg-hunter.config.json`) |
 | `--data <path>` / `--data-dir <path>` | Override `dataDir` |
 | `--output <path>` / `--output-dir <path>` | Override `outputDir` |
-| `--participant-id-field <name>` | Override `participantIdField` (e.g. `subject_ID` for jsPsych; dot-paths like `metadata.sessionId` supported) |
+| `--participant-id-field <name>` | Override `participantIdField` (e.g. `subject_ID` for jsPsych; dot-paths like `metadata.sessionId` supported; lab.js data keeps the default, see [labjs.md](labjs.md#saving-and-reading-the-data)) |
 | `--file-pattern <glob>` | Override `filePattern` |
 | `--integrity-field <name>` | Override `integrityField` |
 | `--session-integrity-path <path>` | Dotted path to the session-level integrity object (e.g. `payload.cyborgHunter`) |

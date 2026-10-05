@@ -263,6 +263,9 @@ If the timeline has an entry trial (or the page has a friction start) but `data-
 
 ## Vanilla segmentation reference
 
+For lab.js studies, see [labjs.md](labjs.md): the rules below do not apply there.
+
+
 On a page without jsPsych, ch.js cuts the session into segments at two kinds of boundary. Manual marks take precedence over page loads:
 
 - **Boot.** The first segment, `span-0`, opens when the page loads. Unnamed segments are called `span-<index>`.
