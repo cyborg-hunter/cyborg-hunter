@@ -99,7 +99,7 @@ for (const scripts of ['element', 'eval']) {
     expect(payloads[3].cyborgHunterOneLiner.pageCount).toBe(1);                         // one page load
     for (const p of server.posts) expect(p.bytes).toBeLessThanOrEqual(CAP);
     expect(await badgeText(page)).toMatch(new RegExp('^Cyborg Hunter active · Qualtrics detected · page 4 · field ' + FIELD +
-      ' declared · ID from data-participant-id · honeypot on · friction off · header re-run ×3 · last write \\d+/' + CAP + ' chars$'));
+      ' declared · ID from data-participant-id · honeypot on · friction off · header re-run ×3 · last write \\d+/' + CAP + ' bytes$'));
     expect(log.info.filter((t) => t.startsWith('Cyborg Hunter active'))).toHaveLength(1);   // one summary, not four
 
     const out = saveAndReport(newTmpDir('qx-' + scripts), 'E2E-QX-1.json', server.posts[3].values[FIELD]);
@@ -170,14 +170,14 @@ test('the cap seam only lowers: maxChars=3000 caps the write at 3000, maxChars=5
   await tabAways();
   await nextPage(page, 1);
   expect(server.posts[0].bytes).toBeLessThanOrEqual(3000);
-  expect(await badgeText(page)).toMatch(/last write \d+\/3000 chars$/);
+  expect(await badgeText(page)).toMatch(/last write \d+\/3000 bytes$/);
 
   await page.goto(at('maxChars=50000', SURVEY_B));
   await ready(page, 1);
   await tabAways();
   await nextPage(page, 1);
   expect(server.posts[1].bytes).toBeLessThanOrEqual(CAP);
-  expect(await badgeText(page)).toMatch(new RegExp('last write \\d+/' + CAP + ' chars$'));
+  expect(await badgeText(page)).toMatch(new RegExp('last write \\d+/' + CAP + ' bytes$'));
 });
 
 test('undeclared field: the value is dropped, the summary and the console say so', async ({ page }) => {

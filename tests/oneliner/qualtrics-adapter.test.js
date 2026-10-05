@@ -1175,8 +1175,8 @@ describe('Qualtrics host: the debug badge', () => {
     const ctx = start(fake, { dataset: { debug: '' } });
     fake.submit('next');
     const text = win.document.getElementById('ch-debug-badge').textContent;
-    assert.match(text, new RegExp('^Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · .* · last write \\d+/' + MAX_CHARS + ' chars$'));
-    assert.ok(text.endsWith('last write ' + ctx.qualtrics.lastWrite().chars + '/' + MAX_CHARS + ' chars'), text);
+    assert.match(text, new RegExp('^Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · .* · last write \\d+/' + MAX_CHARS + ' bytes$'));
+    assert.ok(text.endsWith('last write ' + ctx.qualtrics.lastWrite().chars + '/' + MAX_CHARS + ' bytes'), text);
   });
 
   it('after a re-run: page, field, re-runs and last write, on one badge', () => {
@@ -1185,7 +1185,7 @@ describe('Qualtrics host: the debug badge', () => {
     fake.submit('next');
     fake.rerunHeader(win, null);
     const text = win.document.getElementById('ch-debug-badge').textContent;
-    assert.match(text, new RegExp('Qualtrics detected · page 2 · field __js_cyborg_hunter declared · .* · header re-run ×1 · last write \\d+/' + MAX_CHARS + ' chars$'));
+    assert.match(text, new RegExp('Qualtrics detected · page 2 · field __js_cyborg_hunter declared · .* · header re-run ×1 · last write \\d+/' + MAX_CHARS + ' bytes$'));
     assert.strictEqual(win.document.querySelectorAll('#ch-debug-badge').length, 1);
   });
 

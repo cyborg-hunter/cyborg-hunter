@@ -164,7 +164,7 @@ the live check finds that it does, the line is required.
 2. **On a page with a text-entry question, paste into the text box, switch
    to another tab for at least five seconds, come back and press Next.** On
    the second page the badge should read
-   `… page 2 · field __js_cyborg_hunter declared · … · header re-run ×1 · last write N/12000 chars`,
+   `… page 2 · field __js_cyborg_hunter declared · … · header re-run ×1 · last write N/12000 bytes`,
    or `unknown` in place of `declared`: Qualtrics' read-back is still being
    checked on a live survey, and step 3's export is the check that counts.
    `NOT DECLARED`: [declare the field](#declare-the-field). `last write`

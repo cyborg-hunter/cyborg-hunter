@@ -41,8 +41,8 @@
 //   " · header re-run ×<ctx.rerunCount>" when the header ran again,
 //   " · submits missed ×<n>" when a page was submitted before the writer's
 //   hook was in place (ctx.qualtrics.missed()), and
-//   " · last write <chars>/<cap> chars" once ctx.qualtrics.lastWrite() is
-//   set. The replay reminder reads "replay is on: it is never written to
+//   " · last write <chars>/<cap> bytes" (both in UTF-8 bytes) once
+//   ctx.qualtrics.lastWrite() is set. The replay reminder reads "replay is on: it is never written to
 //   Qualtrics; save CyborgHunter.replay() to your own server". On the new
 //   layout without a survey id (ctx.qualtricsSurveyId, boot.js) the summary
 //   ends with "no survey id in the address or data-qualtrics-survey-id: the
@@ -133,7 +133,7 @@ export function createDebug(opts) {
       var missed = q && typeof q.missed === 'function' ? q.missed() : 0;
       if (missed > 0) out.live.push('submits missed ×' + missed);
       var w = q ? q.lastWrite() : null;
-      if (w) out.live.push('last write ' + w.chars + '/' + w.cap + ' chars');
+      if (w) out.live.push('last write ' + w.chars + '/' + w.cap + ' bytes');
     }
     return out;
   }

@@ -206,7 +206,7 @@ describe('createDebug under Qualtrics', () => {
     var c = qxCtx({ win: win, rerunCount: 2, qualtrics: { page: () => 3, declared: () => null, lastWrite: () => ({ chars: 4812, cap: 12000, level: 0 }) } });
     var d = createDebug({ doc: win.document, ctx: c, log: log });
     assert.strictEqual(d.badgeText(),
-      'Cyborg Hunter active · Qualtrics detected · page 3 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off · header re-run ×2 · last write 4812/12000 chars');
+      'Cyborg Hunter active · Qualtrics detected · page 3 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off · header re-run ×2 · last write 4812/12000 bytes');
     // The re-runs and the last write are live state: the logged summary leaves them out.
     assert.ok(!d.summary().includes('re-run'), d.summary());
     assert.ok(!d.summary().includes('last write'), d.summary());
