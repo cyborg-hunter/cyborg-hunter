@@ -84,6 +84,18 @@ export function extractIntegrityData(raw, config) {
   const rows = Array.isArray(raw) ? raw : transmitRows(raw);
   if (rows) raw = Array.isArray(raw) ? { trials: rows } : { ...raw, trials: rows };
   const fromRows = rows ? participantFromRows(rows, pidField, intField) : {};
+  // Transmit posts an incremental slice of new rows on every idle and the
+  // full data at the end, so a server that stores each body holds several
+  // files per session. A slice is read (its rows are real), but it is partial
+  // and may be keyed apart from the full body (ch.js's id, when the study's
+  // own id sits on an earlier row), so say so.
+  if (rows && raw.metadata?.payload === 'incremental') {
+    warnings.push(
+      `this is one incremental slice of a lab.js upload (rows from ${raw.metadata.slice ?? '?'}, ` +
+      `session ${raw.metadata.id ?? '?'}); ingest only the final 'full' body, or the participant ` +
+      `appears with partial data`
+    );
+  }
 
   // Determine participant ID — check top level, then metadata sub-object,
   // then (rows only) the rows.

@@ -1,12 +1,14 @@
 // Loads JSON or CSV participant files, extracts integrity data, validates schema.
 //
-// Three input shapes:
+// Input shapes:
 //   1. JSON Shape 1 — { participantId: 'P1', trials: [{ integrity: {...} }] }
 //      jsPsych extension data with one file per participant.
 //   2. JSON Shape 2 — { metadata: {...}, responses: [{ mouseTrack, tabAwayEvents, ... }] }
 //      The original legacy format. Signal data lives flat on each response
 //      (no `integrity` wrapper). Pre-dates the standalone library.
-//   3. CSV — jsPsych default save format. Each row is a trial; nested objects
+//   3. JSON Shape 3 — a top-level array of rows, or { data: [rows] } (the
+//      lab.js Transmit body): read as Shape 1 by extract-core.js.
+//   4. CSV — jsPsych default save format. Each row is a trial; nested objects
 //      (integrity, integritySession, integrityScore) are JSON-stringified into
 //      single cells. We unwrap them and route through Shape 1.
 //   A Qualtrics CSV export is the exception to one file, one participant: it
