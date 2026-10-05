@@ -277,3 +277,109 @@ describe('lab.js rows: the study\'s participantId and ch.js\'s id', () => {
     assert.ok(!('metadata' in raw));
   });
 });
+
+// A participant id is a string from the extractor on: the report names its
+// files after it and --participant compares strings. 0 and false are ids
+// (a CSV's dynamic typing turns a numeric subject id into a number); a
+// missing, null or empty id is not.
+describe('participant ids that are not strings', () => {
+  const integ = (id) => ({ trialId: id, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
+  const trialRow = (pid) => ({ sender: 'a', participantId: pid, integrity: integ('0') });
+
+  for (const [id, key] of [[42, '42'], [0, '0'], [false, 'false']]) {
+    it('Shape 1 with participantId ' + JSON.stringify(id) + ' is keyed "' + key + '"', () => {
+      const r = extractIntegrityData({ participantId: id, trials: [{ integrity: integ('t1') }] }, {});
+      assert.strictEqual(r.participantId, key);
+      assert.ok(!r.warnings.some((w) => w.includes('participantId unresolved')), r.warnings.join(' | '));
+    });
+  }
+  for (const id of [undefined, null, '']) {
+    it('Shape 1 with participantId ' + JSON.stringify(id) + ' stays "unknown", with the warning', () => {
+      const r = extractIntegrityData({ participantId: id, trials: [{ integrity: integ('t1') }] }, {});
+      assert.strictEqual(r.participantId, 'unknown');
+      assert.ok(r.warnings.some((w) => w.includes('participantId unresolved')));
+    });
+  }
+  it('a top-level array and a Transmit body whose rows carry a numeric id are keyed by its string', () => {
+    assert.strictEqual(extractIntegrityData([trialRow(43)], {}).participantId, '43');
+    assert.strictEqual(extractIntegrityData([trialRow(0)], {}).participantId, '0');
+    const body = { metadata: { slice: 0, id: 'x', payload: 'full' }, url: 'https://x/', data: [trialRow(44)] };
+    assert.strictEqual(extractIntegrityData(body, {}).participantId, '44');
+  });
+  it('a CSV with a numeric id (dynamic typing makes it a number) is keyed by its string, 0 included', () => {
+    const csv = (id) => ['participantId,integrity', id + ',"{""trialId"":""0"",""pasteEvents"":[]}"'].join('\n');
+    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('42'), {}), {}).participantId, '42');
+    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('0'), {}), {}).participantId, '0');
+  });
+  it('lab.js rows with a numeric study id and a numeric ch.js id: both strings, ch.js\'s in the metadata', () => {
+    const rows = [
+      { sender: 'a', participantId: 7, cyborgHunterParticipantId: 9, integrity: integ('0') },
+      { sender: 'b', cyborgHunterParticipantId: 9, integrity: integ('1') }
+    ];
+    const r = extractIntegrityData(rows, {});
+    assert.strictEqual(r.participantId, '7');
+    assert.strictEqual(r.metadata.cyborgHunterParticipantId, '9');
+  });
+});
+
+// Several sessions in one file (a concatenation, or rows from two pages):
+// ch.js's id is a second name for one session's replay recording, so it is
+// used only when the rows carry exactly one, and at most one id of the
+// study's own besides it.
+describe('lab.js rows that carry more than one participant', () => {
+  const integ = (id) => ({ trialId: id, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
+  const row = (sender, extra) => Object.assign({ sender, integrity: integ(sender) }, extra);
+  const idWarning = (r) => r.warnings.find((w) => w.includes('more than one participant id'));
+
+  it('two ch.js ids (two sessions concatenated, each with its row-0 stamp): keyed by the first, no alias, one warning', () => {
+    const rows = [
+      row('a', { participantId: 'CH-1', cyborgHunterParticipantId: 'CH-1' }), row('b', { cyborgHunterParticipantId: 'CH-1' }),
+      row('a', { participantId: 'CH-2', cyborgHunterParticipantId: 'CH-2' }), row('b', { cyborgHunterParticipantId: 'CH-2' })
+    ];
+    const r = extractIntegrityData(rows, {});
+    assert.strictEqual(r.participantId, 'CH-1', 'a second session\'s stamp is not the study\'s id');
+    assert.ok(!('cyborgHunterParticipantId' in r.metadata));
+    const w = idWarning(r);
+    assert.ok(w, r.warnings.join(' | '));
+    assert.match(w, /cyborgHunterParticipantId: CH-1, CH-2/);
+    assert.match(w, /keyed by "CH-1"/);
+  });
+  it('two ch.js ids under study ids: keyed by the first study id, no alias', () => {
+    const rows = [
+      row('a', { participantId: 'R-1', cyborgHunterParticipantId: 'CH-1' }),
+      row('a', { participantId: 'R-2', cyborgHunterParticipantId: 'CH-2' })
+    ];
+    const r = extractIntegrityData(rows, {});
+    assert.strictEqual(r.participantId, 'R-1');
+    assert.ok(!('cyborgHunterParticipantId' in r.metadata));
+    assert.match(idWarning(r), /participantId: R-1, R-2; cyborgHunterParticipantId: CH-1, CH-2/);
+  });
+  it('one ch.js id and two study ids: no alias, one warning', () => {
+    const rows = [
+      row('a', { participantId: 'R-1', cyborgHunterParticipantId: 'CH-1' }),
+      row('b', { participantId: 'R-2', cyborgHunterParticipantId: 'CH-1' })
+    ];
+    const r = extractIntegrityData(rows, {});
+    assert.strictEqual(r.participantId, 'R-1');
+    assert.ok(!('cyborgHunterParticipantId' in r.metadata));
+    assert.match(idWarning(r), /participantId: R-1, R-2/);
+  });
+  it('one ch.js id and one study id (row 0 stamped with ch.js\'s id): the alias, and no warning', () => {
+    const rows = [row('a', { participantId: 'CH-1', cyborgHunterParticipantId: 'CH-1' }), row('b', { participantId: 'R-1', cyborgHunterParticipantId: 'CH-1' })];
+    const r = extractIntegrityData(rows, {});
+    assert.strictEqual(r.participantId, 'R-1');
+    assert.strictEqual(r.metadata.cyborgHunterParticipantId, 'CH-1');
+    assert.strictEqual(idWarning(r), undefined);
+  });
+  it('a lab.js CSV with two ch.js ids: the same warning, and no alias', () => {
+    const csv = [
+      'sender,participantId,cyborgHunterParticipantId,integrity',
+      'a,R-1,CH-1,"{""trialId"":""0"",""pasteEvents"":[]}"',
+      'a,R-2,CH-2,"{""trialId"":""0"",""pasteEvents"":[]}"'
+    ].join('\n');
+    const r = extractIntegrityData(parseCsvToRaw(csv, {}), {});
+    assert.strictEqual(r.participantId, 'R-1');
+    assert.ok(!r.metadata || !('cyborgHunterParticipantId' in r.metadata));
+    assert.ok(idWarning(r), r.warnings.join(' | '));
+  });
+});
