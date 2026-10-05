@@ -377,11 +377,13 @@ function minimal(pid, cap, full, reason, failed) {
   p.cyborgHunterOneLiner = { host: 'qualtrics', truncated: { level: 5 } };
   p.trials = [];
   if (failed) p.cyborgHunterError = 'the Qualtrics payload could not be built';
-  var json = JSON.stringify(p);
-  var n = utf8Length(json);
+  var json = null;
+  try { json = JSON.stringify(p); } catch (_) { /* a page whose Object.prototype.toJSON throws */ }
+  var n = json === null ? Infinity : utf8Length(json);
   var out = n <= cap ? result(p, json, n, 5, full)
     : result(null, null, 0, 5, full);
-  out.reason = n <= cap ? reason : reason + '; nor does the minimal payload (' + n + ' bytes)';
+  out.reason = n <= cap ? reason
+    : reason + (json === null ? '; nor can the minimal payload be serialized' : '; nor does the minimal payload (' + n + ' bytes)');
   return out;
 }
 

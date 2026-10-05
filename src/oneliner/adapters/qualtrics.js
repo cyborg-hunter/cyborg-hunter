@@ -122,8 +122,9 @@
 // (CyborgHunter.data() from addOnPageSubmit) is the only writer.
 //
 // Nothing here throws into the page: the submit callback, the re-run hook
-// and data() each end in a catch-all, and the error text, the console calls
-// and the note they make cannot throw either.
+// and data() each end in a catch-all, and the error text, the console calls,
+// the note they make and data()'s last resort, the error marker, cannot throw
+// either (a page that makes JSON.stringify throw gets no write at all).
 //
 // Two switches are set by checking a live multi-page survey:
 //   REGISTER_ONCE   Qualtrics keeps addOnPageSubmit callbacks across pages,
@@ -266,7 +267,9 @@ export function installQualtricsAdapter(opts) {
 
   // Written in place of a payload that failed its check: fixed fields and the
   // participant id without control characters, cut to ID_MAX, so a few
-  // hundred bytes at most. Cannot throw.
+  // hundred bytes at most. Cannot throw: when a page script makes
+  // JSON.stringify throw (an Object.prototype.toJSON of its own), the marker
+  // has no json and is never written, and data() still returns its payload.
   function marker(code) {
     var id = '';
     try { id = String(ctx.participantId).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, ID_MAX); } catch (_) { /* no id */ }
@@ -277,8 +280,9 @@ export function installQualtricsAdapter(opts) {
       trials: [],
       cyborgHunterError: 'the Qualtrics payload could not be written (' + code + ')'
     };
-    var json = JSON.stringify(payload);
-    return { json: json, payload: payload, bytes: utf8Bytes(json) };
+    var json = null;
+    try { json = JSON.stringify(payload); } catch (_) { /* nothing can be serialized on this page */ }
+    return { json: json, payload: payload, bytes: json === null ? Infinity : utf8Bytes(json) };
   }
 
   function set(json) {

@@ -442,6 +442,19 @@ describe('the cap', () => {
     assert.ok(buildQualtricsPayload({ blob: thrower }).reason.includes('getter failed'));
   });
 
+  it('never throws when the page makes every JSON.stringify throw: no payload, and a reason', () => {
+    const b = blob();
+    Object.defineProperty(Object.prototype, 'toJSON', { value() { throw new Error('toJSON boom'); }, configurable: true, writable: true });
+    let out;
+    try {
+      assert.doesNotThrow(() => { out = build(b, 12000); });
+    } finally {
+      delete Object.prototype.toJSON;
+    }
+    assert.deepStrictEqual([out.payload, out.json, out.chars, out.level], [null, null, 0, 5]);
+    assert.ok(/toJSON boom/.test(out.reason), out.reason);
+  });
+
   it('random blobs and caps: never over the cap, always valid JSON, never the input changed', () => {
     let seed = 20261002;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);

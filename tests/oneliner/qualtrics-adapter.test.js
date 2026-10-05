@@ -541,6 +541,29 @@ describe('Qualtrics host: nothing throws into the survey', () => {
     assert.deepStrictEqual(errors, [MESSAGES.qualtricsWriteFailed('nope')]);
   });
 
+  // A page script can make every JSON.stringify throw. Then nothing can be
+  // written, the error marker included, but no entry point may throw: a
+  // researcher's own unwrapped data() call sits in a submit callback.
+  it('a page whose Object.prototype.toJSON throws: data(), the submit and the re-run throw nothing and write nothing', () => {
+    const fake = fakeSurveyEngine();
+    const ctx = start(fake);
+    paste('x');
+    let d;
+    Object.defineProperty(Object.prototype, 'toJSON', { value() { throw new Error('toJSON boom'); }, configurable: true, writable: true });
+    try {
+      assert.doesNotThrow(() => { d = win.CyborgHunter.data(); });
+      assert.doesNotThrow(() => fake.submit('next'));
+      assert.doesNotThrow(() => ctx.handlers.rerun());
+    } finally {
+      delete Object.prototype.toJSON;
+    }
+    // The builder could serialize nothing (no json), and neither could the
+    // marker that data() returns in its place.
+    assert.strictEqual(d.cyborgHunterOneLiner.error, 'no-json');
+    assert.deepStrictEqual(d.trials, []);
+    assert.strictEqual(fake.store[STORED_FIELD], undefined);
+  });
+
   it('the documented final-page CyborgHunter.data() line cannot make the submit throw', async () => {
     const fake = fakeSurveyEngine();
     const ctx = start(fake);
