@@ -263,8 +263,7 @@ If the timeline has an entry trial (or the page has a friction start) but `data-
 
 ## Vanilla segmentation reference
 
-For lab.js studies, see [labjs.md](labjs.md): the rules below do not apply there.
-
+For a lab.js study that ch.js hooks, see [labjs.md](labjs.md); the rules below apply when ch.js runs on a lab.js page as on a page without lab.js (after a placement error, or on lab.js 23).
 
 On a page without jsPsych, ch.js cuts the session into segments at two kinds of boundary. Manual marks take precedence over page loads:
 
