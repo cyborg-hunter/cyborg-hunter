@@ -19,10 +19,13 @@ describe('summary', () => {
     assert.equal(summary.totalSoftScore, 3);
   });
 
-  it('takes clipboard totals from the session counters when a trimmed payload emptied the trial lists', () => {
+  // reducedPayload (extract-core.js): a Qualtrics payload reduced to fit the
+  // embedded-data cap, which empties older trials' event lists.
+  it('takes clipboard totals from the session counters when a reduced payload emptied the trial lists', () => {
     const empty = { pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] };
     const participant = {
       participantId: 'P1',
+      reducedPayload: { level: 2 },
       trials: [{ ...empty }, { ...empty }],
       session: { pasteCount: 7, copyCount: 2, dropCount: 1 }
     };
@@ -35,6 +38,7 @@ describe('summary', () => {
   it('keeps the per-trial sums when they agree with the session counters', () => {
     const participant = {
       participantId: 'P1',
+      reducedPayload: { level: 1 },
       trials: [
         { pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] },
         { pasteEvents: [{ t: 2 }, { t: 3 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }
@@ -48,6 +52,7 @@ describe('summary', () => {
     const participant = {
       participantId: 'P1',
       phaseScoped: true,
+      reducedPayload: { level: 2 },
       trials: [{ pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }],
       session: { pasteCount: 9 }
     };
@@ -57,9 +62,26 @@ describe('summary', () => {
   it('ignores a session counter that is not a finite, non-negative number', () => {
     const trials = [{ pasteEvents: [{ t: 1 }, { t: 2 }], copyEvents: [{ t: 3 }], dropEvents: [], tabAwayEvents: [] }];
     for (const bad of ['oops', '7', NaN, -4, Infinity, null, {}, true]) {
-      const summary = computeParticipantSummary({ participantId: 'P1', trials, session: { pasteCount: bad, copyCount: bad, dropCount: bad } }, {});
+      const summary = computeParticipantSummary({ participantId: 'P1', reducedPayload: { level: 2 }, trials, session: { pasteCount: bad, copyCount: bad, dropCount: bad } }, {});
       assert.deepStrictEqual([summary.totalPasteEvents, summary.totalCopyEvents, summary.totalDropEvents], [2, 1, 0], String(bad));
     }
+  });
+
+  // Anywhere else the totals are the per-trial sums, as they always were:
+  // counters can run ahead of the trial rows when events fall outside them
+  // (pastes before a jsPsych page's first trial, practice trials a
+  // researcher dropped from the file).
+  it('an unreduced payload keeps the per-trial sums, whatever the session counters say', () => {
+    const participant = {
+      participantId: 'P1',
+      trials: [
+        { pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] },
+        { pasteEvents: [{ t: 2 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }
+      ],
+      session: { pasteCount: 5, copyCount: 3, dropCount: 1 }
+    };
+    const summary = computeParticipantSummary(participant, {});
+    assert.deepStrictEqual([summary.totalPasteEvents, summary.totalCopyEvents, summary.totalDropEvents], [2, 0, 0]);
   });
 
   it('hard-flag fallback fires when cumulative sessionTotal crosses countThreshold', () => {

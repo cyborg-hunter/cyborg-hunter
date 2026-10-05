@@ -229,7 +229,8 @@ export function extractIntegrityData(raw, config) {
   // The Qualtrics writer reduces the payload until it fits the embedded-data
   // cap (src/oneliner/qualtrics-payload.js) and records what it took out.
   const truncated = raw.cyborgHunterOneLiner?.truncated;
-  if (truncated && typeof truncated === 'object') {
+  const reduced = !!truncated && typeof truncated === 'object';
+  if (reduced) {
     warnings.push(`Qualtrics payload was reduced to fit the embedded-data cap (level ${truncated.level}: ${describeTruncation(truncated)}) — session totals come from the monitor's counters; per-trial event lists are incomplete`);
   }
 
@@ -240,6 +241,10 @@ export function extractIntegrityData(raw, config) {
     metadata: raw.metadata || {},
     session,
     score,
+    // A payload the Qualtrics writer reduced (levels 1-5), whose older trials
+    // lost their event lists: summary.js then takes the clipboard totals from
+    // the session counters. null for every other payload.
+    reducedPayload: reduced ? { level: typeof truncated.level === 'number' ? truncated.level : null } : null,
     // Surface a few top-level payload fields that some renderers need but
     // that aren't part of the session-level integrity object. Keeping the
     // list explicit (rather than exposing `raw` wholesale) avoids future

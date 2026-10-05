@@ -66,6 +66,14 @@ describe('a reduced one-line payload', () => {
     const r = extractIntegrityData(raw(false), {});
     assert.ok(!r.warnings.some(w => /embedded-data cap/.test(w)));
   });
+
+  it('marks the participant as reduced, with the level, only when the payload was', () => {
+    assert.deepStrictEqual(extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2 }), {}).reducedPayload, { level: 3 });
+    for (const t of [false, undefined, true, 'yes']) {
+      assert.strictEqual(extractIntegrityData(raw(t), {}).reducedPayload, null, String(t));
+    }
+    assert.strictEqual(extractIntegrityData({ participantId: 'P1', trials: [] }, {}).reducedPayload, null);
+  });
 });
 
 describe('ruleChronologicalCompare (pure core)', () => {

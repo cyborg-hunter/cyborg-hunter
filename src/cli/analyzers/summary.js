@@ -17,10 +17,15 @@ export function computeParticipantSummary(participant, config) {
   // keyboard shortcuts, viewport shifts, zoom) stay session-wide by design —
   // see phase-scope.js.
   const phaseScoped = participant.phaseScoped === true;
+  // A Qualtrics payload reduced to fit the embedded-data cap (extract-core.js
+  // reducedPayload) has emptied older trials' event lists but kept the
+  // monitor's counters, which then floor the per-trial sums. Only there: on
+  // any other payload the totals are the per-trial sums, as they always were.
   // A session counter is used only when it is a finite, non-negative number;
   // anything else (a damaged or hand-edited file) would make a total NaN.
+  const reduced = !phaseScoped && !!participant.reducedPayload;
   const sessionCount = key => {
-    const n = phaseScoped ? 0 : participant.session?.[key];
+    const n = reduced ? participant.session?.[key] : 0;
     return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : 0;
   };
 
@@ -46,10 +51,7 @@ export function computeParticipantSummary(participant, config) {
     trialCount: n,
 
     // Clipboard signals — paste is the strongest indicator of copy-paste from AI.
-    // The session counters floor the per-trial sums: a payload trimmed to fit
-    // Qualtrics embedded data empties older trials' event lists but keeps the
-    // monitor's counters (on untrimmed data the two agree). Not for a
-    // phase-scoped summary, whose trials cover only part of the session.
+    // A reduced payload's session counters floor the per-trial sums (above).
     totalPasteEvents: Math.max(sum(trials, t => (t.pasteEvents || []).length), sessionCount('pasteCount')),
     totalCopyEvents: Math.max(sum(trials, t => (t.copyEvents || []).length), sessionCount('copyCount')),
     totalDropEvents: Math.max(sum(trials, t => (t.dropEvents || []).length), sessionCount('dropCount')),
