@@ -102,25 +102,19 @@ it: `data-participant-id="${e://Field/PROLIFIC_PID}"`. With such an ID a retake
 in the same tab continues the first response's session
 ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)).
 
-`ch.js` does not recognise an unfilled pipe: if Qualtrics leaves
-`${e://Field/ResponseID}` as it is, every response carries that literal text
-as its ID, and the report treats all responses as one person. The smoke test
-checks for this. If it happens:
-
-- for responses already collected, set
-  `"participantIdField": "metadata.qualtricsResponseId"` in the CLI's config:
-  each response is then its own participant, under its `ResponseId`;
-- for new responses, remove `data-participant-id` from the tag. `ch.js` then
-  uses a random `ch-…` ID (with a console warning), and the CLI replaces it
-  with the row's `ResponseId` (below). A retake in the same tab then
-  continues the first response's session, as with a recruitment platform's
-  ID.
+If Qualtrics leaves `${e://Field/ResponseID}` unfilled, every payload carries
+that literal text as its ID. The CLI recognises piped text left as written
+(`${…://…}`) and uses each row's `ResponseId` instead (below), so each
+response is still its own participant. `ch.js` does not recognise it, so a
+retake in the same tab then continues the first response's session, as with
+a recruitment platform's ID. The smoke test checks for this.
 
 In the export, the CLI records each row's `ResponseId` as
 `metadata.qualtricsResponseId`, whatever ID the payload carries. When the
-payload has no linkable ID (none, or a random `ch-…` one), the CLI uses the
-row's `ResponseId` as the participant ID and warns: "participantId taken from
-the ResponseId column". A payload with a linkable ID keeps it.
+payload has no linkable ID (none, a random `ch-…` one, or unfilled piped
+text), the CLI uses the row's `ResponseId` as the participant ID and warns:
+"participantId taken from the ResponseId column". A payload with a linkable
+ID keeps it.
 
 ## The final page
 
@@ -395,7 +389,7 @@ participant ID, continue one session), and the CLI reads the
 | Badge: `NOT DECLARED`; console: "The Qualtrics field … is not declared" | The field is missing from Survey Flow | [Declare the field](#declare-the-field) |
 | CLI: "N of M responses carry no Cyborg Hunter data" | Those responses have an empty payload cell: `ch.js` never ran on them (licence without custom JavaScript, header script removed, survey not published after the tag was added, preview before the tag was added), or the field was not declared | Check the header and Survey Flow, and publish the survey; responses collected before the fix have no data |
 | CLI: "participantId taken from the ResponseId column" | The payload had no linkable participant ID | Set `data-participant-id` to piped text ([Participant ID](#participant-id)) |
-| Every response has the participant ID `${e://Field/ResponseID}`; the report shows one person | Qualtrics did not fill the pipe | Set `"participantIdField": "metadata.qualtricsResponseId"` for the collected data, and remove `data-participant-id` for new responses ([Participant ID](#participant-id)) |
+| The payloads' `participantId` is `${e://Field/ResponseID}`; CLI: "participantId taken from the ResponseId column" on every response | Qualtrics did not fill the pipe in the header | Nothing for the report: each response is its own participant under its `ResponseId`. A retake in the same tab continues the first response's session ([Participant ID](#participant-id)) |
 | Console: "The Qualtrics payload was reduced"; CLI: "Qualtrics payload was reduced" | The summary was over the cap | Nothing to fix ([Payload size](#payload-size)) |
 | Console: "Cyborg Hunter could not write to Qualtrics embedded data" | Qualtrics' setter failed (nothing was written at that submit; the next write carries a note), or the payload failed its check (an error record was written in its place) | [Open an issue](https://github.com/cyborg-hunter/cyborg-hunter/issues) with the console message and your `<script>` tag; never attach participant data |
 | Badge: `submits missed ×n`; CLI: "a Qualtrics page was submitted before Cyborg Hunter's page-submit hook was in place" | A page was submitted before the header ran again; `ch.js` wrote it at the next header run, so nothing was lost | Nothing to fix; add the [final-page line](#the-final-page) so the last page is covered too |

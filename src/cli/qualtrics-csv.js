@@ -19,6 +19,9 @@ export const QUALTRICS_LEGACY_FIELD = 'cyborg_hunter';
 // The response id column: ResponseId, or ResponseID in a legacy export.
 const isResponseIdColumn = (id) => id.toLowerCase() === 'responseid';
 
+// Qualtrics piped text left as written: `${e://Field/…}`, `${m://…}`.
+const UNFILLED_PIPE = /^\$\{[A-Za-z]+:\/\//;
+
 // The other system columns a Qualtrics export starts with (the legacy
 // exporter shares StartDate, EndDate, Status, IPAddress and Finished).
 const SYSTEM_COLUMNS = ['StartDate', 'EndDate', 'Status', 'IPAddress', 'Progress', 'Duration (in seconds)', 'Finished',
@@ -167,10 +170,12 @@ export function parseQualtricsExport(text, { field = QUALTRICS_FIELD } = {}) {
     }
     raw.metadata = Object.assign({}, raw.metadata, { qualtricsResponseId: responseId });
     // ch.js falls back to a random `ch-…` id when the tag carries no
-    // participant id; the row's ResponseId is the one id that links the
-    // payload to the rest of the response.
+    // participant id, and piped text Qualtrics did not fill in
+    // (`${e://Field/ResponseID}` as written) is the same id in every
+    // response; the row's ResponseId is the one id that links the payload to
+    // the rest of the response.
     const pid = raw.participantId;
-    if (pid == null || pid === '' || String(pid).startsWith('ch-')) {
+    if (pid == null || pid === '' || String(pid).startsWith('ch-') || UNFILLED_PIPE.test(String(pid))) {
       raw.participantId = responseId;
       raw.metadata.participantIdFromResponseId = true;
     }

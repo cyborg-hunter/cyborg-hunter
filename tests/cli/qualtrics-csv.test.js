@@ -130,6 +130,14 @@ describe('parseQualtricsExport', () => {
     assert.deepStrictEqual(q.responses, []);
     assert.deepStrictEqual(q.invalid.map((r) => r.responseId), ['R_5', 'R_6']);
   });
+  it('a participantId that is an unfilled Qualtrics pipe is not linkable: each response takes its ResponseId', () => {
+    const pipe = (id) => cellOf({ participantId: id, cyborgHunterOneLiner: { host: 'qualtrics' }, trials: [] });
+    const csv = 'StartDate,ResponseId,__js_cyborg_hunter\nx,R_1,' + pipe('${e://Field/ResponseID}') + '\nx,R_2,' + pipe('${e://Field/ResponseID}') +
+      '\nx,R_3,' + pipe('P-3') + '\n';
+    const q = parseQualtricsExport(csv, {});
+    assert.deepStrictEqual(q.responses.map((r) => r.raw.participantId), ['R_1', 'R_2', 'P-3']);
+    assert.deepStrictEqual(q.responses.map((r) => r.raw.metadata.participantIdFromResponseId), [true, true, undefined]);
+  });
   it('a payload with no participantId takes the ResponseId', () => {
     const q = parseQualtricsExport('ResponseId,__js_cyborg_hunter\nR_7,"{""trials"":[]}"\n', {});
     assert.strictEqual(q.responses[0].raw.participantId, 'R_7');
