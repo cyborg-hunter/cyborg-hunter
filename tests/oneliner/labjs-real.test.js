@@ -553,6 +553,8 @@ describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
       plugins: [new lab.plugins.Transmit({ url: 'https://collect.example/save', updates: { full: false } })],
       content: [screen(lab, 'a'), screen(lab, 'b'), screen(lab, 'tail', { datacommit: false, timeout: 150 })] });
     const ds = () => datastoreOf(study);
+    let epilogue = false;
+    study.on('epilogue', () => { epilogue = true; });
     const ended = runToEnd(study);
     for (let i = 0; i < 200 && !win.document.body.textContent.includes('tail'); i++) await tick(2);
     await tick(40);                             // b's idle queues the slice
@@ -561,8 +563,13 @@ describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
     assert.deepStrictEqual(posts.map((p) => p.data.map((r) => r.sender)), [['a', 'b']]);
     assert.ok(!posts[0].data[1].integritySegmentFinal, 'b left before the root ended');
     await ended;
+    // The root's idle queues its slice before the epilogue (lab.js schedules
+    // both, in that order); send it, then cancel the queue, whose timer is
+    // Node's own and would fire after the window has closed.
+    for (let i = 0; i < 600 && !epilogue; i++) await tick(5);
     ds().flushIncrementalTransmissionQueue();
     await tick(20);
+    ds().cancelIncrementalTransmissionQueue();
     const root = posts[posts.length - 1].data.find((r) => r.sender === 'root');
     assert.ok(root, 'the root row went out');
     assert.strictEqual(root.integritySegmentFinal.segmentIndex, 2);
@@ -634,9 +641,15 @@ describe('ch.js on real lab.js 20.2.4: the saved data through the report reader'
     for (let i = 0; i < 100 && !win.document.querySelector('main p'); i++) await tick(2);
     paste(win, 'during a');
     await ended;
-    await tick(40);
+    // The plugin posts the full body at the epilogue, after the root's idle
+    // queued an incremental slice. That queue waits on Node's own timer
+    // (2.5 s), which closing the window does not stop, so wait for the full
+    // body and cancel the queue: nothing posts after the window has closed.
+    const isFull = (p) => p.metadata && p.metadata.payload === 'full';
+    for (let i = 0; i < 600 && !posts.some(isFull); i++) await tick(5);
     const ds = datastoreOf(study);
-    return { json: JSON.parse(ds.exportJson()), csv: ds.exportCsv(), full: posts.find((p) => p.metadata && p.metadata.payload === 'full') };
+    ds.cancelIncrementalTransmissionQueue();
+    return { json: JSON.parse(ds.exportJson()), csv: ds.exportCsv(), full: posts.find(isFull) };
   }
 
   it('exportJson(), the Transmit body and exportCsv() give the same participant, session and disclosure', async () => {
