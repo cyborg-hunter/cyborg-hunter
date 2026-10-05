@@ -67,6 +67,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   lab.js's upload-session id).
 
 ### Changed
+- CLI: with `--participant`, a replay recording that has no embedded
+  participant ID is judged against every participant file in the data, as
+  in a run without the filter. A file name that also fits another
+  participant there (`A` and `a`, say) is now ambiguous and not attached;
+  before, the filtered run attached it.
 - CLI and analyze page: a participant ID that is a number (a CSV column
   holding numbers, or a study that stores one) is read as its string. Before,
   such an ID stopped the whole report at the first plot
