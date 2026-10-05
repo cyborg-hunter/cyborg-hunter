@@ -1091,6 +1091,29 @@ describe('replay ingest — lab.js data keyed by the study\'s own participantId'
     assert.ok(warnings.some(w => /ambiguous/.test(String(w.warnings))), JSON.stringify(warnings));
   });
 
+  // Two sessions in one file (concatenated exports): each carries its own
+  // ch.js id, so neither id is a second name for this participant.
+  const concat = (...parts) => JSON.stringify(parts.flatMap(([studyId, chId]) => JSON.parse(labjsRows(studyId, chId))));
+  it('a file holding two sessions gives no alias: neither session\'s recording attaches through ch.js\'s ids', async () => {
+    writeFileSync(join(d, 'two.json'), concat(['RES-1', 'CH-1'], ['RES-2', 'CH-2']));
+    writeFileSync(join(d, 'CH-1-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-1', 1751600000000)));
+    writeFileSync(join(d, 'CH-2-replay-1751600000001.json'), JSON.stringify(recordingV2('CH-2', 1751600000001)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay, p.metadata.cyborgHunterParticipantId]), [['RES-1', null, undefined]]);
+    const text = warnings.map(w => String(w.warnings)).join(' | ');
+    assert.match(text, /more than one participant id \(participantId: RES-1, RES-2; cyborgHunterParticipantId: CH-1, CH-2\)/);
+  });
+
+  // Two stamped sessions (no study id): the second session's row-0 stamp is
+  // ch.js's id, not the study's, so it neither keys the file nor lets the
+  // first session's id attach a recording to it.
+  it('a file holding two stamped sessions is keyed by the first ch.js id, and the other session\'s recording stays unattached', async () => {
+    writeFileSync(join(d, 'two.json'), concat(['CH-1', 'CH-1'], ['CH-2', 'CH-2']));
+    writeFileSync(join(d, 'CH-2-replay-1751600000001.json'), JSON.stringify(recordingV2('CH-2', 1751600000001)));
+    const { participants } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay, p.metadata.cyborgHunterParticipantId]), [['CH-1', null, undefined]]);
+  });
+
   it('a participant keyed by ch.js\'s own id is unaffected', async () => {
     writeFileSync(join(d, 'CH-5.json'), labjsRows('CH-5', 'CH-5'));
     writeFileSync(join(d, 'CH-5-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-5', 1751600000000)));

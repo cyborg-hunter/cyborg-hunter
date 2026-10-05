@@ -47,18 +47,28 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   (`metadata.payload: "incremental"`) is read with a warning: ingest only the
   final `full` body.
 - CLI and analyze page: lab.js data from the one-line setup (`exportJson()`,
-  the Transmit body, `exportCsv()`) is keyed by the study's own
-  `participantId`, even one first set on a later screen, else by the setup's
+  the Transmit body, `exportCsv()`, or those rows wrapped as
+  `{ trials: [...] }`) is keyed by the study's own `participantId`, even one
+  first set on a later screen, else by the setup's
   `cyborgHunterParticipantId`; when the two differ, the setup's id is kept in
   the participant's metadata as `cyborgHunterParticipantId`, and a session
   recording that carries that id is attached to the participant (when no
-  other participant carries or is keyed by it).
+  other participant carries or is keyed by it). A file whose rows carry more
+  than one setup id, or more than one `participantId` besides it (several
+  sessions in one file), is read with a warning, and the setup's id is not
+  used to attach a recording to it.
 - Analyze page: for an object that holds its rows under `data` (the lab.js
   Transmit body), the participant ID field is suggested from its first row
   and its own top-level fields, never from its `metadata` (where `id` is
   lab.js's upload-session id).
 
 ### Changed
+- CLI and analyze page: a participant ID that is a number (a CSV column
+  holding numbers, or a study that stores one) is read as its string. Before,
+  such an ID stopped the whole report at the first plot
+  (`name.replace is not a function`), and `--participant 42` could not find
+  it. `0` and `false` are IDs now; a missing, `null` or empty ID is still
+  `unknown`.
 - CLI and analyze page: a participant file that is a top-level array of rows
   (lab.js `exportJson()`, a JATOS result) is now keyed by the first row
   carrying `participantId` (or `integrity.participantId`) instead of

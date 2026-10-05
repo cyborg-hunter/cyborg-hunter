@@ -35,25 +35,39 @@ function transmitRows(raw) {
   return raw.data.every(r => r && typeof r === 'object' && !Array.isArray(r)) ? raw.data : null;
 }
 
-// The participant id carried by a file's rows. The one-line setup on lab.js
+// A value that names a participant. 0 and false do (a CSV's dynamic typing
+// turns a numeric subject id into a number); undefined, null and an empty
+// string do not, as the `||` chains this replaced treated them.
+const present = v => v !== undefined && v !== null && v !== '';
+
+// Rows written by the one-line setup on lab.js: they carry ch.js's id as
+// cyborgHunterParticipantId. Shared with parseCsvToRaw, which leaves such a
+// CSV's id to the rows (below) instead of hoisting row 0's.
+export function rowsCarryChId(rows) {
+  return rows.some(r => r && typeof r === 'object' && present(r.cyborgHunterParticipantId));
+}
+
+// The participant ids a file's rows carry. The one-line setup on lab.js
 // writes its own id onto every trial row as cyborgHunterParticipantId (and
 // into the integrity report as participantId), and onto row 0 as
 // participantId only when the study has set none at that point. So a
-// participantId that differs from ch.js's id is the study's own, even when it
+// participantId that is none of ch.js's ids is the study's own, even when it
 // first appears on a later row (a form on the second screen): it keys the
 // participant, so the file is not split from the rest of the study's data.
-// Without one, ch.js's id keys it. Returns { id, chId }; id is undefined when
-// no row carries one, and chId is ch.js's id (cyborgHunterParticipantId) when
-// a row has it. Shared with parseCsvToRaw.
-export function participantFromRows(rows, pidField, intField) {
+// Without one, ch.js's id keys it. Returns, as strings, { id, chId, chIds,
+// ownIds }: chIds and ownIds are the distinct ch.js ids and study ids in row
+// order, chId is the first ch.js id, and id is undefined when no row carries
+// one. One session's rows carry one ch.js id and at most one study id.
+function participantFromRows(rows, pidField, intField) {
   const objects = rows.filter(r => r && typeof r === 'object');
-  const chId = objects.map(r => r.cyborgHunterParticipantId).find(Boolean);
-  const own = objects.map(r => getByPath(r, pidField))
-    .find(v => v && (chId === undefined || String(v) !== String(chId)));
+  const distinct = values => [...new Set(values.filter(present).map(String))];
+  const chIds = distinct(objects.map(r => r.cyborgHunterParticipantId));
+  const ownIds = distinct(objects.map(r => getByPath(r, pidField))).filter(v => !chIds.includes(v));
   const inReport = objects
     .map(r => (r[intField] && typeof r[intField] === 'object') ? getByPath(r[intField], pidField) : undefined)
-    .find(Boolean);
-  return { id: own || chId || inReport || undefined, chId };
+    .find(present);
+  const id = ownIds[0] ?? chIds[0] ?? (present(inReport) ? String(inReport) : undefined);
+  return { id, chId: chIds[0], chIds, ownIds };
 }
 
 // Extracts integrity trial data from a single participant's raw JSON.
@@ -80,10 +94,13 @@ export function extractIntegrityData(raw, config) {
   // { trials } file (Shape 1) does, so they are read as one: every reader
   // below (session, rolling segments, honeypot, error markers) looks in
   // raw.trials. Their participant id comes from the rows, as parseCsvToRaw
-  // hoists it for a CSV.
+  // hoists it for a CSV. So does the id of a { trials } file whose rows come
+  // from the one-line setup on lab.js (a lab.js CSV, or rows a server
+  // wrapped), so every lab.js file is keyed the same way.
   const rows = Array.isArray(raw) ? raw : transmitRows(raw);
   if (rows) raw = Array.isArray(raw) ? { trials: rows } : { ...raw, trials: rows };
-  const fromRows = rows ? participantFromRows(rows, pidField, intField) : {};
+  const idRows = rows || (Array.isArray(raw.trials) && rowsCarryChId(raw.trials) ? raw.trials : null);
+  const fromRows = idRows ? participantFromRows(idRows, pidField, intField) : {};
   // Transmit posts an incremental slice of new rows on every idle and the
   // full data at the end, so a server that stores each body holds several
   // files per session. A slice is read (its rows are real), but it is partial
@@ -98,13 +115,13 @@ export function extractIntegrityData(raw, config) {
   }
 
   // Determine participant ID — check top level, then metadata sub-object,
-  // then (rows only) the rows.
+  // then the rows (above).
   // Since 0.6.1 the field supports dot-paths ("metadata.sessionId"); plain
-  // names keep the historical top-level → metadata fallback, then (rows only)
-  // the rows. An empty string (or null) is missing, as the pre-0.6.1 `||`
-  // chain treated it; 0 and false are ids. From here on the id is a string:
-  // the report names its files after it and --participant compares strings,
-  // and a number stopped the whole report at its first plot.
+  // names keep the historical top-level → metadata fallback. An empty string
+  // (or null) is missing, as the pre-0.6.1 `||` chain treated it; 0 and false
+  // are ids. From here on the id is a string: the report names its files
+  // after it and --participant compares strings, and a number stopped the
+  // whole report at its first plot.
   const resolved = [getByPath(raw, pidField), getByPath(raw.metadata, pidField), fromRows.id].find(present);
   const participantId = resolved === undefined ? 'unknown' : String(resolved);
   // An id field that resolves to nothing yields 'unknown'. Silently, that both
@@ -114,8 +131,23 @@ export function extractIntegrityData(raw, config) {
   if (participantId === 'unknown') {
     warnings.push(
       `participantId unresolved (field "${pidField}" not found at top level` +
-      (rows ? ', in metadata or on any row' : ' or in metadata') +
+      (idRows ? ', in metadata or on any row' : ' or in metadata') +
       `) — defaulted to "unknown". Check participantIdField.`
+    );
+  }
+  // Rows that carry more than one ch.js id, or more than one id of the
+  // study's own, hold more than one session (a concatenated export). ch.js's
+  // id then names no single session, so it is not kept as a second name for
+  // the participant's replay recording (ingest-core.js attaches by it).
+  const severalIds = !!fromRows.chIds && (fromRows.chIds.length > 1 || fromRows.ownIds.length > 1);
+  if (severalIds) {
+    const list = ids => ids.slice(0, 5).join(', ') + (ids.length > 5 ? ', …' : '');
+    const named = [];
+    if (fromRows.ownIds.length > 1) named.push(`${pidField}: ${list(fromRows.ownIds)}`);
+    if (fromRows.chIds.length > 1) named.push(`cyborgHunterParticipantId: ${list(fromRows.chIds)}`);
+    warnings.push(
+      `the rows carry more than one participant id (${named.join('; ')}), as if the file held ` +
+      `several sessions; keyed by "${participantId}", and ch.js's id is not used to attach a replay recording`
     );
   }
 
@@ -296,9 +328,10 @@ export function extractIntegrityData(raw, config) {
   }
 
   // ch.js's own id, when the study keyed its rows by another, is kept for the
-  // reader (rows only; a copy, never the caller's metadata object).
+  // reader and the replay attachment (rows of one session only; a copy,
+  // never the caller's metadata object).
   let metadata = raw.metadata || {};
-  if (fromRows.chId && String(fromRows.chId) !== String(participantId)) {
+  if (fromRows.chId !== undefined && !severalIds && fromRows.chId !== participantId) {
     metadata = { ...(typeof metadata === 'object' ? metadata : {}), cyborgHunterParticipantId: fromRows.chId };
   }
 
