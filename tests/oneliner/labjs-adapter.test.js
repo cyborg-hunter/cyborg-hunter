@@ -4,7 +4,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { Window } from 'happy-dom';
-import { detectLabJs, watchLabJsPlacement, isContainer, isTrial, idOf, datastoreOf, trialOptions } from '../../src/oneliner/adapters/labjs.js';
+import { detectLabJs, watchLabJsPlacement, isContainer, isTrial, idOf, datastoreOf, trialOptions, installLabJsAdapter } from '../../src/oneliner/adapters/labjs.js';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 
 function fakeLab(opts) {
@@ -240,4 +240,43 @@ describe('trialOptions', () => {
     Object.defineProperty(c, 'aggregateParameters', { get() { throw new Error('no parents'); } });
     assert.strictEqual(trialOptions(c, o).trialId, 'own-params');
   });
+});
+
+// The install patches run and end together or not at all. In strict code a
+// read-only method throws on assignment; in the bundle (not strict code) the
+// assignment fails silently, which a setter that ignores the value stands in
+// for. Either way neither method stays patched, the friction mark listener
+// and handler come off, and the install throws for boot to log.
+describe('installLabJsAdapter on a prototype that refuses the patch', () => {
+  let win;
+  beforeEach(() => { win = new Window({ url: 'https://lab.example/study.html' }); });
+  afterEach(() => win.close());
+
+  function refusingLab(how) {
+    class Component { run() {} }
+    const end = function end() {};
+    if (how === 'read-only') Object.defineProperty(Component.prototype, 'end', { value: end, writable: false, configurable: true });
+    else Object.defineProperty(Component.prototype, 'end', { get: () => end, set() {}, configurable: true });
+    return { version: '20.2.4', core: { Component }, flow: {}, html: {} };
+  }
+  for (const [how, label] of [['read-only', 'a read-only end'], ['ignoring', 'an end whose assignment is ignored']]) {
+    it(label + ': neither method is patched, nothing stays installed, and the install throws', () => {
+      const lab = refusingLab(how);
+      const proto = lab.core.Component.prototype;
+      const run = proto.run, end = proto.end;
+      const calls = [];
+      win.GuardFriction = { requestFullscreen: () => calls.push('fullscreen'), start: () => 'tok' };
+      const ctx = { handlers: {}, participantId: 'P1', config: { guards: { friction: true } } };
+      assert.throws(() => installLabJsAdapter({ win, ctx, lab, version: '20.2.4', generation: 'classic' }));
+      assert.strictEqual(proto.run, run);
+      assert.strictEqual(proto.end, end);
+      assert.strictEqual(ctx.handlers.startFriction, undefined);
+      assert.strictEqual(ctx.labjs, undefined);
+      const btn = win.document.createElement('button');
+      btn.setAttribute('data-ch-friction-start', '');
+      win.document.body.appendChild(btn);
+      btn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+      assert.deepStrictEqual(calls, [], 'the friction mark listener is gone');
+    });
+  }
 });

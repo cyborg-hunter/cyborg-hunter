@@ -393,10 +393,16 @@ export function installLabJsAdapter(opts) {
     if (!c.parent && !state.finalized) runFinalHook(c);
   }
 
+  // Cleared by restore(). A script that wrapped run or end after ch.js keeps
+  // calling ch.js's wrapper, which restore() cannot take out of that chain,
+  // so from then on the wrapper calls straight through to lab.js.
+  var active = true;
+
   // Both generations' run() is async; a synchronous throw (not seen in
   // either) is passed through as it is. A rejection (23's AbortFlip for a
   // skipped component) opens nothing.
   function wrappedRun() {
+    if (!active) return origRun.apply(this, arguments);
     var self = this;
     var controlled = generation === 'flip' ? !!(arguments[0] && arguments[0].controlled) : true;
     try { if (self.internals) self.internals.chRunSeen = true; } catch (_) { /* only the running-before-install warning reads it */ }
@@ -413,7 +419,9 @@ export function installLabJsAdapter(opts) {
 
   function wrappedEnd() {
     var self = this;
-    try { beforeEnd(self); } catch (e) { markFailed(self, e); }
+    if (active) {
+      try { beforeEnd(self); } catch (e) { markFailed(self, e); }
+    }
     return origEnd.apply(self, arguments);
   }
 
@@ -431,6 +439,7 @@ export function installLabJsAdapter(opts) {
 
   var handle = {
     restore: function () {
+      active = false;
       win.document.removeEventListener('click', onClick, true);
       if (ctx.handlers.startFriction === startFriction) delete ctx.handlers.startFriction;
       if (proto.run === wrappedRun) proto.run = origRun;
@@ -440,7 +449,18 @@ export function installLabJsAdapter(opts) {
   };
   wrappedRun[PATCHED] = handle;
   wrappedEnd[PATCHED] = handle;
-  proto.run = wrappedRun;
-  proto.end = wrappedEnd;
+  // Both methods or neither. A read-only method throws on assignment in
+  // strict code and is silently left as it was in the bundle (which is not
+  // strict code), so the result is checked; on a refusal the install undoes
+  // itself and throws, and boot logs the failure.
+  try {
+    proto.run = wrappedRun;
+    proto.end = wrappedEnd;
+    if (proto.run !== wrappedRun || proto.end !== wrappedEnd) throw new Error('refused');
+  } catch (_) {
+    handle.restore();
+    if (ctx.labjs === state) delete ctx.labjs;
+    throw new Error('lab.js\'s Component.prototype.run and .end could not be patched');
+  }
   return handle;
 }
