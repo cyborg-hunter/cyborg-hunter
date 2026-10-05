@@ -50,7 +50,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the Transmit body, `exportCsv()`) is keyed by the study's own
   `participantId`, even one first set on a later screen, else by the setup's
   `cyborgHunterParticipantId`; when the two differ, the setup's id is kept in
-  the participant's metadata as `cyborgHunterParticipantId`.
+  the participant's metadata as `cyborgHunterParticipantId`, and a session
+  recording that carries that id is attached to the participant (when no
+  other participant carries or is keyed by it).
 
 ### Changed
 - CLI and analyze page: a participant file that is a top-level array of rows

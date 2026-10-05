@@ -363,6 +363,29 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
     idCounts[p.participantId] = (idCounts[p.participantId] || 0) + 1;
   }
 
+  // lab.js under the one-line setup: a participant keyed by the study's own
+  // participantId keeps ch.js's id in metadata.cyborgHunterParticipantId
+  // (extract-core sets it only when the two differ), and ch.js's recorder
+  // embeds ch.js's id. That id is a second name for the participant's
+  // recording, used only when it names nobody else: no participant is keyed
+  // by it (compared sanitized and lowercased, as the filename match is) and
+  // no other participant carries it. Otherwise it is ignored, and a
+  // recording carrying it falls to the mismatch warning below.
+  const chIdOf = (p) => {
+    const v = p.metadata && typeof p.metadata === 'object' ? p.metadata.cyborgHunterParticipantId : null;
+    return v == null || v === '' || String(v) === String(p.participantId) ? null : String(v);
+  };
+  const chIdCounts = Object.create(null);
+  for (const p of participants) {
+    const c = chIdOf(p);
+    if (c !== null) chIdCounts[c] = (chIdCounts[c] || 0) + 1;
+  }
+  const aliasOf = (p) => {
+    const c = chIdOf(p);
+    if (c === null || chIdCounts[c] > 1 || saneCounts[sanitize(c).toLowerCase()]) return null;
+    return c;
+  };
+
   // Duplicate participant ids (repeat runs, duplicate exports) are outside
   // the pipeline's data model — every renderer keys outputs by pid, so the
   // whole report already treats them as one person. Replay attachment
@@ -401,8 +424,11 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // fall between both routes with no warning.
   const claimedByName = new Set();
   for (const p of participants) {
-    const re = participantArtifactRe(sanitize(p.participantId));
-    for (const f of entries) if (re.test(f.name)) claimedByName.add(f.name);
+    const alias = aliasOf(p);
+    for (const id of alias === null ? [p.participantId] : [p.participantId, alias]) {
+      const re = participantArtifactRe(sanitize(id));
+      for (const f of entries) if (re.test(f.name)) claimedByName.add(f.name);
+    }
   }
   // Which unreadable files are ours to report: everything in an explicit
   // replayDir (nothing else lives there), plus anything in dataDir the
@@ -438,9 +464,14 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
     // which belongs to participant "a-replay".
     const sane = sanitize(p.participantId);
     const exactRe = participantArtifactRe(sane);
-    const mine = entries.filter(f => exactRe.test(f.name));
+    // ch.js's id on lab.js data keyed by the study's own id (aliasOf above).
+    const alias = aliasOf(p);
+    const saneAlias = alias === null ? null : sanitize(alias);
+    const aliasRe = saneAlias === null ? null : participantArtifactRe(saneAlias);
+    const mine = entries.filter(f => exactRe.test(f.name) || (aliasRe !== null && aliasRe.test(f.name)));
+    const ownsId = (id) => id === String(p.participantId) || (alias !== null && id === alias);
     // Foreign-named artifacts that named THIS participant inside themselves.
-    const mineForeign = foreign.filter(a => a.id !== null && a.id === String(p.participantId));
+    const mineForeign = foreign.filter(a => a.id !== null && ownsId(a.id));
     // The meta pointer rides on every trial row via addProperties.
     const meta = (p.trials && p.trials[0] && p.trials[0].integrityReplayMeta) || null;
     // Replay finalize failures ride the same way — surface them where the
@@ -537,7 +568,7 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
         // must match EXACT-case (our recorder writes sanitize(pid) verbatim).
         // Case-tolerant matching stays for discovery, where the embedded-id
         // check catches cross-case impostors.
-        if (!cand.file.startsWith(sane + '-replay-')) {
+        if (!cand.file.startsWith(sane + '-replay-') && !(saneAlias !== null && cand.file.startsWith(saneAlias + '-replay-'))) {
           warnings.push({ file: cand.path,
             warnings: [`Replay artifact has no embedded participant_id and its filename case does not match "${sane}" exactly — not attached.`] });
         } else if (saneCounts[sane.toLowerCase()] > 1) {
@@ -548,7 +579,7 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
             warnings: [`Replay artifact has no embedded participant_id — cannot verify ownership; attaching to ${p.participantId} by unique filename match.`] });
           owned.push(cand);
         }
-      } else if (String(embedded) === String(p.participantId)) {
+      } else if (ownsId(String(embedded))) {
         owned.push(cand);
       } else {
         warnings.push({ file: cand.path,

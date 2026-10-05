@@ -102,7 +102,7 @@ In all three, keep `participantIdField` at its default, `participantId` (see [Wh
 
 **The analyze page.** For a Transmit file, the page suggests a participant ID field from the file's top-level keys and its `metadata`, not from its rows, so it offers `metadata.id`. Do not pick it: drop a `cyborg-hunter.config.json` with `"participantIdField": "participantId"` along with the files, and the page uses that field.
 
-**Replay files.** The recording carries ch.js's participant ID. When your study sets its own `participantId` and it differs from ch.js's, the CLI keys the participant by your ID and does not attach the recording. Give ch.js the same ID (`data-participant-id` or `CyborgHunterConfig.participantId`) when you save replays.
+**Replay files.** The recording carries ch.js's participant ID. When your study keys its rows by its own `participantId`, the CLI still attaches the recording, through the participant's `cyborgHunterParticipantId`, as long as no other participant in the data carries or is keyed by that ID. Giving ch.js the same ID as your study (`data-participant-id` or `CyborgHunterConfig.participantId`) keeps the recording and the data under one name.
 
 **Storage.** ch.js makes rows larger: about 1,900 characters of JSON for a trial without events, more with pastes, keystrokes and the raw mouse trace. lab.js 20.x keeps a study's rows in memory. A `lab.data.Store` you create yourself with `persistence` set also writes every row to `sessionStorage` or `localStorage` on each commit, and browsers cap that at about 5 MB. For such a store on a long study, set `window.CyborgHunterConfig = { collectForPostHoc: { rawMouseTrack: false } }` above the ch.js tag to leave the raw mouse trace out; the derived mouse metrics stay.
 

@@ -12,6 +12,9 @@
 // only when the study sets none (the CLI keys lab.js data by it).
 import { test, expect, collectConsole, pasteInto, parseCsv, newTmpDir, cleanupTmpDirs, saveAndReport, rewriteFixture } from './support.mjs';
 import { MESSAGES } from '../../../src/oneliner/errors.js';
+import { ingest } from '../../../src/cli/ingest.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const FIX = '/tests/e2e/oneliner/fixtures/';
 test.afterAll(() => cleanupTmpDirs());
@@ -208,9 +211,20 @@ test('data-replay on lab.js: the recorder follows the trials; the canvas is a si
   expect(rows.every((r) => (r.participantId ?? '') === '' || r.participantId === 'RES-3')).toBe(true);
   expect(trialRows(rows).map((r) => r.cyborgHunterParticipantId)).toEqual(['E2E-LAB-3', 'E2E-LAB-3', 'E2E-LAB-3']);
   expect(await page.evaluate(() => window.study.options.datastore.state.participantId)).toBe('RES-3');
-  const out = saveAndReport(newTmpDir('lab-replay'), 'RES-3.csv', csv);
+  // The recording, saved under the study's id, carries ch.js's: the CLI
+  // attaches it through the participant's cyborgHunterParticipantId.
+  const tmp = newTmpDir('lab-replay');
+  mkdirSync(join(tmp, 'data'), { recursive: true });
+  writeFileSync(join(tmp, 'data', 'RES-3-replay-1751600000000.json'), JSON.stringify(replay));
+  const out = saveAndReport(tmp, 'RES-3.csv', csv);
   expect(out.stdout).toContain('Found 1 participants');
+  expect(out.stdout).not.toContain('had warnings');
   expect(out.summaryCsv[0].participantId).toBe('RES-3');
+  const { participants, warnings } = await ingest({ dataDir: join(tmp, 'data'), filePattern: '*.{json,csv}', participantIdField: 'participantId', integrityField: 'integrity' });
+  expect(warnings).toEqual([]);
+  expect(participants.map((p) => p.participantId)).toEqual(['RES-3']);
+  expect(participants[0].metadata.cyborgHunterParticipantId).toBe('E2E-LAB-3');
+  expect(participants[0].replay.recording.participant_id).toBe('E2E-LAB-3');
 });
 
 test('perf: the per-trial write stays within budget over 60 lab.js trials, and the rows stay far below the storage quota', async ({ page }) => {
