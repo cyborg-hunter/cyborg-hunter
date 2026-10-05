@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: ch.js above lib/lab.js</title>
+  <!-- Fixture for tests/e2e/oneliner/labjs.spec.js. The ch.js tag is ABOVE
+       lib/lab.js, so window.lab does not exist when ch.js runs: ch.js cannot
+       hook lab.js and runs on the vanilla host. The study is
+       labjs-full.study.js. -->
+  <script src="/dist/ch.js" data-participant-id="E2E-LAB-5"></script>
+  <script src="/tests/fixtures/labjs-20.2.4/lab.js" data-labjs-script="library"></script>
+  <script defer src="/tests/e2e/oneliner/fixtures/labjs-full.study.js"></script>
+</head>
+<body>
+  <div class="container fullscreen">
+    <main data-labjs-section="main"><p>Preparing experiment</p></main>
+  </div>
+</body>
+</html>

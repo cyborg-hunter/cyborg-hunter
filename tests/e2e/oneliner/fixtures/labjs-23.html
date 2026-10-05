@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: a lab.js 23 alpha study</title>
+  <!-- Fixture for tests/e2e/oneliner/labjs.spec.js: labjs-full.html's shape
+       on the lab.js 23 alpha line (the flip-generation line; API not
+       settled), which ch.js does not hook yet: one warning, and the page runs
+       as a page without jsPsych. The study is listed in labjs-23.study.js. -->
+  <script src="/tests/fixtures/labjs-23.0.0-alpha9/lab.js" data-labjs-script="library"></script>
+  <script src="/dist/ch.js" data-participant-id="E2E-LAB-2"></script>
+  <script defer src="/tests/e2e/oneliner/fixtures/labjs-23.study.js"></script>
+</head>
+<body>
+  <div class="container fullscreen">
+    <main data-labjs-section="main"><p>Preparing experiment</p></main>
+  </div>
+</body>
+</html>
