@@ -1038,6 +1038,59 @@ describe('replay ingest — lab.js data keyed by the study\'s own participantId'
     assert.ok(mismatch(warnings), JSON.stringify(warnings));
   });
 
+  // --participant: the uniqueness guards count the whole dataset, not only
+  // the participant the report is filtered to.
+  it('--participant: a ch.js id that is another participant\'s key gives no alias', async () => {
+    writeFileSync(join(d, 'RES-3.json'), labjsRows('RES-3', 'P2'));
+    writeFileSync(join(d, 'P2.json'), participantFile('P2'));
+    writeFileSync(join(d, 'P2-replay-1751600000000.json'), JSON.stringify(recordingV2('P2', 1751600000000)));
+    writeFileSync(join(d, 'RES-3-replay-1751600000001.json'), JSON.stringify(recordingV2('P2', 1751600000001)));
+    const { participants, warnings } = await ingest({ ...cfg(), singleParticipant: 'RES-3' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['RES-3']);
+    assert.strictEqual(participants[0].replay, null, 'P2\'s recording must not attach to RES-3');
+    assert.ok(mismatch(warnings), JSON.stringify(warnings));
+  });
+
+  it('--participant: a ch.js id two participants share gives no alias', async () => {
+    writeFileSync(join(d, 'R1.json'), labjsRows('R1', 'C'));
+    writeFileSync(join(d, 'R2.json'), labjsRows('R2', 'C'));
+    writeFileSync(join(d, 'C-replay-1751600000000.json'), JSON.stringify(recordingV2('C', 1751600000000)));
+    const { participants } = await ingest({ ...cfg(), singleParticipant: 'R1' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['R1']);
+    assert.strictEqual(participants[0].replay, null);
+  });
+
+  // Filenames are compared sanitized and lowercased, so ch.js ids that
+  // collide that way are ambiguous too.
+  const ownerless = (pid, epoch) => { const r = recordingV2(pid, epoch); delete r.participant_id; return r; };
+
+  it('ch.js ids that collide once sanitized give no alias; an id-less recording attaches to nobody', async () => {
+    writeFileSync(join(d, 'R1.json'), labjsRows('R1', 'a/b'));
+    writeFileSync(join(d, 'R2.json'), labjsRows('R2', 'a_b'));
+    writeFileSync(join(d, 'a_b-replay-1751600000000.json'), JSON.stringify(ownerless('x', 1751600000000)));
+    const { participants } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay]), [['R1', null], ['R2', null]]);
+  });
+
+  it('an id-less recording named after a unique ch.js id attaches, and the warning names that id', async () => {
+    writeFileSync(join(d, 'R1.json'), labjsRows('R1', 'CH-9'));
+    writeFileSync(join(d, 'CH-9-replay-1751600000000.json'), JSON.stringify(ownerless('x', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+    const w = warnings.map(x => String(x.warnings)).find(t => /no embedded participant_id/.test(t));
+    assert.match(w, /CH-9/);
+    assert.match(w, /R1/);
+  });
+
+  it('--participant: participant keys that collide once sanitized keep an id-less recording ambiguous', async () => {
+    writeFileSync(join(d, 'ab1.json'), participantFile('a/b'));
+    writeFileSync(join(d, 'ab2.json'), participantFile('a_b'));
+    writeFileSync(join(d, 'a_b-replay-1751600000000.json'), JSON.stringify(ownerless('x', 1751600000000)));
+    const { participants, warnings } = await ingest({ ...cfg(), singleParticipant: 'a_b' });
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay]), [['a_b', null]]);
+    assert.ok(warnings.some(w => /ambiguous/.test(String(w.warnings))), JSON.stringify(warnings));
+  });
+
   it('a participant keyed by ch.js\'s own id is unaffected', async () => {
     writeFileSync(join(d, 'CH-5.json'), labjsRows('CH-5', 'CH-5'));
     writeFileSync(join(d, 'CH-5-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-5', 1751600000000)));
