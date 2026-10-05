@@ -100,7 +100,7 @@ In all three, keep `participantIdField` at its default, `participantId` (see [Wh
 - `metadata.id` is lab.js's own ID for one upload session, not the participant's. Do not set `participantIdField` to `id` or `metadata.id`.
 - Only JSON bodies are read (the plugin's default). A body sent with `encoding: 'form'` arrives as form fields, which the CLI does not read.
 
-**The analyze page.** For a Transmit file, the page suggests a participant ID field from the file's top-level keys and its `metadata`, not from its rows, so it offers `metadata.id`. Do not pick it: drop a `cyborg-hunter.config.json` with `"participantIdField": "participantId"` along with the files, and the page uses that field.
+**The analyze page.** It suggests the participant ID field from a file's first row, for a Transmit body as for an `exportJson()` array, so it offers `participantId`. Keep that choice; `metadata.id` is not offered.
 
 **Replay files.** The recording carries ch.js's participant ID. When your study keys its rows by its own `participantId`, the CLI still attaches the recording, through the participant's `cyborgHunterParticipantId`, as long as no other participant in the data carries or is keyed by that ID. Giving ch.js the same ID as your study (`data-participant-id` or `CyborgHunterConfig.participantId`) keeps the recording and the data under one name.
 
