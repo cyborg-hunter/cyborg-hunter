@@ -15,6 +15,8 @@ import Papa from 'papaparse';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { parseCsvToRaw } from '../../src/cli/ingest-core.js';
 import { collectSegments } from '../../src/cli/segment-reassembly.js';
+import { buildReport } from '../../src/cli/report-core.js';
+import { mergeConfig } from '../../src/cli/config-core.js';
 
 const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
 
@@ -573,7 +575,9 @@ describe('ch.js on real lab.js 20.2.4: the end of the session', () => {
     const rows = await runToEnd(study);
     const root = rows.find((r) => r.sender === 'root');
     assert.strictEqual(root.integritySoftScoreFinal, 'mine');
+    assert.strictEqual(typeof root.cyborgHunter_integritySoftScoreFinal, 'number', 'ch.js\'s value under the prefixed name');
     assert.ok(root.integritySegmentFinal);
+    assert.deepStrictEqual(warns, [MESSAGES.labjsColumnTaken('integritySoftScoreFinal')]);
   });
 
   it('a friction mark that fails logs the friction guard error and leaves the hook error for a hook', async () => {
@@ -671,6 +675,150 @@ describe('ch.js on real lab.js 20.2.4: the saved data through the report reader'
     assert.strictEqual(c.session.pasteCount, 1);
     assert.deepStrictEqual(c.honeypot, r.honeypot);
     assert.deepStrictEqual(errors, []);
+  });
+});
+
+// ch.js never replaces a value the study set under one of ch.js's column
+// names. The study's value stays, in its row and in lab.js's state (which
+// every commit updates); ch.js's goes under cyborgHunter_<name> from then on,
+// with one warning per name; the report reads ch.js's value from there.
+describe('ch.js on real lab.js 20.2.4: column names the study uses too', () => {
+  const TIMING = new Set(['time_run', 'time_render', 'time_show', 'time_end', 'time_commit', 'time_switch', 'timestamp', 'duration']);
+
+  // Runs the study once without ch.js and once with it, each in its own window.
+  async function twice(make, dataset, prepare) {
+    const out = {};
+    for (const withCh of [false, true]) {
+      const { win, lab } = createLabWindow({ build: '20.2.4' });
+      captureConsole();
+      try {
+        if (prepare) prepare(win);
+        if (withCh) await bootOn(win, dataset);
+        const seen = {};
+        const study = make(lab, seen);
+        const rows = await runToEnd(study);
+        const ds = datastoreOf(study);
+        out[withCh ? 'ch' : 'base'] = { rows, state: { ...ds.state }, seen, csv: ds.exportCsv(), warns: warns.slice(), errors: errors.slice() };
+      } finally {
+        releaseConsole();
+        try { if (current) current.monitor.destroy(); } catch { /* the final hook destroyed it */ }
+        current = null;
+        await closeLabWindow(win);
+      }
+    }
+    return out;
+  }
+  // Every column of every row the study writes without ch.js (lab.js's
+  // timing aside) holds the same value with ch.js.
+  function assertStudyDataKept(base, ch) {
+    assert.strictEqual(ch.rows.length, base.rows.length);
+    base.rows.forEach((row, i) => {
+      for (const k of Object.keys(row)) {
+        if (!TIMING.has(k)) assert.deepStrictEqual(ch.rows[i][k], row[k], 'row ' + i + ' (' + row.sender + ') column ' + k);
+      }
+    });
+  }
+  // The same rows as if the study had used none of ch.js's names: the
+  // study's value gone and ch.js's under its usual name.
+  function withoutCollisions(rows) {
+    return rows.map((row) => {
+      const out = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (k.startsWith('cyborgHunter_')) out[k.slice('cyborgHunter_'.length)] = v;
+        else if (!(('cyborgHunter_' + k) in row)) out[k] = v;
+      }
+      return out;
+    });
+  }
+
+  it('the study\'s values in lab.js\'s state and in a screen\'s data stay; ch.js\'s go under cyborgHunter_<name>, and the report reads them', async () => {
+    const make = (lab, seen) => {
+      const a = screen(lab, 'a');
+      const b = screen(lab, 'b', { data: { integrity: 'mine' } });
+      const c = screen(lab, 'c', { data: { integritySoftScoreFinal: 'mine-final' } });
+      for (const [name, comp] of [['a', a], ['b', b], ['c', c]]) comp.on('run', function () { seen[name] = this.options.datastore.state.integrity; });
+      const study = new lab.flow.Sequence({ title: 'root', content: [a, b, c] });
+      study.on('prepare', function () { this.options.datastore.set({ integrity: 'S', cyborgHunterVersion: 'study-v' }); });
+      return study;
+    };
+    const { base, ch } = await twice(make);
+    assertStudyDataKept(base, ch);
+    assert.deepStrictEqual(base.seen, { a: 'S', b: 'S', c: 'mine' });
+    assert.deepStrictEqual(ch.seen, base.seen, 'the study reads its own values from lab.js\'s state');
+    for (const k of ['integrity', 'cyborgHunterVersion', 'integritySoftScoreFinal']) assert.deepStrictEqual(ch.state[k], base.state[k], 'state.' + k);
+    const trials = withSegment(ch.rows);
+    assert.deepStrictEqual(trials.map((r) => [r.sender, r.cyborgHunter_integrity.trialId, r.cyborgHunter_cyborgHunterVersion]), [['a', '0', VERSION], ['b', '1', VERSION], ['c', '2', VERSION]]);
+    const c = ch.rows.find((r) => r.sender === 'c');
+    assert.strictEqual(typeof c.cyborgHunter_integritySoftScoreFinal, 'number');
+    assert.ok(c.integritySegmentFinal, 'a final field the study does not use keeps its name');
+    const root = ch.rows.find((r) => r.sender === 'root');
+    assert.strictEqual(typeof root.cyborgHunter_integritySoftScoreFinal, 'number');
+    assert.ok(!('integritySoftScoreFinal' in root));
+    assert.deepStrictEqual(ch.warns, ['integrity', 'cyborgHunterVersion', 'integritySoftScoreFinal'].map((k) => MESSAGES.labjsColumnTaken(k)));
+    assert.deepStrictEqual(ch.errors, []);
+
+    // The report: these rows read as the same rows without the collisions do,
+    // from exportJson() and from exportCsv().
+    const read = extractIntegrityData(ch.rows, {});
+    assert.deepStrictEqual(read, extractIntegrityData(withoutCollisions(ch.rows), {}));
+    assert.deepStrictEqual(read.trials.map((t) => [t.trialId, t.sender]), [['0', 'a'], ['1', 'b'], ['2', 'c']]);
+    assert.ok(read.session, 'the session is reassembled');
+    const sinkOf = async (r) => {
+      const files = new Map();
+      await buildReport([{ ...r, replay: null }], mergeConfig({ noVisuals: true }).config, { sink: (path, data) => files.set(path, data), replayClientSrc: '', fontFaceCss: '' });
+      return files;
+    };
+    const [got, want] = [await sinkOf(read), await sinkOf(extractIntegrityData(withoutCollisions(ch.rows), {}))];
+    for (const f of ['summary.csv', 'triage.md', 'event-log.csv', 'extensions.csv']) assert.strictEqual(got.get(f), want.get(f), f);
+    const fromCsv = extractIntegrityData(parseCsvToRaw(ch.csv, {}), {});
+    assert.deepStrictEqual([fromCsv.participantId, fromCsv.trials.length, fromCsv.session, fromCsv.score], [read.participantId, 3, read.session, read.score]);
+  });
+
+  it('a Loop parameter named like a ch.js column stays in each iteration\'s row', async () => {
+    const make = (lab) => new lab.flow.Sequence({ title: 'root', content: [
+      new lab.flow.Loop({ title: 'loop', template: screen(lab, 'item'), templateParameters: [{ integrity: 'p1' }, { integrity: 'p2' }] }),
+      screen(lab, 'z')
+    ] });
+    const { base, ch } = await twice(make);
+    assertStudyDataKept(base, ch);
+    assert.deepStrictEqual(ch.rows.filter((r) => r.sender === 'item').map((r) => [r.integrity, r.cyborgHunter_integrity.trialId]), [['p1', '0_0'], ['p2', '0_1']]);
+    assert.strictEqual(ch.state.integrity, base.state.integrity);
+    assert.deepStrictEqual(ch.warns, [MESSAGES.labjsColumnTaken('integrity')]);
+  });
+
+  // A study's end handler runs after ch.js's hook, so its value under one of
+  // ch.js's names replaces ch.js's on that row; ch.js sees it in the state at
+  // the next trial and writes under the prefixed name from there. The report
+  // skips the row whose report the study replaced; its segment still counts.
+  it('a value the study\'s end handler writes under integrity: that row keeps it, later rows take the prefixed name, the report skips that row', async () => {
+    const make = (lab) => {
+      const b = screen(lab, 'b');
+      b.on('end', function () { this.data.integrity = 'from-end'; });
+      return new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), b, screen(lab, 'c')] });
+    };
+    const { base, ch } = await twice(make);
+    assertStudyDataKept(base, ch);
+    assert.deepStrictEqual(ch.rows.map((r) => [r.sender, typeof r.integrity, !!r.cyborgHunter_integrity]),
+      [['a', 'object', false], ['b', 'string', false], ['c', 'undefined', true], ['root', 'undefined', false]]);
+    assert.deepStrictEqual(ch.warns, [MESSAGES.labjsColumnTaken('integrity')]);
+    const read = extractIntegrityData(ch.rows, {});
+    assert.deepStrictEqual(read.trials.map((t) => t.trialId), ['0', '2']);
+    assert.deepStrictEqual(collectSegments({ trials: ch.rows }).map((g) => g.segmentIndex), [0, 1, 2, 3]);
+    assert.ok(read.session, 'the session is reassembled from every segment');
+    assert.deepStrictEqual(read.warnings.filter((w) => /missing fields/.test(w)), []);
+  });
+
+  // The check that tells the rule apart from prefixing everything: lab.js's
+  // state holds ch.js's own values after the first trial, and those are not
+  // the study's.
+  it('a study that uses none of the names: no cyborgHunter_ column anywhere, and no warning', async () => {
+    const make = (lab) => new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b'), screen(lab, 'c')] });
+    const { ch } = await twice(make, { guards: 'honeypot' }, (win) => { win.GuardHoneypot = fakeHoneypot([], false, ''); });
+    assert.deepStrictEqual(ch.rows.flatMap((r) => Object.keys(r).filter((k) => k.startsWith('cyborgHunter_'))), []);
+    assert.deepStrictEqual([ch.warns, ch.errors], [[], []]);
+    assert.strictEqual(withSegment(ch.rows).length, 3);
+    const c = ch.rows.find((r) => r.sender === 'c');
+    assert.ok(c.integritySegmentFinal && c.ai_use_session === false, 'the final fields under their own names');
   });
 });
 

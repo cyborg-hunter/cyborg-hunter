@@ -345,5 +345,14 @@ export const MESSAGES = {
       'ch.js records one session per page and ended it when the first study\'s root component ended, so components run after that are not monitored',
       'run one study per page, or reload the page between studies',
       DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn, once per name: the study holds a value under one of ch.js's
+  // column names (adapters/labjs.js); it stays, and ch.js's goes under
+  // cyborgHunter_<name>, where the report reads it.
+  labjsColumnTaken: function (key) {
+    return formatError('Your lab.js study uses the column ' + key + ', which ch.js also writes',
+      'ch.js keeps your value and writes its own as cyborgHunter_' + key + ' from here on, where the report reads it',
+      'nothing is lost; rename your ' + key + ' column if you want ch.js\'s value under its usual name',
+      DOCS + 'labjs.md#where-the-data-goes');
   }
 };

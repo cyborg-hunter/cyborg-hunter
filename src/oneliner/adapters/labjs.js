@@ -176,7 +176,7 @@ export function installLabJsAdapter(opts) {
   var proto = lab.core.Component.prototype;
   if (proto.run && proto.run[PATCHED]) return proto.run[PATCHED];
   var origRun = proto.run, origEnd = proto.end;
-  var state = { version: opts.version, generation: generation, trialsRun: 0, segmentsWritten: 0, finalized: false, lastTrial: null, stamped: false, warnedSecond: false, warnedRunning: false, loggedHookError: false };
+  var state = { version: opts.version, generation: generation, trialsRun: 0, segmentsWritten: 0, finalized: false, lastTrial: null, stamped: false, warnedSecond: false, warnedRunning: false, loggedHookError: false, taken: {}, written: {} };
   ctx.labjs = state;
 
   function hookError(e) {
@@ -185,11 +185,42 @@ export function installLabJsAdapter(opts) {
     console.error(MESSAGES.labjsHookFailed(message(e)));
   }
 
+  // cyborgHunterError is ch.js's own column: a second problem on a row is
+  // added to the first.
+  function noteError(target, msg) {
+    target.cyborgHunterError = target.cyborgHunterError ? target.cyborgHunterError + '; ' + msg : msg;
+  }
+
   // A hook failure: one catalogue error per page, and the component's row
   // (lab.js commits data in its end()) says what failed.
   function markFailed(c, e) {
     hookError(e);
-    try { (c.data || (c.data = {})).cyborgHunterError = message(e); } catch (_) { /* the error is logged */ }
+    try { noteError(c.data || (c.data = {}), message(e)); } catch (_) { /* the error is logged */ }
+  }
+
+  // ch.js's columns never replace a value the study set. When the study
+  // already holds a value under one of ch.js's names (in the component's data
+  // or its parameters, which lab.js commits into its row, or in the
+  // datastore's state, which every commit updates), that value stays, and
+  // ch.js writes its own under cyborgHunter_<name> from then on, with one
+  // warning per name. A value in the state is ch.js's own when it is the one
+  // ch.js gave the last row: an object by reference, a primitive by value (so
+  // an equal number the study put there passes for ch.js's).
+  var PREFIX = 'cyborgHunter_';
+  function nameFor(k, studyHolds) {
+    if (!state.taken[k] && !studyHolds) return k;
+    if (!state.taken[k]) { state.taken[k] = true; console.warn(MESSAGES.labjsColumnTaken(k)); }
+    return PREFIX + k;
+  }
+  // Into a component's data, which its end() commits into its row and into
+  // the state. params: the component's parameters (paramsOf), read once per
+  // batch of columns.
+  function put(c, params, ds, k, v) {
+    var data = c.data || (c.data = {});
+    var key = nameFor(k, data[k] !== undefined || params[k] !== undefined ||
+      !!(ds && ds.state && ds.state[k] !== undefined && ds.state[k] !== state.written[k]));
+    data[key] = v;
+    if (key === k) state.written[k] = v;
   }
 
   // The study's own participantId is never overwritten, in a row or in the
@@ -219,7 +250,8 @@ export function installLabJsAdapter(opts) {
   // a Dummy's included) is committed inside its own end(), so the first end()
   // puts the participant id on row 0 (the CLI's CSV reader hoists the id from
   // row 0). An id the study stages after this (an end handler) lands later
-  // in the staging and wins.
+  // in the staging and wins; a value the study staged or set before it is
+  // kept.
   function stamp(c) {
     var ds = datastoreOf(c);
     if (state.stamped || !ds || !ds.staging || typeof ds.staging !== 'object') return;
@@ -227,7 +259,9 @@ export function installLabJsAdapter(opts) {
     try {
       var fields = { cyborgHunterParticipantId: ctx.participantId, cyborgHunterVersion: VERSION };
       if (!studySetsId(c, ds)) fields.participantId = ctx.participantId;
-      Object.assign(ds.staging, fields);
+      for (var k in fields) {
+        if (ds.staging[k] === undefined && !(ds.state && ds.state[k] !== undefined)) ds.staging[k] = fields[k];
+      }
     } catch (_) { /* the trial rows carry cyborgHunterParticipantId */ }
   }
 
@@ -280,26 +314,41 @@ export function installLabJsAdapter(opts) {
   // onto the last trial row. The root row is the one that reaches the server
   // when the last trial row already left in an incremental Transmit slice
   // (updates: { full: false }) before the root ended; the CLI keeps one copy
-  // of a segment index. A column the study set on its root is kept.
+  // of a segment index. A column the study set is kept (put, finalOnto).
   // The last trial row is found from the end: the flip generation's
   // internals.logIndex is undefined (its datastore.set() returns nothing),
   // and on the classic one the root's end runs inside the last leaf's end()
   // promise, after that leaf's row was committed. A leaf run on its own has
   // no committed row yet: its own data is the root's.
   function writeFinal(root, fields) {
-    var own = root.data || (root.data = {});
-    for (var k in fields) if (!(k in own)) own[k] = fields[k];
+    var ds = datastoreOf(root), params = paramsOf(root);
+    for (var k in fields) {
+      if (k === 'cyborgHunterError') noteError(root.data || (root.data = {}), fields[k]);
+      else put(root, params, ds, k, fields[k]);
+    }
     try {
-      var ds = datastoreOf(root);
       if (ds && Array.isArray(ds.data) && typeof ds.update === 'function') {
         for (var i = ds.data.length - 1; i >= 0; i--) {
-          if (ds.data[i] && ds.data[i].integritySegment) {
-            ds.update(i, function (d) { return Object.assign({}, d, fields); });
+          var row = ds.data[i];
+          if (row && (row.integritySegment || row[PREFIX + 'integritySegment'])) {
+            ds.update(i, function (d) { return finalOnto(d, fields); });
             return;
           }
         }
       }
     } catch (e) { console.error(MESSAGES.sessionEndFailed(message(e))); }
+  }
+
+  // A committed row, which lab.js's update() replaces without touching the
+  // state. ch.js writes none of the final fields before the end, so a value
+  // under one of their names is the study's.
+  function finalOnto(row, fields) {
+    var out = Object.assign({}, row);
+    for (var k in fields) {
+      if (k === 'cyborgHunterError') noteError(out, fields[k]);
+      else out[nameFor(k, out[k] !== undefined)] = fields[k];
+    }
+    return out;
   }
 
   // The end of the session, from the root component's end(): before the
@@ -345,29 +394,35 @@ export function installLabJsAdapter(opts) {
   function cutTrial(c, internals) {
     internals.chOpen = false;
     var t0 = ctx.debug ? performance.now() : 0;
+    var ds = datastoreOf(c);
     var data = c.data || (c.data = {});
     var r = ctx.segmenter.cut({ source: 'host', nextTrialId: 'gap-' + state.trialsRun });
+    var fields = {};
     if (r && r.segment) {
       var report = r.trialReport || {};
       report.trialStart_perfNow = internals.chStart;
-      data.integrity = report;
-      data.integritySegment = r.segment;
-      data.integrityPasteCount = r.segment.counters.pasteCount;
-      data.integrityCopyCount = r.segment.counters.copyCount;
-      data.integrityDropCount = r.segment.counters.dropCount;
-      data.integritySoftScore = r.segment.score.softScore;
-      data.integrityAnyHardTriggered = r.segment.score.anyHardTriggered;
+      fields = {
+        integrity: report,
+        integritySegment: r.segment,
+        integrityPasteCount: r.segment.counters.pasteCount,
+        integrityCopyCount: r.segment.counters.copyCount,
+        integrityDropCount: r.segment.counters.dropCount,
+        integritySoftScore: r.segment.score.softScore,
+        integrityAnyHardTriggered: r.segment.score.anyHardTriggered
+      };
       state.segmentsWritten += 1;
       state.lastTrial = c;
       // A segment that comes with an error is complete; only the next span
       // failed to open. Save it, and mark the row.
       var err = r.error || internals.chError;
-      if (err) data.cyborgHunterError = err;
+      if (err) noteError(data, err);
     } else {
-      data.cyborgHunterError = (r && r.error) || internals.chError || 'no segment';
+      noteError(data, (r && r.error) || internals.chError || 'no segment');
     }
-    data.cyborgHunterParticipantId = ctx.participantId;
-    data.cyborgHunterVersion = VERSION;
+    fields.cyborgHunterParticipantId = ctx.participantId;
+    fields.cyborgHunterVersion = VERSION;
+    var params = paramsOf(c);
+    for (var k in fields) put(c, params, ds, k, fields[k]);
     followReplay();
     try {
       if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);

@@ -25,6 +25,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   `chPhase` parameters or a `data-ch-trial` element, and its integrity
   columns are written into lab.js's own rows. ch.js never overwrites the
   study's `participantId`; its own ID goes into `cyborgHunterParticipantId`.
+  A value the study holds under one of ch.js's column names (`integrity`,
+  for example) is kept too: ch.js then writes its own under
+  `cyborgHunter_<name>`, with one console warning per name, and the CLI and
+  the analyze page read it from there.
   When the root component ends, the final fields are written onto the last
   trial row and the root row, before `on('end')` handlers run. A lab.js 23
   pre-release is not hooked yet: one warning, and the page runs as one

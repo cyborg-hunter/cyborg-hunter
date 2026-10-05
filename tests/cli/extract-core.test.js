@@ -383,3 +383,38 @@ describe('lab.js rows that carry more than one participant', () => {
     assert.ok(idWarning(r), r.warnings.join(' | '));
   });
 });
+
+// The one-line setup on lab.js writes a column under cyborgHunter_<name> when
+// the study already holds a value under <name>; the reader takes ch.js's
+// value from the prefixed column.
+describe('lab.js rows with a column under cyborgHunter_<name>', () => {
+  const report = (id) => ({ trialId: id, participantId: 'CH1', pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
+  const study = [
+    { sender: 'a', participantId: 'R1', cyborgHunterParticipantId: 'CH1', integrity: 'study value', cyborgHunter_integrity: report('0') },
+    { sender: 'b', cyborgHunterParticipantId: 'CH1', integrity: report('1'), integritySoftScoreFinal: 'mine', cyborgHunter_integritySoftScoreFinal: 0.5 }
+  ];
+  const plain = [
+    { sender: 'a', participantId: 'R1', cyborgHunterParticipantId: 'CH1', integrity: report('0') },
+    { sender: 'b', cyborgHunterParticipantId: 'CH1', integrity: report('1'), integritySoftScoreFinal: 0.5 }
+  ];
+
+  it('reads ch.js\'s value from the prefixed column, as if the study had used another name', () => {
+    const r = extractIntegrityData(study, {});
+    assert.deepStrictEqual(r.trials.map((t) => [t.trialId, t.pasteEvents.length]), [['0', 1], ['1', 1]]);
+    assert.ok(r.trials.every((t) => !Object.keys(t).some((k) => k.startsWith('cyborgHunter_'))));
+    assert.deepStrictEqual(r, extractIntegrityData(plain, {}));
+  });
+  it('leaves the caller\'s rows as they were', () => {
+    const rows = study.map((row) => Object.freeze({ ...row }));
+    extractIntegrityData(rows, {});
+    assert.strictEqual(rows[0].integrity, 'study value');
+    assert.ok('cyborgHunter_integrity' in rows[0]);
+  });
+  it('a CSV with a cyborgHunter_integrity column reads the same', () => {
+    const cell = (v) => '"' + JSON.stringify(v).replace(/"/g, '""') + '"';
+    const csv = ['sender,participantId,cyborgHunterParticipantId,integrity,cyborgHunter_integrity',
+      'a,R1,CH1,study value,' + cell(report('0'))].join('\n');
+    const r = extractIntegrityData(parseCsvToRaw(csv, {}), {});
+    assert.deepStrictEqual(r.trials.map((t) => [t.trialId, t.pasteEvents.length]), [['0', 1]]);
+  });
+});
