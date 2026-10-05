@@ -222,6 +222,11 @@ const CASES = {
     args: [],
     fix: 'run one study per page, or reload the page between studies',
     link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  labjsColumnTaken: {
+    args: ['integrity'],
+    fix: 'nothing is lost; rename your integrity column if you want ch.js\'s value under its usual name',
+    link: DOCS + 'labjs.md#where-the-data-goes'
   }
 };
 

@@ -70,6 +70,24 @@ function participantFromRows(rows, pidField, intField) {
   return { id, chId: chIds[0], chIds, ownIds };
 }
 
+// The one-line setup on lab.js writes a column under cyborgHunter_<name>
+// when the study already holds a value under <name> (adapters/labjs.js), so
+// the reader takes ch.js's value from there: such a row is read as a copy
+// with ch.js's value under <name>. Other rows are read as they are.
+const CH_PREFIX = 'cyborgHunter_';
+function chColumns(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  let out = row;
+  for (const k of Object.keys(row)) {
+    if (k.length > CH_PREFIX.length && k.startsWith(CH_PREFIX)) {
+      if (out === row) out = { ...row };
+      out[k.slice(CH_PREFIX.length)] = row[k];
+      delete out[k];
+    }
+  }
+  return out;
+}
+
 // Extracts integrity trial data from a single participant's raw JSON.
 // Returns { participantId, trials, warnings, metadata }.
 // The non-zero counts of a reduced payload's `truncated` record, e.g.
@@ -99,7 +117,12 @@ export function extractIntegrityData(raw, config) {
   // wrapped), so every lab.js file is keyed the same way.
   const rows = Array.isArray(raw) ? raw : transmitRows(raw);
   if (rows) raw = Array.isArray(raw) ? { trials: rows } : { ...raw, trials: rows };
-  const idRows = rows || (Array.isArray(raw.trials) && rowsCarryChId(raw.trials) ? raw.trials : null);
+  if (Array.isArray(raw.trials)) {
+    const read = raw.trials.map(chColumns);
+    if (read.some((t, i) => t !== raw.trials[i])) raw = { ...raw, trials: read };
+  }
+  const fromLabJs = Array.isArray(raw.trials) && rowsCarryChId(raw.trials);
+  const idRows = Array.isArray(raw.trials) && (rows || fromLabJs) ? raw.trials : null;
   const fromRows = idRows ? participantFromRows(idRows, pidField, intField) : {};
   // Transmit posts an incremental slice of new rows on every idle and the
   // full data at the end, so a server that stores each body holds several
@@ -162,8 +185,11 @@ export function extractIntegrityData(raw, config) {
   // needed experiment metadata AND the cyborg-hunter signal data on the same
   // trial object.
   if (Array.isArray(raw.trials)) {
+    // On lab.js rows from the one-line setup, ch.js's report is always an
+    // object; a study value under the same name (one its end handler wrote
+    // after ch.js's hook) is no trial report.
     trials = raw.trials
-      .filter(t => t && t[intField])
+      .filter(t => t && t[intField] && (!fromLabJs || typeof t[intField] === 'object'))
       .map(t => ({ ...t, ...t[intField] }));
     // One-line setup (0.10.0) across several pages: each page has its own
     // performance.now() origin, recorded as integritySegment.pageOrigin.
