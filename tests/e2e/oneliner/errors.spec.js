@@ -104,6 +104,32 @@ test('double load (ch.js then cyborg-hunter.min.js and the guard bundles): loud 
   expect(out.summaryCsv[0].totalPasteEvents).toBe('1');
 });
 
+// Only a Qualtrics survey runs its header's ch.js again (qualtrics.spec.js
+// covers that silent re-run). Anywhere else a second tag of the same version
+// is a second tag: each bundled guard core and then boot say so, and the
+// first copy keeps monitoring under its own attributes.
+test('ch.js twice, same version, on a page without Qualtrics: the double-load errors, first monitor intact', async ({ page }) => {
+  const log = collectConsole(page);
+  const first = '<script src="/dist/ch.js" data-participant-id="E2E-VAN-3"></script>';
+  await rewriteFixture(page, '**/vanilla-head.html', (html) => html.replace(first,
+    first + '\n  <script src="/dist/ch.js" data-participant-id="E2E-SECOND" data-preset="strict"></script>'));
+  await page.goto(FIX + 'vanilla-head.html');
+  await pasteInto(page, '#answer', 'pasted text');
+  await page.click('#get-data');
+  await page.waitForFunction(() => !!window.__data);
+
+  const errors = chErrors(log);
+  expect(errors).toHaveLength(3);
+  expect(errors[0]).toMatch(/^\[cyborg-hunter\] Not redefining GuardFriction: /);
+  expect(errors[1]).toMatch(/^\[cyborg-hunter\] Not redefining GuardHoneypot: /);
+  expect(errors[2]).toBe(MESSAGES.doubleLoad('ch.js', 'ch.js'));
+  expect(await page.evaluate(() => window.__cyborgHunterRerunHost)).toBeUndefined();
+
+  const data = await page.evaluate(() => window.__data);
+  expect(data.participantId).toBe('E2E-VAN-3');
+  expect(data.trials.reduce((n, t) => n + t.integrity.pasteEvents.length, 0)).toBe(1);
+});
+
 test('cyborg-hunter.min.js loaded twice: the neutral loaded-twice error, no load order claimed', async ({ page }) => {
   const log = collectConsole(page);
   await page.goto(FIX + 'core-loaded-twice.html');

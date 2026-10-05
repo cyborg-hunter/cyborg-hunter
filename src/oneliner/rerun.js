@@ -8,7 +8,10 @@
 // Identity is by version, not by script.src: a host that evaluates header
 // scripts through an eval path leaves document.currentScript null. A
 // different ch.js version, or cyborg-hunter.min.js, is still the loud double
-// load (boot.js step 1).
+// load (boot.js step 1). So is a second tag of the same version on any page
+// where the first copy did not start the Qualtrics host: only that host
+// re-runs its header, and boot marks the window when it starts it
+// (win.__cyborgHunterRerunHost).
 //
 // This file is entry.js's FIRST import, so its top level runs before the
 // bundled guard cores evaluate: their "Not redefining" else-branches read
@@ -18,9 +21,10 @@
 import { VERSION } from '../shared/constants.js';
 
 // markRerun(win) → boolean: true when this version of ch.js already runs in
-// win. Side effect: win.__cyborgHunterRerun = that boolean.
+// win and started a host that re-runs its header. Side effect:
+// win.__cyborgHunterRerun = that boolean.
 export function markRerun(win) {
-  var rerun = win.__cyborgHunterLoaded === 'ch.js' &&
+  var rerun = win.__cyborgHunterLoaded === 'ch.js' && !!win.__cyborgHunterRerunHost &&
     !!win.CyborgHunter && win.CyborgHunter.VERSION === VERSION;
   win.__cyborgHunterRerun = rerun;
   return rerun;

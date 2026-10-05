@@ -1,14 +1,16 @@
 // A host that re-renders its header (Qualtrics re-executes the header's ch.js
 // tag on every page, same window) runs the same ch.js again. rerun.js tells
 // that apart from a real double load before the guard cores evaluate: the
-// same version is silent and keeps the first monitor; anything else stays the
-// loud double load. Bootstrap mirrors boot.test.js (modules load after the
-// happy-dom globals).
+// same version on a page where ch.js started the Qualtrics host is silent and
+// keeps the first monitor; anything else, a second tag of the same version on
+// any other page included, stays the loud double load. Bootstrap mirrors
+// boot.test.js (modules load after the happy-dom globals).
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { Window } from 'happy-dom';
 import { VERSION } from '../../src/shared/constants.js';
 import { MESSAGES } from '../../src/oneliner/errors.js';
+import { fakeSurveyEngine } from './support/fake-qualtrics.js';
 
 class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
 let win, boot, markRerun, noteRerun, errors, warns, orig, ctx;
@@ -26,19 +28,26 @@ beforeEach(async () => {
 });
 afterEach(() => {
   console.error = orig.error; console.warn = orig.warn; console.info = orig.info;
+  if (ctx && ctx.qualtrics) ctx.qualtrics.teardown();
+  if (ctx && ctx.vanilla) ctx.vanilla.teardown();
   if (ctx && ctx.monitor) { try { ctx.monitor.destroy(); } catch { /* already destroyed */ } }
   win.close();
   delete global.window; delete global.document; delete global.Node; delete global.MutationObserver; delete global.ResizeObserver;
 });
 const script = (dataset) => ({ dataset: dataset || {}, src: 'https://unpkg.com/cyborg-hunter/dist/ch.js' });
+// The header's ch.js on a Qualtrics survey.
+function bootQualtrics() {
+  win.Qualtrics = { SurveyEngine: fakeSurveyEngine().SE };
+  return boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+}
 
 describe('markRerun', () => {
   it('is false on a page where ch.js has not run', () => {
     assert.strictEqual(markRerun(win), false);
     assert.strictEqual(win.__cyborgHunterRerun, false);
   });
-  it('is true once this version of ch.js runs, and false for another version or min.js', () => {
-    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+  it('is true once this version of ch.js runs on a Qualtrics survey, and false for another version or min.js', () => {
+    ctx = bootQualtrics();
     assert.strictEqual(win.CyborgHunter.VERSION, VERSION);
     assert.strictEqual(markRerun(win), true);
     assert.strictEqual(win.__cyborgHunterRerun, true);
@@ -56,11 +65,43 @@ describe('markRerun', () => {
     assert.strictEqual(markRerun(win), false);
     assert.strictEqual(win.__cyborgHunterRerun, false);
   });
+  // Only the Qualtrics host re-runs its header. On any other page a second
+  // tag of the same version is a second tag: the double-load error says so.
+  it('is false on a page without Qualtrics: a second tag of the same version is the loud double load', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(markRerun(win), false);
+    assert.strictEqual(win.__cyborgHunterRerun, false);
+    assert.strictEqual(boot({ script: script({ participantId: 'P2', guards: 'none' }), win }), null);
+    assert.deepStrictEqual(errors, [MESSAGES.doubleLoad('ch.js', 'ch.js')]);
+    assert.strictEqual(win.CyborgHunter, ctx.api);
+  });
+  it('is false on a jsPsych page, Qualtrics global or not', () => {
+    win.Qualtrics = { SurveyEngine: fakeSurveyEngine().SE };
+    win.initJsPsych = function () { return { data: { addProperties() {} }, run() {} }; };
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'jspsych');
+    assert.strictEqual(markRerun(win), false);
+    assert.strictEqual(boot({ script: script({ participantId: 'P1', guards: 'none' }), win }), null);
+    assert.deepStrictEqual(errors, [MESSAGES.doubleLoad('ch.js', 'ch.js')]);
+  });
+  it('boot marks the window for header re-runs only when it starts the Qualtrics host', () => {
+    ctx = bootQualtrics();
+    const desc = Object.getOwnPropertyDescriptor(win, '__cyborgHunterRerunHost');
+    assert.ok(desc, 'the mark is set');
+    assert.strictEqual(desc.value, 'qualtrics');
+    assert.strictEqual(desc.enumerable, false);
+    assert.strictEqual(desc.writable, false);
+  });
+  it('no mark on a page without Qualtrics', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(win.__cyborgHunterRerunHost, undefined);
+  });
 });
 
 describe('a same-file re-run', () => {
   it('calls the hook boot installed, counts it, and logs nothing', () => {
-    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    ctx = bootQualtrics();
     const seen = [];
     ctx.handlers.rerun = (info) => seen.push(info);
     assert.strictEqual(markRerun(win), true);
@@ -73,7 +114,7 @@ describe('a same-file re-run', () => {
     assert.strictEqual(win.CyborgHunter, ctx.api);  // the first namespace is untouched
   });
   it('a hook that throws is reported once and does not stop the monitor', () => {
-    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    ctx = bootQualtrics();
     ctx.handlers.rerun = () => { throw new Error('boom'); };
     noteRerun(win, null);
     assert.deepStrictEqual(errors, [MESSAGES.rerunFailed('boom')]);
@@ -82,8 +123,8 @@ describe('a same-file re-run', () => {
   it('noteRerun on a page without the hook does nothing', () => {
     assert.doesNotThrow(() => noteRerun(win, null));
   });
-  it('a different ch.js version is still the loud double load', () => {
-    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+  it('a different ch.js version is still the loud double load, on a Qualtrics survey too', () => {
+    ctx = bootQualtrics();
     win.CyborgHunter = Object.assign({}, win.CyborgHunter, { VERSION: '0.0.1' });
     assert.strictEqual(markRerun(win), false);
     const second = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });

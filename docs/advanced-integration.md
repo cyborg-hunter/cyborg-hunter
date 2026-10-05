@@ -217,8 +217,8 @@ Your existing data still reads in the CLI. Files saved in manual mode are unchan
 | `cyborg-hunter.min.js`, then `ch.js` | One error. ch.js stands down: nothing is monitored; `cyborg-hunter.min.js` keeps the namespace for your manual wiring. | the `ch.js` tag to stay in manual mode; the old tags and the manual wiring to switch ([Switching to the one-liner](#switching-to-the-one-liner)) |
 | `ch.js`, then `extension-guard-friction.js` or `extension-guard-honeypot.js` | `Not redefining GuardFriction` / `Not redefining GuardHoneypot`; ch.js's copy stays. | the guard tags |
 | `cyborg-hunter.min.js` twice | `cyborg-hunter.min.js is loaded twice`. | one of the two tags |
-| `ch.js` twice, same version | Nothing is logged. The second run is treated as the host re-running the page header (Qualtrics does this on every page), and the first copy keeps monitoring. | one of the two tags, if the second was a mistake |
-| `ch.js` twice, different versions | `ch.js was loaded after ch.js`; the first copy keeps monitoring. | one of the two tags |
+| `ch.js` twice on a [Qualtrics](qualtrics.md) survey, same version | Nothing is logged. Qualtrics runs the survey header again on every page, so a second run of the same version there is taken for that, and the first copy keeps monitoring. | the second tag, if it is not the header's |
+| `ch.js` twice anywhere else, or two versions | `ch.js was loaded after ch.js` (after `Not redefining GuardFriction` / `Not redefining GuardHoneypot`); the first copy keeps monitoring. | one of the two tags |
 
 ## Honeypot: ethics and IRB note
 

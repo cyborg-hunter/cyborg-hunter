@@ -58,7 +58,9 @@
 //      DOMContentLoaded. CyborgHunter.replay() is wired either way;
 //   9. window.CyborgHunter = the one-liner namespace; then the sentinel and
 //      the re-run hook (win.__cyborgHunterOnRerun, called by a same-file
-//      re-run of ch.js instead of a second boot: rerun.js, entry.js);
+//      re-run of ch.js instead of a second boot: rerun.js, entry.js), and on
+//      a Qualtrics survey the mark that makes such a re-run silent
+//      (win.__cyborgHunterRerunHost; on other pages a second tag is loud);
 //  10. data-debug only (debug.js): the badge and the console summary, shown
 //      once now and again when the jsPsych timeline is walked.
 //
@@ -291,6 +293,14 @@ export function boot(opts) {
       },
       writable: false, enumerable: false, configurable: true
     });
+    // Only Qualtrics re-runs its header, so only a page where ch.js started
+    // the Qualtrics host takes a second run of this version for a re-run
+    // (rerun.js markRerun); elsewhere a second tag stays the loud double load.
+    if (ctx.qualtricsLayout) {
+      Object.defineProperty(win, '__cyborgHunterRerunHost', {
+        value: 'qualtrics', writable: false, enumerable: false, configurable: true
+      });
+    }
     // One console summary per page: vanilla logs once the DOM is parsed;
     // jsPsych logs from the wrapped run() (after the walk), so here it only
     // shows the badge.
