@@ -142,11 +142,15 @@ export function generateTriageReason(summary, edgeExitCount = 0) {
   }
   if (summary.trialsWithFastTyping > 0) parts.push(`fast typing on ${summary.trialsWithFastTyping} trials`);
   // Prefer canonical aiExtensionsFound; fall back to legacy extensionsDetected for tests.
+  // A reduced Qualtrics payload counts every AI extension found
+  // (aiExtensionCount) but may have dropped the names found on earlier pages.
   const aiExtensions = summary.aiExtensionsFound || summary.extensionsDetected || [];
-  if (aiExtensions.length > 0) {
-    const names = aiExtensions.map(e => typeof e === 'string' ? e : (e.name || 'unknown'));
-    parts.push(names.join(', ') + ' detected');
-  }
+  const names = aiExtensions.map(e => typeof e === 'string' ? e : (e.name || 'unknown'));
+  const unnamed = (summary.aiExtensionCount ?? names.length) - names.length;
+  const plural = unnamed === 1 ? '' : 's';
+  if (names.length > 0 && unnamed > 0) parts.push(`${names.join(', ')} and ${unnamed} more AI extension${plural} detected`);
+  else if (names.length > 0) parts.push(names.join(', ') + ' detected');
+  else if (unnamed > 0) parts.push(`${unnamed} AI extension${plural} detected`);
   const sidebarCount = summary.sidebarEventCount ?? (summary.sidebarDetected ? 1 : 0);
   if (sidebarCount > 0) parts.push(`${sidebarCount} sidebar event${sidebarCount === 1 ? '' : 's'}`);
   if (summary.keyboardShortcutCount > 0) parts.push(`${summary.keyboardShortcutCount} keyboard shortcuts`);

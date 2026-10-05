@@ -35,7 +35,10 @@
 // is, and writes nothing when it is null.
 //   payload.cyborgHunterOneLiner.host = 'qualtrics'
 //   payload.cyborgHunterOneLiner.truncated = false at level 0, otherwise
-//     { level, droppedSessionEntries: { key: n }, pagesTrimmed, pagesDropped }
+//     { level, droppedSessionEntries: { key: n }, pagesTrimmed, pagesDropped,
+//       totals } (levels 1-4; level 5 is { level: 5 }): totals holds the whole
+//     session's counts (sessionTotals below), which the CLI reports in place
+//     of the counts it could make from what the reduced payload kept
 //
 // The levels are cumulative; each is measured on the serialized string and
 // the first that fits is returned:
@@ -52,7 +55,8 @@
 //      trials: [] }, plus cyborgHunterError when the blob could not be read;
 //      json null when even that does not fit
 // The newest row's segment carries the monitor's cumulative counters and
-// score, which is what the CLI reads them from, so levels 0-4 keep them.
+// score, which is what the CLI reads them from, so levels 0-4 keep them; the
+// other counts travel in truncated.totals.
 
 export var KEEP_SESSION_ENTRIES = 25;
 export var KEEP_PAGES = 5;
@@ -216,6 +220,88 @@ function summary(b) {
 function segments(p) {
   return p.trials.map(function (r) { return r.integritySegment; })
     .filter(function (s) { return s && s.deltas; });
+}
+
+// The whole session's counts, which levels 1-4 carry in truncated.totals so
+// that a reduced payload still reports every count the monitor saw. Numbers
+// only, a fixed set: a few hundred bytes whatever the session. Each is
+// counted from the level-0 summary the way the CLI counts it from a full
+// payload (src/cli/analyzers/summary.js; a test pins the two equal):
+//   tabAways, tabAwayMs, tabAwayFlicker, tabAwayMedium, tabAwayLong
+//       the segments' tabAwaySums: how many, their sum, and how many are
+//       at most tabAwayCutoffMs (the monitor's tab-away threshold, from the
+//       session config, else 3000), between it and 10 s, and 10 s or more
+//   sidebarOpenings  sidebarEvents counted as incidents (sidebarOpenings())
+//   keyboardShortcuts, viewportWidthShifts, zoomChanges, extensionInjections,
+//   devToolsEvents, aiExtensions  how many entries each session array has
+//   trialsWithTabAway, fastTypingTrials (charsPerSec above the config's
+//   typingSpeedCps, else 10), idleGaps, syntheticInsertions, foreignInputs
+//       over the rows' trial reports
+// A session array that no segment has is left out, and the CLI then counts
+// what the payload kept.
+var LONG_TAB_AWAY_MS = 10000;   // the report's long tab-away
+var SESSION_COUNTS = { keyboardShortcuts: 'keyboardShortcuts', viewportWidthShifts: 'viewportWidthShifts',
+  zoomChanges: 'zoomChanges', extensionInjections: 'extensionInjections', devToolsEvents: 'devToolsEvents',
+  aiExtensionsFound: 'aiExtensions' };
+
+// The CLI's count of sidebar incidents: an "opened" entry starts one only
+// when no sidebar is open, so the two checks that both detect an opening
+// count once. The CLI sorts the entries by t first; they are already in that
+// order, page after page (each page's t runs on its own clock, so a sort
+// here would mix pages up).
+function sidebarOpenings(events) {
+  var open = false, n = 0;
+  events.forEach(function (e) {
+    if (e.type === 'opened') {
+      if (!open) n += 1;
+      open = true;
+    } else if (e.type === 'closed') open = false;
+  });
+  return n;
+}
+
+function sessionTotals(p) {
+  // The segments in the CLI's order: by index, the first of each index.
+  var segs = p.trials.map(function (r) { return r.integritySegment; })
+    .filter(function (s) { return s && typeof s.segmentIndex === 'number'; })
+    .sort(function (a, b) { return a.segmentIndex - b.segmentIndex; });
+  segs = segs.filter(function (s, i) { return i === 0 || s.segmentIndex !== segs[i - 1].segmentIndex; });
+  function joined(key) {   // the session array, or null when no segment has it
+    return segs.reduce(function (all, s) {
+      var d = s.deltas && s.deltas[key];
+      return Array.isArray(d) ? (all || []).concat(d) : all;
+    }, null);
+  }
+  var config = null;
+  for (var i = 0; i < segs.length && !config; i++) config = segs[i].config || null;
+  var th = (config && config.thresholds) || {};
+  var t = {};
+  var sums = joined('tabAwaySums');
+  if (sums) {
+    var cutoff = typeof th.tabAwayDurationMs === 'number' ? th.tabAwayDurationMs : 3000;
+    var count = function (keep) { return sums.filter(keep).length; };
+    t.tabAways = sums.length;
+    t.tabAwayMs = sums.reduce(function (n, d) { return n + d; }, 0);
+    t.tabAwayFlicker = count(function (d) { return d <= cutoff; });
+    t.tabAwayMedium = count(function (d) { return d > cutoff && d < LONG_TAB_AWAY_MS; });
+    t.tabAwayLong = count(function (d) { return d >= LONG_TAB_AWAY_MS; });
+    t.tabAwayCutoffMs = cutoff;
+  }
+  var side = joined('sidebarEvents');
+  if (side) t.sidebarOpenings = sidebarOpenings(side);
+  Object.keys(SESSION_COUNTS).forEach(function (k) {
+    var a = joined(k);
+    if (a) t[SESSION_COUNTS[k]] = a.length;
+  });
+  var reports = p.trials.map(function (r) { return r.integrity; }).filter(Boolean);
+  var cps = typeof th.typingSpeedCps === 'number' ? th.typingSpeedCps : 10;
+  var entries = function (k) { return reports.reduce(function (n, r) { return n + (r[k] ? r[k].length : 0); }, 0); };
+  t.trialsWithTabAway = reports.filter(function (r) { return r.tabAwayEvents && r.tabAwayEvents.length > 0; }).length;
+  t.fastTypingTrials = reports.filter(function (r) { return (r.charsPerSec || 0) > cps; }).length;
+  t.idleGaps = entries('idleGaps');
+  t.syntheticInsertions = entries('syntheticInsertions');
+  t.foreignInputs = entries('foreignInputEvents');
+  return t;
 }
 
 function countDropped(t, key, n) {
@@ -406,7 +492,7 @@ export function buildQualtricsPayload(opts) {
     // already gone, so the copy is small) and is free to change it in place.
     var work = JSON.parse(json);
     var all = work.trials;   // every row, for the rollup of pages levels 3-4 drop
-    var t = { level: 1, droppedSessionEntries: {}, pagesTrimmed: 0, pagesDropped: 0 };
+    var t = { level: 1, droppedSessionEntries: {}, pagesTrimmed: 0, pagesDropped: 0, totals: sessionTotals(work) };
     work.cyborgHunterOneLiner.truncated = t;
     var steps = [keepNewestSessionEntries, emptyOlderRows, keepNewestRows, newestOnly];
     for (var i = 0; i < steps.length; i++) {

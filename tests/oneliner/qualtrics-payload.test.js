@@ -10,6 +10,7 @@ import { Window } from 'happy-dom';
 import { buildQualtricsPayload, trimTrialReport, KEEP_SESSION_ENTRIES, KEEP_PAGES, LABEL_MAX, DEFAULT_MAX_CHARS } from '../../src/oneliner/qualtrics-payload.js';
 import { MAX_CHARS } from '../../src/oneliner/adapters/qualtrics.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { computeParticipantSummary } from '../../src/cli/analyzers/summary.js';
 
 const bytes = (s) => Buffer.byteLength(s, 'utf8');
 const ORIGIN = 1700000000000;
@@ -504,6 +505,79 @@ function totals(raw) {
     hard: r.score.anyHardTriggered, hardPaste: r.score.hardScore.paste.count, soft: r.score.softScore, trials: r.score.trialsCompleted };
 }
 
+// A session with every kind of count the report shows, spread over the
+// pages so that each ladder level drops some of it: tab-aways in every bin
+// of a 5 s threshold, a sidebar incident per page whose opening both checks
+// detected, shortcuts, zoom and viewport changes, an injection and an AI
+// extension on the first page, idle gaps, synthetic and foreign input, fast
+// typing on some pages (8 cps threshold).
+function countsBlob(opts = {}) {
+  const b = blob({ pages: 8, events: 3, tabAways: 0, ...opts });
+  const durations = [1000, 3000, 5000, 5001, 9999, 10000, 15000];
+  b.trials.forEach((r, i) => {
+    const t0 = 1000 * i + 500;
+    const d = r.integritySegment.deltas;
+    d.tabAwaySums = durations.slice();
+    d.tabAwayEvents = durations.map((ms, k) => ({ start: t0 + 10 * k, duration_ms: ms, type: 'windowBlur', timestamp: STAMP }));
+    d.sidebarEvents = [{ type: 'opened', method: 'innerWidth_delta', deltaIW: -300, t: t0 }, { type: 'opened', method: 'layout_compression', gap: 300, t: t0 },
+      { type: 'closed', method: 'innerWidth_delta', duration_ms: 1, t: t0 + 1 }, { type: 'closed', method: 'layout_compression', duration_ms: 1, t: t0 + 1 }];
+    d.keyboardShortcuts = [{ combo: 'F12', t: t0 }];
+    d.zoomChanges = i % 2 ? [{ from: 1, to: 1.1, t: t0 }] : [];
+    d.viewportWidthShifts = [{ oldWidth: 1200, newWidth: 900, delta: -300, t: t0 }];
+    d.extensionInjections = i === 0 ? [{ tag: 'merlin-root', hasShadow: true, t: 1 }] : [];
+    d.aiExtensionsFound = i === 0 ? [{ name: 'Merlin', t: 1 }] : [];
+    const t = r.integrity;
+    t.tabAwayEvents = i % 3 ? d.tabAwayEvents.slice(0, 2) : [];
+    t.idleGaps = [{ duration_ms: 31000, t: t0 }];
+    t.syntheticInsertions = [{ type: 'synthetic_insertion', t: t0, dataLength: 12 }];
+    t.foreignInputEvents = i % 2 ? [{ t: t0, targetTag: 'TEXTAREA', inputType: 'insertText' }] : [];
+    t.charsPerSec = i % 4 === 0 ? 12 : 6;
+  });
+  b.trials[0].integritySegment.config.thresholds = { tabAwayDurationMs: 5000, typingSpeedCps: 8 };
+  return b;
+}
+
+// Every number the report shows for a participant, from a payload.
+const REPORTED = ['totalTabAways', 'tabAwayFlickerCount', 'tabAwayMediumCount', 'tabAwayLongCount', 'totalTabAwayDuration_ms',
+  'tabAwayCutoffMs', 'trialsWithTabAway', 'trialsWithFastTyping', 'totalIdleGaps', 'totalSyntheticInsertions',
+  'totalForeignInputEvents', 'sidebarEventCount', 'keyboardShortcutCount', 'layoutShiftCount', 'zoomChangeCount',
+  'extensionInjectionCount', 'devToolsEventCount', 'totalPasteEvents', 'totalCopyEvents', 'totalDropEvents',
+  'hardTriggered', 'authoritativeSoftScore', 'softScoreThreshold'];
+function reported(json) {
+  const s = computeParticipantSummary(extractIntegrityData(JSON.parse(json), {}), {});
+  const out = Object.fromEntries(REPORTED.map((k) => [k, s[k]]));
+  out.aiExtensions = s.aiExtensionCount ?? s.aiExtensionsFound.length;
+  return out;
+}
+
+describe('a reduced payload carries the whole session\'s counts', () => {
+  for (const [name, opts] of [['one page origin', {}], ['the legacy layout, a page origin per two rows', { legacy: true, rowsPerPage: 2 }]]) {
+    it(name + ': at every level 1-4 the report\'s numbers equal the unreduced summary\'s', () => {
+      const b = countsBlob(opts);
+      const full = build(b, 10000000);
+      assert.strictEqual(full.level, 0);
+      const truth = reported(full.json);
+      assert.deepStrictEqual([truth.totalTabAways, truth.tabAwayFlickerCount, truth.tabAwayMediumCount, truth.tabAwayLongCount,
+        truth.tabAwayCutoffMs, truth.sidebarEventCount, truth.trialsWithFastTyping, truth.aiExtensions], [56, 24, 16, 16, 5000, 8, 2, 1]);
+      for (const level of [1, 2, 3, 4]) {
+        const out = atLevel(b, level);
+        assert.deepStrictEqual(reported(out.json), truth, 'level ' + level);
+        const totals = out.payload.cyborgHunterOneLiner.truncated.totals;
+        assert.ok(Object.values(totals).every((v) => typeof v === 'number' && Number.isFinite(v)), JSON.stringify(totals));
+      }
+    });
+  }
+
+  it('level 0 and level 5 carry no totals', () => {
+    const b = countsBlob();
+    assert.strictEqual(build(b, 10000000).payload.cyborgHunterOneLiner.truncated, false);
+    const four = atLevel(b, 4);
+    const five = build(b, four.chars - 1);
+    assert.strictEqual(five.level, 5);
+    assert.deepStrictEqual(five.payload.cyborgHunterOneLiner.truncated, { level: 5 });
+  });
+});
+
 // Under the legacy layout every page is a full load with its own monitor,
 // and the CLI adds up the last segment of each page origin
 // (src/cli/segment-reassembly.js): levels 3 and 4 drop whole pages, and
@@ -543,11 +617,12 @@ describe('the legacy layout: one monitor per page', () => {
 // Levels 4 and 5 must fit any cap the adapter could use, whatever the
 // session wrote and however long the ids are.
 describe('the last levels have fixed upper bounds', () => {
-  it('level 4 stays under 9,000 bytes with every field at its longest', () => {
+  it('level 4 stays under 9,500 bytes with every field at its longest', () => {
     // Every string LABEL_MAX three-byte characters, every error note NOTE_MAX,
     // every number 24 characters long (and finite when summed), every
     // allowlisted key present, three page origins (so a rollup): 8,583 bytes
-    // when this was written.
+    // when this was written, 9,030 once level 4 carried the whole session's
+    // counts (truncated.totals, a fixed set of numbers). The cap is 12,000.
     const NUM = -1.2345678901234567e-300, LONG = '頁'.repeat(200);
     const fill = (v, k) => (Array.isArray(v) ? v.map((x) => fill(x))
       : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([key, x]) => [key, fill(x, key)]))
@@ -575,7 +650,7 @@ describe('the last levels have fixed upper bounds', () => {
     b.cyborgHunterOneLiner.pageCount = NUM;
     const out = atLevel(b, 4);
     assert.ok(out.payload.integritySegments, 'the rollup is there');
-    assert.ok(out.chars <= 9000, out.chars + ' bytes');
+    assert.ok(out.chars <= 9500, out.chars + ' bytes');
   });
 
   it('the minimal payload stays under 600 bytes', () => {
@@ -590,15 +665,15 @@ describe('the last levels have fixed upper bounds', () => {
 // level under test and the level before it, so the test lands on that level.
 describe('the ladder', () => {
   it('level 1 keeps the newest session entries per key and counts the dropped ones', () => {
-    const b = blob({ pages: 4, tabAways: 20 });   // 80 tab-aways; level 0 is about 14,100 bytes, level 1 about 8,900
-    const out = build(b, 9000);
+    const b = blob({ pages: 4, tabAways: 20 });   // 80 tab-aways; level 0 is about 14,100 bytes, level 1 about 9,200
+    const out = build(b, 9500);
     assert.strictEqual(out.level, 1);
     const kept = out.payload.trials.reduce((n, t) => n + t.integritySegment.deltas.tabAwayEvents.length, 0);
     assert.strictEqual(kept, KEEP_SESSION_ENTRIES);
     assert.strictEqual(out.payload.trials[3].integritySegment.deltas.tabAwayEvents.length, 20);   // newest first
     assert.strictEqual(out.payload.cyborgHunterOneLiner.truncated.droppedSessionEntries.tabAwayEvents, 55);
     assert.strictEqual(out.payload.cyborgHunterOneLiner.truncated.droppedSessionEntries.tabAwaySums, 55);
-    assert.ok(out.chars <= 9000);
+    assert.ok(out.chars <= 9500);
   });
   it('level 1 keeps the newest honeypot violations too, and level 4 counts the rest as dropped', () => {
     // A participant who alt-tabs to a chatbot dozens of times: 80 entries
@@ -646,10 +721,10 @@ describe('the ladder', () => {
     assert.strictEqual(r.session.config.preset, 'standard');
   });
   it('level 4 fits and the CLI still scores it', () => {
-    const b = blob({ pages: 40, events: 20, tabAways: 20 });
-    const out = build(b, 1500);
+    const b = blob({ pages: 40, events: 20, tabAways: 20 });   // level 4 about 1,700 bytes, level 3 about 11,600
+    const out = build(b, 2000);
     assert.strictEqual(out.level, 4);
-    assert.ok(out.chars <= 1500, out.chars + ' bytes');
+    assert.ok(out.chars <= 2000, out.chars + ' bytes');
     assert.strictEqual(out.payload.trials.length, 1);
     assert.deepStrictEqual(out.payload.trials[0].integritySegment.deltas, {});
     const r = extractIntegrityData(JSON.parse(out.json), {});

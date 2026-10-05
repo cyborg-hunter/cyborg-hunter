@@ -7,6 +7,21 @@ export function computeSummary(participants, config) {
   return participants.map(p => computeParticipantSummary(p, config));
 }
 
+// A reduced Qualtrics payload (extract-core.js reducedPayload) kept only some
+// of the session's rows and entries, and carries the whole session's counts
+// (src/oneliner/qualtrics-payload.js truncated.totals): each summary field
+// below is taken from the carried count named next to it. aiExtensionCount
+// exists only then (the names of the AI extensions found stay those kept).
+const CARRIED_TOTALS = {
+  totalTabAways: 'tabAways', totalTabAwayDuration_ms: 'tabAwayMs', tabAwayFlickerCount: 'tabAwayFlicker',
+  tabAwayMediumCount: 'tabAwayMedium', tabAwayLongCount: 'tabAwayLong', tabAwayCutoffMs: 'tabAwayCutoffMs',
+  trialsWithTabAway: 'trialsWithTabAway', trialsWithFastTyping: 'fastTypingTrials', totalIdleGaps: 'idleGaps',
+  totalSyntheticInsertions: 'syntheticInsertions', totalForeignInputEvents: 'foreignInputs',
+  sidebarEventCount: 'sidebarOpenings', keyboardShortcutCount: 'keyboardShortcuts', layoutShiftCount: 'viewportWidthShifts',
+  zoomChangeCount: 'zoomChanges', extensionInjectionCount: 'extensionInjections', devToolsEventCount: 'devToolsEvents',
+  aiExtensionCount: 'aiExtensions'
+};
+
 export function computeParticipantSummary(participant, config) {
   const trials = participant.trials;
   const n = trials.length;
@@ -46,7 +61,7 @@ export function computeParticipantSummary(participant, config) {
   const typingCutoff_cps =
     savedThresholds.typingSpeedCps ?? config.typingSpeedThreshold_cps ?? 10;
 
-  return {
+  const summary = {
     participantId: participant.participantId,
     trialCount: n,
 
@@ -158,6 +173,16 @@ export function computeParticipantSummary(participant, config) {
     // Pass through metadata for downstream use
     metadata: participant.metadata || {}
   };
+
+  // A carried count is used only when it is a finite, non-negative number.
+  const totals = reduced ? participant.reducedPayload.totals : null;
+  if (totals) {
+    for (const [field, key] of Object.entries(CARRIED_TOTALS)) {
+      const v = totals[key];
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) summary[field] = v;
+    }
+  }
+  return summary;
 }
 
 // Re-derives the hard-flag verdict from raw event counts within a phase-scoped

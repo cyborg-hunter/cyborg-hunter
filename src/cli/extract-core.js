@@ -227,11 +227,19 @@ export function extractIntegrityData(raw, config) {
     warnings.push(`one-line setup reported an error for this participant (cyborgHunterError): ${oneLinerError} — data after that point may be incomplete`);
   }
   // The Qualtrics writer reduces the payload until it fits the embedded-data
-  // cap (src/oneliner/qualtrics-payload.js) and records what it took out.
+  // cap (src/oneliner/qualtrics-payload.js) and records what it took out,
+  // with the whole session's counts (totals); the note says which numbers
+  // cover the whole session. A reduced payload without totals (written
+  // before the writer carried them) has only its clipboard counters whole,
+  // and one with no rows (level 5) is not in the report at all.
   const truncated = raw.cyborgHunterOneLiner?.truncated;
   const reduced = !!truncated && typeof truncated === 'object';
   if (reduced) {
-    warnings.push(`Qualtrics payload was reduced to fit the embedded-data cap (level ${truncated.level}: ${describeTruncation(truncated)}) — session totals come from the monitor's counters; per-trial event lists are incomplete`);
+    const whole = trials.length === 0 ? 'no page of the session was kept, so the response is not in the report'
+      : truncated.totals && typeof truncated.totals === 'object'
+        ? "its counts, scores and tier are the whole session's; the trial count, the per-page rows, the event lists and the names of AI extensions cover only what it kept"
+        : "its paste, copy and drop counts, scores and tier are the whole session's; its other counts, per-page rows and event lists cover only what it kept";
+    warnings.push(`Qualtrics payload was reduced to fit the embedded-data cap (level ${truncated.level}: ${describeTruncation(truncated)}) — ${whole}`);
   }
 
   return {
@@ -242,9 +250,15 @@ export function extractIntegrityData(raw, config) {
     session,
     score,
     // A payload the Qualtrics writer reduced (levels 1-5), whose older trials
-    // lost their event lists: summary.js then takes the clipboard totals from
-    // the session counters. null for every other payload.
-    reducedPayload: reduced ? { level: typeof truncated.level === 'number' ? truncated.level : null } : null,
+    // and entries were dropped: summary.js then takes the clipboard totals
+    // from the session counters and every other count it can from `totals`,
+    // the whole session's counts the writer carries (qualtrics-payload.js;
+    // summary.js reads only the keys it knows, each only as a finite number
+    // >= 0). null for every other payload.
+    reducedPayload: reduced ? {
+      level: typeof truncated.level === 'number' ? truncated.level : null,
+      totals: truncated.totals && typeof truncated.totals === 'object' && !Array.isArray(truncated.totals) ? truncated.totals : null
+    } : null,
     // Surface a few top-level payload fields that some renderers need but
     // that aren't part of the session-level integrity object. Keeping the
     // list explicit (rather than exposing `raw` wholesale) avoids future

@@ -62,13 +62,28 @@ describe('a reduced one-line payload', () => {
     assert.ok(r.warnings.some(w => w.includes('(level 3: 55 tabAwayEvents entries dropped, 4 pages trimmed, 35 pages dropped)')), r.warnings.join('\n'));
   });
 
+  // The note says which numbers are the whole session's: with the carried
+  // totals every count is; a reduced payload without them (built before
+  // the writer carried them) keeps only its clipboard counters whole.
+  it('says which numbers are the whole session\'s, with and without carried totals', () => {
+    const withTotals = extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2, totals: { tabAways: 3 } }), {});
+    assert.ok(withTotals.warnings.some(w => w.endsWith("— its counts, scores and tier are the whole session's; the trial count, the per-page rows, the event lists and the names of AI extensions cover only what it kept")), withTotals.warnings.join('\n'));
+    const without = extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2 }), {});
+    assert.ok(without.warnings.some(w => w.endsWith("— its paste, copy and drop counts, scores and tier are the whole session's; its other counts, per-page rows and event lists cover only what it kept")), without.warnings.join('\n'));
+    const five = extractIntegrityData({ participantId: 'P1', cyborgHunterOneLiner: { host: 'qualtrics', truncated: { level: 5 } }, trials: [] }, {});
+    assert.ok(five.warnings.some(w => w.endsWith('(level 5: nothing listed) — no page of the session was kept, so the response is not in the report')), five.warnings.join('\n'));
+  });
+
   it('says nothing when the payload was not reduced', () => {
     const r = extractIntegrityData(raw(false), {});
     assert.ok(!r.warnings.some(w => /embedded-data cap/.test(w)));
   });
 
-  it('marks the participant as reduced, with the level, only when the payload was', () => {
-    assert.deepStrictEqual(extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2 }), {}).reducedPayload, { level: 3 });
+  it('marks the participant as reduced, with the level and the carried totals, only when the payload was', () => {
+    assert.deepStrictEqual(extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2 }), {}).reducedPayload, { level: 3, totals: null });
+    const totals = { tabAways: 40, sidebarOpenings: 2 };
+    assert.deepStrictEqual(extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2, totals }), {}).reducedPayload, { level: 3, totals });
+    assert.strictEqual(extractIntegrityData(raw({ level: 2, totals: [1, 2] }), {}).reducedPayload.totals, null);
     for (const t of [false, undefined, true, 'yes']) {
       assert.strictEqual(extractIntegrityData(raw(t), {}).reducedPayload, null, String(t));
     }
