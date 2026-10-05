@@ -417,6 +417,27 @@ describe('lab.js rows with a column under cyborgHunter_<name>', () => {
     assert.strictEqual(rows[0].integrity, 'study value');
     assert.ok('cyborgHunter_integrity' in rows[0]);
   });
+  // In a CSV every row has every column. A row from before the study's
+  // first use of a name has an empty cyborgHunter_<name> cell, which Papa
+  // reads as null whether lab.js wrote it bare or quoted; ch.js's own value
+  // under <name> on that row stays.
+  for (const [form, empty] of [['bare', ''], ['quoted', '""']]) {
+    it('a CSV row with an empty (' + form + ') cyborgHunter_integrity cell keeps ch.js\'s report under integrity', () => {
+      const cell = (v) => '"' + JSON.stringify(v).replace(/"/g, '""') + '"';
+      const csv = ['sender,participantId,cyborgHunterParticipantId,integrity,cyborgHunter_integrity',
+        'a,R1,CH1,' + cell(report('0')) + ',' + empty,
+        'b,,CH1,study value,' + cell(report('1'))].join('\n');
+      const r = extractIntegrityData(parseCsvToRaw(csv, {}), {});
+      assert.deepStrictEqual(r.trials.map((t) => [t.sender, t.trialId, t.pasteEvents.length]), [['a', '0', 1], ['b', '1', 1]]);
+    });
+  }
+  // In JSON an empty string under the prefixed name is ch.js's own value
+  // (a participant who wrote nothing in the honeypot's box), and it wins.
+  it('a JSON row whose cyborgHunter_ai_report_session is an empty string: the disclosure is ch.js\'s empty one', () => {
+    const rows = [{ sender: 'a', participantId: 'R1', cyborgHunterParticipantId: 'CH1', integrity: report('0'),
+      ai_use_session: false, ai_report_session: 'study text', cyborgHunter_ai_report_session: '' }];
+    assert.deepStrictEqual(extractIntegrityData(rows, {}).honeypot, { aiUse: false, aiReport: '' });
+  });
   it('a CSV with a cyborgHunter_integrity column reads the same', () => {
     const cell = (v) => '"' + JSON.stringify(v).replace(/"/g, '""') + '"';
     const csv = ['sender,participantId,cyborgHunterParticipantId,integrity,cyborgHunter_integrity',

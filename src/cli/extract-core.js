@@ -73,7 +73,12 @@ function participantFromRows(rows, pidField, intField) {
 // The one-line setup on lab.js writes a column under cyborgHunter_<name>
 // when the study already holds a value under <name> (adapters/labjs.js), so
 // the reader takes ch.js's value from there: such a row is read as a copy
-// with ch.js's value under <name>. Other rows are read as they are.
+// with ch.js's value under <name>. Other rows are read as they are. A CSV
+// has every column on every row, so a row from before the study's first use
+// of <name> has an empty cyborgHunter_<name> cell (lab.js writes a missing
+// key and an empty string alike; Papa reads either as null) next to ch.js's
+// own value under <name>, which stays. In JSON an empty string under the
+// prefixed name is ch.js's value, and is taken.
 const CH_PREFIX = 'cyborgHunter_';
 function chColumns(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
@@ -81,7 +86,7 @@ function chColumns(row) {
   for (const k of Object.keys(row)) {
     if (k.length > CH_PREFIX.length && k.startsWith(CH_PREFIX)) {
       if (out === row) out = { ...row };
-      out[k.slice(CH_PREFIX.length)] = row[k];
+      if (row[k] !== undefined && row[k] !== null) out[k.slice(CH_PREFIX.length)] = row[k];
       delete out[k];
     }
   }

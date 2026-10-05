@@ -740,7 +740,7 @@ describe('ch.js on real lab.js 20.2.4: column names the study uses too', () => {
         const study = make(lab, seen);
         const rows = await runToEnd(study);
         const ds = datastoreOf(study);
-        out[withCh ? 'ch' : 'base'] = { rows, state: { ...ds.state }, seen, csv: ds.exportCsv(), warns: warns.slice(), errors: errors.slice() };
+        out[withCh ? 'ch' : 'base'] = { rows, state: { ...ds.state }, seen, csv: ds.exportCsv(), json: JSON.parse(ds.exportJson()), warns: warns.slice(), errors: errors.slice() };
       } finally {
         releaseConsole();
         try { if (current) current.monitor.destroy(); } catch { /* the final hook destroyed it */ }
@@ -849,6 +849,38 @@ describe('ch.js on real lab.js 20.2.4: column names the study uses too', () => {
     assert.ok(read.session, 'the session is reassembled from every segment');
     assert.deepStrictEqual(read.warnings.filter((w) => /missing fields/.test(w)), []);
   });
+
+  // In a CSV every row has every column, so a row from before the study's
+  // first use of a name has an empty cyborgHunter_<name> cell next to
+  // ch.js's own value under <name>. The CSV export must read as the JSON
+  // export does: the same trials, pastes, session and score.
+  const MIDSTUDY = [
+    ['a datastore.set after screen b', { onB: (b) => b.on('after:end', function () { this.options.datastore.set('integrity', 'S2'); }) }],
+    ['data on screen c', { cData: { integrity: 'mine' } }],
+    ['an end handler on screen b', { onB: (b) => b.on('end', function () { this.data.integrity = 'from-end'; }) }],
+    ['data named integritySegment on screen c', { cData: { integritySegment: 'mine' } }]
+  ];
+  for (const [variant, how] of MIDSTUDY) {
+    it('a shared name first used mid-study (' + variant + '): the CSV export reads as the JSON export does', async () => {
+      const make = (lab) => {
+        const scr = (t, x) => new lab.html.Screen(Object.assign({ title: t, content: '<p>' + t + '</p>', timeout: 30 }, x || {}));
+        const a = scr('a'), b = scr('b'), c = scr('c', how.cData ? { data: how.cData } : {}), d = scr('d');
+        for (const pasted of [a, c]) pasted.on('show', () => paste(globalThis.window, 'p'));
+        if (how.onB) how.onB(b);
+        return new lab.flow.Sequence({ title: 'root', content: [a, b, c, d] });
+      };
+      const { ch } = await twice(make);
+      // The whole session: segments carry running totals, so a lost
+      // segment leaves the paste count as it was and shows in the rest.
+      const read = (r) => [r.participantId, r.trials.map((t) => [t.trialId, t.pasteEvents.length]), r.session, r.score];
+      const fromJson = read(extractIntegrityData(ch.json, {}));
+      assert.deepStrictEqual(read(extractIntegrityData(parseCsvToRaw(ch.csv, {}), {})), fromJson);
+      const trials = variant.includes('end handler') ? [['0', 1], ['2', 1], ['3', 0]] : [['0', 1], ['1', 0], ['2', 1], ['3', 0]];
+      assert.deepStrictEqual([fromJson[0], fromJson[1], fromJson[2].pasteCount], ['P1', trials, 2]);
+      assert.deepStrictEqual(collectSegments({ trials: ch.json.map((row) => row.cyborgHunter_integritySegment ? { integritySegment: row.cyborgHunter_integritySegment } : row) })
+        .map((g) => g.segmentIndex), [0, 1, 2, 3, 4], 'every segment, the final one included');
+    });
+  }
 
   // The check that tells the rule apart from prefixing everything: lab.js's
   // state holds ch.js's own values after the first trial, and those are not
