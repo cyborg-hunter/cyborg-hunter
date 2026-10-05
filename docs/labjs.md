@@ -73,7 +73,7 @@ ch.js writes into the data lab.js already collects. Each trial's row gets:
 
 **Participant ID.** ch.js never overwrites a `participantId` your study sets (in a component's `data`, its parameters, or lab.js's state). It writes `participantId` onto one row only, the first row lab.js commits, and only when the study has set none by then. Every trial row carries ch.js's ID as `cyborgHunterParticipantId`. The CLI keys each participant by the study's own `participantId`, even one first set on a later screen, and otherwise by `cyborgHunterParticipantId`; when the two differ, the participant's metadata keeps ch.js's ID as `cyborgHunterParticipantId`. So `participantIdField` stays `participantId`, the CLI's default.
 
-**Reserved column names.** The names above, the `*Final` fields and the honeypot summary below are ch.js's columns. A study must not use them for its own data: on a trial row, ch.js's value replaces the study's.
+**Reserved column names.** The names above, the `*Final` fields and the honeypot summary below are ch.js's columns. A study must not use them for its own data, because one of the two values is lost. On a trial row, ch.js's value replaces one the study gives the component through its `data` option or its parameters, while a value the study's own `end` handler writes replaces ch.js's (lab.js runs those handlers after ch.js's hook and commits the row after both). The end-of-session fields replace whatever the last trial row holds under their names.
 
 ## The end of the session
 
@@ -89,11 +89,12 @@ The CLI reads what lab.js saves, one file per participant:
 
 | How the study saves | File | CLI config |
 |---|---|---|
-| the Download plugin (CSV unless its `fileType` is `json`), or `study.options.datastore.exportCsv()` | CSV, one row per component, objects as JSON cells | `"filePattern": "*.csv"` |
+| the Download plugin, or `study.options.datastore.exportCsv()` (with `fileType: 'json'`, the plugin saves a JSON array as in the next row) | CSV, one row per component, objects as JSON cells | `"filePattern": "*.csv"` |
 | `study.options.datastore.exportJson()`, also what a JATOS export submits | a JSON array of rows | `"filePattern": "*.json"` |
+| the PostMessage plugin (Open Lab and other hosts that embed the study): its message carries `json` and `csv`, both complete | store `json` as the JSON array above, or `csv` as the CSV | as for that file |
 | the Transmit plugin, or `datastore.transmit(url)`, with the body stored as it arrives | `{ "metadata": {…}, "url": "…", "data": [rows] }` | `"filePattern": "*.json"` |
 
-In all three, keep `participantIdField` at its default, `participantId` (see [Where the data goes](#where-the-data-goes)).
+In every case, keep `participantIdField` at its default, `participantId` (see [Where the data goes](#where-the-data-goes)).
 
 **Transmit.** The plugin posts a slice of new rows to your server from time to time while the study runs (`metadata.payload: "incremental"`), and all rows once at the end (`"full"`). Give the CLI only the final `full` body of each session. A slice is read too, with a warning, and appears as a participant with part of the data. Two more limits:
 
@@ -104,7 +105,7 @@ In all three, keep `participantIdField` at its default, `participantId` (see [Wh
 
 **Replay files.** The recording carries ch.js's participant ID. When your study keys its rows by its own `participantId`, the CLI still attaches the recording, through the participant's `cyborgHunterParticipantId`, as long as no other participant in the data carries or is keyed by that ID. Giving ch.js the same ID as your study (`data-participant-id` or `CyborgHunterConfig.participantId`) keeps the recording and the data under one name.
 
-**Storage.** ch.js makes rows larger: about 1,900 characters of JSON for a trial without events, more with pastes, keystrokes and the raw mouse trace. lab.js 20.x keeps a study's rows in memory. A `lab.data.Store` you create yourself with `persistence` set also writes every row to `sessionStorage` or `localStorage` on each commit, and browsers cap that at about 5 MB. For such a store on a long study, set `window.CyborgHunterConfig = { collectForPostHoc: { rawMouseTrack: false } }` above the ch.js tag to leave the raw mouse trace out; the derived mouse metrics stay.
+**Storage.** ch.js makes rows larger: about 1,900 characters of JSON for a trial without events, more with pastes, keystrokes and the raw mouse trace. lab.js 20.x keeps a study's rows in memory: every study gets the datastore lab.js creates, which has no `persistence`. Only if you replace that datastore with a `lab.data.Store` of your own with `persistence` set does every row also go to `sessionStorage` or `localStorage` on each commit, where browsers cap the total at about 5 MB. For such a store on a long study, set `window.CyborgHunterConfig = { collectForPostHoc: { rawMouseTrack: false } }` above the ch.js tag to leave the raw mouse trace out; the derived mouse metrics stay.
 
 ## Replay and canvas
 
