@@ -301,8 +301,9 @@ cyborg-hunter report
 Without a config file, flags do the same:
 `cyborg-hunter report --data ./qualtrics-export --file-pattern "*.csv"`.
 
-The CLI recognises a Qualtrics export by its header row (`ResponseId` and
-`__js_cyborg_hunter`, or `cyborg_hunter`) and reads one participant per
+The CLI recognises a Qualtrics export by its header rows (`ResponseId` and
+`__js_cyborg_hunter`, or `cyborg_hunter`, with Qualtrics' own columns such
+as `StartDate`, or its `ImportId` row) and reads one participant per
 response. It reports responses with an empty cell in one warning, and a cell
 that is not JSON under its response. From version 0.12 the
 [browser analyzer](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)

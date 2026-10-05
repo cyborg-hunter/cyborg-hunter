@@ -9,7 +9,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { isQualtricsExport, parseQualtricsExport } from '../../src/cli/qualtrics-csv.js';
-import { ingestFiles } from '../../src/cli/ingest-core.js';
+import { ingestFiles, parseCsvToRaw } from '../../src/cli/ingest-core.js';
 import { ingestWarningLines } from '../../src/cli/report.js';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -19,20 +19,78 @@ import { join } from 'node:path';
 const text = readFileSync(new URL('./fixtures/qualtrics-export.csv', import.meta.url), 'utf8');
 const reader = (name, t) => ({ name, path: 'data/' + name, size: t.length, read: async () => new TextEncoder().encode(t) });
 const deps = { gunzip: async (b) => b, sha256: () => 'x' };
+// A payload cell as Qualtrics quotes it, and one the Qualtrics writer could
+// have written (every payload it writes names the host).
+const cellOf = (o) => '"' + JSON.stringify(o).replace(/"/g, '""') + '"';
+const QX = cellOf({ participantId: 'P1', cyborgHunterOneLiner: { version: '0.12.0', host: 'qualtrics', truncated: false }, trials: [] });
 
 describe('isQualtricsExport', () => {
   it('needs ResponseId and the payload column in the first line', () => {
     assert.strictEqual(isQualtricsExport(text), true);
     assert.strictEqual(isQualtricsExport('trial_index,rt,integrity\n0,1,{}'), false);
-    assert.strictEqual(isQualtricsExport('"ResponseId","cyborg_hunter"\n"R_1",""'), true);      // legacy field
+    assert.strictEqual(isQualtricsExport('"ResponseId","cyborg_hunter"\n"R_1",' + QX), true);      // legacy field
     assert.strictEqual(isQualtricsExport('"ResponseId","other"\n'), false);
   });
   it('reads a header line that starts with a byte-order mark and ends in CRLF', () => {
     assert.strictEqual(isQualtricsExport('﻿StartDate,ResponseId,__js_cyborg_hunter\r\nx,R_1,\r\n'), true);
   });
   it('a configured field name replaces the default one', () => {
-    assert.strictEqual(isQualtricsExport('ResponseId,__js_ch_custom\n', '__js_ch_custom'), true);
+    assert.strictEqual(isQualtricsExport('ResponseId,__js_ch_custom\nR_1,' + QX + '\n', '__js_ch_custom'), true);
     assert.strictEqual(isQualtricsExport('ResponseId,__js_cyborg_hunter\n', '__js_ch_custom'), false);
+  });
+});
+
+// Both columns are not enough: a CSV from anywhere can have a ResponseId
+// and a cyborg_hunter column. One positive sign that Qualtrics wrote the
+// file is needed as well.
+describe('a Qualtrics export is recognised by a positive signature', () => {
+  it('two Qualtrics system columns, ResponseId one of them, even when every payload cell is empty', () => {
+    assert.strictEqual(isQualtricsExport('StartDate,ResponseId,__js_cyborg_hunter\nx,R_1,\n'), true);
+    assert.strictEqual(isQualtricsExport('ResponseId,RecordedDate,cyborg_hunter\nR_1,x,\n'), true);
+  });
+  it('the ImportId row, with or without the label row before it', () => {
+    const csv = 'ResponseId,__js_cyborg_hunter\n"Response ID","__js_cyborg_hunter"\n' +
+      '"{""ImportId"":""_recordId""}","{""ImportId"":""__js_cyborg_hunter""}"\nR_1,\n';
+    assert.strictEqual(isQualtricsExport(csv), true);
+    assert.strictEqual(isQualtricsExport(csv.replace('"Response ID","__js_cyborg_hunter"\n', '')), true);
+  });
+  it('the first non-empty payload cell holding a payload of the Qualtrics writer, after empty ones', () => {
+    assert.strictEqual(isQualtricsExport('ResponseId,cyborg_hunter\nR_1,\nR_2,' + QX + '\n'), true);
+  });
+  it('a real export whose embedded data is named trial_index, trial_type and time_elapsed is an export', async () => {
+    const extra = ['trial_index,trial_type,time_elapsed', '"trial_index","trial_type","time_elapsed"',
+      '"{""ImportId"":""trial_index""}","{""ImportId"":""trial_type""}","{""ImportId"":""time_elapsed""}"'];
+    const csv = text.replace(/\n$/, '').split('\n').map((l, i) => (extra[i] || '0,survey-text,1200') + ',' + l).join('\n') + '\n';
+    assert.strictEqual(isQualtricsExport(csv), true);
+    const out = await ingestFiles({ participantFiles: [reader('export.csv', csv)], replayFiles: [] }, { participantIdField: 'participantId' }, deps);
+    assert.deepStrictEqual(out.participants.map((p) => p.participantId), ['P-ONE', 'R_2']);
+  });
+  it('a CSV with ResponseId and cyborg_hunter columns holding something else is not an export', async () => {
+    const other = 'ResponseId,cyborg_hunter,score\nR_1,"{""points"":3}",3\nR_2,hello,4\n';
+    assert.strictEqual(isQualtricsExport(other), false);
+    assert.strictEqual(isQualtricsExport('ResponseId,cyborg_hunter\nR_1,\n'), false);                    // no sign at all
+    assert.strictEqual(isQualtricsExport('ResponseId,cyborg_hunter\nR_1,hello\nR_2,' + QX + '\n'), false);   // the first non-empty cell decides
+    const vanilla = cellOf({ participantId: 'P1', cyborgHunterOneLiner: { version: '0.12.0', pageCount: 1 }, trials: [] });
+    assert.strictEqual(isQualtricsExport('ResponseId,cyborg_hunter\nR_1,' + vanilla + '\n'), false);       // not the Qualtrics writer's
+    // Read as one file, the way it was read before the Qualtrics reader existed.
+    const out = await ingestFiles({ participantFiles: [reader('scores.csv', other)], replayFiles: [] }, { participantIdField: 'participantId' }, deps);
+    assert.ok(!out.warnings.some((w) => 'response' in w), JSON.stringify(out.warnings));
+  });
+  it('ResponseID, the legacy exporter\'s spelling, is found and read', () => {
+    const csv = 'ResponseID,ResponseSet,StartDate,EndDate,Finished,cyborg_hunter\nR_1,Default,x,y,1,' + QX + '\n';
+    assert.strictEqual(isQualtricsExport(csv), true);
+    const q = parseQualtricsExport(csv, {});
+    assert.deepStrictEqual(q.responses.map((r) => [r.responseId, r.raw.metadata.qualtricsResponseId]), [['R_1', 'R_1']]);
+  });
+  it('a long run of spaces inside an answer is read in linear time, by both CSV readers', () => {
+    const csv = 'StartDate,ResponseId,QID1_TEXT,__js_cyborg_hunter\nx,R_1,"' + ' '.repeat(100000) + 'end",' + QX + '\n';
+    let t0 = performance.now();
+    const q = parseQualtricsExport(csv, {});
+    assert.ok(performance.now() - t0 < 1000, 'Qualtrics reader: ' + Math.round(performance.now() - t0) + ' ms');
+    assert.deepStrictEqual(q.responses.map((r) => r.responseId), ['R_1']);
+    t0 = performance.now();
+    parseCsvToRaw('participantId,answer\nP1,"' + ' '.repeat(100000) + 'end"\n', {});
+    assert.ok(performance.now() - t0 < 1000, 'jsPsych reader: ' + Math.round(performance.now() - t0) + ' ms');
   });
 });
 

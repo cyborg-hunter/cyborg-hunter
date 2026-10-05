@@ -677,8 +677,9 @@ export function parseCsvToRaw(text, config) {
   // Papa Parse mis-handles a trailing newline on the final cell of the last
   // row (treats it as an unterminated quoted field). POSIX convention is to
   // end text files with a newline, so almost every CSV from the wild has one.
-  // Trim trailing whitespace defensively.
-  const result = Papa.parse(text.replace(/\s+$/, ''), {
+  // Trim trailing whitespace defensively: trimEnd(), linear, where /\s+$/
+  // backtracks quadratically over a long run of spaces inside the file.
+  const result = Papa.parse(text.trimEnd(), {
     header: true,
     skipEmptyLines: true,
     dynamicTyping: true,  // numbers and booleans parsed natively, strings stay strings
