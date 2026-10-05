@@ -31,7 +31,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   capture failure.
 - CLI and analyze page: the lab.js Transmit plugin's envelope
   (`{ metadata, url, data: [rows] }`, what `datastore.transmit()` posts) is
-  read as a participant file.
+  read as a participant file. So is any object that holds its rows under
+  `data` (a custom server's `{ subject, data: [...] }`, for example), which
+  was dropped before. An incremental Transmit slice
+  (`metadata.payload: "incremental"`) is read with a warning: ingest only the
+  final `full` body.
 - CLI and analyze page: lab.js data from the one-line setup (`exportJson()`,
   the Transmit body, `exportCsv()`) is keyed by the study's own
   `participantId`, even one first set on a later screen, else by the setup's

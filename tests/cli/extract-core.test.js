@@ -223,6 +223,32 @@ describe('lab.js rows: the study\'s participantId and ch.js\'s id', () => {
     assert.deepStrictEqual(Object.keys(metadata), ['slice', 'payload']);
   });
 
+  // lab.js's Transmit plugin posts an incremental slice on every idle and the
+  // full body at the end; a server that stores each body leaves several
+  // envelopes for one session. A slice is partial data: it is read, and says so.
+  it('a Transmit incremental slice is read with a warning; the full body has none', () => {
+    const full = { metadata: { slice: 0, id: 'sess-1', payload: 'full' }, url: 'https://x/', data: [
+      row('intro', { participantId: 'STUDY-7', cyborgHunterParticipantId: 'ch-abc' }),
+      row('a', { cyborgHunterParticipantId: 'ch-abc', integrity: integ('0') }),
+      row('b', { cyborgHunterParticipantId: 'ch-abc', integrity: integ('1') })
+    ] };
+    const slice = { metadata: { slice: 2, id: 'sess-1', payload: 'incremental' }, url: 'https://x/', data: [
+      row('b', { cyborgHunterParticipantId: 'ch-abc', integrity: integ('1') })
+    ] };
+    const f = extractIntegrityData(full, {});
+    assert.strictEqual(f.participantId, 'STUDY-7');
+    assert.ok(!f.warnings.some((w) => w.includes('incremental slice')));
+    const s = extractIntegrityData(slice, {});
+    assert.strictEqual(s.participantId, 'ch-abc');
+    assert.strictEqual(s.trials.length, 1);
+    const w = s.warnings.find((x) => x.includes('incremental slice'));
+    assert.ok(w, s.warnings.join(' | '));
+    assert.match(w, /one incremental slice of a lab\.js upload/);
+    assert.match(w, /ingest only the final 'full' body, or the participant appears with partial data/);
+    assert.match(w, /rows from 2/);
+    assert.match(w, /sess-1/);
+  });
+
   it('rows are read like a { trials } file: a session report and a honeypot disclosure on a row are found', () => {
     const session = { softScore: 0.5, anyHardTriggered: false, trialsCompleted: 1, tabAwaySums: [] };
     const raw = [row('a', { participantId: 'R1', integrity: integ('0'), integritySession: session, ai_use_session: true, ai_report_session: 'yes' })];
