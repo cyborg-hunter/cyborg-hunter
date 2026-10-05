@@ -53,6 +53,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the participant's metadata as `cyborgHunterParticipantId`, and a session
   recording that carries that id is attached to the participant (when no
   other participant carries or is keyed by it).
+- Analyze page: for an object that holds its rows under `data` (the lab.js
+  Transmit body), the participant ID field is suggested from its first row
+  and its own top-level fields, never from its `metadata` (where `id` is
+  lab.js's upload-session id).
 
 ### Changed
 - CLI and analyze page: a participant file that is a top-level array of rows

@@ -97,6 +97,47 @@ test('peek: a gzipped file is read without a Blob (a WebKit worker of a file:// 
     assert.deepEqual(p.keys, ['subject_ID']);
   } finally { globalThis.Blob = saved; }
 });
+// lab.js's Transmit plugin posts { metadata: { slice, id, payload }, url,
+// data: [rows] }; metadata.id is lab.js's upload-session id, not the
+// participant's. The CLI reads the rows (extract-core transmitRows), so the
+// peek does too, plus the object's own top-level scalars, never its metadata.
+const envelope = (studyId, sessionId) => JSON.stringify({
+  metadata: { slice: 0, id: sessionId, payload: 'full' },
+  url: 'https://example.org/save',
+  data: [
+    { sender: 'intro', sender_id: '0', participantId: studyId, cyborgHunterParticipantId: 'ch-' + studyId, integritySoftScore: 0 },
+    { sender: 'final', sender_id: '1', participantId: null, cyborgHunterParticipantId: 'ch-' + studyId, integritySoftScore: 1 },
+    { sender: 'root', participantId: null },
+  ],
+});
+
+test('peek: a Transmit envelope gives the first row\'s keys, never metadata.*', async () => {
+  const p = await peekParticipantFile(reader('p.json', envelope('RES-1', 'sess-1')));
+  assert.deepEqual(p.keys, ['sender', 'sender_id', 'participantId', 'cyborgHunterParticipantId', 'integritySoftScore', 'url']);
+  assert.deepEqual(p.values.participantId, ['RES-1']);
+  assert.ok(!p.keys.some((k) => k.startsWith('metadata.')));
+});
+
+test('Transmit envelopes: participantId is suggested and metadata.id is not a candidate', async () => {
+  const peeks = [
+    await peekParticipantFile(reader('a.json', envelope('RES-1', 'sess-1'))),
+    await peekParticipantFile(reader('b.json', envelope('RES-2', 'sess-2'))),
+  ];
+  const r = suggestIdField(peeks);
+  assert.equal(r.suggested, 'participantId');
+  assert.ok(!r.candidates.some((c) => c.field === 'metadata.id' || c.field === 'id'), JSON.stringify(r.candidates));
+});
+
+test('peek: any object holding its rows under data gives the rows\' keys and its own top-level scalars', async () => {
+  const p = await peekParticipantFile(reader('p.json', JSON.stringify({ subject: 'S1', data: [{ rt: 3, cond: 'a' }, { rt: 4, cond: 'a' }] })));
+  assert.deepEqual(p.keys, ['rt', 'cond', 'subject']);
+  assert.deepEqual(p.values.subject, ['S1']);
+});
+
+test('peek: an object with trials keeps the top-level and metadata reading, whatever its data holds', async () => {
+  const p = await peekParticipantFile(reader('p.json', JSON.stringify({ id: 'a', trials: [1], data: [{ x: 1 }], metadata: { sessionId: 's1' } })));
+  assert.deepEqual(p.keys, ['id', 'metadata.sessionId']);
+});
 
 test("cyborg-hunter's own per-trial columns are never offered as the id, whatever the column order", async () => {
   // The synthetic pilot with its id column renamed to a name nobody knows and
