@@ -678,6 +678,48 @@ describe('ch.js on real lab.js 20.2.4: the saved data through the report reader'
   });
 });
 
+// A study ended before any trial row is committed (one screen, ended with
+// study.end() while it shows). lab.js commits the screen's row and then the
+// root row after the root's end handlers, so on('end') sees none of the
+// run's rows, with or without ch.js; the root's own data holds the final
+// fields then, and after:end and the epilogue see them on the root row.
+describe('ch.js on real lab.js 20.2.4: a study ended before any trial row is committed', () => {
+  it('on(end) sees no row either way; the root\'s data, after:end and the epilogue carry the final fields', async () => {
+    const seen = {};
+    for (const withCh of [false, true]) {
+      const { win, lab } = createLabWindow({ build: '20.2.4' });
+      captureConsole();
+      try {
+        if (withCh) await bootOn(win);
+        const study = new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'only', { timeout: 3000 })] });
+        const rows = () => datastoreOf(study).data.map((r) => [r.sender, r.integritySegmentFinal ? r.integrityPasteCountFinal : null]);
+        const log = {};
+        let done = false;
+        study.on('end', function () { log.end = { rows: rows(), own: this.data.integrityPasteCountFinal }; });
+        study.on('after:end', () => { log.afterEnd = rows(); });
+        study.on('epilogue', () => { log.epilogue = rows(); done = true; });
+        study.run();
+        for (let i = 0; i < 200 && !win.document.body.textContent.includes('only'); i++) await tick(2);
+        paste(win, 'x');
+        study.end('abort');
+        for (let i = 0; i < 400 && !done; i++) await tick(5);
+        log.errors = errors.slice();
+        seen[withCh ? 'ch' : 'base'] = log;
+      } finally {
+        releaseConsole();
+        try { if (current) current.monitor.destroy(); } catch { /* the final hook destroyed it */ }
+        current = null;
+        await closeLabWindow(win);
+      }
+    }
+    assert.deepStrictEqual(seen.base.end, { rows: [], own: undefined }, 'lab.js has committed none of the run\'s rows at on(end)');
+    assert.deepStrictEqual(seen.ch.end, { rows: [], own: 1 }, 'the root\'s own data holds the final fields, the paste counted');
+    assert.deepStrictEqual(seen.ch.afterEnd, [['only', null], ['root', 1]]);
+    assert.deepStrictEqual(seen.ch.epilogue, [['only', null], ['root', 1]]);
+    assert.deepStrictEqual([seen.base.errors, seen.ch.errors], [[], []]);
+  });
+});
+
 // ch.js never replaces a value the study set under one of ch.js's column
 // names. The study's value stays, in its row and in lab.js's state (which
 // every commit updates); ch.js's goes under cyborgHunter_<name> from then on,
