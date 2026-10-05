@@ -234,6 +234,16 @@ describe('boot', () => {
     assert.ok(errors.includes(MESSAGES.loadedAboveLabJs()), errors.join('\n'));
   });
 
+  it('vanilla host: a lab.js 23 global that appears by DOMContentLoaded logs the unsupported-version warning only', () => {
+    Object.defineProperty(win.document, 'readyState', { configurable: true, get: () => 'loading' });
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.lab = fakeLab({ lock() {} });
+    win.lab.version = '23.0.0-alpha9';
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    assert.deepStrictEqual(errors, [], 'not taken for a 20.x tag above lib/lab.js');
+    assert.deepStrictEqual(warns, [MESSAGES.labjsVersionUnsupported('23.0.0-alpha9')]);
+  });
+
   it('a boot failure after the lab.js install restores the prototype', () => {
     win.lab = fakeLab();
     const orig = win.lab.core.Component.prototype.run;

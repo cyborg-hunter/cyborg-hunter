@@ -61,6 +61,17 @@ describe('watchLabJsPlacement', () => {
     doc.dispatchEvent(new win.Event('DOMContentLoaded'));
     assert.deepStrictEqual(errors, [MESSAGES.loadedAboveLabJs()]);
   });
+  // ch.js above a lab.js 23 build: the build is not hooked wherever the tag
+  // sits, so the version is what to report, as boot does when it finds one.
+  it('a lab.js 23 global that appears by DOMContentLoaded: the unsupported-version warning, not loadedAboveLabJs', () => {
+    const doc = win.document;
+    Object.defineProperty(doc, 'readyState', { configurable: true, get: () => 'loading' });
+    watchLabJsPlacement({ win, doc, ctx: { host: 'vanilla' } });
+    win.lab = fakeLab({ flip: true, version: '23.0.0-alpha9' });
+    doc.dispatchEvent(new win.Event('DOMContentLoaded'));
+    assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(warns, [MESSAGES.labjsVersionUnsupported('23.0.0-alpha9')]);
+  });
   it('no global but a data-labjs-section element: labjsNotHookable', () => {
     win.document.body.innerHTML = '<main data-labjs-section="main"></main>';
     watchLabJsPlacement({ win, doc: win.document, ctx: { host: 'vanilla' } });   // DOM already parsed: checks now
