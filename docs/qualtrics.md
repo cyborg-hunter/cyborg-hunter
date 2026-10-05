@@ -8,7 +8,7 @@ participant per response (see [Reading the data](#reading-the-data) for the
 browser analyzer).
 
 Some details below depend on how Qualtrics behaves on a live survey and are
-written as conditions ("if …"). They are being checked on a licensed account.
+written as conditions ("if …"). They have not yet been checked on a live survey.
 
 ## Requirements
 
@@ -73,7 +73,7 @@ After writing, `ch.js` reads the field back (once per page). If Qualtrics
 returns nothing, `ch.js` logs "The Qualtrics field
 __js_cyborg_hunter is not declared" and the `data-debug` badge shows
 `NOT DECLARED`. `unknown` means the read-back gave no answer either way.
-Whether Qualtrics' read-back tells an undeclared field apart is being checked
+Whether Qualtrics' read-back tells an undeclared field apart is not yet checked
 on a live survey, so the export (step 3 of the [smoke test](#smoke-test)) is
 the check that counts.
 
@@ -82,8 +82,9 @@ the check that counts.
 The tag above sets the participant ID to the response's own ID through
 Qualtrics piped text, `${e://Field/ResponseID}` (an `R_…` ID). Every response
 gets a new ID, so each payload links to its row and a retake in the same tab
-starts a new session. Qualtrics fills piped text into the header before the
-browser runs the tag; this is being checked on a live survey.
+starts a new session. Qualtrics is expected to fill piped text into the
+header before the browser runs the tag; this is not yet checked on a live
+survey.
 
 `ch.js` takes the first ID it finds, in this order (the same order as on
 [any page](quickstart.md#participant-id)):
@@ -137,7 +138,7 @@ Qualtrics.SurveyEngine.addOnPageSubmit(function () { try { if (window.CyborgHunt
 
 The question's script is in place as soon as the page renders. When ch.js's
 own callback also runs at that submit, in the same task (as it does in our
-simulated survey; the live check confirms Qualtrics), the two share one
+simulated survey; whether Qualtrics does the same is not yet checked), the two share one
 write, so the line adds no row. The line never throws: if `ch.js` did not load (a network
 failure, a blocker), it does nothing, so it cannot stop the participant's
 submit. Keep it in this form. We recommend it for every survey. Whether a
@@ -159,7 +160,7 @@ the live check finds that it does, the line is required.
    to another tab for at least five seconds, come back and press Next.** On
    the second page the badge should read
    `… page 2 · field __js_cyborg_hunter declared · … · header re-run ×1 · last write N/12000 bytes`,
-   or `unknown` in place of `declared`: Qualtrics' read-back is still being
+   or `unknown` in place of `declared`: Qualtrics' read-back is not yet
    checked on a live survey, and step 3's export is the check that counts.
    `NOT DECLARED`: [declare the field](#declare-the-field). `last write`
    gives the payload's size and the cap, both in UTF-8 bytes.
@@ -191,7 +192,7 @@ data. So `ch.js` caps its payload at 12,000 UTF-8 bytes (a safe bound whether
 Qualtrics counts characters or bytes) and never writes a longer string.
 
 The cap leaves room for a little embedded data of your own, not for a second
-large value. If the limit is per page submit, as it appeared in tests, keep
+large value. If the limit is per page submit (not yet checked), keep
 what your own survey writes to embedded data on any one page small (well
 under about 5,000 characters): for example, do not also save a jsPsych
 experiment's data through embedded data on the same page. Together the two
