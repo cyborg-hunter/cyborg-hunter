@@ -227,6 +227,10 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
     files.push(reader);
   }
 
+  // Every participant file's key and ch.js id, taken before the
+  // --participant filter: the replay pass's ambiguity guards must count the
+  // whole dataset, or a filtered run would find every name unique.
+  const census = [];
   for (const reader of files) {
     try {
       const text = decodeUtf8(await reader.read());
@@ -242,6 +246,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
         ? parseCsvToRaw(text, config)
         : JSON.parse(text);
       const result = extractIntegrityData(raw, config);
+      if (result.trials.length > 0) census.push({ participantId: result.participantId, metadata: result.metadata });
 
       // --participant flag filters to a single participant
       if (config.singleParticipant && result.participantId !== config.singleParticipant) {
@@ -276,7 +281,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
     }
   }
 
-  await attachReplayArtifacts(participants, config, warnings, replayFiles, participantFiles, deps);
+  await attachReplayArtifacts(participants, census, config, warnings, replayFiles, participantFiles, deps);
 
   return { participants, warnings };
 }
@@ -334,7 +339,7 @@ function ingestQualtricsExport(text, path, config, participants, warnings) {
 // `entries`: readers for the replay directory's files. `participantPassFiles`:
 // what discovery handed the participant pass, so the foreign scan knows which
 // unreadable files already reported themselves there.
-async function attachReplayArtifacts(participants, config, warnings, entries, participantPassFiles, deps) {
+async function attachReplayArtifacts(participants, census, config, warnings, entries, participantPassFiles, deps) {
   const dir = config.replayDir || config.dataDir;
   // The shell lists the directory; a listing failure is reported here, where
   // it always was (silent for the default dataDir, whose own listing ran first).
@@ -354,12 +359,18 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // other id — on a literal {}, assigning a primitive to __proto__ is a
   // silent no-op, which skipped the duplicate warning AND the
   // ambiguous-association guard below.
+  // Both censuses count `census` (every participant file, taken before the
+  // --participant filter), so a filtered run sees the same ambiguity as a
+  // full one.
   const sanitize = sanitizeId;
+  const saneKey = (id) => sanitize(id).toLowerCase();
   const saneCounts = Object.create(null);
+  for (const p of census) {
+    const s = saneKey(p.participantId);
+    saneCounts[s] = (saneCounts[s] || 0) + 1;
+  }
   const idCounts = Object.create(null);
   for (const p of participants) {
-    const s = sanitize(p.participantId).toLowerCase();
-    saneCounts[s] = (saneCounts[s] || 0) + 1;
     idCounts[p.participantId] = (idCounts[p.participantId] || 0) + 1;
   }
 
@@ -367,22 +378,23 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // participantId keeps ch.js's id in metadata.cyborgHunterParticipantId
   // (extract-core sets it only when the two differ), and ch.js's recorder
   // embeds ch.js's id. That id is a second name for the participant's
-  // recording, used only when it names nobody else: no participant is keyed
-  // by it (compared sanitized and lowercased, as the filename match is) and
-  // no other participant carries it. Otherwise it is ignored, and a
-  // recording carrying it falls to the mismatch warning below.
+  // recording, used only when it names nobody else in the whole dataset
+  // (census): no participant is keyed by it and no other participant
+  // carries it, both compared sanitized and lowercased, as the filename
+  // match is ('a/b' and 'a_b' are one name there). Otherwise it is ignored,
+  // and a recording carrying it falls to the mismatch warning below.
   const chIdOf = (p) => {
     const v = p.metadata && typeof p.metadata === 'object' ? p.metadata.cyborgHunterParticipantId : null;
     return v == null || v === '' || String(v) === String(p.participantId) ? null : String(v);
   };
   const chIdCounts = Object.create(null);
-  for (const p of participants) {
+  for (const p of census) {
     const c = chIdOf(p);
-    if (c !== null) chIdCounts[c] = (chIdCounts[c] || 0) + 1;
+    if (c !== null) chIdCounts[saneKey(c)] = (chIdCounts[saneKey(c)] || 0) + 1;
   }
   const aliasOf = (p) => {
     const c = chIdOf(p);
-    if (c === null || chIdCounts[c] > 1 || saneCounts[sanitize(c).toLowerCase()]) return null;
+    if (c === null || chIdCounts[saneKey(c)] > 1 || saneCounts[saneKey(c)]) return null;
     return c;
   };
 
@@ -568,15 +580,23 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
         // must match EXACT-case (our recorder writes sanitize(pid) verbatim).
         // Case-tolerant matching stays for discovery, where the embedded-id
         // check catches cross-case impostors.
-        if (!cand.file.startsWith(sane + '-replay-') && !(saneAlias !== null && cand.file.startsWith(saneAlias + '-replay-'))) {
+        // A file that matched through ch.js's id (aliasOf) is judged by that
+        // name and its own count, and the warnings name it.
+        const viaAlias = aliasRe !== null && aliasRe.test(cand.file) && !exactRe.test(cand.file);
+        const name = viaAlias ? saneAlias : sane;
+        const count = viaAlias
+          ? (chIdCounts[saneKey(alias)] || 0) + (saneCounts[saneKey(alias)] || 0)
+          : saneCounts[sane.toLowerCase()];
+        const via = viaAlias ? ` (named after ch.js's id ${alias}, its cyborgHunterParticipantId)` : '';
+        if (!cand.file.startsWith(name + '-replay-')) {
           warnings.push({ file: cand.path,
-            warnings: [`Replay artifact has no embedded participant_id and its filename case does not match "${sane}" exactly — not attached.`] });
-        } else if (saneCounts[sane.toLowerCase()] > 1) {
+            warnings: [`Replay artifact has no embedded participant_id and its filename case does not match "${name}" exactly — not attached.`] });
+        } else if (count > 1) {
           warnings.push({ file: cand.path,
-            warnings: [`Replay artifact has no embedded participant_id and its filename is ambiguous (${saneCounts[sane.toLowerCase()]} participants sanitize to "${sane}") — not attached to anyone.`] });
+            warnings: [`Replay artifact has no embedded participant_id and its filename is ambiguous (${count} participants sanitize to "${name}"${via}) — not attached to anyone.`] });
         } else {
           warnings.push({ file: cand.path,
-            warnings: [`Replay artifact has no embedded participant_id — cannot verify ownership; attaching to ${p.participantId} by unique filename match.`] });
+            warnings: [`Replay artifact has no embedded participant_id — cannot verify ownership; attaching to ${p.participantId} by unique filename match${via}.`] });
           owned.push(cand);
         }
       } else if (ownsId(String(embedded))) {
