@@ -244,6 +244,17 @@ describe('boot', () => {
     assert.deepStrictEqual(warns, [MESSAGES.labjsVersionUnsupported('23.0.0-alpha9')]);
   });
 
+  it('a lab.js prototype that refuses the patch: boot fails loudly and leaves lab.js as it was', () => {
+    win.lab = fakeLab();
+    const proto = win.lab.core.Component.prototype;
+    const run = proto.run, end = proto.end;
+    Object.defineProperty(proto, 'end', { get: () => end, set() {}, configurable: true });
+    assert.strictEqual(boot({ script: script({ participantId: 'P1', guards: 'none' }), win }), null);
+    assert.strictEqual(proto.run, run);
+    assert.strictEqual(proto.end, end);
+    assert.deepStrictEqual(errors, [MESSAGES.bootFailed('lab.js\'s Component.prototype.run and .end could not be patched')]);
+  });
+
   it('a boot failure after the lab.js install restores the prototype', () => {
     win.lab = fakeLab();
     const orig = win.lab.core.Component.prototype.run;

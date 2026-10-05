@@ -240,6 +240,25 @@ describe('ch.js on real lab.js 20.2.4: trials and rows', () => {
     assert.strictEqual(proto.end, origEnd);
   });
 
+  // Another script wrapped run and end after ch.js: restore() cannot take
+  // ch.js's wrapper out of that chain, so the wrapper stands down instead.
+  it('restore() under wrappers another script added after ch.js: no ch.js columns, and the other wrappers keep working', async () => {
+    const ctx = await bootOn(win);
+    const proto = lab.core.Component.prototype;
+    const chRun = proto.run, chEnd = proto.end;
+    const calls = [];
+    proto.run = function () { calls.push('run'); return chRun.apply(this, arguments); };
+    proto.end = function () { calls.push('end'); return chEnd.apply(this, arguments); };
+    ctx.labjsAdapter.restore();
+    const rows = await runToEnd(new lab.flow.Sequence({ title: 'root', content: [screen(lab, 'a'), screen(lab, 'b')] }));
+    assert.deepStrictEqual(rows.map((r) => r.sender), ['a', 'b', 'root']);
+    for (const r of rows) assert.deepStrictEqual(Object.keys(r).filter((k) => /^(integrity|cyborgHunter|ai_|guard_|participantId)/.test(k)), [], r.sender);
+    assert.ok(calls.includes('run') && calls.includes('end'), 'the other wrappers still run');
+    assert.strictEqual(ctx.labjs.trialsRun, 0);
+    assert.strictEqual(ctx.labjs.finalized, false, 'the root end did not run the final hook');
+    assert.deepStrictEqual([errors, warns], [[], []]);
+  });
+
   it('a Parallel inside a Parallel is part of the outer trial', async () => {
     await bootOn(win);
     const study = new lab.flow.Sequence({ title: 'root', content: [
