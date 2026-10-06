@@ -191,6 +191,8 @@ export async function buildReport(participants, config, deps) {
 // got (plots drawn once), as data URIs; replays are shown outside the report
 // (replayShownExternally), so this must run AFTER buildReport, whose replay
 // pass stamps `assetPath` and rewrites unloadable artifacts on the participants.
+// The page keeps the report's annotations (annotationPostMessage): the report
+// runs in a sandboxed frame there, where storage throws.
 // deps = { replayClientSrc, fontFaceCss, bytesToBase64? }
 export async function renderInPageHtml(built, participants, config, deps) {
   const toB64 = deps.bytesToBase64 || bytesToBase64;
@@ -204,7 +206,7 @@ export async function renderInPageHtml(built, participants, config, deps) {
     };
   }
   return renderIndexHtml(built.summaries, built.triage, participants, config, built.visualsRendered, {
-    imageSources, replayShownExternally: true, selectionPostMessage: true,
+    imageSources, replayShownExternally: true, selectionPostMessage: true, annotationPostMessage: true,
     replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss,
     runId: built.runId, generatedAt: built.generatedAt,
   });

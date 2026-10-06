@@ -7,7 +7,12 @@
 // ch-annot:<runId>, so a report opened again from disk shows them again; the
 // JSON export is the durable copy (another browser, another machine). Each
 // change is written over what storage holds at that moment, so two tabs of
-// the report (or two reports of the same participants) keep each other's.
+// the report (or two reports of the same participants) keep each other's. In
+// the analyze page (cfg.parent) the report runs sandboxed, where storage
+// throws and downloads are refused: it posts each change to the page
+// (cyborg-hunter:annotate), which keeps the state, posts it back
+// (cyborg-hunter:annotations) and has the exports and the import
+// (demo/analyze/annotations.js).
 //
 // Inline script text, not a module: the report is one HTML file. Kept as
 // String.raw so the code reads as it runs (its regexes and "\n" stay as
@@ -97,9 +102,10 @@ export const ANNOTATION_BUILDERS_JS = String.raw`
       }
 `;
 
-// The controls. `cfg` is { runId }.
+// The controls. `cfg` is { runId, parent }.
 export const ANNOTATION_UI_JS = String.raw`
       var RUN_ID = cfg.runId;
+      var PARENT = !!cfg.parent;
       var KEY = 'ch-annot:' + RUN_ID;
       var TEXT = { include: 'Include', exclude: 'Exclude', flag: 'Flag' };
       // A note is saved after a pause in typing this long, when its field is
@@ -122,6 +128,7 @@ export const ANNOTATION_UI_JS = String.raw`
         return checkAnnotations(saved && typeof saved === 'object' ? saved : {}, ids).annotations;
       }
       function load() {
+        if (PARENT) return Object.create(null);   // the page posts its state
         try { return readStored(); } catch (e) { return Object.create(null); }
       }
       // One change (a function that applies it to a state), written over what
@@ -149,7 +156,8 @@ export const ANNOTATION_UI_JS = String.raw`
         var entry = label || note ? { label: label || null, note: note || '', annotatedAt: new Date().toISOString() } : null;
         function change(map) { if (entry) map[id] = entry; else delete map[id]; }
         change(state);
-        save(change);
+        if (PARENT) window.parent.postMessage({ type: 'cyborg-hunter:annotate', runId: RUN_ID, participantId: id, label: label || null, note: note || '' }, '*');
+        else save(change);
         render();
       }
 
@@ -227,7 +235,9 @@ export const ANNOTATION_UI_JS = String.raw`
       message.className = 'annot-msg';
       message.setAttribute('role', 'status');
       document.querySelector('.rail-footer').appendChild(bar);
-      addTools();
+      // In the analyze page the report cannot download: the page has the
+      // exports and the import.
+      if (!PARENT) addTools();
 
       function addTools() {
         function tool(text, onClick) {
@@ -283,9 +293,17 @@ export const ANNOTATION_UI_JS = String.raw`
 
       // Another tab's change (storage tells the other pages of its origin),
       // shown here too.
-      window.addEventListener('storage', function (e) {
+      if (!PARENT) window.addEventListener('storage', function (e) {
         if (e.key !== KEY && e.key !== null) return;
         state = load();
+        render();
+      });
+
+      // In the analyze page: the page's state, after each load and each change.
+      if (PARENT) window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (e.source !== window.parent || !d || d.type !== 'cyborg-hunter:annotations' || d.runId !== RUN_ID) return;
+        state = checkAnnotations(d.annotations && typeof d.annotations === 'object' ? d.annotations : {}, ids).annotations;
         render();
       });
 
@@ -331,7 +349,7 @@ export const ANNOTATION_UI_JS = String.raw`
 /**
  * The style and script blocks html-index-core.js emits before </body>, with
  * their own leading newline (the page without them is unchanged).
- * @param {{ runId: string }} cfg
+ * @param {{ runId: string, parent: boolean }} cfg
  */
 export function annotationBlock(cfg) {
   return '\n  <style>\n' + ANNOTATION_CSS + '  </style>\n  <script>\n    (function (cfg) {' +

@@ -350,6 +350,20 @@ test('done carries the run id, and a re-analysis keeps it', async () => {
   assert.equal(second.runId, first.runId);
 });
 
+// The page's annotation export writes each participant's tier and triage
+// score, in triage order: the same score summary.csv carries.
+test('done lists each participant\'s tier and triage score, in triage order', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.triageRows.map((r) => [r.participantId, r.tier]), [['SYN-HARD-03', 'hard'], ['SYN-SOFT-02', 'soft'], ['SYN-CLEAN-01', 'clean']]);
+  const scores = Object.fromEntries(done.files['summary.csv'].trim().split('\n').slice(1).map((l) => l.split(',')).map((c) => [c[0], Number(c[2])]));
+  for (const r of done.triageRows) assert.equal(r.triageScore, scores[r.participantId], r.participantId);
+});
+
 test('a dropped file whose name differs from the recorded URL only in case still styles the replay', async () => {
   const dir = 'tests/fixtures/demo';
   const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));

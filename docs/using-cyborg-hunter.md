@@ -371,6 +371,14 @@ what you get before dropping real data. "Export config" writes a
 defaults, so `cyborg-hunter report` in a folder whose `data/` holds the
 same files (or whose `dataDir` points at them) builds the same report.
 
+The report's annotations (Include, Exclude, Flag and a note; see
+[Annotating participants](#annotating-participants)) work the same way on
+this page. The page keeps them in this browser under the report's run id, so
+they stay through a re-analysis with other settings, and the results step
+has the exports (`annotations.csv`, `annotations.json`) and the import. The
+report itself runs sealed off in its frame, where it can neither store nor
+download anything.
+
 **Nothing leaves your browser.** Every web page can declare a security policy
 that the browser enforces. This page's policy has four parts: no data requests
 (`connect-src 'none'`), no images, scripts, fonts or frames from other

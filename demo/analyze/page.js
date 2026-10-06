@@ -3,7 +3,8 @@
 // the list and checks it again; or the sample) → run → results. All
 // participant data stays in the worker (File handles go over,
 // the worker reads the bytes one file at a time); this module only holds
-// what the page shows: counts, warnings, the report HTML, the zip chunks.
+// what the page shows: counts, warnings, the report HTML, the zip chunks,
+// and the report's annotations, which the page keeps (annotations.js).
 // One exception, opts.transferBytes (main.js sets it for a page opened from
 // file:): WebKit's worker cannot read a File there, so the page reads each
 // dropped file itself and transfers the bytes, for every check and run.
@@ -19,6 +20,8 @@ import { createReplayCard } from './replay-card.js';
 import { mergeEntries, removeEntry } from './files-panel.js';
 import { createSettingsPanel, settingsFromConfig, configFromSettings, REINGEST_KEYS } from './settings-panel.js';
 import { exportConfig } from './export-config.js';
+import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
+import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
 
@@ -56,7 +59,7 @@ function listWarnings(ul, items) {
 
 export function createPage(root, worker, opts) {
   var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, result: null,
-    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null };
+    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
@@ -113,6 +116,11 @@ export function createPage(root, worker, opts) {
     var files = state.result ? state.result.files : {};
     root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = busy() || typeof files[b.dataset.file] !== 'string'; });
     root.querySelector('[data-action="download-zip"]').disabled = busy() || !state.zipUrl;
+    // The annotation exports and import likewise: the CSV carries the last
+    // answer's tiers and scores.
+    var noAnnotations = busy() || !state.runId;
+    [root.querySelector('[data-action="annotations-csv"]'), root.querySelector('[data-action="annotations-json"]'), q(root, 'annotations-input')]
+      .forEach(function (c) { c.disabled = noAnnotations; });
   }
   function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; watchdogErrorShown = false; }
   function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; watchdogErrorShown = false; }
@@ -408,6 +416,13 @@ export function createPage(root, worker, opts) {
   // the report frame swapped in place, the replay card's list.
   function showResults(done) {
     state.result = done;
+    // The annotations of this cohort, stored under its run id: a re-run of
+    // the same files keeps the id, and with it what was annotated.
+    if (done.runId !== state.runId) {
+      state.runId = done.runId || null;
+      state.annotations = state.runId ? loadAnnotations(pageStorage(), state.runId, cohortIds()) : null;
+      q(root, 'annotations-status').textContent = '';
+    }
     state.zipUrl = URL.createObjectURL(new Blob(state.zipParts, { type: 'application/zip' }));
     updateControls();
     goTo('results');
@@ -416,7 +431,7 @@ export function createPage(root, worker, opts) {
     listWarnings(q(root, 'run-warnings'), done.warnings.concat(done.reportWarnings));
     // reportUrl moves to the new document only once it has loaded: a failed
     // swap has already revoked its own url, and the old one is still showing.
-    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; armWatchdog(); },
+    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; armWatchdog(); postAnnotations(); },
       function () { showError('The report frame did not load.'); }, { className: 'analyze-report', title: 'Report', loadTimeoutMs: REPORT_LOAD_TIMEOUT_MS });
     if (!replayCard) {
       replayCard = createReplayCard(q(root, 'replay'), state.assets, function (pid) {
@@ -432,9 +447,42 @@ export function createPage(root, worker, opts) {
     reportPosted = false;
   }
 
+  // The ids of this report's participants: a change or an import names one
+  // of them, or it does not apply.
+  function cohortIds() { return state.result.participants.map(function (p) { return p.participantId; }); }
+  // The annotations into the report frame, whose script shows them: after
+  // each report load and each change. '*': the frame's origin is opaque.
+  function postAnnotations() {
+    var frame = root.querySelector('iframe.analyze-report');
+    if (!frame || !frame.contentWindow || !state.runId) return;
+    frame.contentWindow.postMessage({ type: 'cyborg-hunter:annotations', runId: state.runId, annotations: state.annotations }, '*');
+  }
+  // One change (a function that applies it to a state and says whether it
+  // applied), made to what storage holds now rather than to this page's
+  // copy: another tab of the page on the same cohort may have written since.
+  // Where storage is refused the change goes to the page's own state.
+  function changeAnnotations(change) {
+    var storage = pageStorage();
+    var stored = null;
+    try { stored = readAnnotations(storage, state.runId, cohortIds()); } catch (e) { /* refused: see pageStorage */ }
+    var target = stored || state.annotations;
+    if (!change(target)) return;
+    state.annotations = target;
+    if (stored) saveAnnotations(storage, state.runId, stored);
+    postAnnotations();
+  }
+  // One change the report posted (annotations.js checks it).
+  function onAnnotate(msg) {
+    if (!state.result || !state.runId) return;
+    var ids = cohortIds(), now = new Date().toISOString();
+    changeAnnotations(function (map) { return applyAnnotate(map, msg, state.runId, ids, now); });
+  }
+
   function reset() {
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
+    state.runId = null; state.annotations = null;
+    q(root, 'annotations-status').textContent = '';
     stopWatchdog();
     hideStallHint();
     discardZip();
@@ -522,11 +570,45 @@ export function createPage(root, worker, opts) {
     var cfg = exportConfig(effectiveConfig(), { participantIdField: state.idField, assetsDropped: kindCount(state.checked, 'asset') > 0 });
     download('cyborg-hunter.config.json', JSON.stringify(cfg, null, 2) + '\n', 'application/json');
   });
+  // The annotation exports and import (the report's frame can neither
+  // download nor keep them).
+  root.querySelector('[data-action="annotations-csv"]').addEventListener('click', function () {
+    if (!state.result || !state.runId) return;
+    download('annotations-' + state.runId + '.csv',
+      annotationsCsv(state.result.triageRows, state.annotations, state.runId, q(root, 'unreviewed-included').checked), 'text/csv');
+  });
+  root.querySelector('[data-action="annotations-json"]').addEventListener('click', function () {
+    if (!state.result || !state.runId) return;
+    download('annotations-' + state.runId + '.json', annotationsJson(state.runId, state.annotations, new Date().toISOString()), 'application/json');
+  });
+  q(root, 'annotations-input').addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file || !state.result || !state.runId) return;
+    var status = q(root, 'annotations-status');
+    file.text().then(function (text) {
+      var result = readAnnotationsImport(text, cohortIds(), state.runId);
+      changeAnnotations(function (map) {
+        Object.keys(result.annotations).forEach(function (id) { map[id] = result.annotations[id]; });
+        return true;
+      });
+      status.textContent = importMessage(result);
+    }).catch(function (err) { status.textContent = 'Import failed: ' + (err && err.message ? err.message : String(err)); });
+  });
+  // Another tab of the page on the same cohort changed the annotations
+  // (storage tells the other pages of its origin): this tab's report shows it.
+  window.addEventListener('storage', function (e) {
+    if (!state.runId || (e.key !== storageKey(state.runId) && e.key !== null)) return;
+    state.annotations = loadAnnotations(pageStorage(), state.runId, cohortIds());
+    postAnnotations();
+  });
   // The report posts the selected participant (the report renderer's
-  // selectionPostMessage option); only messages from the report frame count.
+  // selectionPostMessage option) and each annotation change
+  // (annotationPostMessage); only messages from the report frame count.
   window.addEventListener('message', function (e) {
     var frame = root.querySelector('iframe.analyze-report');
     if (!frame || e.source !== frame.contentWindow) return;
+    if (e.data && e.data.type === 'cyborg-hunter:annotate') { onAnnotate(e.data); return; }
     if (!e.data || e.data.type !== 'cyborg-hunter:select') return;
     reportPosted = true;       // the report's script ran, whatever the id says
     stopWatchdog();

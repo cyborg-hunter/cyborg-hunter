@@ -133,6 +133,13 @@ describe('the report emits its annotation controls only with a run id', () => {
     assert.equal(html.includes('annot-'), false);
   });
 
+  it('the in-page report hands its annotations to the page; the CLI report keeps its own', async () => {
+    const inPage = await renderIndexHtml(summaries, triage, [p], config, false, { runId: '0123456789abcdef', annotationPostMessage: true });
+    assert.ok(inPage.includes('{"runId":"0123456789abcdef","parent":true}'));
+    const cli = await renderIndexHtml(summaries, triage, [p], config, false, { runId: '0123456789abcdef' });
+    assert.ok(cli.includes('{"runId":"0123456789abcdef","parent":false}'));
+  });
+
   it('the inlined script holds no script-end tag', () => {
     assert.equal(/<\/script/i.test(ANNOTATION_BUILDERS_JS + ANNOTATION_UI_JS), false);
     // Nor what would make the page's own script-end tag close nothing.
@@ -164,16 +171,21 @@ describe('the report\'s annotation script', () => {
     const check = () => { if (refuse) throw new Error('SecurityError'); };
     return { items, getItem: (k) => { check(); return items.has(k) ? items.get(k) : null; }, setItem: (k, v) => { check(); items.set(k, String(v)); } };
   }
-  function mount(storage) {
+  // cfg.parent: the window's parent is a stand-in that records what the
+  // script posts to it.
+  function mount(storage, cfg) {
     const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
     const doc = win.document;
     doc.write(html);
+    const posted = [];
+    const parent = { postMessage: (m, target) => posted.push([m, target]) };
+    if (cfg && cfg.parent) Object.defineProperty(win, 'parent', { configurable: true, value: parent });
     runInNewContext('(function (cfg) {' + ANNOTATION_BUILDERS_JS + ANNOTATION_UI_JS + '})(cfg);',
-      { cfg: { runId: RUN }, window: win, document: doc, localStorage: storage, setTimeout, clearTimeout, URL, Blob });
+      { cfg: { runId: RUN, ...cfg }, window: win, document: doc, localStorage: storage, setTimeout, clearTimeout, URL, Blob });
     const rows = [...doc.querySelectorAll('.cohort-row')];
     const paneOf = (pid) => doc.querySelectorAll('.participant')[rows.findIndex((r) => r.dataset.pid === pid)];
     return {
-      win, doc,
+      win, doc, posted, parent,
       stored: () => JSON.parse(storage.items.get(KEY) || '{}'),
       labels: () => Object.fromEntries(Object.entries(JSON.parse(storage.items.get(KEY) || '{}')).map(([k, v]) => [k, v.label])),
       // What the report's selectById does for an id of p-a_b: its row
@@ -269,5 +281,24 @@ describe('the report\'s annotation script', () => {
     note.dispatchEvent(new r.win.Event('change'));
     assert.equal(r.stored()['a b'].note, 'second');
     assert.equal(r.stored()['a b'].label, null);
+  });
+
+  it('in the analyze page it posts each change to the page, stores nothing, and shows the state only the page posts', () => {
+    const storage = memoryStorage();
+    const r = mount(storage, { parent: true });
+    assert.equal(r.doc.querySelector('.annot-bar').querySelectorAll('button').length, 0, 'no exports: the page has them');
+    r.select('a b');
+    r.key('e');
+    // Through JSON: objects made in the vm context have its prototypes.
+    assert.deepEqual(JSON.parse(JSON.stringify(r.posted)), [[{ type: 'cyborg-hunter:annotate', runId: RUN, participantId: 'a b', label: 'exclude', note: '' }, '*']]);
+    assert.equal(storage.items.has(KEY), false);
+    const state = { type: 'cyborg-hunter:annotations', runId: RUN, annotations: { a_b: { label: 'flag', note: '', annotatedAt: 't' } } };
+    const message = (data, source) => r.win.dispatchEvent(new r.win.MessageEvent('message', { data, source }));
+    message(state, {});
+    message({ ...state, runId: 'ffffffffffffffff' }, r.parent);
+    assert.equal(r.badge('a_b').hidden, true, 'not from the page, or not for this run');
+    message(state, r.parent);
+    assert.equal(r.badge('a_b').textContent, 'flag');
+    assert.equal(r.badge('a b').hidden, true, 'the page\'s state replaces the report\'s');
   });
 });

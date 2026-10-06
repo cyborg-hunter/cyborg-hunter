@@ -73,6 +73,14 @@ iframe.analyze-report{ width:100%; height:min(80vh,900px); border:1px solid var(
     <button class="secondary" data-action="download" data-file="event-log.csv">event-log.csv</button>
     <button class="secondary" data-action="reset">Start over</button>
   </div>
+  <div class="downloads" data-role="annotations">
+    <span class="hint">Your annotations (Include, Exclude, Flag in the report):</span>
+    <button class="secondary" data-action="annotations-csv">annotations.csv</button>
+    <button class="secondary" data-action="annotations-json">annotations.json</button>
+    <label class="hint"><input type="checkbox" data-role="unreviewed-included"> count unreviewed as included</label>
+    <label class="hint">Import: <input type="file" accept=".json,application/json" data-role="annotations-input"></label>
+    <span class="hint" data-role="annotations-status" role="status"></span>
+  </div>
   <div class="hint" role="status"><span data-role="rerun-status" hidden>Re-analysing…</span></div>
   <ul class="warnings" data-role="run-warnings"></ul>
   <div data-role="report"></div>

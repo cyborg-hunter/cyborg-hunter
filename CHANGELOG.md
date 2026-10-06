@@ -16,6 +16,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   elsewhere, and Export CSV writes one row per participant (`participantId,
   tier, triageScore, label, note, annotatedAt, runId`), optionally counting
   the unreviewed as included.
+- `/analyze/`: the same annotations in the in-page report. The page keeps
+  them under the report's run id, so a re-analysis keeps them, and the
+  results step has the CSV and JSON exports and the import.
 - One-line setup: one file per framework. `ch.js` stays the file for jsPsych
   and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
   surveys and `ch-labjs.js` for lab.js studies. The files share the API, the

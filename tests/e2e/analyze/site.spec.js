@@ -211,3 +211,25 @@ test('files the demo stored open as a drop: listed, built, the hash dropped, the
   await expect(page.locator('[data-role="files-panel"]')).toBeHidden();
   await assertOnlyAllowed(page, seen, allow);
 });
+
+test('annotations made in the report frame are kept by the page through a re-analysis, and exported from the results', async ({ page, baseURL }) => {
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  await page.goto('/analyze/');
+  await waitReady(page);
+  await loadSample(page);
+  await buildReport(page);
+  const frame = reportFrame(page);
+  await frame.locator('#p-SYN-HARD-03').getByRole('button', { name: 'Exclude' }).click();
+  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
+  await expect(frame.locator('.annot-count')).toHaveText('1 of 3 reviewed');
+  // The frame cannot download: its exports are the page's.
+  await expect(frame.getByRole('button', { name: 'Export CSV' })).toHaveCount(0);
+  await page.fill('[name="softScoreThreshold"]', '12');
+  await page.press('[name="softScoreThreshold"]', 'Tab');
+  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 2 clean', { timeout: 60000 });
+  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
+  const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="annotations-csv"]')]);
+  expect(readFileSync(await csv.path(), 'utf8').split('\n')[1]).toMatch(/^SYN-HARD-03,hard,[^,]+,exclude,/);
+  await assertOnlyAllowed(page, seen, allow);
+});

@@ -101,8 +101,9 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
       (opts.generatedAt ? ` &middot; <time class="run-time" datetime="${esc(opts.generatedAt)}">${esc(formatRunTime(opts.generatedAt))}</time>` : '')
     : '';
   // The annotation controls (annotation-client.js), stored under the run id:
-  // emitted only when the report has one.
-  const annotationHtml = opts.runId ? annotationBlock({ runId: opts.runId }) : '';
+  // emitted only when the report has one. opts.annotationPostMessage: the
+  // report runs in the analyze page's sandboxed frame, and the page keeps them.
+  const annotationHtml = opts.runId ? annotationBlock({ runId: opts.runId, parent: !!opts.annotationPostMessage }) : '';
 
   // Cohort counts for filter chips and totals footer. The triage array is
   // already sorted tier-first (hard → soft → clean, score-desc within tier) by

@@ -1106,3 +1106,136 @@ test('with experiment files among the drop, the panel says where they go and the
     assert.deepEqual(JSON.parse(await made.at(-1).text()), { participantIdField: 'subject_ID', assetsDir: './assets' });
   } finally { URL.createObjectURL = saved; }
 });
+
+// Annotations: the report frame posts each change (its annotation script in
+// parent mode); the page keeps the state under the run id in its own
+// storage, posts it into the frame after each load and each change, and has
+// the exports and the import (demo/analyze/annotations.js). As in the
+// watchdog block, frames here ignore src (happy-dom would fail every swap at
+// once) and each test fires `load`; each frame gets a stand-in window that
+// records what the page posts into it.
+describe('annotations', () => {
+  const RUN = '0123456789abcdef';
+  const DONE_ANNOTATED = { ...DONE, runId: RUN,
+    triageRows: [{ participantId: 'A', tier: 'hard', triageScore: 10 }, { participantId: 'B', tier: 'clean', triageScore: 0 }] };
+  let createElement;
+  let posted = [];
+  before(() => {
+    createElement = document.createElement;
+    const bound = createElement.bind(document);
+    document.createElement = (tag, o) => {
+      const el = bound(tag, o);
+      if (String(tag).toLowerCase() === 'iframe') {
+        Object.defineProperty(el, 'src', { set() {}, get() { return ''; }, configurable: true });
+        Object.defineProperty(el, 'contentWindow', { configurable: true, value: { postMessage: (m) => posted.push(structuredClone(m)) } });
+      }
+      return el;
+    };
+  });
+  after(() => { document.createElement = createElement; });
+
+  async function loaded() {
+    for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
+    await tick();
+    document.querySelector('iframe.analyze-report').dispatchEvent(new win.Event('load'));
+  }
+  async function toAnnotatedResults() {
+    posted = [];
+    window.localStorage.clear();
+    const t = boot({ timers: fakeTimers() });   // the render watchdog stays on a hand-driven clock
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit({ type: 'zip', chunk: new Uint8Array([1, 2]) });
+    t.emit(DONE_ANNOTATED);
+    await loaded();
+    const frame = document.querySelector('iframe.analyze-report');
+    const annotate = (over, source) => window.dispatchEvent(new win.MessageEvent('message', { source: source || frame.contentWindow,
+      data: { type: 'cyborg-hunter:annotate', runId: RUN, participantId: 'A', label: 'exclude', note: 'pasted', ...over } }));
+    return { t, annotate };
+  }
+  const stored = () => JSON.parse(window.localStorage.getItem('ch-annot:' + RUN) || '{}');
+
+  test('the page stores what the report frame posts, under the run id, and posts the state back', async () => {
+    const r = await toAnnotatedResults();
+    assert.deepEqual(posted, [{ type: 'cyborg-hunter:annotations', runId: RUN, annotations: {} }], 'the state goes in on load');
+    r.annotate();
+    assert.deepEqual([stored().A.label, stored().A.note], ['exclude', 'pasted']);
+    assert.equal(posted.at(-1).annotations.A.label, 'exclude');
+    // Not applied: another run, an id this report does not have, another
+    // label, or a message from another window.
+    r.annotate({ runId: 'ffffffffffffffff', participantId: 'B' });
+    r.annotate({ participantId: 'Z' });
+    r.annotate({ participantId: 'B', label: 'reject' });
+    r.annotate({ participantId: 'B', label: 'flag' }, {});
+    assert.deepEqual(Object.keys(stored()), ['A']);
+    assert.equal(posted.length, 2);
+  });
+
+  test('a re-analysis of the same cohort keeps them, and the new report gets them on load', async () => {
+    const r = await toAnnotatedResults();
+    r.annotate();
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.equal(r.t.sent.at(-1).type, 'reanalyze');
+    const before = posted.length;
+    r.t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    r.t.emit({ ...DONE_ANNOTATED, html: '<p>re-analysed</p>' });
+    await loaded();
+    assert.equal(posted.length, before + 1, 'posted on the new load');
+    assert.equal(posted.at(-1).annotations.A.label, 'exclude');
+  });
+
+  test('the exports and the import are the page\'s', async () => {
+    const r = await toAnnotatedResults();
+    r.annotate();
+    const made = [];
+    const saved = URL.createObjectURL;
+    URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+    try {
+      role('unreviewed-included').checked = true;
+      action('annotations-csv').click();
+      assert.match(await made.at(-1).text(), new RegExp('^participantId,tier,triageScore,label,note,annotatedAt,runId\\n' +
+        'A,hard,10,exclude,pasted,[^,]+,' + RUN + '\\nB,clean,0,include,,,' + RUN + '\\n$'));
+      action('annotations-json').click();
+      assert.deepEqual(Object.keys(JSON.parse(await made.at(-1).text()).annotations), ['A']);
+    } finally { URL.createObjectURL = saved; }
+    const input = role('annotations-input');
+    const file = new File([JSON.stringify({ format: 'cyborg-hunter-annotations', runId: RUN, annotations: {
+      B: { label: 'flag', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' }, Q: { label: 'include', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } })], 'a.json');
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new win.Event('change'));
+    await until(() => role('annotations-status').textContent !== '');
+    assert.equal(role('annotations-status').textContent, 'Imported 1 annotation. Not in this report: Q.');
+    assert.equal(posted.at(-1).annotations.B.label, 'flag');
+    assert.deepEqual(Object.keys(stored()).sort(), ['A', 'B']);
+  });
+
+  // Two tabs of the page on the same cohort share the key: a change is
+  // written over what storage holds at that moment, and the storage event
+  // brings another tab's change into this tab's report.
+  test('a change keeps what another tab of the page stored, and another tab\'s change reaches the report', async () => {
+    const r = await toAnnotatedResults();
+    const entry = (label) => ({ label, note: '', annotatedAt: '2026-10-05T09:00:00.000Z' });
+    window.localStorage.setItem('ch-annot:' + RUN, JSON.stringify({ B: entry('flag') }));
+    r.annotate();
+    assert.deepEqual(Object.keys(stored()).sort(), ['A', 'B']);
+    assert.deepEqual(Object.keys(posted.at(-1).annotations).sort(), ['A', 'B']);
+    window.localStorage.setItem('ch-annot:' + RUN, JSON.stringify({ B: entry('include'), Z: entry('exclude') }));
+    window.dispatchEvent(new win.StorageEvent('storage', { key: 'ch-annot:' + RUN }));
+    assert.deepEqual(posted.at(-1).annotations, { B: entry('include') }, 'read as an import is: Z is not in this report');
+  });
+
+  test('the annotation exports and the import wait for a re-analysis, as the other downloads do', async () => {
+    const r = await toAnnotatedResults();
+    const controls = () => [action('annotations-csv'), action('annotations-json'), role('annotations-input')];
+    assert.ok(controls().every((c) => !c.disabled));
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.ok(controls().every((c) => c.disabled), 'the CSV would carry the last run\'s tiers and scores');
+    r.t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    r.t.emit(DONE_ANNOTATED);
+    await loaded();
+    assert.ok(controls().every((c) => !c.disabled));
+  });
+});

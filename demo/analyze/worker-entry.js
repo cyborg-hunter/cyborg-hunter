@@ -28,7 +28,9 @@
 //     zip           { chunk } — the report zip, in order, buffer transferred
 //     done          the in-page report html and what the page lists beside it;
 //                   phases: the trial phases in the data, sorted; runId: the
-//                   run id (report-core.js runIdOf)
+//                   run id (report-core.js runIdOf); triageRows: each
+//                   participant's tier and triage score in triage order
+//                   (for the annotation export)
 //     replay-model  { participantId, model }
 //     error         { phase, message }, phase 'ingest' or the type of the message
 //                   that failed: 'check' | 'run' | 'reanalyze' | 'replay'
@@ -211,7 +213,10 @@ async function renderRun(state, config) {
         replayError: p.replay && p.replay.error ? (p.replay.reason || p.replay.error) : null };
     }),
     warnings: state.warnings, reportWarnings: built.warnings, assetReport: state.assetReport,
-    phases: phasesOf(participants), files: fileTexts, configUsed: config, zipBytes: zip.bytes });
+    phases: phasesOf(participants), files: fileTexts, configUsed: config, zipBytes: zip.bytes,
+    triageRows: built.triage.map(function (t) {
+      return { participantId: t.participantId, tier: t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean', triageScore: t.score };
+    }) });
 }
 
 // The trial phases in the data, for the settings panel's phase-scope hint,
