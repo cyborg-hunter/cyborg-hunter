@@ -732,10 +732,16 @@ export function parseCsvToRaw(text, config) {
   // end text files with a newline, so almost every CSV from the wild has one.
   // Trim trailing whitespace defensively: trimEnd(), linear, where /\s+$/
   // backtracks quadratically over a long run of spaces inside the file.
+  // Numbers and booleans are parsed natively, except in the id columns
+  // (participantIdField, and ch.js's own id on lab.js rows): an id is the text
+  // it holds, so 007 stays '007' (typed, it would be keyed '7', and the
+  // recording made under 007 would not attach), 1e3 stays '1e3', TRUE stays
+  // 'TRUE'. An empty id cell then stays '' rather than null: the hoist below
+  // and extract-core read both as missing.
   const result = Papa.parse(text.trimEnd(), {
     header: true,
     skipEmptyLines: true,
-    dynamicTyping: true,  // numbers and booleans parsed natively, strings stay strings
+    dynamicTyping: (field) => field !== pidField && field !== 'cyborgHunterParticipantId',
   });
   const rows = result.data || [];
 
@@ -766,11 +772,13 @@ export function parseCsvToRaw(text, config) {
   if (rowsCarryChId(rows)) return { trials: rows };
 
   // Hoist participant ID from the first row to the top level so Shape-1 ingest
-  // finds it via raw[pidField]. Falls back to 'unknown' if the column isn't there.
+  // finds it via raw[pidField]. Falls back to 'unknown' if the column isn't
+  // there or row 0's cell is empty.
   // getByPath supports dotted paths into JSON-parsed cells (e.g. a "metadata"
   // column that held a stringified object); Shape-1's flat-key-first lookup
   // then finds the hoisted value under the same (possibly dotted) key name.
-  const participantId = getByPath(rows[0], pidField) ?? 'unknown';
+  const hoisted = getByPath(rows[0], pidField);
+  const participantId = hoisted === undefined || hoisted === null || hoisted === '' ? 'unknown' : hoisted;
 
   return {
     [pidField]: participantId,

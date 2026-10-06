@@ -214,6 +214,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   page fell back to `participantId`, which is wrong for jsPsych's
   `subject_ID`. The line beside the field counts the data files read and
   the recordings skipped.
+- CLI and analyze page: a CSV participant ID keeps its text (`007` stays
+  `007`, and so does ch.js's ID on lab.js rows). Before, `007` was keyed
+  `7`, so its replay recording did not attach and `--participant 007` found
+  nothing.
 
 ### Removed
 - Internal renderer wrappers removed

@@ -188,6 +188,27 @@ describe('replay artifact ingest', () => {
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
+  // A CSV's id is read as written: a participant 007 is keyed '007', not
+  // '7', so the recording made under 007 attaches and --participant 007
+  // finds them.
+  it('attaches the recording of a CSV participant whose id is 007, under --participant 007 too', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'ch-replay-csv-'));
+    try {
+      const integrity = JSON.parse(participantFile('007')).trials[0].integrity;
+      const cell = '"' + JSON.stringify(integrity).replace(/"/g, '""') + '"';
+      writeFileSync(join(d, '007.csv'), ['participantId,trialId,integrity', '007,r1,' + cell].join('\n'));
+      writeFileSync(join(d, '007-replay-1751600000000.json'), JSON.stringify(recordingV2('007', 1751600000000)));
+      for (const only of [null, '007']) {
+        const { participants, warnings } = await ingest({
+          dataDir: d, filePattern: '*.json', integrityField: 'integrity', participantIdField: 'participantId',
+          ...(only ? { singleParticipant: only } : {}),
+        });
+        assert.deepStrictEqual(participants.map(p => p.participantId), ['007'], 'singleParticipant ' + only);
+        assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+      }
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+
   // Ownership and the latest-session pick read v1's `metadata` block. Making
   // the sniff recognise v2 without these would hand a v2 artifact to the
   // OWNERLESS branch, which verifies by filename alone — so a file recorded
@@ -998,6 +1019,21 @@ describe('replay ingest — lab.js data keyed by the study\'s own participantId'
     const { participants, warnings } = await ingest(cfg());
     assert.deepStrictEqual(participants.map(p => p.participantId), ['RES-3']);
     assert.strictEqual(participants[0].metadata.cyborgHunterParticipantId, 'CH-3');
+    assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+    assert.ok(!mismatch(warnings), JSON.stringify(warnings));
+  });
+
+  // The same rows exported as CSV: ch.js's id is read as written, so 007
+  // still names the recording that carries it.
+  it('a lab.js CSV: the recording that carries ch.js\'s id 007 attaches', async () => {
+    const rows = JSON.parse(labjsRows('RES-3', '007'));
+    const cols = ['sender', 'sender_id', 'participantId', 'integrity', 'cyborgHunterParticipantId'];
+    const cell = (v) => v == null ? '' : typeof v === 'object' ? '"' + JSON.stringify(v).replace(/"/g, '""') + '"' : String(v);
+    writeFileSync(join(d, 'RES-3.csv'), [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n'));
+    writeFileSync(join(d, 'RES-3-replay-1751600000000.json'), JSON.stringify(recordingV2('007', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['RES-3']);
+    assert.strictEqual(participants[0].metadata.cyborgHunterParticipantId, '007');
     assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
     assert.ok(!mismatch(warnings), JSON.stringify(warnings));
   });
