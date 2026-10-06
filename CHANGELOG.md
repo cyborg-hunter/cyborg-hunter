@@ -127,6 +127,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trial's segment early, under the step's `trialId`. Either way the real
   start then logged a `lifecycle` capture failure. With the one-line setup a
   researcher's own per-trial replay entry without `params` is covered too.
+- One-line setup: a page that loads `ch.js` twice (two tags, or two
+  versions) gets a double-load error whose fix says to load `ch.js` once and
+  keep one of its `<script>` tags. Before, the fix said to load only one of
+  `ch.js` and `cyborg-hunter.min.js`, a file the page did not load.
 
 ### Removed
 - Internal renderer wrappers removed

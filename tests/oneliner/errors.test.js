@@ -7,6 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOCS, formatError, loudError, MESSAGES } from '../../src/oneliner/errors.js';
+import { ONE_LINE_TARGETS } from '../../build-targets.js';
 
 const FORMAT = /^\[cyborg-hunter\] .+: .+\. Fix: .+\. https:\/\/.+docs\/.+\.md#/;
 
@@ -244,6 +245,17 @@ describe('error catalogue', () => {
     assert.ok(MESSAGES.doubleLoad('cyborg-hunter.min.js', 'ch-labjs.js')
       .includes('. Fix: load only one of ch-labjs.js and cyborg-hunter.min.js (the one-liner already contains the monitor). https'));
   });
+
+  // Two tags of one file, or two versions of it: the fix is about that file
+  // alone, and names no file the page does not load.
+  for (const { file } of ONE_LINE_TARGETS) {
+    it(file + ' loaded twice: the fix says to load it once', () => {
+      const msg = MESSAGES.doubleLoad(file, file);
+      assert.match(msg, FORMAT);
+      assert.ok(msg.includes(': ' + file + ' was loaded after ' + file + '. Fix: load ' + file + ' only once: keep one of its <script> tags. https'), msg);
+      assert.ok(!msg.includes('cyborg-hunter.min.js'), msg);
+    });
+  }
 
   // The messages any one-line file can log about itself: each names the
   // file it is given (boot.js passes CH_FILE and keeps it as ctx.file), and

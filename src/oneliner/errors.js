@@ -37,12 +37,15 @@ export const MESSAGES = {
   // first: the bundle that set the sentinel, by its own file name (boot.js
   // reads a one-line file's from win.__cyborgHunterFile); second: the one
   // loaded after it. The fix names the one-line file involved, and both
-  // when two different one-line files meet.
+  // when two different one-line files meet. The same one-line file twice
+  // (two tags, or two versions of it) is told to load that file once.
   doubleLoad: function (first, second) {
     var oneLine = first === MIN_FILE ? second : first;
     var other = first !== second && first !== MIN_FILE && second !== MIN_FILE ? second : MIN_FILE;
-    return formatError('Not starting a second monitor', second + ' was loaded after ' + first,
-      'load only one of ' + oneLine + ' and ' + other + (other === MIN_FILE ? ' (the one-liner already contains the monitor)' : ''),
+    var fix = first === second && first !== MIN_FILE
+      ? 'load ' + first + ' only once: keep one of its <script> tags'
+      : 'load only one of ' + oneLine + ' and ' + other + (other === MIN_FILE ? ' (the one-liner already contains the monitor)' : '');
+    return formatError('Not starting a second monitor', second + ' was loaded after ' + first, fix,
       DOCS + 'advanced-integration.md#double-load');
   },
   // min.js's own sentinel found by a second copy of min.js: nothing to say
