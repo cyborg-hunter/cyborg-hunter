@@ -86,6 +86,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the recording's `extensions["cyborg-hunter"]` (`root_attrs` on keyframe
   segments, `root_attr_events` on the recording), so other players ignore
   it. Recordings made before 0.13.0 replay as before.
+- `/analyze/`: a settings panel with the keys a report can apply after
+  collection (score weights, soft-score threshold, phase scope, the ID,
+  integrity and session-report fields, platform ID and trajectory order).
+  On the results, a change re-analyses in place without dropping the files
+  again; a change to the ID, integrity or session-report field reads the
+  files again from the same list.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
@@ -246,6 +252,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   page fell back to `participantId`, which is wrong for jsPsych's
   `subject_ID`. The line beside the field counts the data files read and
   the recordings skipped.
+- `/analyze/`: "Export config" writes only the settings that differ from the
+  CLI's defaults, plus the participant-ID field. Before, it wrote every
+  default key and replaced your own `dataDir`, `filePattern` and `outputDir`
+  with fixed values. With experiment files dropped, it sets `assetsDir` to
+  `./assets`, and the page says where to put them.
 
 ### Removed
 - Internal renderer wrappers removed

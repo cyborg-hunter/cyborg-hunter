@@ -213,12 +213,15 @@ async function renderRun(state, config) {
     phases: phasesOf(participants), files: fileTexts, configUsed: config, zipBytes: zip.bytes });
 }
 
-// The trial phases in the data, for the settings panel's phase-scope hint.
+// The trial phases in the data, for the settings panel's phase-scope hint,
+// named as phase scope names them: a trial without a phase is 'default'
+// (src/cli/analyzers/phase-scope.js).
 function phasesOf(participants) {
   var seen = Object.create(null), out = [];
   participants.forEach(function (p) {
     (p.trials || []).forEach(function (t) {
-      if (t && typeof t.phase === 'string' && t.phase && !seen[t.phase]) { seen[t.phase] = true; out.push(t.phase); }
+      var phase = (t && t.phase) ?? 'default';
+      if (typeof phase === 'string' && phase && !seen[phase]) { seen[phase] = true; out.push(phase); }
     });
   });
   return out.sort();

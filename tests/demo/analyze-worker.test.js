@@ -285,7 +285,8 @@ test('a reset while the report renders does not turn the render into an error', 
 // stylesheet imports two sheets, one of which imports the other: a spliced
 // sheet keeps its own imports as URLs, which a second pass over the same
 // recording must leave as the first wrote them. The data's trial phases come
-// back once each, sorted; a trial without one adds none.
+// back once each, sorted; a trial without one is listed as 'default', the
+// name phase scope gives it (src/cli/analyzers/phase-scope.js).
 test('reanalyze under the same config gives the first report again, file for file', async () => {
   const dir = 'tests/fixtures/demo';
   const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
@@ -321,7 +322,7 @@ test('reanalyze under the same config gives the first report again, file for fil
   assert.deepEqual(second.participants, first.participants);
   assert.deepEqual(second.triageOrder, first.triageOrder);
   assert.deepEqual(second.files, first.files);
-  assert.deepEqual([first.phases, second.phases], [['main', 'warmup'], ['main', 'warmup']]);
+  assert.deepEqual([first.phases, second.phases], [['default', 'main', 'warmup'], ['default', 'main', 'warmup']]);
 });
 
 test('a dropped file whose name differs from the recorded URL only in case still styles the replay', async () => {

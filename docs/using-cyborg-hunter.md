@@ -354,13 +354,22 @@ Unknown flags now exit with an error rather than silently falling back to the co
 ### In the browser, without installing anything
 
 [cyborg-hunter.github.io/cyborg-hunter/analyze/](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)
-builds the same report in your browser: drop the data files (or a folder),
-confirm the participant-ID field the page suggests, and download the report
-as a `.zip` with the CLI's output layout, or `summary.csv`, `triage.md` and
-`event-log.csv` on their own. "Load sample data" runs the whole pipeline on
-the bundled synthetic pilot first, so you can see what you get before
-dropping real data. "Export config" writes the `cyborg-hunter.config.json`
-the run used, ready for the CLI.
+builds the same report in your browser. Add the data files, the replay
+recordings, your `cyborg-hunter.config.json` and the experiment's CSS and
+image files, in one drop or several (a folder at a time is fine); the page
+lists every file with what it read it as, and you can remove any of them.
+Confirm the participant-ID field the page suggests, adjust the settings if
+you need to, and download the report as a `.zip` with the CLI's output
+layout, or `summary.csv`, `triage.md` and `event-log.csv` on their own.
+The settings are the ones a report can apply after collection: the score
+weights, the soft-score threshold, the phase scope, the ID, integrity and
+session-report fields, and two display options. Changing one on the results
+re-analyses at once, without dropping the files again. "Load sample data"
+runs the whole pipeline on the bundled synthetic pilot first, so you can see
+what you get before dropping real data. "Export config" writes a
+`cyborg-hunter.config.json` with every setting that differs from the CLI's
+defaults, so `cyborg-hunter report` in a folder holding the same files
+builds the same report.
 
 **Nothing leaves your browser.** Every web page can declare a security policy
 that the browser enforces. This page's policy has four parts: no data requests

@@ -9,13 +9,16 @@
 // dropped file itself and transfers the bytes, for every check and run.
 //
 // The worker's messages carry no run id (worker-entry.js), so the page runs
-// ONE operation at a time: while a check or a run is in flight the controls
-// that would start another are disabled, and a run that fails throws away
-// the zip chunks it had already streamed before a retry is offered.
+// ONE operation at a time: while a check, a run or a re-analysis is in
+// flight the controls (the settings too) that would start another are
+// disabled, and a run that fails throws away the zip chunks it had already
+// streamed before a retry is offered.
 import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
 import { mergeEntries, removeEntry } from './files-panel.js';
+import { createSettingsPanel, settingsFromConfig, configFromSettings, REINGEST_KEYS } from './settings-panel.js';
+import { exportConfig } from './export-config.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
 
@@ -83,6 +86,10 @@ export function createPage(root, worker, opts) {
   // report is tens of MB. "Loaded but never rendered" is the render
   // watchdog's job, not this one's.
   var REPORT_LOAD_TIMEOUT_MS = 60000;
+  // The settings panel (settings-panel.js), shown from the first check on,
+  // beside the file list and above the results. Created first: it holds the
+  // id field the page wires below.
+  var settingsPanel = createSettingsPanel(q(root, 'settings'), onSettingsChange);
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
 
@@ -92,12 +99,14 @@ export function createPage(root, worker, opts) {
   function goTo(name) {
     state.step = name;
     root.querySelectorAll('section.step').forEach(function (s) { s.hidden = s.dataset.step !== name; });
+    q(root, 'settings').hidden = !state.checked || (name !== 'files' && name !== 'results');
   }
   function updateControls() {
     // A file the check read as data, as the counts line says: the classifier's
     // participant list also holds every JSON recording.
     runButton.disabled = busy() || !state.checked || kindCount(state.checked, 'data') === 0;
     resetButtons.forEach(function (b) { b.disabled = busy(); });
+    settingsPanel.setDisabled(busy());
   }
   function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; watchdogErrorShown = false; }
   function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; watchdogErrorShown = false; }
@@ -129,11 +138,12 @@ export function createPage(root, worker, opts) {
 
   // Every failure lands here, from the worker ({ type: 'error', phase }) or
   // from the page's own code. A replay failure leaves the results alone; a
-  // check failure goes back to an empty files step; a run failure goes back
-  // to the file list with its partial zip discarded and the run control
-  // enabled for a retry.
+  // check failure goes back to an empty files step; a run or re-analysis
+  // failure goes back to the file list with its partial zip discarded and
+  // the run control enabled for a retry.
   function recover(phase, message, warnings) {
     showError(message);
+    q(root, 'rerun-status').hidden = true;
     if (phase === 'replay') {
       var w = replayWaiters.shift();
       if (w) w.reject(handled(message));
@@ -259,6 +269,9 @@ export function createPage(root, worker, opts) {
     var checked = await reply;
     state.checked = checked;
     renderFiles(checked);
+    settingsPanel.write(settingsFromConfig(checked.config));
+    settingsPanel.setAssetsHint(kindCount(checked, 'asset') > 0);
+    q(root, 'settings').hidden = false;
     var sel = q(root, 'id-field'); sel.innerHTML = '';
     var offered = {};
     checked.idSuggestion.candidates.forEach(function (cand) {
@@ -328,6 +341,10 @@ export function createPage(root, worker, opts) {
       : 'Settings: the defaults (no cyborg-hunter.config.json among the files).';
   }
 
+  // The config this page's settings stand for (the check's merged config,
+  // with the panel's values on top).
+  function effectiveConfig() { return configFromSettings(state.checked.config, settingsPanel.read()); }
+
   async function run() {
     if (busy() || !state.checked) return;
     clearError();
@@ -339,8 +356,51 @@ export function createPage(root, worker, opts) {
     var reply = waitFor('done');
     updateControls();
     armStallHint();
-    sendWithFiles({ type: 'run', sample: state.sample, config: state.checked.config, participantIdField: state.idField });
+    var config = effectiveConfig();
+    sendWithFiles({ type: 'run', sample: state.sample, config: config, participantIdField: state.idField });
     var done = await reply;
+    state.ranWith = { config: config, idField: state.idField };
+    showResults(done);
+  }
+
+  // A settings change once a report is on screen: the panel's post-hoc keys
+  // re-analyse the participants already read (`reanalyze`); a change to the
+  // id, integrity or session-report field reads the files again (`run`,
+  // with the same files). Either way the page stays on its results and
+  // swaps the report and the downloads in place.
+  function onSettingsChange() {
+    if (!state.result || busy() || state.step !== 'results') return;
+    var config = effectiveConfig();
+    var reread = state.idField !== state.ranWith.idField || REINGEST_KEYS.some(function (k) {
+      return k !== 'participantIdField' && config[k] !== state.ranWith.config[k];
+    });
+    rerun(reread ? 'run' : 'reanalyze', config).catch(onFailure(reread ? 'run' : 'reanalyze'));
+  }
+
+  // One at a time, like a run: the awaited 'done' keeps the page busy, which
+  // disables the settings until the answer (the worker's zip chunks carry no
+  // run id), and the last run's zip is let go before this one streams in. A
+  // failure goes back to the file list, as a failed run does (recover).
+  async function rerun(type, config) {
+    clearError();
+    stopWatchdog();
+    discardZip();
+    var status = q(root, 'rerun-status');
+    status.hidden = false;
+    var reply = waitFor('done');
+    updateControls();
+    armStallHint();
+    var msg = { type: type, config: config, participantIdField: state.idField };
+    if (type === 'run') { msg.sample = state.sample; sendWithFiles(msg); } else send(msg);
+    var done = await reply;
+    status.hidden = true;
+    state.ranWith = { config: config, idField: state.idField };
+    showResults(done);
+  }
+
+  // A run's or a re-analysis's answer on screen: the summary, the downloads,
+  // the report frame swapped in place, the replay card's list.
+  function showResults(done) {
     updateControls();
     state.result = done;
     state.zipUrl = URL.createObjectURL(new Blob(state.zipParts, { type: 'application/zip' }));
@@ -362,6 +422,7 @@ export function createPage(root, worker, opts) {
       });
     }
     replayCard.setParticipants(done.participants);
+    settingsPanel.setPhases(done.phases);
     reportFirstSelection = true;
     reportPosted = false;
   }
@@ -449,10 +510,11 @@ export function createPage(root, worker, opts) {
       download(name, state.result.files[name], name.endsWith('.md') ? 'text/markdown' : 'text/csv');
     });
   });
+  // The settings as a config the CLI reproduces this report from (only the
+  // keys that differ from its defaults; export-config.js).
   root.querySelector('[data-action="export-config"]').addEventListener('click', function () {
-    // CLI-ready: what this run used, with the file-system fields a CLI run needs.
-    var cfg = Object.assign({}, state.result.configUsed, { dataDir: './data', filePattern: '*.{json,csv}', outputDir: './cyborg-hunter-report' });
-    delete cfg.replayDir; delete cfg.noVisuals;
+    if (!state.checked) return;
+    var cfg = exportConfig(effectiveConfig(), { participantIdField: state.idField, assetsDropped: kindCount(state.checked, 'asset') > 0 });
     download('cyborg-hunter.config.json', JSON.stringify(cfg, null, 2) + '\n', 'application/json');
   });
   // The report posts the selected participant (the report renderer's

@@ -4,7 +4,7 @@
 // dropped stylesheet with the recorded external image blocked, and the
 // participant switch. Every test runs under the same request guard as
 // engines.spec.js.
-import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
+import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
   pilotFiles, cliPilotTree, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER } from './support.mjs';
 
 test('dropped synthetic pilot: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
@@ -139,4 +139,22 @@ test('files from two drops are one list: data first, the replays and the config 
     expect((await railOrder(page)).sort()).toEqual(['DEMO-FIXT', 'DEMO-FIXT-B']);
     await assertOnlyAllowed(page, seen, allow);
   } finally { cohort.cleanup(); await sentinel.close(); }
+});
+
+test('a setting on the results re-analyses in place: no file is read again, and the zip follows', async ({ page, baseURL }) => {
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  await page.goto('/analyze/');
+  await waitReady(page);
+  await loadSample(page);
+  await buildReport(page);
+  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 1 soft, 1 clean');
+  // SYN-SOFT-02's saved soft score is 11: a threshold of 12 makes it clean.
+  await page.fill('[name="softScoreThreshold"]', '12');
+  await page.press('[name="softScoreThreshold"]', 'Tab');
+  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 2 clean', { timeout: 60000 });
+  await expect(page.locator('section[data-step="results"]')).toBeVisible();
+  const zip = await downloadZip(page);
+  expect(zip.text('triage.md')).toMatch(/SYN-SOFT-02 \| clean/);
+  await assertOnlyAllowed(page, seen, allow);
 });

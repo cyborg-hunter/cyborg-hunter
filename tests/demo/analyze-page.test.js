@@ -49,6 +49,9 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
   sampled: 3,
   files: [{ path: 'a.csv', kind: 'data' }, { path: 'b.csv', kind: 'data' }, { path: 'c.json', kind: 'data' }, { path: 'cyborg-hunter.config.json', kind: 'config' }],
   configPath: 'cyborg-hunter.config.json' };
+// CHECKED.config with the settings panel's keys at their defaults: what a run sends.
+const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null, phaseScope: null,
+  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false, trajectoryDisplayOrder: 'rule' };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
@@ -162,7 +165,8 @@ test('one run at a time: the run control is disabled while a run is in flight', 
   t.page.run();
   await tick();
   assert.equal(t.sent.filter((m) => m.type === 'run').length, 1);
-  assert.deepEqual(t.sent[1], { type: 'run', files: [], sample: true, config: CHECKED.config, participantIdField: 'subject_ID' });
+  // The check's config with the settings panel's keys on top, here at their defaults.
+  assert.deepEqual(t.sent[1], { type: 'run', files: [], sample: true, participantIdField: 'subject_ID', config: PANEL_DEFAULTS });
 });
 
 test('a run error discards the zip chunks already received and offers a retry', async () => {
@@ -926,4 +930,158 @@ test('a list of replay recordings only shows 0 data files, and Run stays disable
   await tick();
   assert.match(role('counts').textContent, /^0 data files2 replay recordings/);
   assert.equal(action('run').disabled, true);
+});
+
+// The settings panel: post-hoc keys only, applied without dropping the files
+// again (demo/analyze/settings-panel.js).
+const setField = (name, value) => {
+  const form = role('settings-form');
+  const el = form.elements.namedItem(name);
+  if (el.type === 'checkbox') el.checked = value; else el.value = value;
+  form.dispatchEvent(new win.Event('change', { bubbles: true }));
+};
+
+test('the settings show from the first check on, and a run sends their config', async () => {
+  const t = boot();
+  assert.equal(role('settings').hidden, true, 'nothing to set before a check');
+  await toCheck(t);
+  assert.equal(role('settings').hidden, false);
+  setField('softScoreThreshold', '4');
+  setField('phaseInclude', 'game, practice');
+  assert.equal(t.sent.length, 1, 'no run before Build');
+  action('run').click();
+  await tick();
+  assert.deepEqual(t.sent[1].config.scoring, { softScoreThreshold: 4 });
+  assert.deepEqual(t.sent[1].config.phaseScope, { include: ['game', 'practice'] });
+});
+
+test('on the results, a post-hoc setting re-analyses without reading the files, and the report swaps in place', async () => {
+  const t = boot();
+  await toResults(t);
+  const before = document.querySelector('iframe.analyze-report').src;
+  setField('softScoreThreshold', '2');
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID',
+    config: { ...PANEL_DEFAULTS, scoring: { softScoreThreshold: 2 } } });
+  assert.equal(role('rerun-status').hidden, false);
+  assert.deepEqual(visibleStep(), ['results'], 'the page stays on its results');
+  t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+  t.emit({ ...DONE, html: '<p>re-analysed</p>' });
+  await tick();
+  assert.equal(role('rerun-status').hidden, true);
+  assert.notEqual(document.querySelector('iframe.analyze-report').src, before, 'a new report document');
+  assert.equal(t.page.state.zipParts.length, 1, 'the zip is the new run\'s');
+});
+
+test('on the results, a change to the integrity field reads the files again', async () => {
+  const t = boot();
+  await toResults(t);
+  setField('integrityField', 'chIntegrity');
+  await tick();
+  const last = t.sent.at(-1);
+  assert.equal(last.type, 'run');
+  assert.equal(last.sample, true);
+  assert.equal(last.config.integrityField, 'chIntegrity');
+});
+
+test('Export config writes the keys that differ from the defaults and the id field, never this page\'s run paths', async () => {
+  const t = boot();
+  await toCheck(t);
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    setField('softScoreThreshold', '4');
+    action('export-config').click();
+    const text = await made.at(-1).text();
+    assert.deepEqual(JSON.parse(text), { scoring: { softScoreThreshold: 4 }, participantIdField: 'subject_ID' });
+    assert.equal(text.includes('dropped files'), false);
+  } finally { URL.createObjectURL = saved; }
+});
+
+// The worker answers one message at a time and its zip chunks carry no run
+// id: a re-analysis holds the settings until its answer, like a run.
+test('one re-analysis at a time: the settings are disabled and a change sends nothing until the first answers', async () => {
+  const t = boot();
+  await toResults(t);
+  setField('softScoreThreshold', '2');
+  await tick();
+  const sent = t.sent.length;
+  assert.equal(t.page.state.zipUrl, null, 'the last run\'s zip is let go before the re-analysis streams its own');
+  assert.equal(role('settings-form').querySelector('fieldset').disabled, true);
+  setField('softScoreThreshold', '3');
+  await tick();
+  assert.equal(t.sent.length, sent, 'nothing sent while the first is in flight');
+  t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+  t.emit(DONE);
+  await tick();
+  assert.equal(role('settings-form').querySelector('fieldset').disabled, false);
+  assert.ok(t.page.state.zipUrl, 'the new zip is offered');
+});
+
+test('a failed re-analysis goes back to the file list with its error, its partial zip discarded', async () => {
+  const t = boot();
+  await toResults(t);
+  setField('softScoreThreshold', '2');
+  await tick();
+  t.emit({ type: 'zip', chunk: new Uint8Array([9]) });
+  t.emit({ type: 'error', phase: 'reanalyze', message: 'The report could not be built.' });
+  await tick();
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('error').textContent, 'The report could not be built.');
+  assert.equal(role('rerun-status').hidden, true);
+  assert.deepEqual(t.page.state.zipParts, []);
+  assert.equal(role('settings').hidden, false, 'the settings stay beside the list');
+  assert.equal(role('settings-form').querySelector('fieldset').disabled, false);
+  assert.equal(action('run').disabled, false, 'Build is offered again');
+});
+
+// Phase scope reads a trial without a phase as "default" (the worker lists
+// it among the phases): the hint says so.
+test('the phase hint lists the phases the run found, and what "default" stands for', async () => {
+  const t = boot();
+  await toCheck(t);
+  assert.equal(role('phase-hint').textContent, '');
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, phases: ['main', 'warmup'] });
+  await tick();
+  assert.equal(role('phase-hint').textContent, 'Phases in the data: main, warmup');
+  setField('softScoreThreshold', '2');
+  await tick();
+  t.emit({ ...DONE, phases: ['default', 'main'] });
+  await tick();
+  assert.equal(role('phase-hint').textContent, 'Phases in the data: default, main (default: the trials with no phase)');
+});
+
+test('Export config on the results writes the settings, not the config the run sent the worker', async () => {
+  const t = boot();
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, configUsed: { participantIdField: 'subject_ID', dataDir: '(dropped files)', replayDir: null, outputDir: 'cyborg-hunter-report' } });
+  await tick();
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    action('export-config').click();
+    assert.deepEqual(JSON.parse(await made.at(-1).text()), { participantIdField: 'subject_ID' });
+  } finally { URL.createObjectURL = saved; }
+});
+
+test('with experiment files among the drop, the panel says where they go and the export sets assetsDir', async () => {
+  const t = boot();
+  action('sample').click();
+  await tick();
+  t.emit({ ...CHECKED, files: [...CHECKED.files, { path: 'css/style.css', kind: 'asset' }] });
+  await tick();
+  assert.equal(role('assets-hint').hidden, false);
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    action('export-config').click();
+    assert.deepEqual(JSON.parse(await made.at(-1).text()), { participantIdField: 'subject_ID', assetsDir: './assets' });
+  } finally { URL.createObjectURL = saved; }
 });
