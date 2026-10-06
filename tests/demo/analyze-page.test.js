@@ -688,7 +688,7 @@ describe('the report render watchdog', () => {
     await toLoadedReport(t);
     assert.equal(clock.count(), 1);
     // A new run started while the old one is armed: reset is the only way back
-    // to the check step, so drive run() directly.
+    // to the file list, so drive run() directly.
     t.page.run();                                        // waits on the worker, which this test never answers
     assert.deepEqual(clock.delays(), [60000], 'a new run: the watchdog is gone, only the run\'s stall hint timer is live');
   });
@@ -895,6 +895,7 @@ test('the table lists what each file was read as, with Remove; removing the last
   const rows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent));
   assert.deepEqual(rows(), [['study/a.csv', 'participant data'], ['study/cyborg-hunter.config.json', 'settings']]);
   assert.equal(role('config-source').textContent, 'Settings from study/cyborg-hunter.config.json, over the defaults.');
+  assert.equal(role('file-rows').querySelector('[data-path="study/a.csv"]').getAttribute('aria-label'), 'Remove study/a.csv');
   role('file-rows').querySelector('[data-path="study/cyborg-hunter.config.json"]').click();
   await until(() => t.sent.length === 2);
   assert.deepEqual(t.sent[1].files.map((f) => f.path), ['study/a.csv']);
@@ -913,4 +914,16 @@ test('the sample lists its files without Remove controls', async () => {
   await toCheck(t);
   assert.equal(role('file-rows').querySelectorAll('tr').length, 4);
   assert.equal(role('file-rows').querySelectorAll('[data-action="remove-file"]').length, 0);
+});
+
+// The classifier lists every JSON file as participant data; the check's peek
+// tells a recording apart. Run waits for a file the peek read as data.
+test('a list of replay recordings only shows 0 data files, and Run stays disabled', async () => {
+  const t = boot();
+  action('sample').click();
+  await tick();
+  t.emit({ ...CHECKED, files: [{ path: 'A-replay-1.json', kind: 'recording' }, { path: 'B-replay-1.json', kind: 'recording' }] });
+  await tick();
+  assert.match(role('counts').textContent, /^0 data files2 replay recordings/);
+  assert.equal(action('run').disabled, true);
 });

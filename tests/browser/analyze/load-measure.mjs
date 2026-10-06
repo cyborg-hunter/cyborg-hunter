@@ -92,7 +92,7 @@ for (const n of sizes) {
       intake = (Date.now() - t0) / 1000;
       const t1 = Date.now();
       await page.click('[data-action="run"]');
-      // A failed run returns to the check step with the page's own error.
+      // A failed run returns to the file list with the page's own error.
       await untilOrError(page, page.locator('section[data-step="results"]'), 'visible');
       build = (Date.now() - t1) / 1000;
       // Completed means every participant is in the report and in the zip,

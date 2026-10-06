@@ -32,7 +32,7 @@ function download(name, blobOrText, type) {
 // What the check read each file as (worker-entry.js's `files[].kind`), in
 // the file table.
 var KIND_LABELS = { data: 'participant data', recording: 'replay recording', asset: 'experiment asset',
-  config: 'settings', ignored: 'ignored', unreadable: 'could not be read' };
+  config: 'settings', ignored: 'ignored', unreadable: 'unreadable' };
 function countSpan(n, one, many) { return '<span><b>' + n + '</b> ' + (n === 1 ? one : many) + '</span>'; }
 
 // What the id suggestion was read from: the data files peeked, and the
@@ -94,7 +94,9 @@ export function createPage(root, worker, opts) {
     root.querySelectorAll('section.step').forEach(function (s) { s.hidden = s.dataset.step !== name; });
   }
   function updateControls() {
-    runButton.disabled = busy() || !state.checked || state.checked.counts.participant === 0;
+    // A file the check read as data, as the counts line says: the classifier's
+    // participant list also holds every JSON recording.
+    runButton.disabled = busy() || !state.checked || kindCount(state.checked, 'data') === 0;
     resetButtons.forEach(function (b) { b.disabled = busy(); });
   }
   function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; watchdogErrorShown = false; }
@@ -307,6 +309,7 @@ export function createPage(root, worker, opts) {
         b.dataset.action = 'remove-file';
         b.dataset.path = f.path;
         b.textContent = 'Remove';
+        b.setAttribute('aria-label', 'Remove ' + f.path);
         act.appendChild(b);
       }
       tr.appendChild(name); tr.appendChild(kind); tr.appendChild(act);

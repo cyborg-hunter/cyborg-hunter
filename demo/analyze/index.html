@@ -19,6 +19,8 @@ section.step[hidden]{ display:none } h2{ font:600 18px var(--ff-space); margin:0
 code{ overflow-wrap:anywhere }
 table.files{ border-collapse:collapse; width:100%; font-size:13px; margin:8px 0 }
 table.files th,table.files td{ border-bottom:1px solid var(--line); padding:4px 6px; text-align:left; vertical-align:top }
+/* Hundreds of rows scroll here: the counts, the id field and Run stay in reach. */
+.files-list{ max-height:min(45vh,400px); overflow:auto; margin:8px 0 } .files-list table.files{ margin:0 }
 .dropzone{ border:2px dashed var(--line); padding:28px; text-align:center; margin:12px 0 } .dropzone.over{ border-color:var(--ink); background:var(--bg) }
 button{ font:600 13px var(--ff-recursive); padding:6px 12px; border:1px solid var(--ink); background:var(--ink); color:var(--surface); cursor:pointer }
 button.secondary{ background:var(--surface); color:var(--ink) } button:disabled{ opacity:.5; cursor:default }
@@ -45,7 +47,7 @@ iframe.analyze-report{ width:100%; height:min(80vh,900px); border:1px solid var(
   <p><button class="secondary" data-action="sample">Load sample data</button> <span class="hint">— three synthetic participants (no real person behind them), so you can see the whole report before trusting this page with real data.</span></p>
   <div class="policy"><b>Nothing leaves your browser.</b> This page declares a security policy the browser enforces: no data requests (<code>connect-src 'none'</code>), nothing loaded from other addresses (<code>default-src 'none'</code>), no form submissions (<code>form-action 'none'</code>), no <code>&lt;base&gt;</code> element to redirect the page's links (<code>base-uri 'none'</code>). So once the page's own files have loaded, the browser refuses every data request and form submission, and every frame, image or font from another address. The policy does not cover navigation: the page's own code never navigates away or opens another page, and automated tests fail the build if the page ever requests or navigates to anything but its own files. Links you click yourself still open as usual and carry none of your data. The only entries in your browser's Network tab are this page's own files and <code>blob:</code> URLs. Consequence: replays cannot fetch an experiment's external stylesheets or images from the web — drop them alongside the data to get styled replays, or use the CLI. <a href="./cyborg-hunter-analyze.html" download>Download this page as a single offline file</a>.</div>
   <div data-role="files-panel" hidden>
-    <table class="files"><thead><tr><th>File</th><th>Read as</th><th></th></tr></thead><tbody data-role="file-rows"></tbody></table>
+    <div class="files-list"><table class="files"><thead><tr><th>File</th><th>Read as</th><th></th></tr></thead><tbody data-role="file-rows"></tbody></table></div>
     <div class="counts" data-role="counts"></div>
     <p class="hint" data-role="config-source"></p>
     <p>Participant ID field: <select data-role="id-field"></select> <span class="hint" data-role="id-files"></span></p>
