@@ -667,10 +667,10 @@ ${fontFaceCss}    :root {
       function openLegend()    { legend.removeAttribute('hidden'); }
       function closeLegend()   { legend.setAttribute('hidden', ''); }
       // The enlarged figure: fitted to the window (false) or at its own pixel size (true).
+      // The control keeps its name, "1:1"; aria-pressed and its pressed styling show the state.
       function setActual(on) {
         overlay.classList.toggle('actual', on);
         zoomBtn.setAttribute('aria-pressed', String(on));
-        zoomBtn.textContent = on ? 'Fit' : '1:1';
       }
       function closeLightbox() {
         overlay.classList.remove('open');
@@ -810,6 +810,9 @@ ${fontFaceCss}    :root {
           if (overlay.classList.contains('open')) { closeLightbox(); return; }
           if (!legend.hasAttribute('hidden'))     { closeLegend();   return; }
         }
+        // The enlarged figure covers the report: the keys below act on the
+        // report behind it, so they wait until it closes.
+        if (overlay.classList.contains('open')) return;
 
         const inInput = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
 

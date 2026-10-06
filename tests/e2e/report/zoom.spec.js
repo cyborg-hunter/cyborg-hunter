@@ -1,9 +1,12 @@
 // tests/e2e/report/zoom.spec.js
 // The CLI report's enlarged figure, in each engine: fitted to the window when
 // it opens, at its own pixel size after "1:1" (scrolling inside the overlay),
-// and fullscreen from its control; closing it leaves fullscreen too. The
-// report is rendered from tests/fixtures/demo/DEMO-FIXT.json with one figure,
-// a 2000×400 PNG (wider than the window), and opened from file://.
+// and fullscreen from its control; closing it leaves fullscreen too. While it
+// is open the report behind it keeps still: the arrow keys and "/" act only
+// once it closes. The report is rendered from tests/fixtures/demo/DEMO-FIXT.json
+// with one figure, a 2000×400 PNG (wider than the window), and opened from
+// file://; a second report holds the same session under two ids, so the arrow
+// keys have a participant to move to.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,10 +25,13 @@ test.beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'ch-e2e-zoom-'));
   const config = { outputDir: '.', participantIdField: 'participantId' };
   const raw = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));
+  const render = (ps) => {
+    const summaries = computeSummary(ps, config);
+    return renderIndexHtml(summaries, rankTriage(summaries, detectEdgeExits(ps, config), config), ps, config, true, {});
+  };
   const p = extractIntegrityData(raw, config);
-  const summaries = computeSummary([p], config);
-  const triage = rankTriage(summaries, detectEdgeExits([p], config), config);
-  writeFileSync(join(dir, 'index.html'), await renderIndexHtml(summaries, triage, [p], config, true, {}));
+  writeFileSync(join(dir, 'index.html'), await render([p]));
+  writeFileSync(join(dir, 'two.html'), await render([p, extractIntegrityData({ ...raw, participantId: 'DEMO-FIXT-2' }, config)]));
   // Only the trajectories figure exists; the other two blocks hide themselves.
   mkdirSync(join(dir, 'images'));
   writeFileSync(join(dir, 'images', 'trajectories_DEMO-FIXT.png'), encodePng(W, H, new Uint8Array(W * H * 4).fill(160)));
@@ -49,6 +55,8 @@ test('a figure opens fitted to the window, shows its own pixels at 1:1, and fits
   await page.locator('.lightbox-zoom').click();
   await expect(overlay).toHaveClass(/actual/);
   await expect(page.locator('.lightbox-zoom')).toHaveAttribute('aria-pressed', 'true');
+  // The control keeps its name; its pressed styling shows the state.
+  await expect(page.locator('.lightbox-zoom')).toHaveText('1:1');
   expect(await shownWidth(img)).toBe(W);
   expect(await overlay.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
   // The figure itself toggles too.
@@ -69,4 +77,23 @@ test('a figure goes fullscreen from its control, and closing it leaves fullscree
   await page.locator('.lightbox-close').click();
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
   await expect(page.locator('#lightbox')).not.toHaveClass(/open/);
+});
+
+test('while a figure is open, the arrow keys and "/" leave the report behind it alone', async ({ page }) => {
+  await page.goto(pathToFileURL(join(dir, 'two.html')).href + '#p-DEMO-FIXT');
+  const selected = () => page.locator('.cohort-row.selected').getAttribute('data-pid');
+  expect(await selected()).toBe('DEMO-FIXT');
+  // The key that would move the selection to the other participant.
+  const away = (await page.locator('.cohort-row').first().getAttribute('data-pid')) === 'DEMO-FIXT' ? 'ArrowDown' : 'ArrowUp';
+  await page.locator('#p-DEMO-FIXT a.zoomable').filter({ has: page.locator('img[alt="Mouse trajectories"]') }).click();
+  await expect(page.locator('#lightbox')).toHaveClass(/open/);
+  await page.keyboard.press(away);
+  await page.keyboard.press('/');
+  expect(await selected()).toBe('DEMO-FIXT');
+  expect(await page.evaluate(() => document.activeElement === document.querySelector('.search-wrap input'))).toBe(false);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#lightbox')).not.toHaveClass(/open/);
+  // Closed, the same key moves the selection.
+  await page.keyboard.press(away);
+  await expect.poll(selected).toBe('DEMO-FIXT-2');
 });
