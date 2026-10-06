@@ -19,16 +19,17 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the whole session from the carried totals while their event cells list
   only the kept entries, so a cell's count can be lower than its tile's.
   See docs/qualtrics.md.
-- One-line setup: a lab.js host. With the ch.js tag below `lib/lab.js` (lab.js
-  20.x, what the builder exports), every lab.js component that is shown is a
-  trial, named from the `cyborgHunter` component option, the `chTrialId` /
-  `chPhase` parameters or a `data-ch-trial` element, and its integrity
-  columns are written into lab.js's own rows. ch.js never overwrites the
-  study's `participantId`; its own ID goes into `cyborgHunterParticipantId`.
-  A value the study holds under one of ch.js's column names (`integrity`,
-  for example) is kept too: ch.js then writes its own under
-  `cyborgHunter_<name>`, with one console warning per name, and the CLI and
-  the analyze page read it from there.
+- One-line setup in lab.js studies: `dist/ch-labjs.js`, its tag below
+  `lib/lab.js` (lab.js 20.x, what the builder exports). Every lab.js
+  component that is shown is a trial, named from the `cyborgHunter`
+  component option, the `chTrialId` / `chPhase` parameters or a
+  `data-ch-trial` element, and its integrity columns are written into
+  lab.js's own rows. ch-labjs.js never overwrites the study's
+  `participantId`; its own ID goes into `cyborgHunterParticipantId`.
+  A value the study holds under one of ch-labjs.js's column names
+  (`integrity`, for example) is kept too: ch-labjs.js then writes its own
+  under `cyborgHunter_<name>`, with one console warning per name, and the
+  CLI and the analyze page read it from there.
   When the root component ends, the final fields are written onto the last
   trial row and the root row, before `on('end')` handlers run. A lab.js 23
   pre-release is not hooked yet: one warning, and the page runs as one
@@ -215,9 +216,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   `subject_ID`. The line beside the field counts the data files read and
   the recordings skipped.
 - CLI and analyze page: a CSV participant ID keeps its text (`007` stays
-  `007`, and so does ch.js's ID on lab.js rows). Before, `007` was keyed
-  `7`, so its replay recording did not attach and `--participant 007` found
-  nothing.
+  `007`, and so does ch-labjs.js's ID on lab.js rows). Before, `007` was
+  keyed `7`, so its replay recording did not attach and `--participant 007`
+  found nothing.
 
 ### Removed
 - Internal renderer wrappers removed
