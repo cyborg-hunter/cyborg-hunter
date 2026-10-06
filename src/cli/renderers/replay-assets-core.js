@@ -97,7 +97,8 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
     // analyze page re-rendering with other settings) keeps the first wording,
     // which a re-count would turn into "nothing matched". The apply rewrites
     // each sheet once (asset-match.js marks what it rewrote) and leaves its
-    // own data: images alone, so the second pass writes the same bytes.
+    // own image references and data: images alone, so the second pass writes
+    // the same bytes.
     if (assetMap) {
       try {
         if (p.replay.assetNote === undefined) {

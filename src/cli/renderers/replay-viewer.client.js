@@ -323,6 +323,44 @@
       '</head><body></body></html>';
   }
 
+  // Experiment images the report stored once (src/cli/asset-match.js
+  // applyAssetMap): an image attribute holds ASSET_REF and the URL it was
+  // recorded with, and model.assets maps that URL to its data: URI. Swapped
+  // back here, before anything reads the model, so the reconstruction, the
+  // span walk and the debug surface see the value the attribute had before
+  // the file was deduplicated; every element then shares one string. A
+  // reference with no entry is left as written. MUST match asset-match.js's
+  // ASSET_REF.
+  var ASSET_REF = 'ch-asset:';
+  function expandAssetRefs(model) {
+    var assets = model.assets;
+    if (!assets || typeof assets !== 'object') return;
+    var own = Object.prototype.hasOwnProperty;
+    function value(v) {
+      if (typeof v !== 'string' || v.indexOf(ASSET_REF) !== 0) return v;
+      var url = v.slice(ASSET_REF.length);
+      return own.call(assets, url) && typeof assets[url] === 'string' ? assets[url] : v;
+    }
+    function tree(node) {
+      if (!node || typeof node !== 'object') return;
+      var attrs = node.attrs;
+      if (attrs && typeof attrs === 'object') {
+        for (var name in attrs) if (own.call(attrs, name)) attrs[name] = value(attrs[name]);
+      }
+      var kids = Array.isArray(node.children) ? node.children : [];
+      for (var i = 0; i < kids.length; i++) tree(kids[i]);
+    }
+    (Array.isArray(model.segments) ? model.segments : []).forEach(function (s) {
+      if (!s || typeof s !== 'object') return;
+      tree(s.initialDom);
+      (Array.isArray(s.events) ? s.events : []).forEach(function (e) {
+        if (!e || typeof e !== 'object') return;
+        if (e.type === 'dom.add') tree(e.node);
+        else if (e.type === 'dom.attr') e.value = value(e.value);
+      });
+    });
+  }
+
   // `opts.externalCss` (2026-09-03): the report decides UP FRONT, next to the
   // one "Load replay" button, whether href-only sheets may be linked from
   // their origins. Absent → today's strict frame plus the in-place opt-in.
@@ -340,6 +378,7 @@
     var maxStageWidth = opts && opts.maxStageWidth !== undefined ? opts.maxStageWidth : 960;
     var fitHeightOpt = opts ? opts.fitHeight : undefined;
     mount.textContent = '';
+    expandAssetRefs(model);
     // Hook for the fullscreen rule in replay-styles.js.
     mount.classList.add('replay-viewer');
 

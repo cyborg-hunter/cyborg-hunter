@@ -14,8 +14,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
 import {
-  boot, fixture, same, withProto, baseRecording, segment, bodyKeyframe,
+  boot, bootModel, fixture, same, withProto, baseRecording, segment, bodyKeyframe,
 } from './support/viewer-harness.js';
+import { buildViewerModel } from '../../src/replay/viewer-model.js';
+import { buildAssetMap, applyAssetMap } from '../../src/cli/asset-match.js';
 
 // Composite calls, in the order they were made, from every offscreen canvas the
 // client owns. An offscreen canvas is identified by having a `drawImage` at all
@@ -1573,5 +1575,33 @@ describe('external stylesheets (opts.externalCss + unstyled banner)', () => {
     });
     assert.equal(bannerShown(boot(inlined)), false);
     assert.equal(bannerShown(boot(inlined, { externalCss: true })), false);
+  });
+});
+
+// ── experiment images stored once ──────────────────────────────────────────
+// The report's replay pass writes each matched image's data: URI once, into
+// model.assets, and points every element that shows it there
+// (src/cli/asset-match.js applyAssetMap). The viewer shows the picture on every
+// one of them: in the keyframe, in a dom.add and through a dom.attr.
+
+describe('experiment images stored once in the model', () => {
+  it('shows the stored picture on every element that references it', async () => {
+    const CARD = 'https://exp.example.org/study/img/card.png';
+    const img = (id, attrs) => ({ id, kind: 'element', tag: 'img', attrs, children: [] });
+    const rec = baseRecording({ segments: [segment({
+      initial_dom: bodyKeyframe([img(2, { src: CARD }), img(3, { src: CARD }), img(4, { alt: 'later' })]),
+      events: [
+        { type: 'dom.add', t: 100, parent: 1, before: null, node: img(5, { src: CARD }) },
+        { type: 'dom.attr', t: 200, node: 4, name: 'src', value: CARD },
+      ],
+    })] });
+    const { assetMap } = await buildAssetMap([rec], [{ path: 'img/card.png', read: async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }]);
+    const model = applyAssetMap(buildViewerModel(rec), assetMap);
+    const D = 'data:image/png;base64,iVBORw==';
+    assert.equal(JSON.stringify(model).split(D).length - 1, 1, 'the picture is in the model once');
+    const v = bootModel(model);
+    v.dbg.seek(300);
+    assert.deepEqual([2, 3, 4, 5].map((id) => v.dbg.getNode(id).getAttribute('src')), [D, D, D, D]);
+    assert.equal(v.dbg.getCounters().patchFailures, 0);
   });
 });

@@ -115,7 +115,12 @@ export function stubCanvas(win) {
 // a getter, so a test can change it and dispatch `resize` or
 // `fullscreenchange`.
 export function boot(recording, opts, env) {
-  const model = buildViewerModel(recording);
+  return bootModel(buildViewerModel(recording), opts, env);
+}
+
+// The same boot over a model the report built and rewrote (a replay pass with
+// experiment assets: src/cli/asset-match.js applyAssetMap).
+export function bootModel(model, opts, env) {
   // No network in this realm: happy-dom would otherwise try to fetch every
   // <link rel=stylesheet> the viewer links and fire `error` on it, which the
   // client counts as a failed sheet. Disabled loads count as success here;

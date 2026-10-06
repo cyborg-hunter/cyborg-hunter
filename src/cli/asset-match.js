@@ -3,8 +3,9 @@
 // the URL of every external stylesheet and image; this module matches those
 // URLs against files the researcher supplies (a dropped folder on the analyze
 // page, or `assetsDir` in the CLI config) and inlines what matched into the
-// viewer model: stylesheet text as `css`, images as data: URIs. One matcher,
-// one mapping, both paths — and never a fetch, which the page's policy forbids.
+// viewer model: stylesheet text as `css`, images as data: URIs, each image
+// once (`model.assets`, see applyAssetMap). One matcher, one mapping, both
+// paths — and never a fetch, which the page's policy forbids.
 //
 // An image is an <img>'s src or srcset candidate, a <picture> <source>'s
 // srcset candidate, an SVG <image>'s href or xlink:href, an
@@ -62,6 +63,11 @@ const CSS_REF = /\/\*[\s\S]*?(?:\*\/|$)|@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\
 const CONDITIONAL_IMPORT = /\b(layer|supports)\b/i;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const isComment = (m) => m[0].startsWith('/*');
+// An image attribute that applyAssetMap points into model.assets holds this
+// prefix followed by the URL it was recorded with. The viewer swaps it for
+// the stored data: URI when it receives the model; its copy of the prefix is
+// ASSET_REF in src/cli/renderers/replay-viewer.client.js.
+export const ASSET_REF = 'ch-asset:';
 
 // The default decoder drops a leading byte-order mark, which in a <style>
 // would otherwise become part of the first selector.
@@ -217,8 +223,9 @@ function srcsetUrls(text) {
 // Calls visit(kind, value, replace, at) for every image or media reference
 // in the segments' keyframe trees, dom.add subtrees and dom.attr values, in
 // order; replace(v) writes a new value back where the old one was found.
-// Each srcset candidate is visited as an image of its own, and a replaced
-// candidate is spliced back in with the rest of the srcset as written.
+// Each srcset candidate is visited as an image of its own, with `at` set to
+// 'srcset', and a replaced candidate is spliced back in with the rest of the
+// srcset as written.
 // `media_src` (the resolved URL a video or audio loaded) is always media.
 // A media reference's `at` names the element it belongs to and where on it
 // the URL sits: { owner, slot: 'media_src' | 'src' | 'source' }, the owner of
@@ -242,7 +249,7 @@ function eachRef(segments, visit) {
     let out = '', at = 0, changed = false;
     for (const [start, end] of srcsetUrls(text)) {
       let url = text.slice(start, end);
-      visit('image', url, (x) => { url = x; changed = true; });
+      visit('image', url, (x) => { url = x; changed = true; }, 'srcset');
       out += text.slice(at, start) + url;
       at = end;
     }
@@ -537,10 +544,24 @@ export function applyAssetMap(model, assetMap) {
       if (ev.css !== before) cssApplied.add(ev);
     }
   }
-  // Media is never matched, so only image references are rewritten.
-  eachRef(segmentsOf(model), (kind, url, replace) => {
-    if (kind === 'image' && supplied(assetMap, url)) replace(dataUri(url));
+  // Media is never matched, so only image references are rewritten. Each
+  // image is written ONCE, into model.assets (URL → data: URI), and an
+  // attribute that shows it holds ASSET_REF + the URL: a card game shows the
+  // same card art on every card, and written into each attribute the picture
+  // was embedded once per element. A srcset candidate stays an inline data:
+  // URI, as one srcset value holds several URLs. A reference already in place
+  // (a second pass over a recording the model aliases) stands for its URL, so
+  // the table comes out the same and the attribute is left as it is.
+  const assets = {};
+  eachRef(segmentsOf(model), (kind, url, replace, at) => {
+    if (kind !== 'image') return;
+    if (at === 'srcset') { if (supplied(assetMap, url)) replace(dataUri(url)); return; }
+    const raw = typeof url === 'string' && url.startsWith(ASSET_REF) ? url.slice(ASSET_REF.length) : url;
+    if (!supplied(assetMap, raw)) return;
+    assets[raw] = dataUri(raw);
+    if (raw === url) replace(ASSET_REF + raw);
   });
+  if (Object.keys(assets).length > 0) model.assets = assets;
   return model;
 }
 
