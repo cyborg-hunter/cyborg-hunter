@@ -77,6 +77,15 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   Transmit body), the participant ID field is suggested from its first row
   and its own top-level fields, never from its `metadata` (where `id` is
   lab.js's upload-session id).
+- Session replay: the recorder records `<html>`'s own attributes (on every
+  keyframe, and each change), and the viewer applies them to the replay.
+  A page that keeps its layout on `<html>`, for example CSS variables set
+  with `document.documentElement.style.setProperty`, replays at the sizes
+  the participant saw; before, everything sized by those variables fell
+  back to its default (a card image at its natural size). The data rides in
+  the recording's `extensions["cyborg-hunter"]` (`root_attrs` on keyframe
+  segments, `root_attr_events` on the recording), so other players ignore
+  it. Recordings made before 0.13.0 replay as before.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
