@@ -260,6 +260,8 @@
   // must not subtract a second gutter on classic-scrollbar platforms. Hiding
   // the ROOT scroller's bar (scrolling still works programmatically) keeps
   // layout width == camera width everywhere; inner containers keep their bars.
+  // `!important`, so a recorded inline style on <html> (root_attrs) cannot
+  // bring the bar back.
   //
   // The placeholder rule is spec §12's player duty made visible: an element the
   // format cannot carry the content of (an iframe today) reads as "something
@@ -271,7 +273,7 @@
   // NOTE also ABSENT: an unconditional `html{height:100%}`. <html>'s height is
   // set per mount by syncRootHeight() below, only for a body that needs it.
   function shellRules() {
-    return 'html{scrollbar-width:none}' +
+    return 'html{scrollbar-width:none!important}' +
       'html::-webkit-scrollbar{width:0;height:0}' +
       '[data-ch-placeholder]{outline:2px dashed #b26a00;outline-offset:-2px;' +
       'background:repeating-linear-gradient(45deg,rgba(178,106,0,.06),' +

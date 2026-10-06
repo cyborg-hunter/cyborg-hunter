@@ -14,6 +14,8 @@ import * as CHReplay from '../../src/replay/index.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 import { boot } from './support/viewer-harness.js';
 import { rootAttrsSnapshot, rootAttrChanges } from '../../src/replay/root-attrs.js';
+import { buildViewerModel } from '../../src/replay/viewer-model.js';
+import { applyRootAttrs } from '../../src/replay/dom-instantiate.js';
 
 const FIXTURE = JSON.parse(readFileSync(new URL('../fixtures/replay/root-attrs.recording.json', import.meta.url), 'utf8'));
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -64,6 +66,57 @@ describe('the viewer applies <html> attributes from the recording', () => {
     const v = boot(rec);
     const html = at(v, 0, 2000);
     assert.deepEqual(html, { style: 'height: 100%;' }, 'syncRootHeight, and nothing from root_attr_events');
+  });
+
+  it('a body patch to a percentage height pins <html> only in a recording without the snapshot', () => {
+    const patch = { type: 'dom.attr', t: 500, node: 1, name: 'style', value: 'height: 100%;' };
+    const without = clone(FIXTURE);
+    delete without.segments[0].extensions;
+    without.segments[0].events = [patch];
+    const v = boot(without);
+    assert.deepEqual(at(v, 0, 100), {}, 'nothing to pin before the patch');
+    assert.deepEqual(at(v, 0, 1000), { style: 'height: 100%;' }, 'the patch re-runs syncRootHeight');
+    const withSnapshot = clone(FIXTURE);
+    withSnapshot.segments[0].events = [patch];
+    assert.deepEqual(at(boot(withSnapshot), 0, 1000), { lang: 'en', style: '--card-w: 120px;' },
+      'the recording states <html>, so the patch adds no pin');
+  });
+
+  it('neither the snapshot nor the stream sets an on* handler or xmlns', () => {
+    const rec = clone(FIXTURE);
+    rec.segments[0].extensions['cyborg-hunter'].root_attrs.xmlns = 'http://example.org/ns';
+    rec.extensions['cyborg-hunter'].root_attr_events.push(
+      { t: 1600, name: 'onclick', value: 'alert(1)' },
+      { t: 1700, name: 'xmlns', value: 'http://example.org/ns' });
+    const v = boot(rec);
+    assert.deepEqual(at(v, 0, 100), { lang: 'en', style: '--card-w: 120px;' });
+    assert.deepEqual(at(v, 0, 2000), { lang: 'en', style: '--card-w: 80px;' });
+  });
+
+  it('the model keeps only changes whose value is a string or null', () => {
+    const rec = clone(FIXTURE);
+    rec.extensions['cyborg-hunter'].root_attr_events.push(
+      { t: 1600, name: 'data-n', value: 5 },
+      { t: 1700, name: 'data-o', value: { a: 1 } },
+      { t: 1800, name: 'data-u' });
+    assert.deepEqual(buildViewerModel(rec).rootAttrEvents.map((e) => [e.name, e.value]),
+      [['style', '--card-w: 80px;'], ['data-theme', 'dark'], ['lang', null]]);
+  });
+
+  it('a keyframe mount removes what the set lacks, but never the shell\'s xmlns', () => {
+    const doc = new Window({ url: 'https://report.test/' }).document;
+    doc.documentElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    doc.documentElement.setAttribute('data-theme', 'dark');
+    applyRootAttrs(doc, { lang: 'en' });
+    const out = {};
+    for (const a of doc.documentElement.attributes) out[a.name] = a.value;
+    assert.deepEqual(out, { xmlns: 'http://www.w3.org/1999/xhtml', lang: 'en' });
+  });
+
+  it('the shell\'s own <html> rule outranks a recorded inline style', () => {
+    const v = boot(clone(FIXTURE));
+    const rules = v.doc().querySelector('style[data-ch-shell-rules]').textContent;
+    assert.ok(rules.includes('html{scrollbar-width:none!important}'), rules);
   });
 });
 

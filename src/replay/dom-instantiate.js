@@ -300,13 +300,14 @@ var ROOT_SKIP = { xmlns: true };
 
 // The whole set, as a keyframe states it: every attribute the shell's <html>
 // has that the set lacks is removed, so a backward seek takes back what a
-// later change added.
+// later change added. ROOT_SKIP names are left alone on this path too.
 function applyRootAttrs(doc, attrs) {
   var root = doc && doc.documentElement;
   if (!root) return;
   var want = attrs || {};
   for (var i = root.attributes.length - 1; i >= 0; i--) {
     var name = root.attributes[i].name;
+    if (ROOT_SKIP[name.toLowerCase()] === true) continue;
     if (!Object.prototype.hasOwnProperty.call(want, name)) root.removeAttribute(name);
   }
   applyAttrs(root, want, ROOT_SKIP, null);

@@ -320,10 +320,11 @@ export function buildViewerModel(recording) {
     scoring: ext.scoring || null,
     guardViolations: asArray(ext.guard_violations),
     // <html>'s attribute changes, ABSOLUTE wire time like the other session
-    // streams; sorted, as the walk merges by time.
+    // streams; sorted, as the walk merges by time. A value is a string or null
+    // (removed), as rootAttrsOf keeps strings only.
     rootAttrEvents: asArray(ext.root_attr_events)
-      .filter((e) => e && typeof e === 'object' && typeof e.name === 'string')
-      .slice()
+      .filter((e) => e && typeof e === 'object' && typeof e.name === 'string'
+        && (typeof e.value === 'string' || e.value === null))
       .sort((a, b) => (num(a.t) || 0) - (num(b.t) || 0)),
     // Channel names only: the chip says which channel went dark, and the
     // message/time detail has no surface in the report today.
