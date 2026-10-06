@@ -79,3 +79,18 @@ test('removing a file by its listed path', () => {
   const list = [listed('a.csv', 1, 1), listed('drop2/a.csv', 2, 1)];
   assert.deepEqual(removeEntry(list, 'drop2/a.csv').map((e) => e.path), ['a.csv']);
 });
+
+test('dropping a folder again after one of its files was moved to its drop folder leaves the list unchanged', () => {
+  const second = [listed('data/a.json', 11, 1), listed('data/b.json', 5, 1)];
+  const list = mergeEntries([listed('data/a.json', 10, 1)], second, 2);
+  assert.deepEqual(list.map((e) => e.path), ['data/a.json', 'drop2/data/a.json', 'data/b.json']);
+  assert.deepEqual(mergeEntries(list, second, 3).map((e) => e.path), list.map((e) => e.path));
+});
+
+// The suffix goes on the drop folder, never on the file's own name: the
+// classifier and the asset matcher read the name.
+test('two same-named files in one drop, the name already listed, get distinct paths', () => {
+  const list = mergeEntries([listed('x.csv', 1, 1)], [listed('x.csv', 2, 1), listed('x.csv', 3, 1)], 2);
+  assert.deepEqual(list.map((e) => e.path), ['x.csv', 'drop2/x.csv', 'drop2-2/x.csv']);
+  assert.deepEqual(removeEntry(list, 'drop2/x.csv').map((e) => e.file.size), [1, 3], 'Remove takes out one file');
+});
