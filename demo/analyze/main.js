@@ -1,7 +1,9 @@
 // demo/analyze/main.js — page entry: one worker from a blob URL (so it
-// inherits this page's policy), then the page state machine over it.
+// inherits this page's policy), then the page state machine over it, and the
+// files the demo's last step left for it (analyze/#from-demo).
 import workerSrc from 'virtual:worker-src';
 import { createPage } from './page.js';
+import { takeHandoff, handoffEntries } from '../handoff.js';
 
 // One worker alive at a time: making a new one (the page replaces a worker
 // that failed) revokes the previous one's blob URL.
@@ -18,4 +20,15 @@ if (typeof document !== 'undefined') {
   // if it fails. From file: the page reads dropped files itself (page.js).
   window.__chAnalyze = createPage(document.body, createAnalyzeWorker(),
     { createWorker: createAnalyzeWorker, transferBytes: location.protocol === 'file:' });   // exposed for the end-to-end tests
+  // Opened by the demo's "Open in the analyzer": its files wait in this
+  // browser's IndexedDB (../handoff.js) and join the list as a drop would.
+  // The hash goes first, so a reload starts with an empty list; a failure
+  // leaves the page as if opened directly.
+  if (location.hash === '#from-demo') {
+    history.replaceState(null, '', location.pathname + location.search);
+    takeHandoff().then(function (record) {
+      var entries = handoffEntries(record, Date.now());
+      if (entries.length) return window.__chAnalyze.addFiles(entries);
+    }).catch(function (e) { console.warn('cyborg-hunter analyze: the files from the demo could not be read', e); });
+  }
 }

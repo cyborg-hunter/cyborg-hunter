@@ -2,10 +2,12 @@
 // The full flow on Chromium: dropped files, the zip tree against the CLI's,
 // the report's own scripts and its selection message, styled replays from a
 // dropped stylesheet with the recorded external image blocked, and the
-// participant switch. Every test runs under the same request guard as
-// engines.spec.js.
+// participant switch, and the files the demo hands over. Every test runs
+// under the same request guard as engines.spec.js.
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
-  pilotFiles, cliPilotTree, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER } from './support.mjs';
+  pilotFiles, cliPilotTree, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT } from './support.mjs';
 
 test('dropped synthetic pilot: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -156,5 +158,55 @@ test('a setting on the results re-analyses in place: no file is read again, and 
   await expect(page.locator('section[data-step="results"]')).toBeVisible();
   const zip = await downloadZip(page);
   expect(zip.text('triage.md')).toMatch(/SYN-SOFT-02 \| clean/);
+  await assertOnlyAllowed(page, seen, allow);
+});
+
+// The demo's last step stores the visitor's files in this browser's
+// IndexedDB and opens analyze/#from-demo (demo/handoff.js). The record is
+// written here with the plain IndexedDB API, so the page is held to the
+// stored format and not only to its own writer.
+test('files the demo stored open as a drop: listed, built, the hash dropped, the record read once', async ({ page, baseURL }) => {
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  await page.goto('/analyze/');
+  await waitReady(page);
+  const dir = join(ROOT, 'tests', 'fixtures', 'demo');
+  const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort()
+    .map((name) => ({ path: name, text: readFileSync(join(dir, name), 'utf8') }));
+  await page.evaluate((stored) => new Promise((resolve, reject) => {
+    const req = indexedDB.open('cyborg-hunter-handoff', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('files');
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction('files', 'readwrite');
+      tx.objectStore('files').put({ createdAt: Date.now(),
+        files: stored.map((f) => ({ path: f.path, blob: new Blob([f.text], { type: 'application/json' }) })) }, 'demo');
+      tx.oncomplete = () => { req.result.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+  }), files);
+  await page.evaluate(() => { location.hash = 'from-demo'; });
+  await page.reload();
+  await waitReady(page);
+  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(3);
+  await expect(page.locator('[data-role="counts"]')).toContainText('1 data file');
+  await expect(page.locator('[data-role="counts"]')).toContainText('1 replay recording');
+  await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('');
+  await buildReport(page);
+  expect(await railOrder(page)).toEqual(['DEMO-FIXT']);
+  // Read once: the record is gone, and a reload starts with an empty list.
+  const left = await page.evaluate(() => new Promise((resolve, reject) => {
+    const req = indexedDB.open('cyborg-hunter-handoff', 1);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const get = req.result.transaction('files').objectStore('files').get('demo');
+      get.onsuccess = () => { req.result.close(); resolve(get.result === undefined); };
+    };
+  }));
+  expect(left).toBe(true);
+  await page.reload();
+  await waitReady(page);
+  await expect(page.locator('[data-role="files-panel"]')).toBeHidden();
   await assertOnlyAllowed(page, seen, allow);
 });
