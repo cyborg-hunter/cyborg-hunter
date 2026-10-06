@@ -34,6 +34,7 @@ import { serializeTree } from './snapshot.js';
 import { mapMutations, MUTATION_OBSERVER_INIT } from './mutations.js';
 import { buildInitialState } from './initial-state.js';
 import { createSpan } from './span.js';
+import { rootAttrsSnapshot, rootAttrChanges, ROOT_OBSERVER_INIT } from './root-attrs.js';
 
 /**
  * Initial stylesheet capture (spec §2 `StylesheetSnapshot`).
@@ -301,6 +302,14 @@ export function attachDomCapture(rec, env) {
 
   rec.setObservedRoot(rootSelector());
 
+  // <html>'s attributes (root-attrs.js), recorded whenever the observed root
+  // lies below <html>, which is every root but <html> itself. `rootHeld` is
+  // what the file says <html> carries now: the last keyframe's snapshot plus
+  // every change recorded since.
+  var htmlEl = doc.documentElement || null;
+  var recordRoot = !!htmlEl && root !== htmlEl;
+  var rootHeld = Object.create(null);
+
   try {
     var sheets = captureStylesheets(doc);
     rec.setStylesheets(sheets);
@@ -414,6 +423,18 @@ export function attachDomCapture(rec, env) {
       } else {
         trial.initialDom = tree;
         trial.initialState = seed;
+        if (recordRoot) {
+          // Contained on its own, like the batch reader below: a failure
+          // here states an empty set rather than losing the keyframe, so
+          // every keyframe still states <html>'s attributes.
+          try {
+            trial.rootAttrs = rootAttrsSnapshot(htmlEl, opts);
+          } catch (e) {
+            trial.rootAttrs = Object.create(null);
+            rec.captureFailure('root_attrs', e);
+          }
+          rootHeld = Object.assign(Object.create(null), trial.rootAttrs);
+        }
         rec.noteSnapshotChars(trial, chars);
         cadence.hasKeyframe = true;
         cadence.segments = 1;
@@ -477,18 +498,20 @@ export function attachDomCapture(rec, env) {
   // ── Mutations (spec §5.1) ──
   if (MutationObserverImpl) {
     var handleBatch = function (records) {
+      // One callback = one `t` (spec §7): the batch is one task's worth of
+      // DOM change, and the observer reports it with no per-record times.
+      var t = now();
       try {
         // The COMPLETE batch, in the observer's own order. mapMutations
         // pre-scans it (which removals and insertions are still to come, what
         // each attribute held before the batch) and that pre-scan is what makes
         // the mapping batch-coherent — filtering or reordering records here
-        // would silently break it.
+        // would silently break it. Records about <html> (below) are outside
+        // the root, and the mapper leaves them alone.
         var events = mapMutations(records, {
           root: root,
           span: span,
-          // One callback = one `t` (spec §7): the batch is one task's worth of
-          // DOM change, and the observer reports it with no per-record times.
-          t: now(),
+          t: t,
           keepBait: opts.keepBait,
           redactSelector: opts.redactSelector,
           taint: opts.taint,
@@ -502,10 +525,20 @@ export function attachDomCapture(rec, env) {
         // events cost as a group on the wire.
         if (events.length) cadence.patchChars += payloadChars(events);
       } catch (e) { rec.captureFailure('mutations', e); }
+      // <html>'s attributes from the same batch: one entry per attribute,
+      // carrying the final value, so twenty setProperty calls in one task
+      // are one entry. Contained on its own: a failure here loses only these.
+      if (recordRoot) {
+        try {
+          var changes = rootAttrChanges(records, htmlEl, opts, rootHeld);
+          for (var c = 0; c < changes.length; c++) rec.pushRootAttr(changes[c], t);
+        } catch (e) { rec.captureFailure('root_attrs', e); }
+      }
     };
     var observer = new MutationObserverImpl(handleBatch);
     try {
       observer.observe(root, MUTATION_OBSERVER_INIT);
+      if (recordRoot) observer.observe(htmlEl, ROOT_OBSERVER_INIT);
       // Registered through the listener registry with the observer marker so
       // recorder.destroy() disconnects it (same convention as core monitor).
       rec.addListener(
