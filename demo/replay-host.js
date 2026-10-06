@@ -1,8 +1,8 @@
 // demo/replay-host.js
-// Walkthrough item 12's fix: the visitor's own replay renders in a SEPARATE
-// same-origin viewer-host iframe, a sibling of the report iframe in the
-// demo's top document — not nested inside it (results.js no longer passes
-// inlineReplayModels to the report renderer; see buildReportHtml).
+// The replay's host document, for the analyze page's replay card
+// (analyze/replay-card.js): a replay renders in a SEPARATE same-origin
+// viewer-host iframe, a sibling of the report iframe in the page — not
+// nested inside it.
 //
 // Root cause this works around (Codex-confirmed): the report iframe is
 // sandbox="allow-scripts" (opaque origin, deliberately — see the swapIframe
@@ -30,7 +30,7 @@ import { escapeScriptClose } from './report-frame.js';
 // report's cascade, so it declares the report's tokens itself: the same
 // values the CLI report's :root uses (palette + --ff-* font stacks), which
 // the shared .replay-* rules (src/cli/renderers/replay-styles.js, passed in
-// by results.js) reference. tests/demo/replay-host.test.js checks that every
+// by the analyze page) reference. tests/demo/replay-host.test.js checks that every
 // var() those rules use is declared here.
 var ROOT_CSS = `
 :root{ --bg:#fafafa; --surface:#ffffff; --ink:#0f0f0f; --dim:#4f4a40; --line:#b9b2a2; --hard:#d32f2f;
@@ -79,8 +79,8 @@ var SCRIPT_TAG = 'script';
 // Pure: the host document's full HTML. DOM-free — see
 // tests/demo/replay-host.test.js. `styles.replayCss` is the CLI's own
 // REPLAY_STYLES_CSS and `styles.fontFaceCss` the report's base64 @font-face
-// block, both handed down by results.js (from the preview-core bundle and
-// loadFontFaceCss); without them the viewer renders unstyled in system faces.
+// block, both handed down by the analyze page (baked into its bundle);
+// without them the viewer renders unstyled in system faces.
 // `viewerOpts` (optional) becomes initChReplayViewer's third argument (the
 // analyze page passes { noExternalCss: true }); absent, the output is exactly
 // what it was before the argument existed.
@@ -99,35 +99,6 @@ export function buildReplayHostHtml(replayModel, replayClientSrc, styles, viewer
     '<' + SCRIPT_TAG + '>window.initChReplayViewer(document.getElementById(\'ch-replay-mount\'), ' + modelJson + optsArg + ');</' + SCRIPT_TAG + '>' +
     '</body></html>'
   );
-}
-
-// Builds + appends the "Session replay" card (heading + hint + host iframe)
-// as the last child of `container` — a sibling of the report iframe, which
-// swapIframe() also appends directly to `container`. Idempotent: a second
-// call is a no-op while a host iframe is already mounted, so a caller never
-// needs to track whether it already ran.
-export function mountReplayHost(container, replayModel, replayClientSrc, styles) {
-  if (!container || container.querySelector('iframe.replay-host-frame')) return null;
-  var section = document.createElement('div');
-  section.className = 'replay-host-card';
-  section.innerHTML =
-    '<h3>Session replay</h3>' +
-    '<p class="hint">Your own recorded session, reconstructed from the same data behind the ' +
-    'report above. The report you build locally with the CLI embeds this same replay inline, ' +
-    'inside the report page.</p>';
-  var iframe = document.createElement('iframe');
-  iframe.className = 'replay-host-frame';
-  // allow-scripts allow-same-origin: see the docblock above for why this is
-  // safe (only our own client script runs here; the recorded DOM stays
-  // sandboxed one level deeper, inside the viewer's own reconstruction
-  // frame).
-  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-  iframe.title = 'Your session replay';
-  section.appendChild(iframe);
-  container.appendChild(section);
-  iframe.src = URL.createObjectURL(new Blob(
-    [buildReplayHostHtml(replayModel, replayClientSrc, styles)], { type: 'text/html' }));
-  return iframe;
 }
 
 // Revokes the host's Blob URL and removes the whole "Session replay" card.

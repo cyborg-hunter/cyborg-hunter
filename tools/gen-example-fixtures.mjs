@@ -1,11 +1,11 @@
 // tools/gen-example-fixtures.mjs
 //
-// Hand-authored-by-construction example participants for the demo's results
-// screen (spec §7.2): "example-1" (HARD-leaning) and
-// "example-2" (CLEAN) sit beside the visitor's own session so the report
-// never looks empty. Deterministic: a seeded mulberry32 PRNG plus a fixed
-// EPOCH decide every value — no Date.now(), no Math.random() — so
-// regenerating this file is byte-identical. Every field name/shape below is
+// Hand-authored-by-construction example participants for the demo's last
+// step (spec §7.2): "example-1" (HARD-leaning) and "example-2" (CLEAN) come
+// with the visitor's own files, so the report built from them never looks
+// empty. Deterministic: a seeded mulberry32 PRNG plus a fixed EPOCH decide
+// every value — no Date.now(), no Math.random() — so regenerating these
+// files is byte-identical. Every field name/shape below is
 // copied from the real signal modules (src/core/signals/{clipboard,focus,
 // mouse,typing}.js) and the real trial-report writer (src/core/monitor.js
 // endTrial()), and every scoring constant is read from the library's actual
@@ -15,8 +15,8 @@
 // hand to tell one deliberate story per example.
 //
 // Usage:
-//   node tools/gen-example-fixtures.mjs             # writes demo/assets/example-participants.json
-//   node tools/gen-example-fixtures.mjs --stdout    # prints to stdout (determinism test uses this)
+//   node tools/gen-example-fixtures.mjs             # writes demo/assets/example-1.json and example-2.json
+//   node tools/gen-example-fixtures.mjs --out DIR   # writes them into DIR instead (the determinism test)
 
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -287,13 +287,15 @@ function makeExample2() {
   ]);
 }
 
-const out = JSON.stringify([makeExample1(), makeExample2()], null, 2) + '\n';
-
-if (process.argv.includes('--stdout')) {
-  process.stdout.write(out);
-} else {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const outPath = join(here, '..', 'demo', 'assets', 'example-participants.json');
-  writeFileSync(outPath, out);
+// One file per participant, named after it: the demo offers each for
+// download and hands both to the analyzer, and the CLI reads each as a
+// participant's session file.
+const files = { 'example-1.json': makeExample1(), 'example-2.json': makeExample2() };
+const outFlag = process.argv.indexOf('--out');
+const outDir = outFlag > -1 ? process.argv[outFlag + 1]
+  : join(dirname(fileURLToPath(import.meta.url)), '..', 'demo', 'assets');
+for (const [name, participant] of Object.entries(files)) {
+  const outPath = join(outDir, name);
+  writeFileSync(outPath, JSON.stringify(participant, null, 2) + '\n');
   console.log(`Wrote ${outPath}`);
 }

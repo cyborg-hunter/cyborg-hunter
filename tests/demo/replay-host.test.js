@@ -1,9 +1,10 @@
 // tests/demo/replay-host.test.js
 // DOM-free unit tests for replay-host.js's pure HTML-building step
-// (walkthrough item 12). mountReplayHost/teardownReplayHost are
-// DOM-dependent and get their coverage as E2E (demo/tests/tour.spec.js) —
-// this file only exercises buildReplayHostHtml's escaping, since a broken
-// escape there is a script-injection bug, not just a cosmetic one.
+// (walkthrough item 12). teardownReplayHost is DOM-dependent and gets its
+// coverage from the analyze page's tests (tests/demo/analyze-page.test.js,
+// tests/e2e/analyze/site.spec.js) — this file only exercises
+// buildReplayHostHtml's escaping, since a broken escape there is a
+// script-injection bug, not just a cosmetic one.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildReplayHostHtml } from '../../demo/replay-host.js';
@@ -70,8 +71,8 @@ test('both inlining rules mirror src/shared/inline-safe.js exactly', () => {
 });
 
 // The .replay-* rules are no longer copied here: they come from the CLI's
-// own src/cli/renderers/replay-styles.js, passed down by results.js (through
-// the preview-core bundle), together with the report's @font-face block.
+// own src/cli/renderers/replay-styles.js, passed down by the analyze page
+// (baked into its bundle), together with the report's @font-face block.
 test('buildReplayHostHtml uses the replay CSS and font faces it is given', () => {
   const html = buildReplayHostHtml({ segments: [] }, '', { replayCss: REPLAY_STYLES_CSS, fontFaceCss: '@font-face { font-family: "Sora"; }' });
   assert.ok(html.includes(REPLAY_STYLES_CSS), 'the shared replay rules, verbatim');

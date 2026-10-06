@@ -1,7 +1,7 @@
 // demo/report-frame.js
-// The report frame shared by the demo's results step (results.js) and the
-// analyze page (analyze/page.js): a sandboxed Blob-URL iframe swap, and the
-// script-end escape every inline <script> the two pages build goes through.
+// The analyze page's report frame (analyze/page.js): a sandboxed Blob-URL
+// iframe swap, and the script-end escape every inline <script> the page and
+// its replay host (replay-host.js) build goes through.
 //
 // Like everything under demo/, this file cannot import from src/: only
 // demo/* and dist/ are copied into the deployed site

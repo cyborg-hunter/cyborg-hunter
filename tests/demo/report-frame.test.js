@@ -13,16 +13,11 @@ globalThis.window = win; globalThis.document = win.document;
 globalThis.Blob = win.Blob; globalThis.URL = win.URL;
 const { swapIframe, escapeScriptClose } = await import('../../demo/report-frame.js');
 const host = await import('../../demo/replay-host.js');
-const results = await import('../../demo/results.js');
 
 test('escapeScriptClose mirrors inlineSafeSrc and is what replay-host uses', () => {
   const s = 'a</script>b</SCRIPT>c';
   assert.equal(escapeScriptClose(s), inlineSafeSrc(s));
   assert.ok(host.buildReplayHostHtml({ segments: [] }, s, {}).includes(inlineSafeSrc(s)));
-});
-
-test('results.js re-exports the shared swapIframe', () => {
-  assert.equal(results.swapIframe, swapIframe);
 });
 
 test('swapIframe creates a sandboxed iframe with the given class and revokes the previous url on load', async () => {

@@ -62,6 +62,16 @@ export function takeHandoff() {
   });
 }
 
+// Deletes the stored record, if there is one. The tour calls this when it
+// loads and when its own hand-off fails: a record whose analyzer page never
+// opened must not be handed to a later visit.
+export function clearHandoff() {
+  return inTransaction(function (store) {
+    store.delete(KEY);
+    return function () { return undefined; };
+  });
+}
+
 // The page's file entries ({ path, file }) for a record: none when there is
 // no record or it is older than HANDOFF_MAX_AGE_MS at `now`. Every File gets
 // the record's time as its modification time.

@@ -149,6 +149,13 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   recording, experiment asset, settings, ignored, unreadable) and a Remove
   button, and a line says whether the settings came from a dropped
   `cyborg-hunter.config.json` or are the defaults.
+- Live demo: the tour ends with your files. Its last step, "Your files",
+  offers the session data, the replay recording and a config, plus two
+  example participants, as two batches of Save links (no zip), and an
+  "Open in the analyzer" button that hands all five to `/analyze/` in the
+  same browser, where they are listed as if dropped. The report the tour
+  used to build at its end, and its scoring playground, are gone: the
+  analyzer builds the report and holds the settings. The tour has 11 steps.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the

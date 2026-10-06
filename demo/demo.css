@@ -133,8 +133,6 @@ code, pre{font-family:var(--mono);}
 .task{background:var(--ground);border-radius:0;padding:22px 24px;margin:0 0 18px;}
 .task .label{font-family:var(--ff-sofia);font-size:11px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--dim);margin:0 0 14px;}
-/* The playground panel's heading has no rule of its own otherwise. */
-.task.playground h3{font-family:var(--ff-sofia);font-weight:600;}
 .question{font-size:17px;font-weight:600;margin:0 0 16px;}
 
 .answerchip{display:flex;align-items:center;gap:10px;background:var(--panel);
@@ -148,8 +146,8 @@ textarea, input[type="text"]{width:100%;font:inherit;padding:10px 12px;
   color:var(--ink);resize:vertical;}
 textarea{min-height:74px;}
 input[type="text"]{max-width:440px;}
-/* Number inputs and selects (the scoring playground) otherwise take the UA
- * form-control font. */
+/* Number inputs and selects (the scoring step's weight editors) otherwise
+ * take the UA form-control font. */
 input[type="number"], select{font:inherit;}
 textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-offset:-1px;}
 
@@ -366,20 +364,14 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .lp-body[data-view="json"] .lp-trials{display:none;}
 
 /* Roomier rail wherever the card is wide (today's four-column fractions
- * restored there): step 9's promoted pane, and results-mode's full-width
- * aside reflow (.results-mode .main-col below — the pane isn't .promoted
- * there, so both selectors are spelled out). */
-/* 156px in the promoted pane, 172px at the report: both fit a wrapped heading,
- * but step 9's pane only has the main column's width to spend, and the 16px
- * buys .lp-detail back the room the event column's floor needs. */
+ * restored there): step 9's promoted pane. 156px fits a wrapped heading in
+ * the main column's width, and buys .lp-detail back the room the event
+ * column's floor needs. */
 [data-role="live-pane"].promoted .lp-body{grid-template-columns:156px minmax(0,1fr);}
-.results-mode [data-role="live-pane"] .lp-body{grid-template-columns:172px minmax(0,1fr);}
 [data-role="live-pane"].promoted .lp-trials{max-height:560px;} /* tracks .promoted .lp-stream */
-[data-role="live-pane"].promoted .lp-trial-tab,
-.results-mode [data-role="live-pane"] .lp-trial-tab{display:block;font-size:12px;
+[data-role="live-pane"].promoted .lp-trial-tab{display:block;font-size:12px;
   -webkit-line-clamp:none;max-height:none;} /* room for the whole heading */
-[data-role="live-pane"].promoted .lp-stream,
-.results-mode [data-role="live-pane"] .lp-stream{font-size:11.8px;}
+[data-role="live-pane"].promoted .lp-stream{font-size:11.8px;}
 /* Wide-state columns are floored, not purely fractional: the event column has
  * to hold `synthetic_insertion` (135px at 11.8px mono) and the trial column
  * `act1-autotype` (92px), and neither has a break opportunity — an underscore
@@ -388,16 +380,14 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
  * had at 1fr/1fr/2fr; when the pane is narrower than this needs, the floors
  * hold and detail absorbs it, which is the right column to squeeze since it's
  * the only one that wraps. */
-[data-role="live-pane"].promoted .lp-cols, [data-role="live-pane"].promoted .lp-row,
-.results-mode [data-role="live-pane"] .lp-cols, .results-mode [data-role="live-pane"] .lp-row{
+[data-role="live-pane"].promoted .lp-cols, [data-role="live-pane"].promoted .lp-row{
   grid-template-columns:44px minmax(90px,.8fr) minmax(140px,1.19fr) minmax(0,2fr);gap:8px;}
 /* Wide states wrap these two instead of truncating them (a violation row's
  * "violation: not_fullscreen" reads far better over two lines than clipped),
  * but keep overflow hidden as the hard backstop: the column floors above are
  * sized for this mono face, and a wider one must break the word rather than
  * paint it over .lp-detail. */
-[data-role="live-pane"].promoted .lp-trial, [data-role="live-pane"].promoted .lp-event,
-.results-mode [data-role="live-pane"] .lp-trial, .results-mode [data-role="live-pane"] .lp-event{
+[data-role="live-pane"].promoted .lp-trial, [data-role="live-pane"].promoted .lp-event{
   white-space:normal;text-overflow:clip;overflow-wrap:break-word;overflow:hidden;}
 
 .lp-json{background:none;color:var(--ink);margin:0;padding:0;border-radius:0;
@@ -407,8 +397,11 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .lp-caption code{font-family:var(--mono);font-size:11px;}
 
 /* ---------------------------------------------------------------------
- * Downloads step (13) — file cards + "show as text" fallback dialog.
+ * Files step (the last one) — the hand-off to the analyzer, the two
+ * download batches' file cards, and the "show as text" fallback dialog.
  * --------------------------------------------------------------------- */
+.handoff{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 14px;}
+.batch-heading{font-family:var(--ff-sofia);font-size:15px;font-weight:600;margin:18px 0 8px;}
 .files{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px;}
 .file{display:flex;flex-direction:column;gap:10px;min-width:190px;
   background:var(--panel);box-shadow:var(--shadow);border:1px solid var(--line);border-radius:0;padding:10px 14px;
@@ -419,6 +412,8 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .file .file-desc{display:block;font-family:var(--ff-recursive);color:var(--dim);font-size:11px;}
 .file .file-actions{display:flex;gap:12px;align-items:center;}
 .file .file-actions a{color:var(--ink);font-size:12px;text-decoration:underline;text-underline-offset:3px;}
+/* An example's Save is a link styled as the session files' Save button. */
+.file .file-actions a.btn{color:#fff;font-size:inherit;text-decoration:none;}
 .file .file-caveat{font-family:var(--ff-recursive);color:var(--dim);font-size:11px;font-style:italic;
   max-width:220px;margin:0;}
 
@@ -429,7 +424,7 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .filetext-dialog pre{max-height:60vh;overflow:auto;user-select:text;margin:0 0 14px;}
 
 /* ---------------------------------------------------------------------
- * Step 11 scoring panel (walkthrough item 7) — per-signal weight editors.
+ * Scoring step panel (walkthrough item 7) — per-signal weight editors.
  * Wrapped in .task for the recessed background; config-as-source snippets
  * below it inherit the global `pre`/.code-tabs treatment unchanged.
  * --------------------------------------------------------------------- */
@@ -437,40 +432,8 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .weight-editors label{font-size:13px;display:flex;align-items:center;gap:6px;}
 .weight-editors input[type="number"]{width:56px;}
 
-/* Replicate-locally walkthrough (step 13) — numbered sections. .replicate
+/* The files step's command-line walkthrough — numbered sections. .replicate
  * pre inherits the global `pre` rule above (background/padding/radius/
  * overflow/margin) unchanged — nothing extra needed there. */
 .replicate h3{font-family:var(--ff-sofia);font-size:15px;font-weight:600;margin:18px 0 8px;}
 .replicate h3:first-child{margin-top:0;}
-
-/* ---------------------------------------------------------------------
- * Results screen (step 12) — full-width, instruments retired.
- * --------------------------------------------------------------------- */
-.results-mode .main-col{grid-column:1 / -1;}
-/* The lamp rail is hidden for good from this step on (demo.js), so the
- * instrument column holds nothing but the live-record card — let it span the
- * whole grid rather than sit in the 1fr track, matching the report frame
- * above it and giving the record's own columns room to breathe. */
-.results-mode .instrument{grid-column:1 / -1;}
-/* "Your report" walkthrough: the report's hairline note box, read as prose
- * (Recursive, inherited from body). */
-.yourreport{background:var(--panel);border:1px solid var(--line);border-radius:4px;
-  padding:16px 20px;margin:0 0 18px;}
-.yourreport h3{font-family:var(--ff-space);font-weight:550;letter-spacing:.01em;font-size:20px;margin:0 0 8px;}
-.yourreport li{margin:0 0 8px;max-width:60ch;}
-.yourreport .t-hard, .yourreport .t-soft, .yourreport .t-clean{font-family:var(--ff-sora);}
-.yourreport .t-hard{color:var(--hard);font-weight:700;}
-.yourreport .t-soft{color:var(--soft);font-weight:700;}
-.yourreport .t-clean{color:var(--clean);font-weight:700;}
-.results-frame{width:100%;min-height:900px;border:1px solid var(--line);border-radius:0;
-  box-shadow:var(--shadow);background:var(--panel);}
-
-/* Session-replay viewer-host card (item 12) — a sibling of .results-frame,
- * not inside it. The INNER replay CSS (.replay-*) lives inside the host
- * iframe's own Blob document (demo/replay-host.js), not here — this only
- * styles the outer card + frame chrome from the results screen's side. */
-.replay-host-card{background:var(--panel);border:1px solid var(--line);border-radius:0;
-  box-shadow:var(--shadow);padding:20px 24px;margin:18px 0 0;}
-.replay-host-card h3{font-family:var(--ff-sofia);font-size:15px;font-weight:600;margin:0 0 6px;}
-.replay-host-card .hint{margin:0 0 14px;}
-.replay-host-frame{width:100%;min-height:520px;border:0;border-radius:0;}

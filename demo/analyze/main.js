@@ -29,6 +29,9 @@ if (typeof document !== 'undefined') {
     takeHandoff().then(function (record) {
       var entries = handoffEntries(record, Date.now());
       if (entries.length) return window.__chAnalyze.addFiles(entries);
-    }).catch(function (e) { console.warn('cyborg-hunter analyze: the files from the demo could not be read', e); });
+    }).catch(function (e) {
+      if (e && e.handled) return;   // recover() (page.js) has shown it on the page already
+      console.warn('cyborg-hunter analyze: the files from the demo could not be read', e);
+    });
   }
 }
