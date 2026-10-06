@@ -241,10 +241,11 @@ export function createPage(root, worker, opts) {
     var c = checked.counts;
     // classify-files.js puts every JSON file in BOTH the participant and the
     // replay list (ingest tells a recording from data by content), so the
-    // replay list is the JSON count and each file is counted once here.
+    // replay list is the JSON count and each file is counted once here. The
+    // line under the id field says how many were data and how many replays.
     var json = c.replay, csv = c.participant - c.replay;
     q(root, 'counts').innerHTML =
-      '<span><b>' + c.participant + '</b> data files (' + csv + ' CSV, ' + json + ' JSON: participant data or recordings, told apart when the report is built)</span>' +
+      '<span><b>' + c.participant + '</b> data or replay files (' + csv + ' CSV, ' + json + ' JSON)</span>' +
       '<span><b>' + c.assets + '</b> experiment assets</span><span><b>' + (checked.configFound ? '1' : '0') + '</b> config file</span>' +
       (c.ignored ? '<span><b>' + c.ignored + '</b> ignored</span>' : '');
     var sel = q(root, 'id-field'); sel.innerHTML = '';

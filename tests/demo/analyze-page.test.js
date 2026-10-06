@@ -86,7 +86,7 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
   assert.deepEqual(t.sent, [{ type: 'check', files: [], sample: true }]);
   assert.deepEqual(visibleStep(), ['check']);
   // JSON files sit in both of the classifier's lists; the page counts each file once.
-  assert.match(role('counts').textContent, /^3 data files \(2 CSV, 1 JSON: participant data or recordings, told apart when the report is built\)0 experiment assets1 config file$/);
+  assert.match(role('counts').textContent, /^3 data or replay files \(2 CSV, 1 JSON\)0 experiment assets1 config file$/);
   assert.deepEqual([...role('id-field').options].map((o) => o.value), ['subject_ID', 'run_id']);
   assert.equal(role('id-field').value, 'subject_ID');
   assert.equal(role('check-warnings').textContent, 'unknown key "dataDri"');
