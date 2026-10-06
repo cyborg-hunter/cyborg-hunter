@@ -91,6 +91,15 @@ describe('build.js: the one-line targets', () => {
     assert.ok(out.length < 50, out.length + ' bytes left: ' + out.slice(0, 120));
   });
 
+  it('README.md#install lists every target and nothing else', () => {
+    const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+    const parts = readme.split(/^## Install$/m);
+    assert.strictEqual(parts.length, 2, 'one "## Install" heading');
+    const section = parts[1].split(/^## /m)[0];
+    const files = [...section.matchAll(/^\| `([^`]+\.js)` \|/gm)].map((m) => m[1]).sort();
+    assert.deepStrictEqual(files, ONE_LINE_TARGETS.map((t) => t.file).sort());
+  });
+
   it('docs/quickstart.md#which-file lists every target and nothing else', () => {
     const doc = readFileSync(join(ROOT, 'docs', 'quickstart.md'), 'utf8');
     const parts = doc.split(/^### Which file$/m);

@@ -6,6 +6,17 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ## [Unreleased]
 
 ### Added
+- One-line setup: one file per framework. `ch.js` stays the file for jsPsych
+  and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
+  surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
+  tag's attributes and the double-load sentinel, and each carries only its
+  own framework's adapter, so participants never download the others. A file
+  on a page that runs another framework logs one console error naming the
+  file to load (also on the `data-debug` badge) and records the page as a
+  page without a framework (one exception: `ch-labjs.js` on a lab.js page
+  whose jsPsych loads after it keeps lab.js hooked). `ch-qualtrics.js`
+  records a survey whose page also runs jsPsych as a Qualtrics page, with
+  one warning. See docs/quickstart.md#which-file.
 - One-line setup in Qualtrics surveys: `dist/ch-qualtrics.js` in the
   survey's Look & Feel header writes a capped summary of the session
   (scores, counts and event timings, never text the participant typed or
