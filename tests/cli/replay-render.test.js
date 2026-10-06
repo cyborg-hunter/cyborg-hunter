@@ -506,7 +506,9 @@ describe('viewer client file', () => {
     assert.match(src, /base-uri 'none'/);
     // Replays never play media, so the frame never fetches it either (the
     // analyze page's policy blocks it too; tests/e2e/report/media.spec.js).
-    assert.match(src, /media-src 'none'/);
+    // Matched with its neighbouring directive, so only the policy string in
+    // srcdocCsp passes, not the comment above it that names the directive.
+    assert.match(src, /img-src \* data: blob:; media-src 'none'; /);
     assert.doesNotMatch(src, /media-src \*/);
     // External stylesheets load only when the analyst allowed it: the <link>
     // emission must be gated by allowExternalCss, and that flag must come from
