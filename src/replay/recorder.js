@@ -91,6 +91,14 @@ export const REPLAY_DEFAULTS = {
   // array no per-trial cap can see, like the two streams above. A page that
   // republishes its layout on every resize writes one entry per batch; 2000 is
   // ~30x the busiest pilot session measured (70 rewrites).
+  //
+  // The cap counts entries, not characters, and an entry is about as long as
+  // its value: a 600-character style rewritten 2000 times is ~1.3 MB, the same
+  // order as the guard-violation ceiling above. Forward-only like the others,
+  // with the same single note through captureFailure, but the loss is
+  // smaller: every keyframe restates <html> in full (`root_attrs`), so past
+  // the cap the stream is stale only until the next keyframe. Set null to
+  // disable.
   maxRootAttrEvents: 2000
 };
 
