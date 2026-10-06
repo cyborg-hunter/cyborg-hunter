@@ -451,14 +451,20 @@ export async function buildAssetMap(recordings, droppedFiles) {
   return { assetMap, report };
 }
 
-// The sheets and stylesheet updates applyAssetMap has rewritten. A viewer
-// model aliases its recording's (viewer-model.js), so a second model over the
-// same recording (the analyze page re-rendering a report, or serving one
-// replay) hands back text this module already rewrote, and rewriting it again
-// is not a no-op: a spliced sheet keeps its own supplied imports as URLs,
-// which a second pass finds at the top level and splices as well. Each one is
-// rewritten once; the set lives outside the objects, so the model's JSON does
-// not change. Images need no mark: a data: URI is never looked up again.
+// The sheets and stylesheet updates whose text an applyAssetMap call changed
+// (a link sheet filled from a supplied file counts). A viewer model aliases
+// its recording's (viewer-model.js), so a second model over the same
+// recording (the analyze page re-rendering a report, or serving one replay)
+// hands back text this module already rewrote, and rewriting it again is not
+// a no-op: a spliced sheet keeps its own supplied imports as URLs, which a
+// second pass finds at the top level and splices as well. A marked one is
+// skipped from then on; one whose text an apply left as it was is not marked,
+// so a later map that supplies it (or what it references) still applies, and
+// the same map applied again leaves it unchanged a second time. This assumes
+// one map per set of objects: a marked sheet is never rewritten by another
+// map (the CLI and the analyze page build one map per ingest, and a new run
+// ingests new objects). The set lives outside the objects, so the model's JSON
+// does not change. Images need no mark: a data: URI is never looked up again.
 const cssApplied = new WeakSet();
 
 export function applyAssetMap(model, assetMap) {
@@ -515,18 +521,20 @@ export function applyAssetMap(model, assetMap) {
   };
   const sheet = (s) => {
     if (!s || typeof s !== 'object' || cssApplied.has(s)) return;
-    cssApplied.add(s);
+    const before = s.css;
     const e = s.kind === 'link' && s.css == null ? supplied(assetMap, s.href) : null;
     if (e) s.css = decodeUtf8(e.bytes);
     if (s.css) s.css = rewriteCss(s.css, s.href, false);
+    if (s.css !== before) cssApplied.add(s);
   };
   for (const s of list(model.stylesheets)) sheet(s);
   for (const ev of list(model.stylesheetEvents)) {
     if (!ev || typeof ev !== 'object') continue;
     if (ev.type === 'stylesheet.add') sheet(ev.sheet);
     else if (ev.type === 'stylesheet.update' && ev.css && !cssApplied.has(ev)) {
-      cssApplied.add(ev);
+      const before = ev.css;
       ev.css = rewriteCss(ev.css, null, false);
+      if (ev.css !== before) cssApplied.add(ev);
     }
   }
   // Media is never matched, so only image references are rewritten.

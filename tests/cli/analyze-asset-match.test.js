@@ -205,6 +205,20 @@ describe('references inside a supplied stylesheet', () => {
     assert.strictEqual(JSON.stringify(applyAssetMap(buildViewerModel(rec), assetMap)), once, 'a second model, a second apply');
     assert.strictEqual(JSON.stringify(applyAssetMap(first, assetMap)), once, 'the same model applied again');
   });
+  // Only a sheet whose text an apply changed is marked: one a map did not
+  // supply stays open to a later map that does.
+  it('a sheet a first map left href-only is filled by a later map that supplies it', async () => {
+    const img = { id: 2, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/study/img/stim-1.png' }, children: [] };
+    const rec = hrefOnly([img]);
+    const mapA = (await buildAssetMap([rec], [{ path: 'study/img/stim-1.png', read: async () => PNG }])).assetMap;
+    assert.strictEqual(mapA.size, 1, 'the image only');
+    assert.strictEqual(applyAssetMap(buildViewerModel(rec), mapA).stylesheets[0].css, null);
+    const mapB = (await buildAssetMap([rec], [{ path: 'study/css/style.css', read: async () => bytes('p{margin:0}') }])).assetMap;
+    const filled = applyAssetMap(buildViewerModel(rec), mapB);
+    assert.strictEqual(filled.stylesheets[0].css, 'p{margin:0}');
+    const once = JSON.stringify(filled);
+    assert.strictEqual(JSON.stringify(applyAssetMap(buildViewerModel(rec), mapB)), once, 'filled once, then left as it is');
+  });
   it('an @import in recorded CSS counts as a stylesheet, not an image, and is spliced in, never turned into a data: URI', async () => {
     const r = hrefOnly();
     r.stylesheets = [{ id: 1, kind: 'link', href: 'https://exp.example.org/study/css/main.css',
