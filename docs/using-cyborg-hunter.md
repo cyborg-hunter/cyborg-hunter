@@ -6,7 +6,7 @@ How the library fits into a browser-based experiment, past the [quickstart](quic
 
 Two layers:
 
-- **Library** (`ch.js`; `cyborg-hunter.min.js` in manual mode) — runs in the participant's browser, records signals.
+- **Library** (the one-line file: `ch.js`, `ch-qualtrics.js` or `ch-labjs.js`; `cyborg-hunter.min.js` in manual mode) — runs in the participant's browser, records signals.
 - **CLI** (`cyborg-hunter` binary) — runs on your laptop after data collection, reads the saved data files, generates a report.
 
 The integrity monitor writes its observations into the same data file your experiment already saves (jsPsych CSV, custom JSON, whatever) and makes no network calls of its own. (The optional replay recorder saves a separate artifact; see [Session replay](#session-replay).) The CLI's job is to find your data files, parse them, and render the report.
@@ -19,7 +19,7 @@ The integrity monitor writes its observations into the same data file your exper
 
 For production studies pin an exact version (see [README § Install](../README.md#install)).
 
-Placed below `jspsych.js` and above your experiment code, this tag monitors every trial, records each one as its own segment and writes the integrity data into the rows your experiment already saves. On a page without jsPsych, you can mark trials yourself and save `CyborgHunter.data()`. In a Qualtrics survey the `ch-qualtrics.js` tag goes in the Look & Feel header, and it writes a capped summary into one embedded-data field at every page submit: [qualtrics.md](qualtrics.md). Placement, the participant ID, the tag's attributes and a smoke test: [quickstart.md](quickstart.md#2-add-one-script-tag). Manual mode (wiring the jsPsych extension yourself), the migration note, friction and replay under the one-line setup: [advanced-integration.md](advanced-integration.md).
+Placed below `jspsych.js` and above your experiment code, this tag monitors every trial, records each one as its own segment and writes the integrity data into the rows your experiment already saves. On a page without jsPsych, you can mark trials yourself and save `CyborgHunter.data()`. In a Qualtrics survey the `ch-qualtrics.js` tag goes in the Look & Feel header, and it writes a capped summary into one embedded-data field at every page submit: [qualtrics.md](qualtrics.md). In a lab.js study the `ch-labjs.js` tag goes below `lib/lab.js`, and every screen is a trial with its integrity columns in lab.js's own rows: [labjs.md](labjs.md). Placement, the participant ID, the tag's attributes and a smoke test: [quickstart.md](quickstart.md#2-add-one-script-tag). Manual mode (wiring the jsPsych extension yourself), the migration note, friction and replay under the one-line setup: [advanced-integration.md](advanced-integration.md).
 
 ## Per-trial parameters
 

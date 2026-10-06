@@ -191,6 +191,7 @@ The optional **guard** extensions add: fullscreen / sidebar / focus enforcement 
 
 - [docs/quickstart.md](docs/quickstart.md) — zero to triage report
 - [docs/qualtrics.md](docs/qualtrics.md) — the one-line setup in a Qualtrics survey: header tag, embedded-data field, payload cap, reading the export
+- [docs/labjs.md](docs/labjs.md) — the one-line setup in a lab.js study: the `ch-labjs.js` tag below `lib/lab.js`, trial naming, the columns in lab.js's rows, reading the data
 - [docs/advanced-integration.md](docs/advanced-integration.md) — manual mode, switching to the one-line setup, the honeypot's ethics note, friction, pages without jsPsych, replay
 - [docs/worked-example.md](docs/worked-example.md) — full pipeline run on the bundled synthetic dataset, outputs interpreted
 - [docs/interpreting-signals.md](docs/interpreting-signals.md) — scores vs tiers, viewport shifts, phase scoping: the common misreadings
