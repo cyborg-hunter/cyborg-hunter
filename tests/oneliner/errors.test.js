@@ -286,8 +286,9 @@ describe('loud errors in the existing bundles', () => {
 
 // Each call in src/oneliner of a message that names the running file hands it
 // that file: CH_FILE (build-flags.js), ctx.file, or the `file` an inert
-// namespace was built for. A call without one would make every file but
-// ch.js name ch.js.
+// namespace was built for (the bare identifier: a property that ends in
+// .file, such as wrongBuild.file, is another file). A call without one would
+// make every file but ch.js name ch.js.
 describe('messages that name the running file', () => {
   const SRC = fileURLToPath(new URL('../../src/oneliner/', import.meta.url));
   const NAMES = ['doubleLoad', 'randomId', 'manualInitOnOneLiner', 'replayUnavailable', 'replayRestoreFailed',
@@ -300,7 +301,7 @@ describe('messages that name the running file', () => {
     const bad = [];
     for (const f of walk(SRC).filter((p) => p.endsWith('.js'))) {
       readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
-        if (CALL.test(line) && !/(CH_FILE|ctx\.file|\bfile)\)/.test(line)) bad.push(f.slice(SRC.length) + ':' + (i + 1) + ': ' + line.trim());
+        if (CALL.test(line) && !/(CH_FILE|ctx\.file|[(, ]file)\)/.test(line)) bad.push(f.slice(SRC.length) + ':' + (i + 1) + ': ' + line.trim());
       });
     }
     assert.deepStrictEqual(bad, []);

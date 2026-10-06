@@ -17,11 +17,11 @@
 //      id of its own reuses the first page's random id (source 'session')
 //      and continues its session; a URL, attribute or config id still wins;
 //   4. a monitor (its session starts at step 6);
-//   5. host: 'jspsych' when initJsPsych is already defined, else 'vanilla'
-//      (the host adapters install their hooks into ctx.handlers). The vanilla
-//      adapter (adapters/vanilla.js) is installed before the first span
-//      opens: it restores a previous page's segment index, so the boot span
-//      is named after the continued index;
+//   5. host: 'jspsych' when initJsPsych is already defined, in a file built
+//      with it (HAS_JSPSYCH), else 'vanilla' (the host adapters install their
+//      hooks into ctx.handlers). The vanilla adapter (adapters/vanilla.js) is
+//      installed before the first span opens: it restores a previous page's
+//      segment index, so the boot span is named after the continued index;
 //   6. the monitor's session starts and the segmenter keeps it inside a
 //      trial from this moment on ('span-<index>'), so a paste before the
 //      first host trial or mark is still recorded. The session start needs
@@ -52,9 +52,10 @@
 //   win:               the window (the core monitor itself uses the globals)
 //   monitorFactory:    core init(); injectable for tests
 //   participantParams: URL parameter names for the participant id, in order
-// ctx = { config, participantId, participantIdSource, monitor, differ,
-//         segmenter, host, scriptSrc, handlers, win, api, vanilla?,
-//         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
+// ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
+//         participantId, participantIdSource, monitor, differ, segmenter,
+//         host, scriptSrc, handlers, win, api, vanilla?, replaySrc?,
+//         replayProxy? (jsPsych), replay? (vanilla handle),
 //         debug? (data-debug) }
 //
 // boot never throws into the page: any failure is logged as bootFailed, a
