@@ -79,7 +79,11 @@
 // any of them as the one-line setup, and names itself in
 // win.__cyborgHunterFile (non-enumerable), so a later double load names both
 // files. ctx.file is the running file's name (CH_FILE, build-flags.js), for
-// the messages that name it.
+// the messages that name it. Each call into the jsPsych adapter is guarded by
+// HAS_JSPSYCH, so a file without it drops that code; such a file on a
+// jsPsych page logs one wrongBuild error naming ch.js (ctx.wrongBuild, which
+// the data-debug badge shows too) and records the page as a page without a
+// framework.
 
 import './build-flags.js';
 import { init } from '../core/monitor.js';
@@ -115,7 +119,7 @@ export function boot(opts) {
   var adapter = null;   // the jsPsych adapter, once installed (step 7)
   try {
     // detectManualMode (adapters/jspsych.js) treats this class as the one-liner.
-    if (win.jsPsychCyborgHunter === undefined) win.jsPsychCyborgHunter = OneLinerExtension;
+    if (HAS_JSPSYCH && win.jsPsychCyborgHunter === undefined) win.jsPsychCyborgHunter = OneLinerExtension;
   } catch (_) { /* a locked global: the researcher's own script tag still works */ }
   try {
     if (win.__cyborgHunterLoaded) {
@@ -125,12 +129,16 @@ export function boot(opts) {
       // Another ch.js already wraps initJsPsych; a second wrapper would list
       // this bundle's own class, which that ch.js takes for a manual-mode
       // extension (detectManualMode compares classes).
-      if (win.__cyborgHunterLoaded !== 'ch.js') installInertWrapper(win);
+      if (HAS_JSPSYCH && win.__cyborgHunterLoaded !== 'ch.js') installInertWrapper(win);
       return null;
     }
 
     var script = opts.script || null;
     var config = readConfig({ dataset: (script && script.dataset) || {}, globalConfig: win.CyborgHunterConfig });
+    // The page's framework, against the ones this file carries (step 5).
+    var jsPsychPage = typeof win.initJsPsych === 'function';
+    var wrongBuild = jsPsychPage && !HAS_JSPSYCH ? { host: 'jsPsych', file: 'ch.js' } : null;
+    if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
 
     var pid = resolveParticipantId({
       search: (win.location && win.location.search) || '',
@@ -149,10 +157,11 @@ export function boot(opts) {
     monitor = monitorFactory(Object.assign({}, config.monitor, { participantId: pid.id, preset: config.preset }));
     var differ = createSegmentDiffer(monitor);
     var segmenter = createSegmenter({ monitor: monitor, differ: differ });
-    var host = typeof win.initJsPsych === 'function' ? 'jspsych' : 'vanilla';
+    var host = HAS_JSPSYCH && jsPsychPage ? 'jspsych' : 'vanilla';
 
     ctx = {
       file: CH_FILE,
+      wrongBuild: wrongBuild,
       config: config,
       participantId: pid.id,
       participantIdSource: pid.source,
@@ -190,8 +199,8 @@ export function boot(opts) {
     if (host === 'vanilla') {
       startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
       replay.startVanilla();
-    } else adapter = installJsPsychAdapter({ win: win, ctx: ctx });
-    watchHostPlacement({
+    } else if (HAS_JSPSYCH) adapter = installJsPsychAdapter({ win: win, ctx: ctx });
+    if (HAS_JSPSYCH) watchHostPlacement({
       win: win, doc: win.document, ctx: ctx, adapter: adapter,
       onVanilla: function () {
         try {
@@ -258,7 +267,7 @@ function failDeferred(ctx, adapter, e) {
     }
     if (adapter) {
       adapter.restore();
-      installInertWrapper(ctx.win);
+      if (HAS_JSPSYCH) installInertWrapper(ctx.win);
       if (ctx.jsPsych) ctx.jsPsych.data.addProperties({ cyborgHunterError: 'Cyborg Hunter did not start: ' + msg });
     }
   } catch (_) { /* the failure is logged above */ }
@@ -277,7 +286,7 @@ function fail(win, ctx, adapter, e) {
   console.error(MESSAGES.bootFailed(msg));
   try {
     if (adapter) adapter.restore();
-    installInertWrapper(win);
+    if (HAS_JSPSYCH) installInertWrapper(win);
   } catch (_) { /* the failure is logged above */ }
   try {
     if (win.CyborgHunter === undefined) win.CyborgHunter = buildInertApi(CH_FILE);

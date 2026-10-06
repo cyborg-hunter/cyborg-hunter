@@ -33,6 +33,7 @@
 // run() is waiting on the proxy's initialize(), so a stalled CDN must not
 // hold the experiment back indefinitely.
 
+import './build-flags.js';
 import { VERSION } from '../shared/constants.js';
 import { MESSAGES } from './errors.js';
 
@@ -321,7 +322,7 @@ export function installReplay(opts) {
   }
   // With data-debug the summary says it (debug.js), so the page gets one line.
   if (!ctx.debug && replaySaveReminderApplies(ctx)) console.info(MESSAGES.replaySaveReminder(ctx.file));
-  if (ctx.host === 'jspsych') {
+  if (HAS_JSPSYCH && ctx.host === 'jspsych') {
     ctx.replayProxy = makeReplayProxy({ doc: doc, src: ctx.replaySrc, ctx: ctx, timeoutMs: opts.timeoutMs });
   }
 

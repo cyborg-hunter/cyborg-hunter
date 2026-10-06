@@ -28,6 +28,8 @@
 //   With data-replay (and no recorder autoSave) the summary, not the badge,
 //   ends with " · data-replay is on: save CyborgHunter.replay() in your save
 //   code", in place of boot's console.info reminder (replay-loader.js).
+//   A page whose framework this one-line file does not carry (ctx.wrongBuild,
+//   boot.js) ends both with " · wrong file: this page runs <host>, load <file>".
 //
 // The badge never takes focus or clicks (pointer-events: none) and nothing
 // here throws into the host page. update() and refresh() re-attach it when
@@ -86,8 +88,12 @@ export function createDebug(opts) {
     if (!live && replaySaveReminderApplies(ctx)) out.push(REPLAY_SAVE_REMINDER);
     return out.join(' · ');
   }
-  function summary() { return parts(false); }
-  function badgeText() { return parts(true); }
+  function wrongFile(text) {
+    var w = ctx.wrongBuild;
+    return w ? text + ' · wrong file: this page runs ' + w.host + ', load ' + w.file : text;
+  }
+  function summary() { return wrongFile(parts(false)); }
+  function badgeText() { return wrongFile(parts(true)); }
 
   function render(text) {
     if (!badge) {

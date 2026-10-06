@@ -51,6 +51,16 @@ export const MESSAGES = {
       'keep one <script> tag',
       DOCS + 'advanced-integration.md#double-load');
   },
+  // console.error, once at boot: the page runs a framework whose adapter
+  // this one-line file does not carry (build-targets.js); boot.js then
+  // monitors it as a page without a framework. host: the framework's name;
+  // file: the one-line file that carries it; self: the file that runs.
+  wrongBuild: function (host, file, self) {
+    return formatError('This page runs ' + host + ', which ' + own(self) + ' does not monitor',
+      'each framework has its own one-line file, so ' + own(self) + ' records this page as a page without a framework',
+      'load ' + file + ' in place of ' + own(self),
+      DOCS + 'quickstart.md#which-file');
+  },
   notHookable: function () {
     return formatError('Not monitoring jsPsych trials',
       'ch.js loaded after initJsPsych() ran, or the page calls jsPsychModule.initJsPsych / new JsPsych directly (a bundler or ES module build), which never goes through window.initJsPsych',

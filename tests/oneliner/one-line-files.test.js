@@ -102,3 +102,58 @@ describe('another one-line file (CH_FILE ch-labjs.js)', () => {
     assert.ok(warns[0].includes('ch-labjs.js did not start'), warns[0]);
   });
 });
+
+// A file without the jsPsych adapter (ch-qualtrics.js, ch-labjs.js) on a
+// jsPsych page: one error naming ch.js, then the page is recorded as a page
+// without a framework. initJsPsych is left alone and no extension class is
+// put on the window: jsPsych runs as it would without the file.
+describe('a file without the jsPsych adapter (HAS_JSPSYCH false)', () => {
+  let restore;
+  before(() => { restore = setBuild({ HAS_JSPSYCH: false, CH_FILE: 'ch-labjs.js' }); });
+  after(() => restore());
+
+  it('on a jsPsych page: one wrongBuild error naming ch.js, the vanilla host, initJsPsych untouched', () => {
+    const original = function () { return { data: { addProperties() {} }, run() {} }; };
+    win.initJsPsych = original;
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-labjs.js')]);
+    assert.ok(errors[0].includes('load ch.js in place of ch-labjs.js'), errors[0]);
+    assert.deepStrictEqual(ctx.wrongBuild, { host: 'jsPsych', file: 'ch.js' });
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.ok(ctx.vanilla, 'the vanilla adapter records the page');
+    assert.strictEqual(ctx.segmenter.state().open, true);
+    assert.strictEqual(win.initJsPsych, original);
+    assert.strictEqual(win.jsPsychCyborgHunter, undefined);
+  });
+
+  it('on a page without jsPsych: no error', () => {
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(ctx.wrongBuild, null);
+    assert.strictEqual(ctx.host, 'vanilla');
+  });
+
+  it('with data-debug the summary names the file to load', () => {
+    win.initJsPsych = function () {};
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none', debug: '' }), win });
+    assert.strictEqual(infos.length, 1, infos.join('\n'));
+    assert.ok(infos[0].endsWith(' · wrong file: this page runs jsPsych, load ch.js'), infos[0]);
+  });
+
+  it('a failed boot on a jsPsych page leaves initJsPsych as it was', () => {
+    const original = function () {};
+    win.initJsPsych = original;
+    boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => { throw new Error('kaboom'); } });
+    assert.strictEqual(win.initJsPsych, original);
+  });
+});
+
+describe('every host in (the node default): a jsPsych page is a jsPsych page', () => {
+  it('no wrongBuild', () => {
+    win.initJsPsych = function () {};
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'jspsych');
+    assert.strictEqual(ctx.wrongBuild, null);
+    assert.deepStrictEqual(errors, []);
+  });
+});

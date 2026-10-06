@@ -36,6 +36,15 @@ describe('createDebug', () => {
     assert.strictEqual(d.badgeText(), text);
   });
 
+  // A one-line file on a page whose framework it does not carry (boot.js
+  // ctx.wrongBuild): the summary and the badge say which file to load.
+  it('summary and badge end with the file to load when the page runs another framework', () => {
+    var d = createDebug({ doc: win.document, ctx: Object.assign(jsCtx({ win: win }), { host: 'vanilla', wrongBuild: { host: 'jsPsych', file: 'ch.js' } }), log: log });
+    assert.strictEqual(d.summary(),
+      'Cyborg Hunter active · vanilla mode · 0 mark elements · ID from workerId · honeypot on · friction off · wrong file: this page runs jsPsych, load ch.js');
+    assert.ok(d.badgeText().endsWith(' · wrong file: this page runs jsPsych, load ch.js'), d.badgeText());
+  });
+
   it('update() renders the badge and logs exactly once', () => {
     var d = createDebug({ doc: win.document, ctx: jsCtx({ win: win }), log: log });
     d.update();

@@ -47,6 +47,11 @@ const CASES = {
     fix: 'keep one <script> tag',
     link: DOCS + 'advanced-integration.md#double-load'
   },
+  wrongBuild: {
+    args: ['Qualtrics', 'ch-qualtrics.js', 'ch.js'],
+    fix: 'load ch-qualtrics.js in place of ch.js',
+    link: DOCS + 'quickstart.md#which-file'
+  },
   bootFailed: {
     args: ['boom'],
     fix: 'open an issue with this message and your <script> tag',
@@ -181,6 +186,11 @@ describe('error catalogue', () => {
   it('the double-load message names both scripts in load order', () => {
     assert.ok(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')
       .includes(': cyborg-hunter.min.js was loaded after ch.js. Fix:'));
+  });
+
+  it('the wrong-file message names the framework, the running file and the file to load', () => {
+    assert.ok(MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-labjs.js')
+      .startsWith('[cyborg-hunter] This page runs jsPsych, which ch-labjs.js does not monitor: each framework has its own one-line file, so ch-labjs.js records this page as a page without a framework. Fix: load ch.js in place of ch-labjs.js. '));
   });
 
   it('two different one-line files: the double-load fix names both', () => {

@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import esbuild from 'esbuild';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 import { ONE_LINE_TARGETS, defineFor } from '../../build-targets.js';
 
@@ -63,6 +64,17 @@ describe('build.js: the one-line targets', () => {
   it('defineFor turns a target into literal flags and its own file name', () => {
     assert.deepStrictEqual(defineFor({ file: 'ch-x.js', hosts: ['labjs'] }),
       { HAS_JSPSYCH: 'false', HAS_QUALTRICS: 'false', HAS_LABJS: 'true', CH_FILE: '"ch-x.js"' });
+  });
+
+  // A file built without the jsPsych adapter, as ch-qualtrics.js and
+  // ch-labjs.js are: the HAS_JSPSYCH guards in boot.js and replay-loader.js
+  // drop every call into it, and esbuild drops the code they reached.
+  it('a build without jsPsych carries none of the jsPsych adapter', async () => {
+    const r = await esbuild.build({
+      entryPoints: [join(ROOT, 'src', 'oneliner', 'entry.js')], define: defineFor({ file: 'ch-none.js', hosts: [] }),
+      bundle: true, minify: true, format: 'iife', platform: 'browser', write: false, logLevel: 'error'
+    });
+    assert.ok(!r.outputFiles[0].text.includes(MARKERS.jspsych));
   });
 
   it('docs/quickstart.md#which-file lists every target and nothing else', () => {
