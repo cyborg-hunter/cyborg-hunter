@@ -14,8 +14,9 @@ import { isRedacted } from './redaction.js';
 
 // <html>'s own attributes and nothing below it, on the capture's one observer
 // (capture-dom.js): the observed root's registration covers the subtree, and
-// the stylesheet capture covers <head>.
-export var ROOT_OBSERVER_INIT = { attributes: true, attributeOldValue: true };
+// the stylesheet capture covers <head>. No old values: rootAttrChanges
+// compares each value with what the file holds, never with the record's.
+export var ROOT_OBSERVER_INIT = { attributes: true };
 
 function redactedRoot(el, opts) {
   return isRedacted(el, opts && opts.redactSelector);
@@ -47,12 +48,18 @@ export function rootAttrsSnapshot(el, opts) {
  */
 export function rootAttrChanges(records, el, opts, held) {
   var out = [];
-  if (!el || isExcluded(el, opts)) return out;
+  if (!el) return out;
   var seen = Object.create(null);
-  var redacted = redactedRoot(el, opts);
+  // Exclusion and redaction are read at the first record about <html>, not
+  // per batch: most batches hold none, and those then cost only this scan.
+  var redacted;
   for (var i = 0; i < records.length; i++) {
     var r = records[i];
     if (!r || r.target !== el || r.type !== 'attributes' || r.attributeNamespace || !r.attributeName) continue;
+    if (redacted === undefined) {
+      if (isExcluded(el, opts)) return out;
+      redacted = redactedRoot(el, opts);
+    }
     var name = r.attributeName;
     if (seen[name]) continue;
     seen[name] = true;

@@ -13,7 +13,7 @@ import { Window } from 'happy-dom';
 import * as CHReplay from '../../src/replay/index.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 import { boot } from './support/viewer-harness.js';
-import { rootAttrsSnapshot, rootAttrChanges } from '../../src/replay/root-attrs.js';
+import { rootAttrsSnapshot, rootAttrChanges, ROOT_OBSERVER_INIT } from '../../src/replay/root-attrs.js';
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
 import { applyRootAttrs } from '../../src/replay/dom-instantiate.js';
 
@@ -160,6 +160,42 @@ describe('capture', () => {
       [{ name: 'style', value: 'a' }, { name: 'data-x', value: '1' }, { name: 'lang', value: null }]);
     assert.deepEqual({ ...held }, { style: 'a', 'data-x': '1' });
     assert.deepEqual(rootAttrChanges(records, html, {}, held), []);
+  });
+
+  it('a batch with no record about <html> reads nothing on <html>', () => {
+    // The capture observer hands over its whole batch, which is nearly always
+    // about <body>'s subtree alone. <html>'s exclusion and redaction are read
+    // once a record about it appears, so such a batch costs only the scan.
+    let reads = 0;
+    const html = {
+      nodeType: 1,
+      get attributes() { reads++; return []; },
+      matches() { reads++; return false; },
+    };
+    const body = win.document.body;
+    const records = [
+      { type: 'attributes', target: body, attributeName: 'class' },
+      { type: 'childList', target: body },
+    ];
+    const held = Object.create(null);
+    assert.deepEqual(rootAttrChanges(records, html, { redactSelector: '[data-ch-redact]' }, held), []);
+    assert.equal(reads, 0);
+  });
+
+  it('an excluded <html> gives no changes, and what the file holds stays as it was', () => {
+    const html = win.document.documentElement;
+    html.setAttribute('data-record-exclude', '');
+    html.setAttribute('style', '--k: 2;');
+    const held = Object.assign(Object.create(null), { style: '--k: 1;' });
+    const records = [{ type: 'attributes', target: html, attributeName: 'style' }];
+    assert.deepEqual(rootAttrChanges(records, html, {}, held), []);
+    assert.deepEqual({ ...held }, { style: '--k: 1;' });
+  });
+
+  it('the <html> registration asks for attribute records and nothing more', () => {
+    // No old values: rootAttrChanges compares against what the file holds,
+    // and the body mapper never reads a record about <html>.
+    assert.deepEqual(ROOT_OBSERVER_INIT, { attributes: true });
   });
 
   it('a recording carries <html>\'s attributes at the keyframe and its changes, coalesced per batch', async () => {
