@@ -46,7 +46,9 @@ const outcome = (p) => Promise.race([p.then(() => 'resolved', () => 'rejected'),
 const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 0, ignored: 0 }, configFound: true,
   config: { participantIdField: 'participantId' }, configWarnings: ['unknown key "dataDri"'],
   idSuggestion: { suggested: 'subject_ID', candidates: [{ field: 'subject_ID', reason: 'from cyborg-hunter.config.json' }, { field: 'subject_ID', reason: 'known name' }, { field: 'run_id', reason: 'constant within each file, unique across files' }] },
-  sampled: 3 };
+  sampled: 3,
+  files: [{ path: 'a.csv', kind: 'data' }, { path: 'b.csv', kind: 'data' }, { path: 'c.json', kind: 'data' }, { path: 'cyborg-hunter.config.json', kind: 'config' }],
+  configPath: 'cyborg-hunter.config.json' };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
@@ -84,9 +86,11 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
   const t = boot();
   await toCheck(t);
   assert.deepEqual(t.sent, [{ type: 'check', files: [], sample: true }]);
-  assert.deepEqual(visibleStep(), ['check']);
-  // JSON files sit in both of the classifier's lists; the page counts each file once.
-  assert.match(role('counts').textContent, /^3 data or replay files \(2 CSV, 1 JSON\)0 experiment assets1 config file$/);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, false);
+  // Counted by what the check read each file as.
+  assert.equal(role('counts').textContent, '3 data files0 replay recordings0 experiment assets1 config file');
+  assert.equal(role('config-source').textContent, 'Settings from cyborg-hunter.config.json, over the defaults.');
   assert.deepEqual([...role('id-field').options].map((o) => o.value), ['subject_ID', 'run_id']);
   assert.equal(role('id-field').value, 'subject_ID');
   assert.equal(role('check-warnings').textContent, 'unknown key "dataDri"');
@@ -111,7 +115,7 @@ async function until(cond) { for (let i = 0; i < 50 && !cond(); i++) await tick(
 test('over http the page hands the worker File handles, not bytes', async () => {
   const t = boot();
   const entries = dropped();
-  t.page.setFiles(entries);
+  t.page.addFiles(entries);
   await until(() => t.sent.length === 1);
   assert.deepEqual(t.sent[0], { type: 'check', sample: false, files: entries.map((e) => ({ path: e.path, file: e.file })) });
   assert.deepEqual(t.transfers[0], []);
@@ -119,7 +123,7 @@ test('over http the page hands the worker File handles, not bytes', async () => 
 
 test('from file:, the page reads each dropped file and transfers its bytes, for the check and again for the run', async () => {
   const t = boot({ transferBytes: true });
-  t.page.setFiles(dropped());
+  t.page.addFiles(dropped());
   await until(() => t.sent.length === 1);
   const check = t.sent[0];
   assert.equal(check.type, 'check');
@@ -140,9 +144,11 @@ test('from file:, the page reads each dropped file and transfers its bytes, for 
 test('from file:, a file that cannot be read fails the check like any check error', async () => {
   const t = boot({ transferBytes: true });
   const bad = { path: 'gone.csv', file: { size: 1, arrayBuffer: () => Promise.reject(new Error('NotFoundError: the file is gone')) } };
-  await t.page.setFiles([bad]).catch(() => {});
+  await t.page.addFiles([bad]).catch(() => {});
   await tick();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
+  assert.deepEqual(t.page.state.entries, [], 'the list is emptied, so the next drop starts clean');
   assert.match(role('error').textContent, /the file is gone/);
   assert.equal(t.sent.length, 0);
 });
@@ -169,7 +175,8 @@ test('a run error discards the zip chunks already received and offers a retry', 
   await tick();
   assert.deepEqual(t.page.state.zipParts, []);
   assert.equal(t.page.state.zipUrl, null);
-  assert.deepEqual(visibleStep(), ['check']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, false, 'back on the file list, ready for a retry');
   assert.equal(role('error').hidden, false);
   assert.match(role('error').textContent, /No participant data/);
   // The run's file warnings go under the check's config warnings.
@@ -181,13 +188,14 @@ test('a run error discards the zip chunks already received and offers a retry', 
   assert.equal(role('error').hidden, true, 'a retry clears the old error');
 });
 
-test('a check error returns to the drop step', async () => {
+test('a check error returns to the files step with no list', async () => {
   const t = boot();
   action('sample').click();
   await tick();
   t.emit({ type: 'error', phase: 'check', message: 'boom' });
   await tick();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
   assert.equal(role('error').textContent, 'boom');
 });
 
@@ -267,11 +275,12 @@ test('a run without recordings says so in the replay card', async () => {
   assert.equal(action('load-replay').disabled, true);
 });
 
-test('start over returns to the drop step and clears the run', async () => {
+test('start over returns to the files step and clears the run', async () => {
   const t = boot();
   await toResults(t);
   document.querySelectorAll('[data-action="reset"]')[1].click();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
   assert.equal(t.page.state.result, null);
   assert.deepEqual(t.page.state.zipParts, []);
   assert.equal(t.page.state.zipUrl, null);
@@ -294,7 +303,7 @@ test('a worker failure mid-run recovers like a run error: chunks discarded, cont
     t.worker[kind]({ message: 'out of memory' });
     await tick();
     assert.deepEqual(t.page.state.zipParts, [], kind);
-    assert.deepEqual(visibleStep(), ['check'], kind);
+    assert.deepEqual(visibleStep(), ['files'], kind);
     assert.equal(action('run').disabled, false, kind);
     assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled), kind);
     assert.equal(role('error').hidden, false, kind);
@@ -302,13 +311,14 @@ test('a worker failure mid-run recovers like a run error: chunks discarded, cont
   }
 });
 
-test('a worker failure mid-check returns to the drop step with Start over usable', async () => {
+test('a worker failure mid-check returns to the files step with Start over usable', async () => {
   const t = boot();
   action('sample').click();
   await tick();
   t.worker.onerror({ message: 'SyntaxError' });
   await tick();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
   assert.match(role('error').textContent, /SyntaxError/);
   assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled));
   action('sample').click();   // a retry is accepted
@@ -496,7 +506,7 @@ test('after a worker failure the page retries on a fresh worker from the factory
   // A late message from the dead worker is ignored.
   workers[0].onmessage({ data: DONE });
   await tick();
-  assert.deepEqual(visibleStep(), ['check']);
+  assert.deepEqual(visibleStep(), ['files']);
   workers[1].onmessage({ data: ready });
   assert.equal([...document.head.querySelectorAll('style')].length, 1, 'fonts installed once');
   action('run').click(); await tick();
@@ -546,7 +556,8 @@ test('a worker failure with several replay requests outstanding settles them all
 });
 
 // A cohort above the size the page was tested with is allowed, with a warning.
-const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, assets: 0, ignored: 0 } });
+const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, assets: 0, ignored: 0 },
+  files: Array.from({ length: n }, (_, i) => ({ path: 'p' + i + '.csv', kind: 'data' })) });
 
 test('a cohort above the tested size shows a warning with its size; the run stays allowed', async () => {
   const t = boot();
@@ -844,4 +855,62 @@ describe('the still-working hint', () => {
     action('run').click(); await tick();
     assert.deepEqual(clock.delays(), [5]);
   });
+});
+
+// One "Files & settings" step: every drop or file choice adds to the list
+// (demo/analyze/files-panel.js) and checks the whole list again.
+test('each addition adds to the list and checks it again; the same file is sent once, a colliding path moves to its own folder', async () => {
+  const t = boot();
+  const a = { path: 'data/a.csv', file: new File(['x'], 'a.csv', { lastModified: 1 }) };
+  t.page.addFiles([a]);
+  await until(() => t.sent.length === 1);
+  t.emit({ ...CHECKED, files: [{ path: 'data/a.csv', kind: 'data' }] });
+  await tick();
+  const other = { path: 'data/a.csv', file: new File(['different'], 'a.csv', { lastModified: 2 }) };
+  const replay = { path: 'r/A-replay-1.json', file: new File(['{}'], 'A-replay-1.json', { lastModified: 3 }) };
+  t.page.addFiles([a, other, replay]);
+  await until(() => t.sent.length === 2);
+  assert.deepEqual(t.sent[1].files.map((f) => f.path), ['data/a.csv', 'drop2/data/a.csv', 'r/A-replay-1.json']);
+});
+
+test('a drop on the files step after a check adds to the list', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  const ev = new win.Event('drop', { bubbles: true, cancelable: true });
+  ev.dataTransfer = { items: [], files: [new File(['y'], 'more.csv', { lastModified: 5 })] };
+  role('dropzone').dispatchEvent(ev);
+  await until(() => t.sent.length === 2);
+  assert.deepEqual(t.sent[1].files.map((f) => f.path), ['study/a.csv', 'study/cyborg-hunter.config.json', 'more.csv']);
+});
+
+test('the table lists what each file was read as, with Remove; removing the last file empties the step', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit({ ...CHECKED, files: [{ path: 'study/a.csv', kind: 'data' }, { path: 'study/cyborg-hunter.config.json', kind: 'config' }], configPath: 'study/cyborg-hunter.config.json' });
+  await tick();
+  const rows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent));
+  assert.deepEqual(rows(), [['study/a.csv', 'participant data'], ['study/cyborg-hunter.config.json', 'settings']]);
+  assert.equal(role('config-source').textContent, 'Settings from study/cyborg-hunter.config.json, over the defaults.');
+  role('file-rows').querySelector('[data-path="study/cyborg-hunter.config.json"]').click();
+  await until(() => t.sent.length === 2);
+  assert.deepEqual(t.sent[1].files.map((f) => f.path), ['study/a.csv']);
+  t.emit({ ...CHECKED, configFound: false, configPath: null, files: [{ path: 'study/a.csv', kind: 'data' }] });
+  await tick();
+  assert.equal(role('config-source').textContent, 'Settings: the defaults (no cyborg-hunter.config.json among the files).');
+  role('file-rows').querySelector('[data-path="study/a.csv"]').click();
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reset' }, 'nothing left to check: the page starts over');
+  assert.equal(role('files-panel').hidden, true);
+  assert.deepEqual(t.page.state.entries, []);
+});
+
+test('the sample lists its files without Remove controls', async () => {
+  const t = boot();
+  await toCheck(t);
+  assert.equal(role('file-rows').querySelectorAll('tr').length, 4);
+  assert.equal(role('file-rows').querySelectorAll('[data-action="remove-file"]').length, 0);
 });

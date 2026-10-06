@@ -136,6 +136,13 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trialId/phase now keeps that label on its row; unlabelled steps keep
   `gap-<n>`. Rows recorded by 0.10.x–0.11.x for such steps were labelled
   `gap-<n>`.
+- `/analyze/`: dropping and checking are one "Files & settings" step. Every
+  drop or file choice adds to the list, so data and replays can come from
+  different folders; the same file dropped twice is listed once. A table
+  lists each file with what it was read as (participant data, replay
+  recording, experiment asset, settings, ignored, unreadable) and a Remove
+  button, and a line says whether the settings came from a dropped
+  `cyborg-hunter.config.json` or are the defaults.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the

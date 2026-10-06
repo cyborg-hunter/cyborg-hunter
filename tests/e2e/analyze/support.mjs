@@ -150,10 +150,10 @@ export async function waitReady(page) {
 }
 export async function loadSample(page) {
   await page.click('[data-action="sample"]');
-  await expect(page.locator('section[data-step="check"]')).toBeVisible();
+  await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
 }
-// A failed run sends the page back to the check step with its error shown:
+// A failed run sends the page back to the files step with its error shown:
 // fail at once with the page's own message instead of at the timeout.
 export async function buildReport(page) {
   await expect(page.locator('[data-action="run"]')).toBeEnabled();

@@ -87,7 +87,7 @@ for (const n of sizes) {
       await page.goto(base + '/analyze/');
       await page.waitForFunction(() => document.querySelector('[data-role="tested-size"]').textContent !== '…', null, { timeout: 60000 });
       await page.setInputFiles('[data-role="file-input"]', files);
-      await page.waitForSelector('section[data-step="check"]:not([hidden])', { timeout: TIMEOUT_MS });
+      await page.waitForSelector('[data-role="files-panel"]:not([hidden])', { timeout: TIMEOUT_MS });
       await page.waitForSelector('[data-action="run"]:not([disabled])', { timeout: TIMEOUT_MS });
       intake = (Date.now() - t0) / 1000;
       const t1 = Date.now();

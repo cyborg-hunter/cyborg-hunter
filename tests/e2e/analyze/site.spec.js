@@ -13,8 +13,8 @@ test('dropped synthetic pilot: same triage order as the sample, zip tree matches
   await page.goto('/analyze/');
   await waitReady(page);
   await page.setInputFiles('[data-role="file-input"]', pilotFiles());
-  await expect(page.locator('section[data-step="check"]')).toBeVisible();
-  await expect(page.locator('[data-role="counts"]')).toContainText('3 data or replay files (3 CSV, 0 JSON)');
+  await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
   await buildReport(page);
@@ -61,7 +61,7 @@ test('a dropped stylesheet styles the replay; the recorded external image is nev
     await page.goto('/analyze/');
     await waitReady(page);
     await page.setInputFiles('[data-role="file-input"]', cohort.files);
-    await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment assets');
+    await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment asset');
     await buildReport(page);
     await reportSelected(page);
     await page.selectOption('[data-role="replay-select"]', 'DEMO-FIXT');
@@ -113,4 +113,30 @@ test('switching participant tears down the viewer and mounts the right replay', 
     await expect(page.locator('iframe.replay-host-frame')).toHaveCount(0);
     await assertOnlyAllowed(page, seen, allow);
   } finally { cohort.cleanup(); }
+});
+
+test('files from two drops are one list: data first, the replays and the config after; Remove takes one out', async ({ page, baseURL }) => {
+  const sentinel = await startSentinel();
+  const cohort = makeReplayCohort(sentinel.url);
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  try {
+    await page.goto('/analyze/');
+    await waitReady(page);
+    const data = cohort.files.filter((f) => /DEMO-FIXT(-B)?\.json$/.test(f));
+    const rest = cohort.files.filter((f) => !data.includes(f));
+    await page.setInputFiles('[data-role="file-input"]', data);
+    await expect(page.locator('[data-role="counts"]')).toContainText('2 data files');
+    await page.setInputFiles('[data-role="file-input"]', rest);
+    await expect(page.locator('[data-role="counts"]')).toContainText('2 replay recordings');
+    await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment asset');
+    await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
+    await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(6);
+    await page.locator('[data-role="file-rows"] [data-path="demo.css"]').click();
+    await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(5);
+    await expect(page.locator('[data-role="counts"]')).toContainText('0 experiment assets');
+    await buildReport(page);
+    expect((await railOrder(page)).sort()).toEqual(['DEMO-FIXT', 'DEMO-FIXT-B']);
+    await assertOnlyAllowed(page, seen, allow);
+  } finally { cohort.cleanup(); await sentinel.close(); }
 });

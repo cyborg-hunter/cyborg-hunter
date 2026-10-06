@@ -1,6 +1,7 @@
 // demo/analyze/page.js
-// The page's steps over one worker: drop (or the sample) → check → run →
-// results. All participant data stays in the worker (File handles go over,
+// The page's steps over one worker: files (each drop or file choice adds to
+// the list and checks it again; or the sample) → run → results. All
+// participant data stays in the worker (File handles go over,
 // the worker reads the bytes one file at a time); this module only holds
 // what the page shows: counts, warnings, the report HTML, the zip chunks.
 // One exception, opts.transferBytes (main.js sets it for a page opened from
@@ -14,6 +15,7 @@
 import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
+import { mergeEntries, removeEntry } from './files-panel.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
 
@@ -27,6 +29,12 @@ function download(name, blobOrText, type) {
   // Revoked later, not now: the browser may still be reading the blob.
   setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
 }
+// What the check read each file as (worker-entry.js's `files[].kind`), in
+// the file table.
+var KIND_LABELS = { data: 'participant data', recording: 'replay recording', asset: 'experiment asset',
+  config: 'settings', ignored: 'ignored', unreadable: 'could not be read' };
+function countSpan(n, one, many) { return '<span><b>' + n + '</b> ' + (n === 1 ? one : many) + '</span>'; }
+
 // What the id suggestion was read from: the data files peeked, and the
 // replay recordings among the dropped JSON files, which the peek leaves out.
 function filesInspectedText(sampled, recordings) {
@@ -44,7 +52,7 @@ function listWarnings(ul, items) {
 }
 
 export function createPage(root, worker, opts) {
-  var state = { step: 'drop', entries: [], sample: false, checked: null, idField: null, result: null,
+  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, result: null,
     zipParts: [], zipUrl: null, selected: null, assets: null, limits: null };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
@@ -119,8 +127,9 @@ export function createPage(root, worker, opts) {
 
   // Every failure lands here, from the worker ({ type: 'error', phase }) or
   // from the page's own code. A replay failure leaves the results alone; a
-  // check failure goes back to the drop; a run failure goes back to the check
-  // with its partial zip discarded and the run control enabled for a retry.
+  // check failure goes back to an empty files step; a run failure goes back
+  // to the file list with its partial zip discarded and the run control
+  // enabled for a retry.
   function recover(phase, message, warnings) {
     showError(message);
     if (phase === 'replay') {
@@ -130,11 +139,17 @@ export function createPage(root, worker, opts) {
     }
     hideStallHint();
     for (var k in pending) { pending[k].reject(handled(message)); delete pending[k]; }
-    // A failed run goes back to the check step, whose list already holds the
+    // A failed run goes back to the files step, whose list already holds the
     // config warnings: the run's own go under them.
     if (warnings) listWarnings(q(root, 'check-warnings'), (state.checked && phase !== 'check' ? state.checked.configWarnings || [] : []).concat(warnings));
-    if (phase === 'check' || !state.checked) { state.checked = null; goTo('drop'); }
-    else { discardZip(); goTo('check'); }
+    // A check that fails empties the list: drops add to it now, and a file
+    // that cannot be read would fail every later check while the table that
+    // offers Remove is not shown.
+    if (phase === 'check' || !state.checked) {
+      state.checked = null; state.entries = []; state.dropCount = 0;
+      q(root, 'files-panel').hidden = true; goTo('files');
+    }
+    else { discardZip(); goTo('files'); }
     updateControls();
   }
   // A rejection recover() already reported: the caller's catch must not
@@ -228,7 +243,10 @@ export function createPage(root, worker, opts) {
     if (busy()) return;
     clearError();
     state.checked = null;
-    goTo('check');
+    goTo('files');
+    q(root, 'files-panel').hidden = false;
+    q(root, 'file-rows').innerHTML = '';
+    q(root, 'config-source').textContent = '';
     q(root, 'counts').innerHTML = '<span class="hint">Reading the files…</span>';
     listWarnings(q(root, 'check-warnings'), []);
     q(root, 'size-warning').hidden = true;
@@ -238,16 +256,7 @@ export function createPage(root, worker, opts) {
     sendWithFiles({ type: 'check', sample: state.sample });
     var checked = await reply;
     state.checked = checked;
-    var c = checked.counts;
-    // classify-files.js puts every JSON file in BOTH the participant and the
-    // replay list (ingest tells a recording from data by content), so the
-    // replay list is the JSON count and each file is counted once here. The
-    // line under the id field says how many were data and how many replays.
-    var json = c.replay, csv = c.participant - c.replay;
-    q(root, 'counts').innerHTML =
-      '<span><b>' + c.participant + '</b> data or replay files (' + csv + ' CSV, ' + json + ' JSON)</span>' +
-      '<span><b>' + c.assets + '</b> experiment assets</span><span><b>' + (checked.configFound ? '1' : '0') + '</b> config file</span>' +
-      (c.ignored ? '<span><b>' + c.ignored + '</b> ignored</span>' : '');
+    renderFiles(checked);
     var sel = q(root, 'id-field'); sel.innerHTML = '';
     var offered = {};
     checked.idSuggestion.candidates.forEach(function (cand) {
@@ -264,12 +273,56 @@ export function createPage(root, worker, opts) {
     q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
     listWarnings(q(root, 'check-warnings'), checked.configWarnings);
     var tested = state.limits && state.limits.testedParticipants;
-    if (tested && c.participant > tested) {
-      q(root, 'size-warning-text').textContent = 'This cohort has ' + c.participant + ' data files, more than the ' + tested +
+    var dataFiles = kindCount(checked, 'data');
+    if (tested && dataFiles > tested) {
+      q(root, 'size-warning-text').textContent = 'This cohort has ' + dataFiles + ' data files, more than the ' + tested +
         ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here, or use the CLI, which is not limited by browser memory.';
       q(root, 'size-warning').hidden = false;
     }
     updateControls();
+  }
+
+  function kindCount(checked, kind) {
+    return (checked.files || []).filter(function (f) { return f.kind === kind; }).length;
+  }
+
+  // The recognised-files table (one row per file, what it was read as, and
+  // a Remove control; the sample has no file list of its own to edit), the
+  // counts by kind, and where the settings came from.
+  function renderFiles(checked) {
+    var rows = q(root, 'file-rows');
+    rows.innerHTML = '';
+    (checked.files || []).forEach(function (f) {
+      var tr = document.createElement('tr');
+      var name = document.createElement('td');
+      var code = document.createElement('code');
+      code.textContent = f.path;
+      name.appendChild(code);
+      var kind = document.createElement('td');
+      kind.textContent = KIND_LABELS[f.kind] || f.kind;
+      var act = document.createElement('td');
+      if (!state.sample) {
+        var b = document.createElement('button');
+        b.className = 'secondary';
+        b.dataset.action = 'remove-file';
+        b.dataset.path = f.path;
+        b.textContent = 'Remove';
+        act.appendChild(b);
+      }
+      tr.appendChild(name); tr.appendChild(kind); tr.appendChild(act);
+      rows.appendChild(tr);
+    });
+    var ignored = kindCount(checked, 'ignored'), unreadable = kindCount(checked, 'unreadable');
+    q(root, 'counts').innerHTML =
+      countSpan(kindCount(checked, 'data'), 'data file', 'data files') +
+      countSpan(kindCount(checked, 'recording'), 'replay recording', 'replay recordings') +
+      countSpan(kindCount(checked, 'asset'), 'experiment asset', 'experiment assets') +
+      countSpan(checked.configFound ? 1 : 0, 'config file', 'config files') +
+      (ignored ? countSpan(ignored, 'ignored', 'ignored') : '') +
+      (unreadable ? countSpan(unreadable, 'unreadable', 'unreadable') : '');
+    q(root, 'config-source').textContent = checked.configPath
+      ? 'Settings from ' + checked.configPath + ', over the defaults.'
+      : 'Settings: the defaults (no cyborg-hunter.config.json among the files).';
   }
 
   async function run() {
@@ -327,21 +380,38 @@ export function createPage(root, worker, opts) {
     listWarnings(q(root, 'run-warnings'), []);
     // Cleared so choosing the same files again still fires `change`.
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';
-    goTo('drop');
+    q(root, 'files-panel').hidden = true;
+    state.dropCount = 0;
+    goTo('files');
     clearError();
     updateControls();
   }
 
-  function setFiles(entries) { state.entries = entries; state.sample = false; return check(); }
+  // Each drop or file choice ADDS to the list (files-panel.js), and the list
+  // is checked again. Files added after the sample replace it: the sample is
+  // not a file list.
+  function addFiles(entries) {
+    if (busy()) return Promise.resolve();
+    if (state.sample) { state.sample = false; state.entries = []; }
+    state.dropCount++;
+    state.entries = mergeEntries(state.entries, entries, state.dropCount);
+    return check();
+  }
+  function removeFile(path) {
+    if (busy()) return Promise.resolve();
+    state.entries = removeEntry(state.entries, path);
+    if (!state.entries.length) { reset(); return Promise.resolve(); }
+    return check();
+  }
   function loadSample() { if (busy()) return Promise.resolve(); state.sample = true; state.entries = []; return check(); }
 
   // Wiring
   var zone = q(root, 'dropzone');
   function onDrop(e) {
     e.preventDefault(); zone.classList.remove('over');
-    if (state.step !== 'drop' || busy()) return;
+    if (state.step !== 'files' || busy()) return;
     // collectDropped reads every entry synchronously, before its first await.
-    collectDropped(e.dataTransfer).then(setFiles).catch(onFailure('check'));
+    collectDropped(e.dataTransfer).then(addFiles).catch(onFailure('check'));
   }
   zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('over'); });
   zone.addEventListener('dragleave', function () { zone.classList.remove('over'); });
@@ -350,8 +420,18 @@ export function createPage(root, worker, opts) {
   // file in place of this page: take it as a drop on the zone instead.
   window.addEventListener('dragover', function (e) { e.preventDefault(); });
   window.addEventListener('drop', function (e) { if (!zone.contains(e.target)) onDrop(e); else e.preventDefault(); });
-  q(root, 'file-input').addEventListener('change', function (e) { setFiles(filesFromInput(e.target)).catch(onFailure('check')); });
-  q(root, 'dir-input').addEventListener('change', function (e) { setFiles(filesFromInput(e.target)).catch(onFailure('check')); });
+  // Cleared after reading, so choosing the same file again still fires `change`.
+  ['file-input', 'dir-input'].forEach(function (r) {
+    q(root, r).addEventListener('change', function (e) {
+      var entries = filesFromInput(e.target);
+      e.target.value = '';
+      addFiles(entries).catch(onFailure('check'));
+    });
+  });
+  q(root, 'file-rows').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-action="remove-file"]');
+    if (b) removeFile(b.dataset.path).catch(onFailure('check'));
+  });
   root.querySelector('[data-action="sample"]').addEventListener('click', function () { loadSample().catch(onFailure('check')); });
   q(root, 'id-field').addEventListener('change', function (e) { state.idField = e.target.value; });
   runButton.addEventListener('click', function () { run().catch(onFailure('run')); });
@@ -395,7 +475,7 @@ export function createPage(root, worker, opts) {
     replayCard.select(pid);
   });
 
-  return { state: state, setFiles: setFiles, loadSample: loadSample, run: run, reset: reset,
+  return { state: state, addFiles: addFiles, removeFile: removeFile, loadSample: loadSample, run: run, reset: reset,
     selectParticipant: function (pid) { if (replayCard) replayCard.select(pid); },
     loadReplay: function () { return replayCard ? replayCard.load() : Promise.resolve(); } };
 }
