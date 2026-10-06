@@ -228,7 +228,9 @@ file is recognised by its contents under any filename and attaches by the
 `participant_id` inside it, and a jsPsych v1 recording is converted to v2
 on the way in (see **Replay artifacts** in `docs/cli-reference.md`). Each participant's pane gains a **Session replay** section with
 a lazy-loaded viewer: trial selector, play/pause/speed, scrub bar, cursor
-trail, click ripples, away-bands, an event marker lane, and — for
+trail, click ripples, away-bands, an event marker lane, size controls (the
+participant's whole recorded viewport, scaled to fit the window, by default;
+**1:1** for its own pixel size; **Fullscreen**), and — for
 `dom`-tier recordings — a sandboxed reconstruction of the page (scripts
 are blocked by both the iframe sandbox and a restrictive CSP; a
 participant-injected image URL can still fire a GET when the analyst

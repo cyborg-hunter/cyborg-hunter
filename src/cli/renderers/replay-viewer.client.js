@@ -332,7 +332,16 @@
     mount._chReplayInit = true;
     var initialExternalCss = !!(opts && opts.externalCss);
     var noExternalCss = !!(opts && opts.noExternalCss);
+    // The stage's room. `opts.maxStageWidth` caps its width: 960 px when
+    // absent, no cap when null (a host that gives the replay a wide column).
+    // `opts.fitHeight` is the height in CSS px the whole viewer may take, a
+    // number or a function asked at every sizing; the window's height when
+    // absent. In fullscreen the screen is the room, uncapped.
+    var maxStageWidth = opts && opts.maxStageWidth !== undefined ? opts.maxStageWidth : 960;
+    var fitHeightOpt = opts ? opts.fitHeight : undefined;
     mount.textContent = '';
+    // Hook for the fullscreen rule in replay-styles.js.
+    mount.classList.add('replay-viewer');
 
     var segments = model.segments || [];
     if (segments.length === 0) {
@@ -391,6 +400,7 @@
     var pendingCamSize = false;
     var stageW = 0, stageH = 0;
     var k = 1, ox = 0, oy = 0;  // iframe scale + letterbox origin
+    var oneToOne = false;       // the 1:1 control: recorded pixel size, scrolled
 
     // Scrub coalescing: at most one restore per animation frame, targeting the
     // latest requested time. Without it a drag across a deep span queues one
@@ -439,6 +449,18 @@
     header.appendChild(speedSel);
     header.appendChild(clock);
     header.appendChild(sessionPos);
+    // Size: fitted (the default, the whole recorded viewport on screen) or
+    // 1:1; and fullscreen for the whole viewer, offered only where this
+    // document may go fullscreen.
+    var sizeBtn = el('button', 'replay-size', '1:1');
+    sizeBtn.title = 'Show the recorded page at its own pixel size';
+    sizeBtn.setAttribute('aria-pressed', 'false');
+    header.appendChild(sizeBtn);
+    var fullBtn = null;
+    if (document.fullscreenEnabled) {
+      fullBtn = el('button', 'replay-fullscreen', 'Fullscreen');
+      header.appendChild(fullBtn);
+    }
     if (segments.length > 1) header.appendChild(pauseLabel);
     // Every CH panel is guarded on its OWN field, never on `foreign`: a
     // converted file carries the CH namespace without CH's data, and a CH file
@@ -721,7 +743,12 @@
     var mediaLayer = el('div', 'replay-media');
     mediaLayer.setAttribute('aria-hidden', 'true');
     stage.appendChild(mediaLayer);
-    mount.appendChild(stage);
+    // The stage sits in a box of its own: at 1:1 the box keeps the fitted
+    // room and the full-size stage scrolls inside it, so neither size reflows
+    // the page during playback.
+    var stageWrap = el('div', 'replay-stage-wrap');
+    stageWrap.appendChild(stage);
+    mount.appendChild(stageWrap);
     var ctx = overlay.getContext('2d');
 
     // ── Marker lane + scrub ──
@@ -995,21 +1022,57 @@
       }
     }
 
+    function fullscreenOn() { return !!document.fullscreenElement && document.fullscreenElement === mount; }
+
+    // The room the stage has: the mount's width (capped by maxStageWidth),
+    // and the fit height less the viewer's own controls, measured where they
+    // are laid out (header, lane, scrubber, ticker and the gaps between them,
+    // plus the mount's padding). Fullscreen: the screen, uncapped.
+    var MIN_STAGE_H = 200;
+    function fitBox() {
+      var full = fullscreenOn();
+      var w = mount.clientWidth || 720;
+      var cap = full ? null : num(maxStageWidth);
+      if (cap != null) w = Math.min(w, cap);
+      var fh = full ? window.innerHeight
+        : typeof fitHeightOpt === 'function' ? fitHeightOpt()
+        : num(fitHeightOpt) != null ? fitHeightOpt : window.innerHeight;
+      var cs = window.getComputedStyle ? window.getComputedStyle(mount) : null;
+      var chrome = (ticker.getBoundingClientRect().bottom - header.getBoundingClientRect().top) -
+        stageWrap.getBoundingClientRect().height +
+        (cs ? (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) : 0);
+      return { w: w, h: Math.max(MIN_STAGE_H, (num(fh) || 0) - Math.max(0, chrome)) };
+    }
+
     // The stage BOX is fixed per segment (sized from the seed camera's aspect)
     // so playback never reflows the report page; camera changes re-letterbox
-    // the iframe INSIDE the box.
+    // the iframe INSIDE the box. Fitted, the box is the largest of that shape
+    // in the room; at 1:1 it is the seed camera's own size (scale 1 at the
+    // segment's opening viewport), shown through the wrap at the room's size.
+    var lastBox = null;
     function sizeStage() {
-      stageW = Math.min(mount.clientWidth || 720, 960);
       var seed = seg().camera || {};
       var scw = num(seed.client_w) || num(seed.w) || 1280;
       var sch = num(seed.client_h) || num(seed.h) || 800;
-      stageH = Math.round(sch * (stageW / scw));
+      var box = lastBox = fitBox();
+      if (oneToOne) {
+        stageW = scw;
+        stageH = sch;
+      } else {
+        stageW = Math.max(1, Math.floor(Math.min(box.w, box.h * scw / sch)));
+        stageH = Math.round(sch * (stageW / scw));
+      }
       stage.style.width = stageW + 'px';
       stage.style.height = stageH + 'px';
       overlay.width = stageW;
       overlay.height = stageH;
-      lane.width = stageW;
-      scrub.style.width = stageW + 'px';
+      // The lane and the scrubber span what is on screen.
+      var shownW = oneToOne ? Math.min(stageW, box.w) : stageW;
+      stageWrap.classList.toggle('replay-actual', oneToOne);
+      stageWrap.style.width = oneToOne ? shownW + 'px' : '';
+      stageWrap.style.height = oneToOne ? Math.min(stageH, box.h) + 'px' : '';
+      lane.width = shownW;
+      scrub.style.width = shownW + 'px';
     }
 
     // Applied lazily: before each anchored self-check and once per applied
@@ -2319,19 +2382,55 @@
 
     // Analyst-side resizes (report sidebar, browser zoom, window resize)
     // re-derive the stage box and transform — the reconstruction must track
-    // its container, not just the recording.
+    // its container, not just the recording. The window's own resize is
+    // watched too: the room's height comes from it (or from fitHeight), and a
+    // taller window changes no width the observer would see.
+    function refit() {
+      sizeStage();
+      if (!cam) return;
+      pendingCamSize = true;
+      flushCamSize();
+      drawOverlay();
+      drawLane();
+    }
+    function refitIfChanged() {
+      var box = fitBox();
+      if (lastBox && box.w === lastBox.w && box.h === lastBox.h) return;
+      refit();
+    }
+    // The observer's refit waits a frame: resizing the stage inside the
+    // observer's own callback resizes the element it observes, which WebKit
+    // reports as a page error ("ResizeObserver loop completed with
+    // undelivered notifications").
+    var refitQueued = false;
+    function queueRefit() {
+      if (refitQueued) return;
+      refitQueued = true;
+      requestAnimationFrame(function () { refitQueued = false; refitIfChanged(); });
+    }
     if (typeof ResizeObserver !== 'undefined') {
-      var ro = new ResizeObserver(function () {
-        var newW = Math.min(mount.clientWidth || 720, 960);
-        if (newW === stageW) return;
-        sizeStage();
-        pendingCamSize = true;
-        flushCamSize();
-        drawOverlay();
-        drawLane();
-      });
+      var ro = new ResizeObserver(queueRefit);
       ro.observe(mount);
     }
+    window.addEventListener('resize', refitIfChanged);
+
+    sizeBtn.addEventListener('click', function () {
+      oneToOne = !oneToOne;
+      // The control keeps its name, "1:1"; aria-pressed and its pressed
+      // styling (replay-styles.js) show the state.
+      sizeBtn.setAttribute('aria-pressed', String(oneToOne));
+      refit();
+    });
+    if (fullBtn) {
+      fullBtn.addEventListener('click', function () {
+        var p = fullscreenOn() ? document.exitFullscreen() : mount.requestFullscreen();
+        if (p && p.catch) p.catch(function () { /* refused: the viewer stays as it was */ });
+      });
+    }
+    document.addEventListener('fullscreenchange', function () {
+      if (fullBtn) fullBtn.textContent = fullscreenOn() ? 'Exit fullscreen' : 'Fullscreen';
+      refit();
+    });
 
     // Test/debug surface (used by the alignment battery and the
     // checkpoint executor; not a public API).

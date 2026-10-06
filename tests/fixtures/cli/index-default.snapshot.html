@@ -148,8 +148,10 @@
       border: 1px solid var(--line); font-weight: 400;
     }
 
-    /* Detail pane base */
-    .detail .participant { max-width: 800px; }
+    /* Detail pane base. The replay section is the exception to the 800px
+       reading column: its viewer scales the recording to the room it has, and
+       a recorded desktop page is wider than the column. */
+    .detail .participant > :not(.replay-block) { max-width: 800px; }
 
     /* Empty-state hint when filter+search combine to hide every row.
        Shown by reconcileSelection() via [data-empty="true"] on .detail. */
@@ -980,6 +982,15 @@
     .replay-media-badge { font: 11px/1.2 var(--ff-tomorrow);
                     background: rgba(0,137,123,0.85); color: #fff; padding: 2px 7px;
                     border-radius: 3px; white-space: nowrap; }
+    /* Size controls: 1:1 keeps the recorded pixel size and the stage scrolls
+       inside its box; fullscreen gives the whole viewer the screen. */
+    .replay-size, .replay-fullscreen {
+      padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
+      color: var(--ink); border-radius: 4px; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 13px; }
+    .replay-size[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+    .replay-stage-wrap.replay-actual { overflow: auto; }
+    .replay-viewer:fullscreen { background: var(--surface); padding: 12px 16px; overflow: auto; }
   </style>
   <script>
 
@@ -998,7 +1009,12 @@
         const mount = block.querySelector('.replay-mount');
         // Read the fetch decision before the mount is cleared.
         const fetchBox = block.querySelector('.replay-fetch-css');
-        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked) };
+        // The replay takes the pane's whole width (no 960px cap, and the
+        // section is not held to the reading column) and fits the pane's
+        // height, less its padding.
+        const pane = document.querySelector('.detail');
+        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked), maxStageWidth: null,
+          fitHeight: function () { return (pane ? pane.clientHeight : window.innerHeight) - 40; } };
         btn.disabled = true;
         btn.textContent = 'Loading…';
         mount.setAttribute('aria-busy', 'true');

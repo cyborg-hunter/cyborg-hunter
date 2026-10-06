@@ -276,8 +276,10 @@ ${fontFaceCss}    :root {
       border: 1px solid var(--line); font-weight: 400;
     }
 
-    /* Detail pane base */
-    .detail .participant { max-width: 800px; }
+    /* Detail pane base. The replay section is the exception to the 800px
+       reading column: its viewer scales the recording to the room it has, and
+       a recorded desktop page is wider than the column. */
+    .detail .participant > :not(.replay-block) { max-width: 800px; }
 
     /* Empty-state hint when filter+search combine to hide every row.
        Shown by reconcileSelection() via [data-empty="true"] on .detail. */
@@ -872,7 +874,12 @@ ${replayClientSrc}
         const mount = block.querySelector('.replay-mount');
         // Read the fetch decision before the mount is cleared.
         const fetchBox = block.querySelector('.replay-fetch-css');
-        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked) };
+        // The replay takes the pane's whole width (no 960px cap, and the
+        // section is not held to the reading column) and fits the pane's
+        // height, less its padding.
+        const pane = document.querySelector('.detail');
+        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked), maxStageWidth: null,
+          fitHeight: function () { return (pane ? pane.clientHeight : window.innerHeight) - 40; } };
         btn.disabled = true;
         btn.textContent = 'Loading…';
         mount.setAttribute('aria-busy', 'true');

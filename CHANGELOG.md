@@ -173,6 +173,13 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   same browser, where they are listed as if dropped. The report the tour
   used to build at its end, and its scoring playground, are gone: the
   analyzer builds the report and holds the settings. The tour has 11 steps.
+- Replay viewer: the stage shows the participant's whole recorded viewport,
+  scaled to fit on both axes. Before, it took the available width only, and a
+  tall recording ran below the window. **1:1** shows the recorded page at
+  its own pixel size, scrolling inside the stage's box; **Fullscreen** gives
+  the viewer the whole screen. In the CLI report the replay takes the detail
+  pane's full width and height, beyond the 800 px column the rest of the pane
+  keeps.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the

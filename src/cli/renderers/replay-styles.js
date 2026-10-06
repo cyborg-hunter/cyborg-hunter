@@ -58,4 +58,13 @@ export const REPLAY_STYLES_CSS = `    /* Replay viewer (see replay-viewer.client
                     padding: 5px 6px; pointer-events: none; flex-wrap: wrap; }
     .replay-media-badge { font: 11px/1.2 var(--ff-tomorrow);
                     background: rgba(0,137,123,0.85); color: #fff; padding: 2px 7px;
-                    border-radius: 3px; white-space: nowrap; }`;
+                    border-radius: 3px; white-space: nowrap; }
+    /* Size controls: 1:1 keeps the recorded pixel size and the stage scrolls
+       inside its box; fullscreen gives the whole viewer the screen. */
+    .replay-size, .replay-fullscreen {
+      padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
+      color: var(--ink); border-radius: 4px; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 13px; }
+    .replay-size[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+    .replay-stage-wrap.replay-actual { overflow: auto; }
+    .replay-viewer:fullscreen { background: var(--surface); padding: 12px 16px; overflow: auto; }`;

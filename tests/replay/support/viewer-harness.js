@@ -108,7 +108,13 @@ export function stubCanvas(win) {
 
 // ── boot ───────────────────────────────────────────────────────────────────
 
-export function boot(recording, opts) {
+// `env` (optional) states what happy-dom cannot compute, for the stage-fit
+// tests (viewer-fit.test.js): the mount's width (`mountWidth`), the window's
+// height (`innerHeight`), and whether and what the document has in
+// fullscreen (`fullscreenEnabled`, `fullscreenElement`). Each is read through
+// a getter, so a test can change it and dispatch `resize` or
+// `fullscreenchange`.
+export function boot(recording, opts, env) {
   const model = buildViewerModel(recording);
   // No network in this realm: happy-dom would otherwise try to fetch every
   // <link rel=stylesheet> the viewer links and fire `error` on it, which the
@@ -119,6 +125,13 @@ export function boot(recording, opts) {
   const frames = [];
   win.document.body.innerHTML = '<div id="mount"></div>';
   const mount = win.document.getElementById('mount');
+  const stated = (target, name) => {
+    if (env && name in env) Object.defineProperty(target, name, { configurable: true, get: () => env[name] });
+  };
+  stated(win, 'innerHeight');
+  stated(win.document, 'fullscreenEnabled');
+  stated(win.document, 'fullscreenElement');
+  if (env && 'mountWidth' in env) Object.defineProperty(mount, 'clientWidth', { configurable: true, get: () => env.mountWidth });
   // The four globals the client reads. ResizeObserver is deliberately
   // undefined — the client is `typeof`-guarded and an analyst-side resize is
   // not what these files test.
