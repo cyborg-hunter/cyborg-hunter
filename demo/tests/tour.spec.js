@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import {
   test, expect,
   dispatchPaste, dispatchCopy, dispatchDevToolsShortcut, typeRealistically,
-  startTour, waitForLamp,
+  startTour, waitForLamp, fastForwardToFiles,
   installFailingFullscreenMock,
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
@@ -297,6 +297,33 @@ test('the files step leaves fullscreen via the plugin, with no false violation l
   await download.saveAs(join(tmpDir, download.suggestedFilename()));
   const sessionData = JSON.parse(readFileSync(join(tmpDir, `${participantId}.json`), 'utf8'));
   expect((sessionData.guardFriction && sessionData.guardFriction.violations) || []).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// 10b. The files step's cards name each file as it is saved (the session
+// files carry the visitor's id), and each batch's "Save all" saves every file
+// in it from one click, next to the per-file Save buttons.
+// ---------------------------------------------------------------------------
+test('files step: the cards name the files as saved, and Save all saves each batch', async ({ page }) => {
+  await fastForwardToFiles(page);
+  const participantId = await pid(page);
+  const cardNames = await page.locator('.file small').allTextContents();
+  expect(cardNames[0]).toBe(participantId + '.json');
+  expect(cardNames[1]).toMatch(new RegExp('^' + participantId + '-replay-\\d+\\.json$'));
+  expect(cardNames.slice(2)).toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
+
+  // One click per batch; the browser's downloads, as Playwright sees them.
+  const saveAll = async (batch, count) => {
+    const names = [];
+    const onDownload = (download) => names.push(download.suggestedFilename());
+    page.on('download', onDownload);
+    await page.locator(`[data-action="save-all"][data-batch="${batch}"]`).click();
+    await expect.poll(() => names.length).toBe(count);
+    page.off('download', onDownload);
+    return names.sort();
+  };
+  expect(await saveAll(0, 3)).toEqual(cardNames.slice(0, 3).sort());
+  expect(await saveAll(1, 2)).toEqual(['example-1.json', 'example-2.json']);
 });
 
 // ---------------------------------------------------------------------------

@@ -134,9 +134,10 @@ command-line tool that turns those records into a triage report a reviewer
 can read in minutes. It exists because participants increasingly answer
 studies with an AI in a second window, and self-report doesn't catch that.</p>
 <p>This demo makes you the participant. You'll trigger the signals yourself,
-watch them being recorded, run into the enforcement mode, and end with a
-real report built from your own session. Two instruments on this page are
-demo-only: the signal lamps on the right and the live session record below
+watch them being recorded, run into the enforcement mode, and end with your
+session's files, one click away from a real report built from them in the
+analyzer. Two instruments on this page are demo-only: the signal lamps on
+the right and the live session record below
 them. The lamps show a curated handful of what cyborg-hunter records; the
 full list is in docs/signals-reference.md. The recording itself is the
 actual product, behaving exactly as it does in a study.</p>
@@ -370,10 +371,13 @@ data.</p>`.trim(),
   },
 ];
 
-/** The last step's files, in two download batches (a Save link per file, no
- * zip): the session built in this tab (`key`, built by demo.js's
- * buildDownloadFile) and the two example participants the site serves
- * (`href`). The hand-off to the analyzer passes the same five files. */
+/** The last step's files, in two download batches (a Save link per file and
+ * a "Save all" per batch, no zip): the session built in this tab (`key`,
+ * built by demo.js's buildDownloadFile) and the two example participants the
+ * site serves (`href`). A session file's card shows the name it is saved
+ * under (demo.js sessionFileName); its `filename` here is the pattern, shown
+ * only for a recording this browser could not make. The hand-off to the
+ * analyzer passes the same files. */
 export const DOWNLOAD_BATCHES = [
   {
     heading: 'Your session',
@@ -402,7 +406,7 @@ export const DOWNLOAD_BATCHES = [
  * store the files. */
 export const HANDOFF = {
   buttonLabel: 'Open in the analyzer →',
-  buttonHint: 'All five files, kept in this browser: nothing is uploaded.',
+  buttonHint: 'The files below, kept in this browser: nothing is uploaded.',
   failed: 'This browser would not keep the files for the analyzer. Save them ' +
     'below and drop them on <a href="analyze/">the analyzer</a> instead.',
 };
@@ -413,9 +417,10 @@ export const HANDOFF = {
 export const REPLICATE = {
   sections: [
     { n: 1, heading: 'Save the five files into one empty folder',
-      text: 'Use the Save buttons above, one per file. If your browser asks whether this site may download several files, allow it. ' +
-        'If a session file is still blocked, use its "show as text" link and save the text yourself; for an example file, ' +
-        'right-click its Save link and choose "Save link as".',
+      text: 'Use "Save all" on each batch above, or the Save button of each file. After the first file of a "Save all", ' +
+        'your browser may ask whether this site may download several files: allow it, or save the rest with their own ' +
+        'Save buttons. If a session file is still blocked, use its "show as text" link and save the text yourself; for an ' +
+        'example file, right-click its Save link and choose "Save link as".',
       code: null },
     { n: 2, heading: 'Install Node.js if you don’t have it',
       text: 'Node 18 or newer. Check with:',

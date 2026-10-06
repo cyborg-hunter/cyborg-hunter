@@ -278,6 +278,7 @@ test('a refused hand-off keeps the visitor on the files step, says why, and enab
   await button.click();
   const note = page.locator('[data-role="handoff-note"]');
   await expect(note).toBeVisible();
+  await expect(note).toHaveAttribute('role', 'status');
   await expect(note).toContainText('would not keep the files');
   await expect(note.locator('a[href="analyze/"]')).toHaveCount(1);
   await expect(button).toBeEnabled();

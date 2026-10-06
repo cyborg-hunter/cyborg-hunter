@@ -278,7 +278,7 @@ function startTour(participantId, capabilities, manifest) {
   // it for 'sessionData') — with it set, and once the last step has
   // snapshotted state.sessionReport, this reads that frozen snapshot instead
   // of a fresh live one. Without it (paneRow()'s live-pane feed, and step
-  // 11's "your soft score … from the session so far" readout), this keeps
+  // 10's "your soft score … from the session so far" readout), this keeps
   // reading monitor.getSessionReport() live, same as before — freezing
   // either of those inputs would quietly make "so far" false.
   function buildCurrentPayload(opts) {
@@ -679,7 +679,7 @@ function startTour(participantId, capabilities, manifest) {
 
   // Renders the fallback note (steps.js copy if the task defines one, else
   // a minimal inline string) and, if not already offered, a skip link
-  // straight to "From signals to scores" (index 10) — reusing the same
+  // straight to "From signals to scores" (index 9) — reusing the same
   // data-key the card's click delegation already handles. The primary
   // "Enter fullscreen" button stays enabled for a retry either way (advance
   // is never fully blocked).
@@ -795,6 +795,34 @@ function startTour(participantId, capabilities, manifest) {
     return '<span class="act2">' + prefix + '</span> ' + rest;
   }
 
+  // The name a session file is saved under: buildDownloadFile writes it and
+  // the file's card shows it. null for a recording this browser could not
+  // make. Naming the recording finalizes it (finalizeReplay() is idempotent);
+  // the card renders in the same goTo() call that finalizes it anyway, a few
+  // statements later (its last-step block).
+  function sessionFileName(key) {
+    if (key === 'sessionData') return participantId + '.json';
+    if (key === 'config') return 'cyborg-hunter.config.json';
+    if (key !== 'replay') return null;
+    var recording = finalizeReplay();
+    if (!recording) return null;
+    // Epoch from the recording's own start field (mirrors persistence.js's
+    // replayFilename(), which isn't exposed on the standalone
+    // window.CyborgHunterReplay global) else Date.now(). SessionRecording v2
+    // carries the start as a top-level `recording_started_at` ISO string
+    // (serializer.js); the pre-v2 `metadata.start_time` reading landed here
+    // as Date.now() on every v2 recording, so the downloaded replay filename
+    // no longer matched what the CLI derives — hence the fix.
+    var epoch = Date.now();
+    var startedAt = recording.recording_started_at ||
+      (recording.metadata && recording.metadata.start_time);
+    if (startedAt) {
+      var parsedEpoch = Date.parse(startedAt);
+      if (!isNaN(parsedEpoch)) epoch = parsedEpoch;
+    }
+    return participantId + '-replay-' + epoch + '.json';
+  }
+
   // Builds the { filename, data } pair for one downloads-step file button.
   // Called both by the download click handler and the "show as text"
   // fallback, so both always agree on exactly what would have been saved.
@@ -805,33 +833,16 @@ function startTour(participantId, capabilities, manifest) {
       // a fresh live read that could pick up a sidebar/viewport event our
       // OWN fullscreen exit produced (exitFullscreenIfActive() in goTo()'s
       // last-step block) — the visitor did not produce that event.
-      return { filename: participantId + '.json', data: buildCurrentPayload({ final: true }) };
+      return { filename: sessionFileName('sessionData'), data: buildCurrentPayload({ final: true }) };
     }
     if (key === 'replay') {
       // renderFileCard() disables this button when
-      // state.replayUnavailable, so this is only reachable after a real
-      // attach attempt — guard anyway in case finalizeReplay() has nothing
-      // to return.
+      // state.replayUnavailable; Save all (saveBatch) and the hand-off
+      // (handoffFiles) call this anyway and leave out the null it returns
+      // then, or when finalizeReplay() has nothing to return.
       var recording = finalizeReplay();
       if (!recording) return null;
-      // Epoch from the recording's own start field (mirrors persistence.js's
-      // replayFilename(), which isn't exposed on the standalone
-      // window.CyborgHunterReplay global) else Date.now(). SessionRecording v2
-      // carries the start as a top-level `recording_started_at` ISO string
-      // (serializer.js); the pre-v2 `metadata.start_time` reading landed here
-      // as Date.now() on every v2 recording, so the downloaded replay filename
-      // no longer matched what the CLI derives — hence the fix.
-      var epoch = Date.now();
-      var startedAt = recording.recording_started_at ||
-        (recording.metadata && recording.metadata.start_time);
-      if (startedAt) {
-        var parsedEpoch = Date.parse(startedAt);
-        if (!isNaN(parsedEpoch)) epoch = parsedEpoch;
-      }
-      return {
-        filename: participantId + '-replay-' + epoch + '.json',
-        data: recording
-      };
+      return { filename: sessionFileName('replay'), data: recording };
     }
     if (key === 'config') {
       // The analysis settings for the five files the step offers: the
@@ -844,7 +855,7 @@ function startTour(participantId, capabilities, manifest) {
       // scoring.softScoreThreshold as an analyst-side override). Changing
       // them is the analyzer's job now: its settings panel exports a config.
       return {
-        filename: 'cyborg-hunter.config.json',
+        filename: sessionFileName('config'),
         data: {
           dataDir: '.',
           filePattern: '{DEMO-*,example-*}.json',
@@ -864,13 +875,32 @@ function startTour(participantId, capabilities, manifest) {
   // popup/auto-download.
   function triggerDownload(filename, data) {
     var url = URL.createObjectURL(jsonBlob(data));
+    clickDownload(url, filename);
+    URL.revokeObjectURL(url);
+  }
+
+  // Clicks a throwaway <a download> for `href`, inside the caller's click
+  // handler (the browser's user gesture).
+  function clickDownload(href, filename) {
     var a = document.createElement('a');
-    a.href = url;
+    a.href = href;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  }
+
+  // "Save all": every file of one batch from this one click, in order — a
+  // session file built and written as its Save button does (a missing
+  // recording is skipped), an example from the site. A browser may ask
+  // before the second download of one click; the walkthrough (REPLICATE)
+  // says to allow it or to use the per-file Save buttons.
+  function saveBatch(batch) {
+    batch.files.forEach(function (f) {
+      if (f.href) { clickDownload(f.href, f.filename); return; }
+      var toSave = buildDownloadFile(f.key);
+      if (toSave) triggerDownload(toSave.filename, toSave.data);
+    });
   }
 
   // A built file's bytes, as the Save button writes them and the hand-off
@@ -904,7 +934,7 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // "Open in the analyzer": the five files the batches offer, stored for the
+  // "Open in the analyzer": the files the batches offer, stored for the
   // analyze page (handoff.js), which this tab then opens. The navigation
   // waits for the write, so no popup blocker is involved, and Back returns
   // to the tour. If the browser refuses the store, the step says so; the
@@ -951,15 +981,16 @@ function startTour(participantId, capabilities, manifest) {
   }
 
   // One file card. A session file (f.key) is built in this tab, saved by
-  // its button, and has a "show as text" fallback; an example (f.href) is a
-  // plain link to the file the site serves.
+  // its button under the name its card shows, and has a "show as text"
+  // fallback; an example (f.href) is a plain link to the file the site
+  // serves.
   function renderFileCard(f) {
-    var info = function (description) {
-      return '<div class="file-info">' + f.label + '<small>' + f.filename + '</small>' +
-        '<span class="file-desc">' + description + '</span></div>';
+    var info = function (name, description) {
+      return '<div class="file-info">' + escHtml(f.label) + '<small>' + escHtml(name) + '</small>' +
+        '<span class="file-desc">' + escHtml(description) + '</span></div>';
     };
     if (f.href) {
-      return '<div class="file">' + info(f.description) +
+      return '<div class="file">' + info(f.filename, f.description) +
         '<div class="file-actions"><a class="btn" href="' + f.href + '" download="' + f.filename + '">Save</a></div></div>';
     }
     var disabled = f.key === 'replay' && state.replayUnavailable;
@@ -971,7 +1002,8 @@ function startTour(participantId, capabilities, manifest) {
       ? '<p class="file-caveat" data-role="config-caveat">' + tpl(CONFIG_CAVEAT) + '</p>'
       : '';
     return (
-      '<div class="file">' + info(disabled ? 'recording unavailable in this browser' : f.description) +
+      '<div class="file">' +
+      info(sessionFileName(f.key) || f.filename, disabled ? 'recording unavailable in this browser' : f.description) +
       '<div class="file-actions">' +
       '<button class="btn" data-action="download" data-key="' + f.key +
       '" data-saved-label="' + f.savedLabel + '"' + (disabled ? ' disabled' : '') + '>Save</button>' +
@@ -992,10 +1024,11 @@ function startTour(participantId, capabilities, manifest) {
     parts.push(
       '<div class="handoff"><button class="btn" data-action="open-analyzer">' + escHtml(HANDOFF.buttonLabel) + '</button>' +
       '<span class="hint">' + escHtml(HANDOFF.buttonHint) + '</span></div>' +
-      '<p class="rule" data-role="handoff-note" hidden></p>'
+      '<p class="rule" data-role="handoff-note" role="status" hidden></p>'
     );
-    DOWNLOAD_BATCHES.forEach(function (batch) {
-      parts.push('<h3 class="batch-heading">' + escHtml(batch.heading) + '</h3>');
+    DOWNLOAD_BATCHES.forEach(function (batch, b) {
+      parts.push('<div class="batch-head"><h3 class="batch-heading">' + escHtml(batch.heading) + '</h3>' +
+        '<button class="btn" data-action="save-all" data-batch="' + b + '">Save all</button></div>');
       parts.push('<div class="files">' + batch.files.map(renderFileCard).join('') + '</div>');
     });
     parts.push(
@@ -1035,7 +1068,7 @@ function startTour(participantId, capabilities, manifest) {
     return playgroundModPromise;
   }
 
-  // Config-as-source snippets (step 11, walkthrough item 7a): both built
+  // Config-as-source snippets (step 10, walkthrough item 7a): both built
   // from the manifest's real values, never hand-typed, so a preset change
   // can't silently drift from what's displayed (same principle as
   // tools/gen-signal-manifest.mjs's own docblock). Shows the 'standard'
@@ -1073,7 +1106,7 @@ function startTour(participantId, capabilities, manifest) {
     }, null, 2);
   }
 
-  // Step 11's scoring panel (walkthrough item 7): per-signal weight editors
+  // Step 10's scoring panel (walkthrough item 7): per-signal weight editors
   // seeded from state.scoringOverrides.weights (falling back to the active
   // preset's own defaults) plus the two config-as-source snippets above.
   // Interactivity (weight-input listener, live soft-score readout) is
@@ -1110,11 +1143,11 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // Step 11: wires the weight-input listener + the live current-soft-score
+  // Step 10: wires the weight-input listener + the live current-soft-score
   // readout (buildCurrentPayload() -> recomputeSignals(), against the
   // visitor's own session so far). Debounced (reuses playground.js's
   // makeDebounced) so dragging an input's spinner doesn't recompute on
-  // every intermediate value. Called fresh from goTo() every time step 11
+  // every intermediate value. Called fresh from goTo() every time step 10
   // renders — the previous render's panel/listeners are gone with the old
   // innerHTML, same discipline as every other step-specific wiring here.
   function wireScoringPanel(manifest) {
@@ -1410,6 +1443,8 @@ function startTour(participantId, capabilities, manifest) {
     }
     var analyzerBtn = e.target.closest('[data-action="open-analyzer"]');
     if (analyzerBtn) { openInAnalyzer(analyzerBtn); return; }
+    var saveAllBtn = e.target.closest('[data-action="save-all"]');
+    if (saveAllBtn) { saveBatch(DOWNLOAD_BATCHES[Number(saveAllBtn.dataset.batch)]); return; }
     var downloadBtn = e.target.closest('[data-action="download"]');
     if (downloadBtn) {
       var toSave = buildDownloadFile(downloadBtn.dataset.key);

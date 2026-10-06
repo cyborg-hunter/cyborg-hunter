@@ -1,9 +1,7 @@
 // demo/tests/helpers.mjs
 // Shared Playwright fixtures + DOM-automation helpers for tour.spec.js and
-// handoff.spec.js (the 11-step tour). Rewritten for D1 — keeps the v1 helper PATTERNS proven
-// against headless Chromium (see each section below for why), drops the
-// teaser/finale/Alt+S helpers the remodel deleted, and rewrites the
-// fast-forward helper for the new step map.
+// handoff.spec.js (the 11-step tour), in the patterns proven against
+// headless Chromium (see each section below for why).
 //
 // Three auto-fixtures apply to every test that imports `test` from this
 // module:
@@ -31,7 +29,7 @@
 // GuardFriction's fullscreenElementOf()/check() read the patched APIs from
 // the very first paint, same as a real implementation would.
 //
-// One thing driving the live page during D1 disproved: dispatching a
+// One thing driving the live page disproved: dispatching a
 // synthetic 'blur' Event on window does NOT make GuardFriction log a
 // violation. Its check() reads document.hasFocus() — real browser focus
 // state, unaffected by a synthetic event — so a bare blur dispatch is a
