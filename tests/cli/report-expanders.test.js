@@ -34,3 +34,28 @@ describe('paste evidence', () => {
     assert.match(html, /\.paste-entry:not\(\.expanded\) \.paste-full \{ display: none; \}/);
   });
 });
+
+// One session-signal cell's markup, from its title to the next cell (or to
+// the end of the grid).
+function cellOf(html, title) {
+  const start = html.indexOf('<div class="sig-cell-title">' + title + '</div>');
+  assert.ok(start >= 0, 'a "' + title + '" cell');
+  const next = html.indexOf('<div class="sig-cell">', start);
+  return html.slice(start, next >= 0 ? next : html.indexOf('</div></div>', start));
+}
+const items = (markup) => [...markup.matchAll(/<li>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+
+describe('session-signal cells', () => {
+  it('a cell lists its first three items and keeps the rest in a details element whose summary counts them', async () => {
+    const cell = cellOf(await render(), 'Kb shortcuts');
+    const open = cell.slice(0, cell.indexOf('<details'));
+    const more = cell.slice(cell.indexOf('<details'));
+    assert.deepEqual(items(open), ['Ctrl+C', 'Ctrl+V', 'Ctrl+Tab']);
+    assert.match(more, /^<details class="sig-more"><summary class="muted">… \+3 more<\/summary>/);
+    assert.deepEqual(items(more), ['Alt+Tab', 'Ctrl+F', 'Ctrl+T']);
+  });
+
+  it('no cell ends in an inert "more" line', async () => {
+    assert.doesNotMatch(await render(), /<li class="muted">… \+\d+ more<\/li>/);
+  });
+});

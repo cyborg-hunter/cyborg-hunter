@@ -394,6 +394,7 @@ ${fontFaceCss}    :root {
     }
     .sig-cell ul { list-style: none; margin-top: 4px; font-size: 12px; padding: 0; }
     .sig-cell li { font-family: var(--ff-recursive); padding: 2px 0; word-break: break-word; }
+    .sig-more > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; cursor: pointer; }
     .muted { color: var(--dim); }
 
     /* Paste evidence — list of expandable entries */
@@ -1183,15 +1184,13 @@ function renderSessionBlock(s, participant) {
   const cells = [];
   if (aiExt.length) {
     // AI extensions can be strings or {name: '...'} objects (legacy convention).
-    const lines = aiExt.slice(0, 3).map(e => esc(typeof e === 'string' ? e : (e?.name || 'unknown')));
-    cells.push(cellHtml('AI extensions', aiExt.length, lines));
+    cells.push(cellHtml('AI extensions', aiExt.map(e => esc(typeof e === 'string' ? e : (e?.name || 'unknown')))));
   }
   if (sidebar.length) {
-    cells.push(cellHtml('Sidebar events', sidebar.length, sidebar.slice(0, 3).map(formatSidebar)));
+    cells.push(cellHtml('Sidebar events', sidebar.map(formatSidebar)));
   }
   if (kb.length) {
-    cells.push(cellHtml('Kb shortcuts', kb.length, kb.slice(0, 3).map(ev =>
-      esc(String(ev?.combo || ev?.key || 'unknown')))));
+    cells.push(cellHtml('Kb shortcuts', kb.map(ev => esc(String(ev?.combo || ev?.key || 'unknown')))));
   }
 
   return `
@@ -1200,17 +1199,20 @@ function renderSessionBlock(s, participant) {
   `;
 }
 
-// One signal cell: uppercase title + up to 3 preview lines + an overflow line
-// when the underlying count exceeds previewLines.length. Caller is responsible
-// for esc'ing entries in previewLines (we trust the caller here so callers can
-// embed safe markup like the muted span in formatSidebar).
-function cellHtml(title, count, previewLines) {
-  const overflow = count > previewLines.length
-    ? `<li class="muted">… +${count - previewLines.length} more</li>`
+// One signal cell: uppercase title, the first CELL_PREVIEW lines, and the rest
+// inside a <details> whose summary says how many there are. The browser opens
+// it with no script, so it works wherever the report is opened. Caller is
+// responsible for esc'ing every entry in `lines` (we trust the caller here so
+// callers can embed safe markup like the muted span in formatSidebar).
+const CELL_PREVIEW = 3;
+function cellHtml(title, lines) {
+  const rest = lines.slice(CELL_PREVIEW);
+  const more = rest.length
+    ? `<details class="sig-more"><summary class="muted">… +${rest.length} more</summary><ul>${rest.map(l => `<li>${l}</li>`).join('')}</ul></details>`
     : '';
   return `<div class="sig-cell">
     <div class="sig-cell-title">${title}</div>
-    <ul>${previewLines.map(l => `<li>${l}</li>`).join('')}${overflow}</ul>
+    <ul>${lines.slice(0, CELL_PREVIEW).map(l => `<li>${l}</li>`).join('')}</ul>${more}
   </div>`;
 }
 

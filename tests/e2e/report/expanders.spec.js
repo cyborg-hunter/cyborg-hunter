@@ -1,6 +1,7 @@
 // tests/e2e/report/expanders.spec.js
 // The CLI report's expand controls, clicked in each engine: the paste-evidence
-// toggle shows a long paste's full text and hides it again. The report is
+// toggle shows a long paste's full text and hides it again, and a
+// session-signal cell's "… +N more" opens the rest of its list. The report is
 // built by bin/cyborg-hunter.js from tests/fixtures/cli/expanders-participant.json
 // (its markup: tests/cli/report-expanders.test.js) and opened from file://.
 import { execFileSync } from 'node:child_process';
@@ -35,4 +36,14 @@ test('the paste toggle shows a long paste\'s full text, and hides it again', asy
   await entry.locator('.paste-toggle').click();
   await expect(entry.locator('.paste-full')).toBeHidden();
   await expect(entry.locator('.paste-preview')).toBeVisible();
+});
+
+test('a session-signal cell\'s "… +3 more" opens the rest of its list', async ({ page }) => {
+  await openReport(page);
+  const cell = page.locator('#p-EXP-1 .sig-cell').filter({ hasText: 'Kb shortcuts' });
+  await expect(cell.getByText('Ctrl+C', { exact: true })).toBeVisible();
+  await expect(cell.getByText('Alt+Tab', { exact: true })).toBeHidden();
+  await cell.getByText('… +3 more').click();
+  await expect(cell.getByText('Alt+Tab', { exact: true })).toBeVisible();
+  await expect(cell.getByText('Ctrl+T', { exact: true })).toBeVisible();
 });

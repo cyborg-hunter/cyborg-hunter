@@ -129,6 +129,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   researcher's own per-trial replay entry without `params` is covered too.
 - Report (CLI and `/analyze/`): the ▸ toggle beside a long paste now shows
   its full text. Before, a click hid the preview and showed nothing.
+- Report (CLI and `/analyze/`): "… +N more" under a session-level signal
+  (AI extensions, sidebar events, keyboard shortcuts) now opens the rest of
+  the list. Before, it was plain text, and the rest was nowhere in the report.
 
 ### Removed
 - Internal renderer wrappers removed
