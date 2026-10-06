@@ -116,3 +116,31 @@ test('the host posts its document height to the framing page, and again whenever
   assert.deepEqual(sent, [[{ type: 'cyborg-hunter:replay-height', height: 300 }, '*'],
     [{ type: 'cyborg-hunter:replay-height', height: 513 }, '*']]);
 });
+
+// While the viewer is fullscreen it sits in the top layer, out of the flow,
+// and the host's document is only its own padding tall. Posting that would
+// shrink the frame under the fullscreen viewer, and the frame would come back
+// short on exit until the next post.
+test('the host posts no height while its viewer is fullscreen', () => {
+  const html = buildReplayHostHtml({ segments: [] }, '');
+  const reporter = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1])
+    .find((s) => s.includes('cyborg-hunter:replay-height'));
+  const sent = [];
+  let height = 680;
+  let observed = null;
+  const document = { body: {}, fullscreenElement: null, documentElement: { getBoundingClientRect: () => ({ height }) } };
+  const window = { parent: { postMessage: (msg, target) => sent.push([msg, target]) } };
+  function ResizeObserver(cb) { this.observe = (el) => { observed = { el, cb }; }; }
+  new Function('window', 'document', 'ResizeObserver', reporter)(window, document, ResizeObserver);
+  document.fullscreenElement = {};
+  height = 32;
+  observed.cb();
+  assert.equal(sent.length, 1, 'nothing posted while fullscreen');
+  document.fullscreenElement = null;
+  height = 680;
+  observed.cb();
+  assert.equal(sent.length, 1, 'back at the height last posted: nothing to post');
+  height = 700;
+  observed.cb();
+  assert.deepEqual(sent.at(-1), [{ type: 'cyborg-hunter:replay-height', height: 700 }, '*']);
+});

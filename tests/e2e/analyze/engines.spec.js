@@ -139,8 +139,16 @@ test('the replay frame is as tall as the viewer, fits the window, and the viewer
     const full = mount.locator('.replay-fullscreen');
     // Shown only where the frame's document may go fullscreen.
     await expect(full).toBeVisible();
+    const tall = await frame.evaluate((f) => f.style.height);
     await full.click();
     await expect.poll(() => mount.evaluate((m) => document.fullscreenElement === m)).toBe(true);
+    // The host posts no height while its viewer is fullscreen (its document is
+    // then only its padding tall), so the frame keeps its height for the
+    // return. Three frames and a task: time for the host's ResizeObserver to
+    // run and its message to arrive.
+    await mount.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 50))))));
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
+    expect(await frame.evaluate((f) => f.style.height)).toBe(tall);
     // Leaving needs no user gesture, so the click is dispatched: headless
     // Chromium does not deliver a pointer click into a fullscreen frame
     // (the top-level case is clicked in tests/e2e/report/replay-fit.spec.js).

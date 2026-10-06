@@ -80,11 +80,14 @@ var SCRIPT_TAG = 'script';
 // it changes, so the page can size the frame to the viewer and the replay
 // shows whole, with no scrollbar of its own (demo/analyze/replay-card.js).
 // Only a number crosses. The target is '*' because the offline single file's
-// documents have no origin to name.
+// documents have no origin to name. Nothing is posted while the viewer is
+// fullscreen: it is then out of the flow and the document is only its padding
+// tall, a height the frame should not take back with it on exit.
 var HEIGHT_REPORTER =
   '(function () {' +
   'var last = -1;' +
   'function post() {' +
+  'if (document.fullscreenElement) return;' +
   'var h = Math.ceil(document.documentElement.getBoundingClientRect().height);' +
   'if (h === last) return;' +
   'last = h;' +
