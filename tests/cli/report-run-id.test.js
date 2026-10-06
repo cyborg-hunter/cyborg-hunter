@@ -40,7 +40,7 @@ describe('the run id', () => {
     assert.ok(inPage.includes(line), 'the in-page report');
   });
 
-  it('is absent when no hash is given: the top bar is unchanged', async () => {
+  it('is absent when no hash is given: the top bar is unchanged, and no annotation controls', async () => {
     const { participants } = await ingest(CLI);
     const files = new Map();
     const built = await buildReport(participants, mergeConfig(CLI).config,
@@ -48,5 +48,8 @@ describe('the run id', () => {
     assert.equal(built.runId, null);
     assert.equal(built.generatedAt, null);
     assert.equal(files.get('index.html').includes('run-id'), false);
+    // The annotations are stored under the run id: without one, none.
+    assert.equal(files.get('index.html').includes('ch-annot:'), false);
+    assert.equal(files.get('index.html').includes('annot-'), false);
   });
 });

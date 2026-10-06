@@ -27,6 +27,7 @@ import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
 import { inlineSafeJson, inlineSafeSrc } from '../../shared/inline-safe.js';
+import { annotationBlock } from './annotation-client.js';
 
 /**
  * Renders the report's index.html as a string. `opts.replayClientSrc` is the
@@ -99,6 +100,9 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
     ? ` &middot; run <code class="mono run-id">${esc(opts.runId)}</code>` +
       (opts.generatedAt ? ` &middot; <time class="run-time" datetime="${esc(opts.generatedAt)}">${esc(formatRunTime(opts.generatedAt))}</time>` : '')
     : '';
+  // The annotation controls (annotation-client.js), stored under the run id:
+  // emitted only when the report has one.
+  const annotationHtml = opts.runId ? annotationBlock({ runId: opts.runId }) : '';
 
   // Cohort counts for filter chips and totals footer. The triage array is
   // already sorted tier-first (hard → soft → clean, score-desc within tier) by
@@ -849,7 +853,7 @@ ${replayClientSrc}
         document.body.appendChild(s);
       });
     })();
-  </script>
+  </script>${annotationHtml}
 </body>
 </html>`;
 

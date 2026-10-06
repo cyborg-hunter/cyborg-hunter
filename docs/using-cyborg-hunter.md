@@ -487,6 +487,26 @@ cyborg-hunter-report/
 
 Visual renderers depend on `node-canvas` (Cairo bindings). If `npm install canvas` failed (typically a pkg-config / Cairo issue), the CLI prints platform-specific install hints and renders the text outputs without images.
 
+### Annotating participants
+
+The report's top bar names its run, for example `run 3f9c2a7b1d4e8a60 ·
+2026-10-05 14:03 UTC`. The id is a hash of the participant ids, so a report
+rebuilt from the same files keeps it, whatever the settings. In each
+participant's header, **Include**, **Exclude** and **Flag** record your
+decision and the note field your reason. Pressing the chosen label again
+clears it; a participant without a label is not reviewed. The keys `i`, `e`
+and `f` do the same for the participant on screen. The rail shows each label
+beside the participant and, at the bottom, how many are reviewed.
+
+The report keeps the annotations in this browser, under its run id, so they
+are there when you open the same `index.html` again. **Export JSON** saves
+them to a file, and **Import…** reads such a file back into a report of the
+same participants (entries for other participants are listed, not applied).
+**Export CSV** writes one row per participant in triage order:
+`participantId, tier, triageScore, label, note, annotatedAt, runId`. Tick
+"count unreviewed as included" to write `include` for everyone you did not
+label, for an exclusion list.
+
 ## Optional: DOM protection utilities
 
 The library exposes three helpers that make casual scraping by AI tools harder. None of them are silver bullets — they raise the cost of automated extraction enough to deter low-effort cheating.
