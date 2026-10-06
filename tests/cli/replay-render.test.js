@@ -495,7 +495,7 @@ describe('viewer client file', () => {
       'payload still decodes to the original content');
   });
 
-  it('viewer frame is non-interactive and CSP blocks forms/frames/connect', () => {
+  it('viewer frame is non-interactive and CSP blocks forms/frames/connect/media', () => {
     const src = readFileSync(
       new URL('../../src/cli/renderers/replay-viewer.client.js', import.meta.url), 'utf8');
     assert.match(src, /pointer-events\s*:?\s*none|pointerEvents\s*=\s*'none'/i,
@@ -504,6 +504,10 @@ describe('viewer client file', () => {
     assert.match(src, /frame-src 'none'/);
     assert.match(src, /connect-src 'none'/);
     assert.match(src, /base-uri 'none'/);
+    // Replays never play media, so the frame never fetches it either (the
+    // analyze page's policy blocks it too; tests/e2e/report/media.spec.js).
+    assert.match(src, /media-src 'none'/);
+    assert.doesNotMatch(src, /media-src \*/);
     // External stylesheets load only when the analyst allowed it: the <link>
     // emission must be gated by allowExternalCss, and that flag must come from
     // the report's up-front decision (opts.externalCss, 2026-09-03) — absent
