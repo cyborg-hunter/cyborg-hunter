@@ -249,8 +249,8 @@ describe('lab.js rows: the study\'s participantId and ch.js\'s id', () => {
 
 // A participant id is a string from the extractor on: the report names its
 // files after it and --participant compares strings. 0 and false are ids
-// (a CSV's dynamic typing turns a numeric subject id into a number); a
-// missing, null or empty id is not.
+// (a JSON export can hold a numeric subject id); a missing, null or empty id
+// is not. A CSV's id columns are read as the text they hold: 007 is not 7.
 describe('participant ids that are not strings', () => {
   const integ = (id) => ({ trialId: id, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
   const trialRow = (pid) => ({ sender: 'a', participantId: pid, integrity: integ('0') });
@@ -278,10 +278,27 @@ describe('participant ids that are not strings', () => {
     const body = { metadata: { slice: 0, id: 'x', payload: 'full' }, url: 'https://x/', data: [trialRow(44)] };
     assert.strictEqual(extractIntegrityData(body, {}).participantId, '44');
   });
-  it('a CSV with a numeric id (dynamic typing makes it a number) is keyed by its string, 0 included', () => {
+  it('a CSV id keeps its text: 007, 1e3 and TRUE as written, 0 included', () => {
     const csv = (id) => ['participantId,integrity', id + ',"{""trialId"":""0"",""pasteEvents"":[]}"'].join('\n');
-    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('42'), {}), {}).participantId, '42');
-    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('0'), {}), {}).participantId, '0');
+    for (const id of ['007', '1e3', 'TRUE', '42', '0']) {
+      assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv(id), {}), {}).participantId, id);
+    }
+  });
+  it('a CSV keyed by its own participantIdField keeps that column\'s text; the other columns are still typed', () => {
+    const csv = ['subject,rt,correct,integrity', '007,0350,TRUE,"{""trialId"":""0"",""pasteEvents"":[]}"'].join('\n');
+    const raw = parseCsvToRaw(csv, { participantIdField: 'subject' });
+    assert.deepStrictEqual([raw.subject, raw.trials[0].subject, raw.trials[0].rt, raw.trials[0].correct], ['007', '007', 350, true]);
+    assert.strictEqual(extractIntegrityData(raw, { participantIdField: 'subject' }).participantId, '007');
+  });
+  // ch.js's id in a lab.js CSV is an id too: it keys a participant without
+  // an id of the study's own, and names the recording beside one.
+  it('a lab.js CSV keeps ch.js\'s id as written, alone or beside the study\'s own id', () => {
+    const csv = (studyId) => ['sender,participantId,cyborgHunterParticipantId,integrity',
+      'intro,' + studyId + ',007,"{""trialId"":""0"",""pasteEvents"":[]}"', 'root,,,'].join('\n');
+    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv(''), {}), {}).participantId, '007');
+    const r = extractIntegrityData(parseCsvToRaw(csv('R1'), {}), {});
+    assert.strictEqual(r.participantId, 'R1');
+    assert.strictEqual(r.metadata.cyborgHunterParticipantId, '007');
   });
   it('lab.js rows with a numeric study id and a numeric ch.js id: both strings, ch.js\'s in the metadata', () => {
     const rows = [

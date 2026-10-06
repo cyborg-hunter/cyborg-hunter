@@ -193,6 +193,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   versions) gets a double-load error whose fix says to load `ch.js` once and
   keep one of its `<script>` tags. Before, the fix said to load only one of
   `ch.js` and `cyborg-hunter.min.js`, a file the page did not load.
+- CLI and analyze page: a CSV participant ID keeps its text (`007` stays
+  `007`, and so does ch.js's ID on lab.js rows). Before, `007` was keyed
+  `7`, so its replay recording did not attach and `--participant 007` found
+  nothing.
 
 ### Removed
 - Internal renderer wrappers removed

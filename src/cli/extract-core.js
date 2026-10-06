@@ -30,9 +30,9 @@ function transmitRows(raw) {
   return raw.data.every(r => r && typeof r === 'object' && !Array.isArray(r)) ? raw.data : null;
 }
 
-// A value that names a participant. 0 and false do (a CSV's dynamic typing
-// turns a numeric subject id into a number); undefined, null and an empty
-// string do not, as the `||` chains this replaced treated them.
+// A value that names a participant. 0 and false do (a JSON export can hold a
+// numeric subject id); undefined, null and an empty string do not, as the
+// `||` chains this replaced treated them.
 const present = v => v !== undefined && v !== null && v !== '';
 
 // Rows written by the one-line setup on lab.js: they carry ch.js's id as
