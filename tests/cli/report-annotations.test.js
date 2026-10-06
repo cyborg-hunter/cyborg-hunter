@@ -226,6 +226,20 @@ describe('the report\'s annotation script', () => {
     assert.deepEqual(r.labels(), { 'a b': 'exclude' });
   });
 
+  // A replay viewer in fullscreen covers the report, as the report's own
+  // navigation keys already allow for: the selected row is behind it.
+  it('the keys while anything is in fullscreen (a replay viewer) label nothing', () => {
+    const storage = memoryStorage();
+    const r = mount(storage);
+    r.select('a b');
+    Object.defineProperty(r.doc, 'fullscreenElement', { configurable: true, value: r.doc.body });
+    r.key('f');
+    assert.equal(storage.items.has(KEY), false);
+    Object.defineProperty(r.doc, 'fullscreenElement', { configurable: true, value: null });
+    r.key('f');
+    assert.deepEqual(r.labels(), { 'a b': 'flag' });
+  });
+
   it('each change is written over what storage holds now, and another tab\'s change shows here', () => {
     const storage = memoryStorage();
     const r = mount(storage);

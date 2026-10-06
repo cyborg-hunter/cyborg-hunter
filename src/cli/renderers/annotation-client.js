@@ -311,14 +311,16 @@ export const ANNOTATION_UI_JS = String.raw`
       // selected row, since two ids that sanitize alike share one pane id and
       // both panes then show. Not while typing in a field, not with a modifier
       // key, not for a held key's repeats, and not while the legend or an
-      // enlarged image is open.
+      // enlarged image is open or anything is in fullscreen (a replay viewer
+      // covers the report, as the report's navigation keys allow for).
       document.addEventListener('keydown', function (e) {
         var label = e.key === 'i' ? 'include' : e.key === 'e' ? 'exclude' : e.key === 'f' ? 'flag' : null;
         if (!label || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
         if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
         var legend = document.getElementById('legend-modal');
         var lightbox = document.getElementById('lightbox');
-        if ((legend && !legend.hasAttribute('hidden')) || (lightbox && lightbox.classList.contains('open'))) return;
+        if ((legend && !legend.hasAttribute('hidden')) || (lightbox && lightbox.classList.contains('open')) ||
+          document.fullscreenElement) return;
         var row = document.querySelector('.cohort-row.selected');
         if (!row) return;
         var id = row.dataset.pid;
