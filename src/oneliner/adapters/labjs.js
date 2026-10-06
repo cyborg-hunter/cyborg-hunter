@@ -68,6 +68,8 @@ export function watchLabJsPlacement(opts) {
     try {
       var ctx = opts.ctx, doc = opts.doc;
       if (ctx.bootError || ctx.host !== 'vanilla') return;
+      // A page with jsPsych is a jsPsych page: its message is boot.js's wrongBuild.
+      if (typeof opts.win.initJsPsych === 'function') return;
       var found = detectLabJs(opts.win);
       if (found && found.generation !== 'classic') console.warn(MESSAGES.labjsVersionUnsupported(found.version));
       else if (found) console.error(MESSAGES.loadedAboveLabJs());
