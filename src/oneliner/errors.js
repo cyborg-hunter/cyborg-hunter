@@ -21,14 +21,26 @@ export function loudError(problem, cause, fix, link) {
 }
 
 var REPORT_FIX = 'open an issue with this message and your <script> tag';
+var MIN_FILE = 'cyborg-hunter.min.js';
+
+// The one-line file that is running, for the messages that name it: boot.js
+// passes CH_FILE (build-flags.js) and keeps it as ctx.file. Without one (a
+// test's own ctx) the message names ch.js.
+function own(file) { return file || 'ch.js'; }
 
 // The data-debug summary's part for MESSAGES.replaySaveReminder (debug.js).
 export const REPLAY_SAVE_REMINDER = 'data-replay is on: save CyborgHunter.replay() in your save code';
 
 export const MESSAGES = {
+  // first: the bundle that set the sentinel, by its own file name (boot.js
+  // reads a one-line file's from win.__cyborgHunterFile); second: the one
+  // loaded after it. The fix names the one-line file involved, and both
+  // when two different one-line files meet.
   doubleLoad: function (first, second) {
+    var oneLine = first === MIN_FILE ? second : first;
+    var other = first !== second && first !== MIN_FILE && second !== MIN_FILE ? second : MIN_FILE;
     return formatError('Not starting a second monitor', second + ' was loaded after ' + first,
-      'load only one of ch.js and cyborg-hunter.min.js (the one-liner already contains the monitor)',
+      'load only one of ' + oneLine + ' and ' + other + (other === MIN_FILE ? ' (the one-liner already contains the monitor)' : ''),
       DOCS + 'advanced-integration.md#double-load');
   },
   // min.js's own sentinel found by a second copy of min.js: nothing to say
@@ -53,15 +65,15 @@ export const MESSAGES = {
   },
   // The URL parameter names are not spelled out here: the caller supplies the
   // list (participant-id.js), and the docs anchor documents it.
-  randomId: function (id) {
+  randomId: function (id, file) {
     return formatError('Participant rows cannot be linked to your platform ID',
       'no PROLIFIC-style URL parameter, data-participant-id or CyborgHunterConfig.participantId was found; using ' + id,
-      'add data-participant-id="..." to the ch.js tag or pass the ID in the URL',
+      'add data-participant-id="..." to the ' + own(file) + ' tag or pass the ID in the URL',
       DOCS + 'quickstart.md#participant-id');
   },
-  manualInitOnOneLiner: function () {
+  manualInitOnOneLiner: function (file) {
     return formatError('CyborgHunter.init() called while the one-liner is running',
-      'ch.js already created the monitor at page load',
+      own(file) + ' already created the monitor at page load',
       'remove the init()/startTrial()/endTrial() code, or switch to cyborg-hunter.min.js for manual mode',
       DOCS + 'advanced-integration.md#manual-mode');
   },
@@ -132,25 +144,25 @@ export const MESSAGES = {
   // Session replay (data-replay): cyborg-hunter-replay.js is loaded lazily
   // from next to ch.js (or data-replay-src). console.error; the experiment
   // runs on without replay.
-  replayUnavailable: function (msg) {
+  replayUnavailable: function (msg, file) {
     return formatError('Session replay is not recording', msg,
-      'put cyborg-hunter-replay.js next to ch.js or point data-replay-src at it, and allow its URL in the page\'s Content-Security-Policy',
+      'put cyborg-hunter-replay.js next to ' + own(file) + ' or point data-replay-src at it, and allow its URL in the page\'s Content-Security-Policy',
       DOCS + 'known-issues.md#one-line-setup');
   },
   // console.error, vanilla host: the page came back from the back/forward
   // cache and the recorder could not record again (replay-loader.js
   // restore()). The usual cause is a cyborg-hunter-replay.js from a release
   // without resumeSession(). Integrity monitoring is unaffected.
-  replayRestoreFailed: function (msg) {
+  replayRestoreFailed: function (msg, file) {
     return formatError('Session replay did not resume when the participant came back to this page', msg,
-      'serve the cyborg-hunter-replay.js of the same release as ch.js; CyborgHunter.replay() still returns the recording up to when the participant left this page',
+      'serve the cyborg-hunter-replay.js of the same release as ' + own(file) + '; CyborgHunter.replay() still returns the recording up to when the participant left this page',
       DOCS + 'advanced-integration.md#replay-with-the-one-liner');
   },
   // console.warn, from CyborgHunter.replay(), which then returns null.
-  replayOff: function () {
+  replayOff: function (file) {
     return formatError('CyborgHunter.replay() has no recording',
-      'session replay is off (the ch.js tag has no data-replay)',
-      'add data-replay to the ch.js tag',
+      'session replay is off (the ' + own(file) + ' tag has no data-replay)',
+      'add data-replay to the ' + own(file) + ' tag',
       DOCS + 'advanced-integration.md#replay-with-the-one-liner');
   },
   replayNotReady: function () {
@@ -195,17 +207,17 @@ export const MESSAGES = {
   // data-debug the summary carries REPLAY_SAVE_REMINDER instead; debug.js).
   // It replaces the recorder's own autoSave warning, which the one-liner
   // silences (replay-loader.js recorderConfig).
-  replaySaveReminder: function () {
+  replaySaveReminder: function (file) {
     return formatError('data-replay is on',
-      'ch.js records the session but does not save the recording',
+      own(file) + ' records the session but does not save the recording',
       'save CyborgHunter.replay() in your save code',
       DOCS + 'advanced-integration.md#replay-with-the-one-liner');
   },
   // console.warn, once, from the inert window.CyborgHunter that boot leaves
   // when ch.js failed (api.js buildInertApi): the call did nothing.
-  notRunning: function () {
+  notRunning: function (file) {
     return formatError('Cyborg Hunter is not running on this page',
-      'ch.js did not start (see the error above), so CyborgHunter calls do nothing',
+      own(file) + ' did not start (see the error above), so CyborgHunter calls do nothing',
       'fix the error logged above; until then the experiment runs without monitoring',
       DOCS + 'known-issues.md#one-line-setup');
   },

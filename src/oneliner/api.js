@@ -20,7 +20,8 @@
 //                           (below); in manual mode, the core init(cfg)
 //   preventTextSelection, addHoneypot, setAltText   (core static helpers)
 // }
-// buildInertApi() → the same members, inert (ch.js failed; see below).
+// buildInertApi(file) → the same members, inert (the one-line file `file`
+// failed; see below).
 // mark/data/startFriction depend on the host (jsPsych or vanilla); the host
 // adapter installs them in ctx.handlers, and boot installs replay
 // (replay-loader.js). Until then they return undefined. mark() (with startTrial/endTrial) and data() are vanilla calls:
@@ -92,7 +93,7 @@ export function buildPublicApi(ctx) {
     // hand-over happens after boot.
     init: function (cfg) {
       if (ctx.host === 'manual') return coreInit(cfg);
-      console.error(MESSAGES.manualInitOnOneLiner());
+      console.error(MESSAGES.manualInitOnOneLiner(ctx.file));
       return inertMonitor(api);
     },
     preventTextSelection: preventTextSelection,
@@ -117,11 +118,11 @@ export function buildPublicApi(ctx) {
 //              stop it at the end
 // The core's static helpers (preventTextSelection, addHoneypot, setAltText)
 // do not depend on the monitor and stay real.
-export function buildInertApi() {
+export function buildInertApi(file) {
   var warned = false;
   function noted(value) {
     return function () {
-      if (!warned) { warned = true; console.warn(MESSAGES.notRunning()); }
+      if (!warned) { warned = true; console.warn(MESSAGES.notRunning(file)); }
       return typeof value === 'function' ? value() : value;
     };
   }

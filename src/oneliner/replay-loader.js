@@ -63,13 +63,14 @@ export function replaySaveReminderApplies(ctx) {
   return !(selfSaving && ctx.host !== 'vanilla');
 }
 
-// data-replay-src when given, else cyborg-hunter-replay.js next to ch.js.
-// scriptSrc is document.currentScript.src (entry.js); it is null for an
-// inline or bundled ch.js, which has no directory to look in.
-export function replaySrcFor(scriptSrc, override) {
+// data-replay-src when given, else cyborg-hunter-replay.js next to the
+// one-line file. scriptSrc is document.currentScript.src (entry.js); it is
+// null for an inline or bundled file, which has no directory to look in.
+// file names the one-line file in the error (ctx.file; ch.js without one).
+export function replaySrcFor(scriptSrc, override, file) {
   if (override) return override;
   if (!scriptSrc) {
-    throw new Error('ch.js could not tell which URL it was loaded from (inline or bundled), so it cannot find ' +
+    throw new Error((file || 'ch.js') + ' could not tell which URL it was loaded from (inline or bundled), so it cannot find ' +
       REPLAY_FILE + '; set data-replay-src');
   }
   return new URL(REPLAY_FILE, scriptSrc).href;
@@ -129,7 +130,7 @@ export function makeReplayProxy(opts) {
       } catch (e) {
         // A recorder attached before the failure would keep its listeners.
         if (inner && inner.api) { try { inner.api.destroy(); } catch (_) { /* already failing */ } }
-        console.error(MESSAGES.replayUnavailable(message(e)));
+        console.error(MESSAGES.replayUnavailable(message(e), ctx.file));
       }
     }
 
@@ -230,7 +231,7 @@ export function createVanillaReplay(opts) {
           }
           handle.stopped = false;
         } catch (e) {
-          console.error(MESSAGES.replayRestoreFailed(message(e)));
+          console.error(MESSAGES.replayRestoreFailed(message(e), ctx.file));
           return;
         }
         try { handle.api.startTrial({ trialId: trialId, extensions: RESTORED_FROM_BFCACHE }); } catch (_) { /* replay only */ }
@@ -271,7 +272,7 @@ function currentHolder(ctx) {
 }
 
 function replay(ctx) {
-  if (!ctx.config.replay) { console.warn(MESSAGES.replayOff()); return null; }
+  if (!ctx.config.replay) { console.warn(MESSAGES.replayOff(ctx.file)); return null; }
   if (ctx.replayRecording) return ctx.replayRecording;
   var holder = currentHolder(ctx);
   if (holder && holder.api) {
@@ -302,16 +303,16 @@ export function installReplay(opts) {
   var doc = opts.doc || win.document;
   ctx.handlers.replay = function () {
     try { return replay(ctx); } catch (e) {
-      console.error(MESSAGES.replayUnavailable(message(e)));
+      console.error(MESSAGES.replayUnavailable(message(e), ctx.file));
       return null;
     }
   };
   var none = { startVanilla: function () {} };
   if (!ctx.config.replay) return none;
   try {
-    ctx.replaySrc = replaySrcFor(ctx.scriptSrc, ctx.config.replaySrc);
+    ctx.replaySrc = replaySrcFor(ctx.scriptSrc, ctx.config.replaySrc, ctx.file);
   } catch (e) {
-    console.error(MESSAGES.replayUnavailable(message(e)));
+    console.error(MESSAGES.replayUnavailable(message(e), ctx.file));
     return none;
   }
   var autoSave = ctx.config.replay.autoSave;
@@ -319,7 +320,7 @@ export function installReplay(opts) {
     console.warn(MESSAGES.replayAutoSaveVanilla());
   }
   // With data-debug the summary says it (debug.js), so the page gets one line.
-  if (!ctx.debug && replaySaveReminderApplies(ctx)) console.info(MESSAGES.replaySaveReminder());
+  if (!ctx.debug && replaySaveReminderApplies(ctx)) console.info(MESSAGES.replaySaveReminder(ctx.file));
   if (ctx.host === 'jspsych') {
     ctx.replayProxy = makeReplayProxy({ doc: doc, src: ctx.replaySrc, ctx: ctx, timeoutMs: opts.timeoutMs });
   }
@@ -328,7 +329,7 @@ export function installReplay(opts) {
   function start() {
     createVanillaReplay({ win: win, doc: doc, src: ctx.replaySrc, ctx: ctx, timeoutMs: opts.timeoutMs }).then(
       function (handle) { ctx.replay = handle; },
-      function (e) { console.error(MESSAGES.replayUnavailable(message(e))); }
+      function (e) { console.error(MESSAGES.replayUnavailable(message(e), ctx.file)); }
     );
   }
   return {

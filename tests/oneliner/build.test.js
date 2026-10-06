@@ -83,6 +83,11 @@ for (const target of ONE_LINE_TARGETS) {
       assert.match(readFileSync(file, 'utf8'), /\.__cyborgHunterLoaded="ch\.js"/);
     });
 
+    it('names itself for a later double-load message', () => {
+      const src = readFileSync(join(outDir, target.file), 'utf8');
+      assert.ok(src.includes('"__cyborgHunterFile",{value:' + JSON.stringify(target.file)), target.file);
+    });
+
     it('carries the adapters of its own hosts and none of the others', () => {
       const src = readFileSync(join(outDir, target.file), 'utf8');
       for (const [host, marker] of Object.entries(MARKERS)) {

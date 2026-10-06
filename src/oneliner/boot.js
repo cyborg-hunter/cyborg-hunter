@@ -73,7 +73,15 @@
 // find a registered instance; and a boot failure with no window.CyborgHunter
 // yet leaves the inert namespace (api.js buildInertApi), so documented calls
 // do not throw.
+//
+// Every one-line file runs this boot (build-targets.js). Each sets the same
+// sentinel value, 'ch.js', so cyborg-hunter.min.js's footer and rerun.js read
+// any of them as the one-line setup, and names itself in
+// win.__cyborgHunterFile (non-enumerable), so a later double load names both
+// files. ctx.file is the running file's name (CH_FILE, build-flags.js), for
+// the messages that name it.
 
+import './build-flags.js';
 import { init } from '../core/monitor.js';
 import { createSegmentDiffer } from './segment-diff.js';
 import { createSegmenter } from './segmenter.js';
@@ -111,7 +119,9 @@ export function boot(opts) {
   } catch (_) { /* a locked global: the researcher's own script tag still works */ }
   try {
     if (win.__cyborgHunterLoaded) {
-      console.error(MESSAGES.doubleLoad(win.__cyborgHunterLoaded, 'ch.js'));
+      // A one-line file of an earlier release set only the sentinel.
+      var first = win.__cyborgHunterLoaded === 'ch.js' && typeof win.__cyborgHunterFile === 'string' ? win.__cyborgHunterFile : win.__cyborgHunterLoaded;
+      console.error(MESSAGES.doubleLoad(first, CH_FILE));
       // Another ch.js already wraps initJsPsych; a second wrapper would list
       // this bundle's own class, which that ch.js takes for a manual-mode
       // extension (detectManualMode compares classes).
@@ -132,7 +142,7 @@ export function boot(opts) {
     if (pid.source === 'random') {
       var kept = sessionGet(win, PID_KEY);
       if (kept) pid = { id: kept, source: 'session' };
-      else console.warn(MESSAGES.randomId(pid.id));
+      else console.warn(MESSAGES.randomId(pid.id, CH_FILE));
     }
     sessionSet(win, PID_KEY, pid.id);
 
@@ -142,6 +152,7 @@ export function boot(opts) {
     var host = typeof win.initJsPsych === 'function' ? 'jspsych' : 'vanilla';
 
     ctx = {
+      file: CH_FILE,
       config: config,
       participantId: pid.id,
       participantIdSource: pid.source,
@@ -192,6 +203,9 @@ export function boot(opts) {
           console.error(MESSAGES.bootFailed(String((e && e.message) || e)));
         }
       }
+    });
+    Object.defineProperty(win, '__cyborgHunterFile', {
+      value: CH_FILE, writable: false, enumerable: false, configurable: true
     });
     win.CyborgHunter = ctx.api;
     win.__cyborgHunterLoaded = 'ch.js';
@@ -266,6 +280,6 @@ function fail(win, ctx, adapter, e) {
     installInertWrapper(win);
   } catch (_) { /* the failure is logged above */ }
   try {
-    if (win.CyborgHunter === undefined) win.CyborgHunter = buildInertApi();
+    if (win.CyborgHunter === undefined) win.CyborgHunter = buildInertApi(CH_FILE);
   } catch (_) { /* a locked global */ }
 }
