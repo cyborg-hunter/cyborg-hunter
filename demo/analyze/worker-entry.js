@@ -12,7 +12,9 @@
 //     { type: 'run',    files, sample?: true, config, participantIdField }
 //     { type: 'reanalyze', config, participantIdField }  the last run's participants
 //                   again under another config: analysis, figures, report and
-//                   zip, with no file read (the settings panel's post-hoc keys)
+//                   zip, with no file read (the settings panel's post-hoc keys);
+//                   the keys only ingest reads (participantIdField,
+//                   qualtricsField, singleParticipant) stay the run's
 //     { type: 'replay', participantId }
 //     { type: 'reset' }  start over: the last run's participants are let go
 //   worker → page
@@ -24,9 +26,11 @@
 //                   kind data | recording | asset | config | ignored | unreadable)
 //     progress      { phase: 'check' | 'ingest' | 'report', done, total, label? }
 //     zip           { chunk } — the report zip, in order, buffer transferred
-//     done          the in-page report html and what the page lists beside it
+//     done          the in-page report html and what the page lists beside it;
+//                   phases: the trial phases in the data, sorted
 //     replay-model  { participantId, model }
-//     error         { phase, message }
+//     error         { phase, message }, phase 'ingest' or the type of the message
+//                   that failed: 'check' | 'run' | 'reanalyze' | 'replay'
 import replayClientSrc from 'virtual:replay-client-src';
 import fontFaceCss from 'virtual:font-face-css';
 import sample from 'virtual:sample-data';
@@ -70,8 +74,11 @@ function readersFor(msg) {
   return msg.files.map(fileReader);
 }
 
-// The analyst's state between messages: the last run's participants, so a
-// replay model can be built on request (one at a time, from the recording).
+// The analyst's state between messages: what the last run read (its
+// participants, the asset map, the notes and warnings, and its config), so a
+// replay model can be built on request (one at a time, from the recording)
+// and the report rendered again under another config without reading the
+// files again (reanalyze).
 var lastRun = null;
 
 async function check(msg) {
@@ -121,6 +128,10 @@ function runConfig(msg) {
   return Object.assign({}, msg.config, { participantIdField: msg.participantIdField, dataDir: '(dropped files)', replayDir: null, outputDir: 'cyborg-hunter-report' });
 }
 
+// The keys only ingest reads. A re-analysis reports the participants the run
+// read, so these keep the run's values whatever the page sends.
+var INGEST_KEYS = ['participantIdField', 'qualtricsField', 'singleParticipant'];
+
 async function run(msg) {
   var readers = readersFor(msg);
   var groups = classifyFiles(readers);
@@ -144,29 +155,37 @@ async function run(msg) {
     if (!p.replay || !p.replay.recording) return;
     try { assetNotes[p.participantId] = assetNoteText(assetMatchSummary(p.replay.recording, assets.assetMap)); } catch (_) { assetNotes[p.participantId] = null; }
   });
-  lastRun = { participants: participants, assetMap: assets.assetMap, assetNotes: assetNotes,
-    warnings: ingested.warnings.concat(assets.report.warnings), assetReport: assets.report };
-  await renderRun(config);
+  var state = lastRun = { participants: participants, assetMap: assets.assetMap, assetNotes: assetNotes,
+    warnings: ingested.warnings.concat(assets.report.warnings), assetReport: assets.report, config: config };
+  await renderRun(state, config);
 }
 
 // A re-analysis: the participants the last run read, under the config the
-// page sends now. Ingest, matching and the notes are the run's; everything
-// after them (analysis, figures, the report, the zip) is done again.
+// page sends now. Ingest, matching, the notes and the keys only ingest reads
+// are the run's; everything after them (analysis, figures, the report, the
+// zip) is done again.
 async function reanalyze(msg) {
-  if (!lastRun) {
+  var state = lastRun;
+  if (!state) {
     post({ type: 'error', phase: 'reanalyze', message: 'Build the report first: there is nothing to re-analyse.' });
     return;
   }
-  await renderRun(runConfig(msg));
+  var config = runConfig(msg);
+  INGEST_KEYS.forEach(function (k) {
+    if (k in state.config) config[k] = state.config[k]; else delete config[k];
+  });
+  await renderRun(state, config);
 }
 
-// The report pass over lastRun's participants. The replay pass inside
-// buildReport rewrites the recordings it styles, so a second pass over the
-// same objects must write what the first wrote: replay-assets-core.js keeps
-// the first note, and the apply leaves its own output alone
-// (tests/demo/analyze-worker.test.js compares the two zips' replay files).
-async function renderRun(config) {
-  var participants = lastRun.participants, assetNotes = lastRun.assetNotes;
+// The report pass over a run's participants. `state` is the run's, passed in:
+// a reset during the pass lets go of lastRun without pulling it from under
+// this one. The replay pass inside buildReport rewrites the recordings it
+// styles, and a second pass over the same objects writes what the first
+// wrote because replay-assets-core.js keeps the first note and asset-match.js
+// rewrites each stylesheet once (tests/demo/analyze-worker.test.js compares
+// two zips file for file, with a stylesheet two others import).
+async function renderRun(state, config) {
+  var participants = state.participants, assetNotes = state.assetNotes;
   // Copied before transfer: a pass-through chunk aliases the bytes the sink
   // was given, and keepImages still needs those for the in-page data URIs.
   var zip = createZipSink(function (chunk) { var copy = chunk.slice(); post({ type: 'zip', chunk: copy }, [copy.buffer]); });
@@ -177,7 +196,7 @@ async function renderRun(config) {
     post({ type: 'progress', phase: 'report', done: 0, total: 0, label: path });
   };
   var built = await buildReport(participants, config, {
-    sink: sink, keepImages: true, assetMap: lastRun.assetMap,
+    sink: sink, keepImages: true, assetMap: state.assetMap,
     createCanvas: typeof OffscreenCanvas === 'function' ? offscreenCreateCanvas : null, encodePng: offscreenEncodePng,
     replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss,
   });
@@ -190,7 +209,7 @@ async function renderRun(config) {
         assetNote: has ? assetNotes[p.participantId] : null,
         replayError: p.replay && p.replay.error ? (p.replay.reason || p.replay.error) : null };
     }),
-    warnings: lastRun.warnings, reportWarnings: built.warnings, assetReport: lastRun.assetReport,
+    warnings: state.warnings, reportWarnings: built.warnings, assetReport: state.assetReport,
     phases: phasesOf(participants), files: fileTexts, configUsed: config, zipBytes: zip.bytes });
 }
 

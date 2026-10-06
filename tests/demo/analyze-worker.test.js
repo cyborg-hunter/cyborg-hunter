@@ -244,6 +244,42 @@ test('reanalyze before any run is an error, not a silent no-op', async () => {
   assert.match(err.message, /Build the report first/);
 });
 
+// Only ingest reads the id field, the Qualtrics column and the one-participant
+// filter. The participants a re-analysis reports were read under the run's,
+// so its configUsed keeps those, whatever the page sends.
+test('reanalyze keeps the keys ingest read under the run, whatever the page sends', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  w.send({ type: 'reanalyze', config: { ...checked.config, qualtricsField: 'other_column', singleParticipant: 'SYN-HARD-03' }, participantIdField: 'trial_index' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  assert.equal(second.configUsed.participantIdField, 'subject_ID');
+  assert.equal(second.configUsed.qualtricsField, first.configUsed.qualtricsField);
+  assert.equal('singleParticipant' in second.configUsed, 'singleParticipant' in first.configUsed);
+  assert.deepEqual(second.participants.map((p) => p.participantId), first.participants.map((p) => p.participantId));
+});
+
+// A reset while a report renders lets go of the run; the render already under
+// way finishes over the state it started with instead of failing half-way.
+test('a reset while the report renders does not turn the render into an error', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  assert.equal((await w.next('done', 'error')).type, 'done');
+  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'subject_ID' });
+  await w.next('zip');
+  w.send({ type: 'reset' });
+  const end = await w.next('done', 'error');
+  assert.equal(end.type, 'done', end.message);
+  w.send({ type: 'replay', participantId: 'SYN-HARD-03' });
+  assert.equal((await w.next('replay-model', 'error')).type, 'error', 'the reset still let go of the run');
+});
+
 // Under the config the run used, a re-analysis is the run again: every file
 // in the zip, the in-page report and what the page lists beside it. The
 // stylesheet imports two sheets, one of which imports the other: a spliced
