@@ -41,7 +41,24 @@ describe('every one-line file sets the same sentinel and names itself', () => {
     assert.strictEqual(desc.value, 'ch.js');
     assert.strictEqual(desc.enumerable, false);
     assert.strictEqual(desc.writable, false);
+    assert.strictEqual(desc.configurable, true);
     assert.strictEqual(win.__cyborgHunterLoaded, 'ch.js');
+  });
+
+  // The mark is a diagnostic: a page that already holds the name, locked,
+  // keeps its own value and ch.js boots as usual.
+  it('a page whose own __cyborgHunterFile cannot be redefined: ch.js still boots and names itself', () => {
+    Object.defineProperty(win, '__cyborgHunterFile', { value: 'page', writable: false, configurable: false });
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.ok(ctx, 'boot returns its context');
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(win.CyborgHunter, ctx.api);
+    assert.strictEqual(typeof win.CyborgHunter.mark, 'function');
+    assert.strictEqual(win.__cyborgHunterLoaded, 'ch.js');
+    assert.strictEqual(ctx.file, 'ch.js');
+    assert.strictEqual(win.__cyborgHunterFile, 'page');
+    win.CyborgHunter.init({});
+    assert.deepStrictEqual(errors, [MESSAGES.manualInitOnOneLiner('ch.js')]);
   });
 
   it('a one-line file of an earlier release set only the sentinel: the double-load error names ch.js', () => {

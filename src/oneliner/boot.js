@@ -213,9 +213,11 @@ export function boot(opts) {
         }
       }
     });
-    Object.defineProperty(win, '__cyborgHunterFile', {
-      value: CH_FILE, writable: false, enumerable: false, configurable: true
-    });
+    try {
+      Object.defineProperty(win, '__cyborgHunterFile', {
+        value: CH_FILE, writable: false, enumerable: false, configurable: true
+      });
+    } catch (_) { /* a page's own locked name: a diagnostic mark must never stop monitoring */ }
     win.CyborgHunter = ctx.api;
     win.__cyborgHunterLoaded = 'ch.js';
     // One console summary per page: vanilla logs once the DOM is parsed;
