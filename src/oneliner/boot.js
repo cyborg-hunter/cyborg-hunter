@@ -27,9 +27,8 @@
 //      with it (HAS_JSPSYCH), else 'labjs' when window.lab is, in a file
 //      built with it (HAS_LABJS; adapters/labjs.js; a lab.js 23 build is not
 //      hooked yet: one warning, and the vanilla host), else 'vanilla' (the
-//      host adapters install
-//      their hooks into ctx.handlers). On the
-//      vanilla host a Qualtrics survey is recognised first
+//      host adapters install their hooks into ctx.handlers). On the vanilla
+//      host a Qualtrics survey is recognised first
 //      (adapters/qualtrics.js: ctx.qualtricsLayout 'new' | 'legacy' | null,
 //      with a console warning for the legacy layout), before replay, whose
 //      boot reminder depends on it. The vanilla and lab.js adapters are

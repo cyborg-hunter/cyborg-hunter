@@ -402,6 +402,21 @@ describe('ch-labjs.js', () => {
     assert.deepStrictEqual(ctx.wrongBuild, { host: 'jsPsych', file: 'ch.js' });
     ctx.labjsAdapter.restore();
   });
+
+  // The tag above both jspsych.js and lib/lab.js: by DOMContentLoaded the
+  // page runs jsPsych, so it is a jsPsych page, and the one message is the
+  // wrongBuild error; a tag "loaded before lib/lab.js" would be a wrong
+  // diagnosis there.
+  it('a tag above jspsych.js and lib/lab.js: only the wrongBuild error naming ch.js', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.lab = fakeLab();
+    win.initJsPsych = jsPsychStub();
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-labjs.js')]);
+    assert.strictEqual(ctx.host, 'vanilla');
+  });
 });
 
 // A file without the lab.js adapter on a lab.js page (a lab.js 23 one too):
