@@ -635,6 +635,35 @@ describe('v2 sinks: pushRecord and pushViewportChange', () => {
     assert.strictEqual(rec.getState().guardViolations.length, 60);
     assert.deepStrictEqual(rec.getState().captureFailures, []);
   });
+
+  it('caps the <html> attribute stream and records the drop once, without claiming truncation', () => {
+    // The third session-level vendor array: <html>'s attribute changes
+    // (root-attrs.js) outlive trials like the two streams above, so neither
+    // per-trial cap can see them.
+    const rec = freshRecorder({ maxRootAttrEvents: 3 });
+    rec.startSession();
+    rec.startTrial({ trialId: 't1' });
+    for (let i = 0; i < 10; i++) rec.pushRootAttr({ name: 'style', value: '--k: ' + i + ';' }, i);
+    const s = rec.getState();
+    assert.strictEqual(s.rootAttrEvents.length, 3);
+    assert.deepStrictEqual(s.rootAttrEvents.map(e => e.t), [0, 1, 2],
+      'forward-only: the early changes are the ones kept');
+    const failures = s.captureFailures.filter(f => f.channel === 'root_attr_events');
+    assert.strictEqual(failures.length, 1, 'the ceiling is recorded once, not per drop');
+    assert.match(failures[0].message, /root_attr_events/);
+    assert.strictEqual(s.captureStopped, false,
+      'a bounded vendor stream is not §5.7 truncation');
+  });
+
+  it('the <html> attribute cap can be disabled', () => {
+    // More pushes than the default ceiling (2000), so the count also shows
+    // that null is not read as "use the default".
+    const rec = freshRecorder({ maxRootAttrEvents: null });
+    rec.startSession();
+    for (let i = 0; i < 2100; i++) rec.pushRootAttr({ name: 'style', value: String(i) }, i);
+    assert.strictEqual(rec.getState().rootAttrEvents.length, 2100);
+    assert.deepStrictEqual(rec.getState().captureFailures, []);
+  });
 });
 
 describe('capture stop and the keyframe size budget', () => {
