@@ -6,7 +6,7 @@
 // and never loads a second file. The replay viewer client, the report fonts
 // and the synthetic-pilot sample are baked in the same way: the page's policy
 // forbids fetching them. platform 'browser' is the gate against a Node-only
-// import creeping into a core (same as tools/build-preview-core.mjs).
+// import creeping into a core.
 // Run via `npm run demo:analyze`; ANALYZE_OUTDIR redirects the output (tests).
 import esbuild from 'esbuild';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';

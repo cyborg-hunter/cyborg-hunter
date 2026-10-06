@@ -526,12 +526,11 @@ describe('srcset, SVG <image> and <input type="image">', () => {
 });
 
 // The analyze page words its replay card's note in the worker
-// (demo/analyze/worker-entry.js: assetNoteText(assetMatchSummary(...)) through
-// the page bundle's entry, before the report pass); the CLI words the
+// (demo/analyze/worker-entry.js: assetNoteText(assetMatchSummary(...)), from
+// src/cli/asset-match.js, before the report pass); the CLI words the
 // report's replay section inside buildReplayAssets. The two must agree.
 describe('the analyze page and the CLI word the note the same', () => {
   it('for a recording with stylesheets, images in every form, and media', async () => {
-    const entry = await import('../../src/cli/preview-entry.js');
     const { buildReplayAssets } = await import('../../src/cli/renderers/replay-assets-core.js');
     const files = [
       { path: 'study/css/style.css', read: async () => bytes('p{margin:0}') },
@@ -546,8 +545,8 @@ describe('the analyze page and the CLI word the note the same', () => {
         el(23, 'input', { type: 'image', src: X + 'img/go.png' }));
       return r;
     };
-    const { assetMap } = await entry.buildAssetMap([rec()], files);
-    const page = entry.assetNoteText(entry.assetMatchSummary(rec(), assetMap));
+    const { assetMap } = await buildAssetMap([rec()], files);
+    const page = assetNoteText(assetMatchSummary(rec(), assetMap));
     const p = { participantId: 'P1', replay: { recording: rec(), file: 'P1-replay.json' } };
     buildReplayAssets([p], { sink: () => {}, assetMap });
     assert.strictEqual(p.replay.assetNote, page);

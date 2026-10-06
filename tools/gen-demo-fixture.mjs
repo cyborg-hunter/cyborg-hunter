@@ -122,7 +122,7 @@ function waitForServer(url, timeoutMs = 30000) {
 async function main() {
   const keepSite = process.argv.includes('--keep-site');
 
-  // 1. Assemble the deployable site (build.js if stale + preview-core + copy).
+  // 1. Assemble the deployable site (build.js if stale + analyze bundle + copy).
   console.log('gen-demo-fixture: assembling .demo-site/');
   execFileSync(process.execPath, ['tools/assemble-demo-site.mjs'], { cwd: ROOT, stdio: 'inherit' });
 

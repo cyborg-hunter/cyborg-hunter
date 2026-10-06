@@ -1,9 +1,9 @@
 // src/cli/renderers/replay-styles.js
 // The replay viewer's CSS (.replay-* rules), shared by the CLI report
-// (html-index-core.js puts it in the report's second <style>) and the demo's
-// replay-host iframe (demo/replay-host.js, which receives it from results.js
-// through the preview-core bundle). One copy: the demo used to keep a
-// hand-synced duplicate, which had drifted. Rules reference the report's
+// (html-index-core.js puts it in the report's second <style>) and the
+// analyze page's replay host (demo/replay-host.js, which receives it from the
+// page's worker). One copy: the demo used to keep a hand-synced duplicate,
+// which had drifted. Rules reference the report's
 // tokens (--ink, --surface, --line, --bg, --dim, --hard and the --ff-* font
 // stacks); a host document must declare them.
 

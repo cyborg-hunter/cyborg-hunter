@@ -18,9 +18,4 @@ describe('replay styles: one shared copy', () => {
     const used = [...new Set([...REPLAY_STYLES_CSS.matchAll(/var\((--[\w-]+)\)/g)].map(m => m[1]))];
     assert.deepEqual(used.filter(v => !(v in declared)), []);
   });
-
-  it('is re-exported for the demo bundle', async () => {
-    const entry = await import('../../src/cli/preview-entry.js');
-    assert.equal(entry.REPLAY_STYLES_CSS, REPLAY_STYLES_CSS);
-  });
 });

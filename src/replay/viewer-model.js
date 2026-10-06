@@ -1,7 +1,7 @@
 // src/replay/viewer-model.js
 // SessionRecording v2 (spec r2) → viewer model. Pure — no Node APIs — so the
-// browser /analyze/ page and the demo bundle it directly; the CLI reaches it
-// through cli/renderers/replay-assets-core.js.
+// browser /analyze/ page bundles it directly; the CLI reaches it through
+// cli/renderers/replay-assets-core.js.
 //
 // This is one of exactly two allowed wire→viewer time-conversion points (the
 // other lives in the CLI ingest path): a SessionRecording carries ms since
