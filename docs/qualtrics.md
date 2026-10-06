@@ -7,8 +7,10 @@ embedded-data field. The CLI reads the Qualtrics CSV export directly, one
 participant per response (see [Reading the data](#reading-the-data) for the
 browser analyzer).
 
-Some details below depend on how Qualtrics behaves on a live survey and are
-written as conditions ("if …"). They have not yet been checked on a live survey.
+The Qualtrics behaviour this page relies on was checked on a live survey on
+2026-10-05 (Preview of a draft four-page survey, New Survey Taking Experience,
+on a university licence). What that check did not cover is said where it
+matters.
 
 ## Requirements
 
@@ -69,22 +71,22 @@ the New Survey Taking Experience stores that value in the field
 legacy layout the field is `cyborg_hunter` instead
 ([Legacy layout](#legacy-layout)).
 
-After writing, `ch.js` reads the field back (once per page). If Qualtrics
-returns nothing, `ch.js` logs "The Qualtrics field
-__js_cyborg_hunter is not declared" and the `data-debug` badge shows
-`NOT DECLARED`. `unknown` means the read-back gave no answer either way.
-Whether Qualtrics' read-back tells an undeclared field apart is not yet checked
-on a live survey, so the export (step 3 of the [smoke test](#smoke-test)) is
-the check that counts.
+`ch.js` cannot tell whether the field is declared. In the survey page,
+Qualtrics' `getJSEmbeddedData` returns whatever the page wrote, declared or
+not; an undeclared value is dropped only on Qualtrics' server. So the
+`data-debug` badge always shows `field __js_cyborg_hunter unknown`, and the
+stored value is the check: after a preview, Data & Analysis → the response's
+menu → View Response lists `__js_cyborg_hunter` under Embedded Data when the
+field is declared (step 3 of the [smoke test](#smoke-test)).
 
 ## Participant ID
 
 The tag above sets the participant ID to the response's own ID through
 Qualtrics piped text, `${e://Field/ResponseID}` (an `R_…` ID). Every response
 gets a new ID, so each payload links to its row and a retake in the same tab
-starts a new session. Qualtrics is expected to fill piped text into the
-header before the browser runs the tag; this is not yet checked on a live
-survey.
+starts a new session. Qualtrics fills piped text into the header before the
+browser runs the tag: on a live survey the tag received the response's `R_…`
+ID on every page.
 
 `ch.js` takes the first ID it finds, in this order (the same order as on
 [any page](quickstart.md#participant-id)):
@@ -122,9 +124,10 @@ ID keeps it.
 `ch.js` writes each page from a page-submit callback
 (`Qualtrics.SurveyEngine.addOnPageSubmit`) registered from the header.
 Qualtrics shows the next page at once and runs the header script again a
-moment later, which registers the callback for that page. If Qualtrics drops
-the earlier page's callbacks and the participant presses Next before the
-header has run again, nothing writes that page at its submit. On a middle
+moment later, which registers the callback for that page. Qualtrics drops
+each page's callbacks after its submit (checked on a live survey), so if the
+participant presses Next before the header has run again, nothing writes
+that page at its submit. On a middle
 page `ch.js` notices at the next header run, writes the missed page then (the
 next submit carries it), and notes the gap. After the final page no header
 run follows, so its activity would be lost.
@@ -141,10 +144,11 @@ own callback also runs at that submit, in the same task (as it does in our
 simulated survey; whether Qualtrics does the same is not yet checked), the two share one
 write, so the line adds no row. The line never throws: if `ch.js` did not load (a network
 failure, a blocker), it does nothing, so it cannot stop the participant's
-submit. Keep it in this form. We recommend it for every survey. Whether a
-survey without it can lose its final page depends on whether Qualtrics drops page-submit
-callbacks between pages and enables Next before the header has run again; if
-the live check finds that it does, the line is required.
+submit. Keep it in this form. We recommend it for every survey. In the live
+check the header ran again within a moment of each page change and the final
+page was written without the line; whether Qualtrics can take a Next press
+before the header has run again (a slow network, a cache miss) was not
+checked, and the line covers that case.
 
 ## Smoke test
 
@@ -159,15 +163,22 @@ the live check finds that it does, the line is required.
 2. **On a page with a text-entry question, paste into the text box, switch
    to another tab for at least five seconds, come back and press Next.** On
    the second page the badge should read
-   `… page 2 · field __js_cyborg_hunter declared · … · header re-run ×1 · last write N/12000 bytes`,
-   or `unknown` in place of `declared`: Qualtrics' read-back is not yet
-   checked on a live survey, and step 3's export is the check that counts.
-   `NOT DECLARED`: [declare the field](#declare-the-field). `last write`
-   gives the payload's size and the cap, both in UTF-8 bytes.
-3. **Finish the preview response and export it** ([Reading the data](#reading-the-data)).
-   The `__js_cyborg_hunter` column holds a JSON object, its `participantId`
-   is the response's `R_…` ID (not the text `${e://Field/ResponseID}`), and
-   the report shows the paste and the tab switch.
+   `… page 2 · field __js_cyborg_hunter unknown · … · header re-run ×1 · last write N/12000 bytes`.
+   The field always reads `unknown` ([Declare the field](#declare-the-field));
+   step 3 is the check. `last write` gives the payload's size and the cap,
+   both in UTF-8 bytes. Preview shows the survey twice, on the page and in a
+   phone frame, and both run `ch.js`: read the badge on the page. The phone
+   frame's badge shows `submits missed ×1` and more, because Preview moves
+   that copy to the next page without a submit of its own. A published survey
+   runs one copy.
+3. **Finish the preview response and check what was stored.** After about a
+   minute, Data & Analysis → the response's menu → View Response lists
+   `__js_cyborg_hunter` under Embedded Data, a JSON object whose
+   `participantId` is the response's `R_…` ID (not the text
+   `${e://Field/ResponseID}`). No `__js_cyborg_hunter` there: the field is not
+   declared ([Declare the field](#declare-the-field)). Then export the
+   responses ([Reading the data](#reading-the-data)): the report shows the
+   paste and the tab switch.
 
 **Remove `data-debug` before launch, and publish again.** Participants can
 see the badge.
@@ -184,19 +195,21 @@ the id or class of a field typed into outside the survey (only its tag name
 and the kind of input), mouse or element traces, keystroke timings, or window
 positions.
 
-Qualtrics refuses a page submit whose embedded data is too long: the
-participant sees "Something went wrong" and cannot continue. In tests a
-submit with about 20,000 characters of embedded data was stored and one with
-25,000 was refused, and the limit is shared with the survey's own embedded
-data. So `ch.js` caps its payload at 12,000 UTF-8 bytes (a safe bound whether
-Qualtrics counts characters or bytes) and never writes a longer string.
+Qualtrics refuses a page submit in which any one embedded-data value is
+longer than 20,000 bytes (UTF-8, of the value as written): the participant
+sees "Something went wrong" and cannot go on until the value is shorter.
+Measured on a live survey on 2026-10-05: a value of exactly 20,000 bytes was
+stored; values of 20,002 bytes (10,001 two-byte characters) and 24,000 bytes
+were refused. Values do not count against each other: a submit that carried
+three 19,000-byte values and the Cyborg Hunter payload was accepted. `ch.js`
+caps its payload at 12,000 UTF-8 bytes and never writes a longer string.
 
-The cap leaves room for a little embedded data of your own, not for a second
-large value. If the limit is per page submit (not yet checked), keep
-what your own survey writes to embedded data on any one page small (well
-under about 5,000 characters): for example, do not also save a jsPsych
-experiment's data through embedded data on the same page. Together the two
-could pass the limit and stop the participant.
+Your own embedded data does not share that budget, but the same limit
+applies to each of your values. A value set from JavaScript is sent again
+with every later submit, so one value over 20,000 bytes stops the
+participant on the page where it was set and on every page after it: for
+example, a whole jsPsych experiment's data saved into one embedded-data
+field.
 
 When the summary is over the cap, `ch.js` writes the first level of this
 ladder that fits. The levels are cumulative:
@@ -251,14 +264,16 @@ every case the survey goes on.
 of the survey would continue the same session instead of starting over.
 Every survey on your Qualtrics domain shares that storage. Under the New
 Survey Taking Experience `ch.js` therefore keeps one session per survey,
-named by the survey ID in the page address (`/jfe/form/SV_…`, or
-`/jfe/preview/…/SV_…` in preview). A second survey opened in the same tab
-starts a session of its own, even under the same participant ID.
+named by the survey ID in the page address (`/jfe/form/SV_…`). A second
+survey opened in the same tab starts a session of its own, even under the
+same participant ID.
 
 If your survey's address does not show its ID (for example a custom link that
 does not redirect), add `data-qualtrics-survey-id="${e://Field/SurveyID}"` to
-the `ch.js` tag. Without an ID, every survey in the tab would share one
-session, and the `data-debug` summary says so. The legacy layout does not keep
+the `ch.js` tag (Qualtrics fills this pipe in the header, as it does
+`ResponseID`). Without an ID, every survey in the tab would share one
+session, and the `data-debug` summary says so. Preview is such a case: it
+runs the survey in frames whose address (`/jfe/preview/app`) has no ID. The legacy layout does not keep
 a session per survey yet.
 
 One case stays shared: the same participant ID taking the same survey again
@@ -388,7 +403,8 @@ participant ID, continue one session), and the CLI reads the
 | What you see | Cause | What to do |
 |---|---|---|
 | No badge in Preview with `data-debug` | `ch.js` did not run: the licence strips scripts, the tag was not saved, or the script could not load | Check the saved header source ([Requirements](#requirements)) and the browser console |
-| Badge: `NOT DECLARED`; console: "The Qualtrics field … is not declared" | The field is missing from Survey Flow | [Declare the field](#declare-the-field) |
+| View Response or the export has no `__js_cyborg_hunter` value, though the badge showed writes (`last write …`) | The field is missing from Survey Flow; Qualtrics drops the value without an error, and the badge cannot tell (it says `unknown`) | [Declare the field](#declare-the-field) |
+| Preview: the phone frame's badge shows `submits missed ×n` | Preview moves the phone copy to the next page without a submit of its own | Nothing to fix; read the badge on the page ([Smoke test](#smoke-test)) |
 | CLI: "N of M responses carry no Cyborg Hunter data" | Those responses have an empty payload cell: `ch.js` never ran on them (licence without custom JavaScript, header script removed, survey not published after the tag was added, preview before the tag was added), or the field was not declared | Check the header and Survey Flow, and publish the survey; responses collected before the fix have no data |
 | CLI: "participantId taken from the ResponseId column" | The payload had no linkable participant ID | Set `data-participant-id` to piped text ([Participant ID](#participant-id)) |
 | The payloads' `participantId` is `${e://Field/ResponseID}`; CLI: "participantId taken from the ResponseId column" on every response | Qualtrics did not fill the pipe in the header | Nothing for the report: each response is its own participant under its `ResponseId`. A retake in the same tab continues the first response's session ([Participant ID](#participant-id)) |

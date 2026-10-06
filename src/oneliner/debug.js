@@ -36,8 +36,9 @@
 //     Qualtrics detected · page <P> · field __js_cyborg_hunter <declared|NOT DECLARED|unknown>
 //   (legacy layout: "Qualtrics detected (legacy layout, field cyborg_hunter)"
 //   and "field cyborg_hunter <...>"). P and the field state come from the
-//   writer's handle ctx.qualtrics (page(), declared() true|false|null); with
-//   no handle yet they read page 1 and unknown. The badge also ends with
+//   writer's handle ctx.qualtrics (page(), declared() true|false|null; the
+//   writer answers null at present, so the field reads unknown); with no
+//   handle yet they read page 1 and unknown. The badge also ends with
 //   " · header re-run ×<ctx.rerunCount>" when the header ran again,
 //   " · submits missed ×<n>" when a page was submitted before the writer's
 //   hook was in place (ctx.qualtrics.missed()), and

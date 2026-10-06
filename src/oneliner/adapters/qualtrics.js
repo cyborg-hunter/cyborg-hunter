@@ -24,11 +24,12 @@
 //   in the tab does not continue the first. attr, the tag's
 //   data-qualtrics-survey-id (a researcher can pipe ${e://Field/SurveyID}
 //   into it), wins when it holds an id; piped text Qualtrics did not resolve
-//   is not one. Otherwise the page address: a path part /jfe/form/SV_…, or
-//   /jfe/preview/…/SV_… in preview, the same on every page of a response and
-//   after a reload; then an older link's ?SID=SV_… (no other query
-//   parameter: one may name another survey, a referrer or a redirect). null
-//   when neither has an id. Never throws.
+//   is not one. Otherwise the page address: a path part /jfe/form/SV_…, the
+//   same on every page of a response and after a reload; then an older
+//   link's ?SID=SV_… (no other query parameter: one may name another survey,
+//   a referrer or a redirect). null when neither has an id. In Preview ch.js
+//   runs in frames at /jfe/preview/app, with no id in the address (live
+//   survey, 2026-10-05): there only the attribute gives one. Never throws.
 //
 // installQualtricsAdapter({ win, ctx, maxChars?, builder?, registerOnce?, writeOnRerun?, onWrite? }) → {
 //   write(reason) → null | { payload, written }   payload: what was checked
@@ -38,19 +39,14 @@
 //                 the header on every page of the New Survey Taking
 //                 Experience); under the legacy layout, where each page is
 //                 a new boot, the session's page count
-//   declared()    whether the field is declared in Survey Flow: true |
-//                 false | null (unknown). After the first write the setter
-//                 takes on each page, the field is read back once
-//                 (getJSEmbeddedData('cyborg_hunter'); legacy:
-//                 getEmbeddedData('cyborg_hunter')): the string just written
-//                 is true; null or undefined is false, with one console
-//                 error per page load (per boot: the legacy layout boots on
-//                 every page) naming the field to declare; anything
-//                 else (no getter, a getter that throws, another value) is
-//                 null. A page with no successful write keeps the last
-//                 answer. How Qualtrics answers for an undeclared field is
-//                 to be confirmed on a live survey; this is the rule until
-//                 then
+//   declared()    whether the field is declared in Survey Flow: always null
+//                 (unknown). On a live survey (2026-10-05) setJSEmbeddedData
+//                 keeps every value in a client-side object and
+//                 getJSEmbeddedData reads that object back, declared or not,
+//                 so no read-back can tell; Qualtrics drops an undeclared
+//                 value only on its server. The stored value (View Response,
+//                 the export) is the check. The legacy getter is not checked
+//                 live, so it is not read either
 //   lastWrite()   null | { chars, cap, level, error? }, the last write the
 //                 setter took; chars in UTF-8 bytes, like the cap
 //   missed()      how many page submits ran no callback of this writer (see
@@ -126,7 +122,10 @@
 // the note they make and data()'s last resort, the error marker, cannot throw
 // either (a page that makes JSON.stringify throw gets no write at all).
 //
-// Two switches are set by checking a live multi-page survey:
+// Two switches, for a Qualtrics that behaves otherwise than the live
+// four-page survey checked on 2026-10-05 (where the hook registered from
+// the header fired at every submit, the final page's too, and each submit
+// ran only the callbacks registered on its own page; so both are false):
 //   REGISTER_ONCE   Qualtrics keeps addOnPageSubmit callbacks across pages,
 //                   so the hook is registered once, not once per page
 //   WRITE_ON_RERUN  the hook registered from the header never fires: each
@@ -147,9 +146,9 @@ export var FIELD_NAME = 'cyborg_hunter';          // the name passed to setJSEmb
 export var STORED_FIELD = '__js_cyborg_hunter';   // the Survey Flow field (New Survey Taking Experience)
 export var LEGACY_FIELD = 'cyborg_hunter';        // the Survey Flow field under the legacy layout (setEmbeddedData)
 // The longest serialized payload ch.js writes into one submit, in UTF-8
-// bytes. The live limit sits between about 19,900 and 38,000 characters per
-// submit and is shared with the survey's own embedded data, so the cap
-// leaves headroom.
+// bytes. Qualtrics refuses a submit (HTTP 400) in which any one
+// embedded-data value is over 20,000 UTF-8 bytes; other values do not count
+// against it (live survey, 2026-10-05). The cap keeps headroom under that.
 export var MAX_CHARS = 12000;
 export var REGISTER_ONCE = false;
 export var WRITE_ON_RERUN = false;
@@ -217,10 +216,7 @@ export function installQualtricsAdapter(opts) {
   var submitWrotePage = null;  // the page a submit callback's write was taken on
   var warnedPage = null;       // the page the reduced-payload warning was logged on
   var last = null;
-  var probedPage = null;       // the page the field was last read back on
-  var fieldState = null;       // declared(): true | false | null
-  var toldUndeclared = false;  // the undeclared-field error was logged
-  var reruns = 0;              // header re-runs: page changes
+  var reruns = 0;             // header re-runs: page changes
   var submitTasks = 0;         // submit tasks that ran a callback of this writer (catch-ups included)
   var missed = 0;              // page changes with no such submit task
   var missedNote = -1;         // the index of the missed-page note (vanilla noteError)
@@ -297,29 +293,6 @@ export function installQualtricsAdapter(opts) {
     }
   }
 
-  // Is the field declared? Read back once per page, right after the setter
-  // took json (see declared() above). Cannot throw.
-  function probe(json) {
-    if (probedPage === page) return;
-    probedPage = page;
-    var got;
-    try {
-      var se = win.Qualtrics.SurveyEngine;
-      got = legacy ? se.getEmbeddedData(LEGACY_FIELD) : se.getJSEmbeddedData(FIELD_NAME);
-    } catch (_) {
-      fieldState = null;   // no getter, or one that throws
-      return;
-    }
-    if (got === json) fieldState = true;
-    else if (got === null || got === undefined) {
-      fieldState = false;
-      if (!toldUndeclared) {
-        toldUndeclared = true;
-        log('error', MESSAGES.qualtricsFieldUndeclared(legacy ? LEGACY_FIELD : STORED_FIELD));
-      }
-    } else fieldState = null;
-  }
-
   // reason ('submit', 'data', 'rerun') is for reading the code only.
   function write(reason) {
     if (!active) return null;
@@ -340,15 +313,11 @@ export function installQualtricsAdapter(opts) {
       failed(b.code + (b.detail ? ': ' + b.detail : ''));
       var m = marker(b.code);
       var ok = m.bytes <= maxChars && set(m.json);
-      if (ok) {
-        last = { chars: m.bytes, cap: maxChars, level: null, error: b.code };
-        probe(m.json);
-      }
+      if (ok) last = { chars: m.bytes, cap: maxChars, level: null, error: b.code };
       return { payload: m.payload, written: ok };
     }
     if (!set(b.json)) return { payload: b.payload, written: false };
     last = { chars: b.bytes, cap: maxChars, level: b.level };
-    probe(b.json);
     // After the setter, so a broken console cannot keep the payload back.
     if (b.level > 0 && warnedPage !== page) {
       warnedPage = page;
@@ -456,7 +425,7 @@ export function installQualtricsAdapter(opts) {
   return {
     write: write,
     page: pageNumber,
-    declared: function () { return fieldState; },
+    declared: function () { return null; },   // no read-back can tell (see above)
     lastWrite: function () { return last; },
     missed: function () { return missed; },
     teardown: function () {

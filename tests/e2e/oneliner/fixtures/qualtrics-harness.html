@@ -11,7 +11,8 @@
          - window.Qualtrics.SurveyEngine with the semantics of
            tests/oneliner/support/fake-qualtrics.js (a value written to an
            undeclared field is dropped without an error; getJSEmbeddedData
-           reads '' for a declared unset field and null for an undeclared one);
+           returns the value the page last set, declared or not, and
+           undefined before any, as on a live survey);
          - the header (#qx-header) holds the researcher's ch.js tag and is
            re-rendered, its script executed again, on every page change;
          - Next runs the addOnPageSubmit callbacks in one task, then posts the
@@ -157,23 +158,22 @@ Qualtrics.SurveyEngine.addOnload(function () {
     }
     var submitHooks = [];
     var onloadHooks = [];
+    var ed = {};   // the page's own copy of every value it set, read back declared or not
     function keep(field, v) { if (declared.indexOf(field) !== -1) store[field] = String(v); }
-    function read(field) {
-      if (declared.indexOf(field) === -1) return null;
-      return field in store ? store[field] : '';
-    }
+    function set(name, field, v) { ed[name] = v; keep(field, v); }
+    function read(name) { return ed[name]; }
     var SE = {
       addOnPageSubmit: function (fn) { submitHooks.push(fn); },
       addOnload: function (fn) { onloadHooks.push(fn); },
       addOnReady: function () {},
       addOnUnload: function () {},
-      setEmbeddedData: function (name, v) { if (legacy) keep(name, v); }
+      setEmbeddedData: function (name, v) { if (legacy) set(name, name, v); }
     };
     if (legacy) {
       SE.getEmbeddedData = function (name) { return read(name); };
     } else {
-      SE.setJSEmbeddedData = function (name, v) { keep('__js_' + name, v); };
-      SE.getJSEmbeddedData = function (name) { return read('__js_' + name); };
+      SE.setJSEmbeddedData = function (name, v) { set(name, '__js_' + name, v); };
+      SE.getJSEmbeddedData = function (name) { return read(name); };
     }
     window.Qualtrics = { SurveyEngine: SE };
 

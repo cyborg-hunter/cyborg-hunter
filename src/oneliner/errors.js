@@ -248,9 +248,10 @@ export const MESSAGES = {
       'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
       DOCS + 'qualtrics.md#legacy-layout');
   },
-  // console.error: the value written did not read back, so the field is
-  // missing from Survey Flow and every write is lost. `field` is the Survey
-  // Flow name: __js_cyborg_hunter, or cyborg_hunter under the legacy layout.
+  // console.error: the field is missing from Survey Flow and every write is
+  // lost. `field` is the Survey Flow name: __js_cyborg_hunter, or
+  // cyborg_hunter under the legacy layout. Not logged at present: the page
+  // cannot tell an undeclared field (adapters/qualtrics.js declared()).
   qualtricsFieldUndeclared: function (field) {
     return formatError('The Qualtrics field ' + field + ' is not declared',
       'values written to an undeclared embedded-data field are dropped by Qualtrics without an error',

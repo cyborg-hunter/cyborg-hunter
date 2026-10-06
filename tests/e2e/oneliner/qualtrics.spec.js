@@ -6,10 +6,13 @@
 // ?layout=legacy, for the older layout of full page loads. Its header comment
 // lists the query parameters.
 //
-// The spec answers /jfe/next as the Qualtrics server does: a submit whose
+// The spec answers /jfe/next much as the Qualtrics server does: a submit whose
 // embedded data is above LIMIT bytes is refused with a 400, which on a live
-// survey stops the participant on the page. Every test except the harness's
-// own negative control asserts (afterEach) that no submit was refused.
+// survey stops the participant on the page. (A live survey refuses a submit
+// when any one value is over 20,000 UTF-8 bytes, measured 2026-10-05; the spec
+// applies the limit to the sum of the stored values, which is stricter.) Every
+// test except the harness's own negative control asserts (afterEach) that no
+// submit was refused.
 
 import { test, expect, collectConsole, pasteInto, newTmpDir, cleanupTmpDirs, saveAndReport } from './support.mjs';
 import { MESSAGES } from '../../../src/oneliner/errors.js';
@@ -18,7 +21,7 @@ const FIX = '/tests/e2e/oneliner/fixtures/qualtrics-harness.html';
 const FIELD = '__js_cyborg_hunter';
 const LEGACY_FIELD = 'cyborg_hunter';
 const CAP = 12000;     // MAX_CHARS in src/oneliner/adapters/qualtrics.js
-const LIMIT = 20000;   // about where a live survey refused a submit
+const LIMIT = 20000;   // a live survey's limit for one value, in UTF-8 bytes
 const SURVEY_A = 'SV_E2EsurveyA';
 const SURVEY_B = 'SV_E2EsurveyB';
 
@@ -31,8 +34,8 @@ const isReduced = (t) => t.startsWith('[cyborg-hunter] The Qualtrics payload was
 const at = (query = '', survey = SURVEY_A) => FIX + '?SID=' + survey + (query ? '&' + query : '');
 
 // Serves /jfe/next like Qualtrics: 400 when the embedded data of one submit
-// is above `limit` bytes (UTF-8, at least the character count whichever way
-// the server counts), 200 otherwise. Records every submit. `limit` can be
+// is above `limit` UTF-8 bytes in all (live: per value, so this is
+// stricter), 200 otherwise. Records every submit. `limit` can be
 // changed mid-test (server.limit).
 const servers = [];
 test.beforeEach(() => { servers.length = 0; });
@@ -99,7 +102,7 @@ for (const scripts of ['element', 'eval']) {
     expect(payloads[3].cyborgHunterOneLiner.pageCount).toBe(1);                         // one page load
     for (const p of server.posts) expect(p.bytes).toBeLessThanOrEqual(CAP);
     expect(await badgeText(page)).toMatch(new RegExp('^Cyborg Hunter active · Qualtrics detected · page 4 · field ' + FIELD +
-      ' declared · ID from data-participant-id · honeypot on · friction off · header re-run ×3 · last write \\d+/' + CAP + ' bytes$'));
+      ' unknown · ID from data-participant-id · honeypot on · friction off · header re-run ×3 · last write \\d+/' + CAP + ' bytes$'));
     expect(log.info.filter((t) => t.startsWith('Cyborg Hunter active'))).toHaveLength(1);   // one summary, not four
 
     const out = saveAndReport(newTmpDir('qx-' + scripts), 'E2E-QX-1.json', server.posts[3].values[FIELD]);
@@ -180,7 +183,10 @@ test('the cap seam only lowers: maxChars=3000 caps the write at 3000, maxChars=5
   expect(await badgeText(page)).toMatch(new RegExp('last write \\d+/' + CAP + ' bytes$'));
 });
 
-test('undeclared field: the value is dropped, the summary and the console say so', async ({ page }) => {
+// The page cannot tell an undeclared field (getJSEmbeddedData reads back its
+// own copy either way, as on a live survey): the value is dropped, and only
+// the stored data shows it.
+test('undeclared field: the value is dropped; the badge says unknown and nothing is logged', async ({ page }) => {
   const log = collectConsole(page);
   const server = await qualtricsServer(page);
   await page.goto(at('declared='));
@@ -188,8 +194,8 @@ test('undeclared field: the value is dropped, the summary and the console say so
   await nextPage(page, 1);
   await nextPage(page, 2);
   expect(server.posts.map((p) => Object.keys(p.values))).toEqual([[], []]);
-  expect(await badgeText(page)).toMatch(/field __js_cyborg_hunter NOT DECLARED/);
-  expect(chErrors(log)).toEqual([MESSAGES.qualtricsFieldUndeclared(FIELD)]);
+  expect(await badgeText(page)).toMatch(/field __js_cyborg_hunter unknown/);
+  expect(chErrors(log)).toEqual([]);
 });
 
 test('callbacks kept across pages: still one write per submit', async ({ page }) => {
