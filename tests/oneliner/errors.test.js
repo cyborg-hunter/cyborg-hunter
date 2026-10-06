@@ -264,15 +264,16 @@ describe('loud errors in the existing bundles', () => {
   it('build.js takes the min.js double-load messages from the catalogue', () => {
     const src = read('build.js');
     assert.match(src, /import \{ MESSAGES \} from '\.\/src\/oneliner\/errors\.js'/);
-    assert.match(src, /MESSAGES\.doubleLoad\('ch\.js', 'cyborg-hunter\.min\.js'\)/);
+    assert.match(src, /= '\[' \+\s*MESSAGES\.doubleLoad\(NAME, 'cyborg-hunter\.min\.js'\)\.split\(NAME\)/);
     assert.match(src, /MESSAGES\.coreLoadedTwice\(\)/);
   });
 
-  // "loaded after ch.js" is only true when the sentinel is ch.js's own; a
-  // second copy of min.js gets the neutral loaded-twice message instead.
+  // "loaded after <one-line file>" is only true when a one-line file set the
+  // sentinel; a second copy of min.js gets the neutral loaded-twice message
+  // instead.
   it('build.js: the min.js footer branches on which bundle set the sentinel', () => {
     const src = read('build.js');
-    assert.match(src, /window\.__cyborgHunterLoaded==="ch\.js"\)\{console\.error\(' \+\s*JSON\.stringify\(MESSAGES\.doubleLoad\(/);
+    assert.match(src, /window\.__cyborgHunterLoaded==="ch\.js"\)\{console\.error\(' \+\s*doubleLoadAfterOneLine \+/);
     assert.match(src, /\}else if\(window\.__cyborgHunterLoaded\)\{console\.error\(' \+\s*JSON\.stringify\(MESSAGES\.coreLoadedTwice\(\)\)/);
   });
 

@@ -140,6 +140,17 @@ describe('dist/cyborg-hunter.min.js: window.CyborgHunter after the footer', () =
     assert.deepStrictEqual(errors, [MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')]);
   });
 
+  // Every one-line file sets the sentinel 'ch.js' and names itself in
+  // __cyborgHunterFile (boot.js); one of an earlier release has no mark and
+  // is ch.js.
+  it('after a one-line file: the error names the file its mark names; without a mark, ch.js', () => {
+    const named = load({ __cyborgHunterLoaded: 'ch.js', __cyborgHunterFile: 'ch-qualtrics.js', CyborgHunter: {} });
+    assert.deepStrictEqual(named.errors, [MESSAGES.doubleLoad('ch-qualtrics.js', 'cyborg-hunter.min.js')]);
+    assert.ok(named.errors[0].includes(': cyborg-hunter.min.js was loaded after ch-qualtrics.js. Fix: load only one of ch-qualtrics.js and cyborg-hunter.min.js '), named.errors[0]);
+    const unmarked = load({ __cyborgHunterLoaded: 'ch.js', CyborgHunter: {} });
+    assert.deepStrictEqual(unmarked.errors, [MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')]);
+  });
+
   it('alone: the core namespace, and the sentinel names min.js', () => {
     const { g, errors } = load({});
     assert.strictEqual(typeof g.CyborgHunter.init, 'function');

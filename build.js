@@ -27,13 +27,25 @@ import { ONE_LINE_TARGETS, defineFor } from './build-targets.js';
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const OUT = process.env.BUILD_OUTDIR || 'dist';
 
+// The min.js footer's double-load text after a one-line file, as a JS
+// expression: the catalogue's text cut where the first file's name goes,
+// joined at run time with the name that file left in
+// window.__cyborgHunterFile (src/oneliner/boot.js). A one-line file of an
+// earlier release left no mark and is ch.js, so that page gets the text
+// MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js') returns.
+const NAME = '\u0000';   // a placeholder no message contains
+const doubleLoadAfterOneLine = '[' +
+  MESSAGES.doubleLoad(NAME, 'cyborg-hunter.min.js').split(NAME).map((part) => JSON.stringify(part)).join(',') +
+  '].join(typeof window.__cyborgHunterFile==="string"?window.__cyborgHunterFile:"ch.js")';
+
 async function build() {
   // Browser IIFE — self-contained, exposes window.CyborgHunter.
   // Do NOT manually assign window.CyborgHunter in src/core/index.js;
   // esbuild's globalName handles the global. The footer adds the
   // backward-compat IntegrityMonitor alias and the double-load sentinel
   // shared with dist/ch.js (window.__cyborgHunterLoaded): if ch.js already
-  // ran, it logs the catalogue's double-load error; if another copy of this
+  // ran, it logs the catalogue's double-load error, naming the one-line file
+  // that ran (doubleLoadAfterOneLine above); if another copy of this
   // bundle set it, the neutral loaded-twice error (src/oneliner/errors.js).
   // After ch.js the bundle must not take the namespace either: globalName's
   // top-level `var CyborgHunter = ...` replaces ch.js's window.CyborgHunter
@@ -53,7 +65,7 @@ async function build() {
     banner: { js: `// cyborg-hunter v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter\n` +
       'var __cyborgHunterPrevNS=typeof window!=="undefined"&&window.__cyborgHunterLoaded==="ch.js"?window.CyborgHunter:void 0;' },
     footer: { js: 'if(typeof window!=="undefined"){if(window.__cyborgHunterLoaded==="ch.js"){console.error(' +
-      JSON.stringify(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')) +
+      doubleLoadAfterOneLine +
       ');if(__cyborgHunterPrevNS)CyborgHunter=__cyborgHunterPrevNS}else if(window.__cyborgHunterLoaded){console.error(' +
       JSON.stringify(MESSAGES.coreLoadedTwice()) +
       ')}else{window.__cyborgHunterLoaded="cyborg-hunter.min.js"}window.IntegrityMonitor=CyborgHunter;__cyborgHunterPrevNS=void 0}' }
