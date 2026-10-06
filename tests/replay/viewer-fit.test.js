@@ -51,6 +51,14 @@ describe('the stage fits the recorded viewport into the room on both axes', () =
     assert.deepEqual(stageSize(boot(recordedAt(1600, 900), { maxStageWidth: null }, env)), [1400, 788]);
   });
 
+  it('the room\'s width is the mount\'s content box: padding (the fullscreen viewer has some) is not the stage\'s', () => {
+    const v = boot(recordedAt(1600, 400), {}, { mountWidth: 832, innerHeight: 2000 });
+    assert.deepEqual(stageSize(v), [832, 208]);
+    v.mount.style.padding = '12px 16px';
+    v.win.dispatchEvent(new v.win.Event('resize'));
+    assert.deepEqual(stageSize(v), [800, 200]);
+  });
+
   it('a window that grows taller refits the stage: its height is watched, not only the mount\'s width', () => {
     const env = { mountWidth: 800, innerHeight: 500 };
     const v = boot(recordedAt(400, 1000), {}, env);

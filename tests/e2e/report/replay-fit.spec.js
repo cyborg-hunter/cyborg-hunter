@@ -85,3 +85,21 @@ test('the viewer goes fullscreen and fits the screen, then fits the pane again',
   await expect.poll(() => mount.evaluate((m) => !!document.fullscreenElement)).toBe(false);
   await expect.poll(() => measure(mount)).toEqual(before);
 });
+
+test('fullscreen on a narrow screen: the stage fits inside the viewer\'s padding, with no sideways scroll', async ({ page }) => {
+  // A tall, narrow window: the width binds, so the room's width decides.
+  await page.setViewportSize({ width: 600, height: 1000 });
+  const mount = await loadReplay(page);
+  const before = await measure(mount);
+  await mount.locator('.replay-fullscreen').click();
+  await expect.poll(() => mount.evaluate((m) => document.fullscreenElement === m)).toBe(true);
+  // The fullscreen refit has landed once the stage takes the screen.
+  await expect.poll(async () => (await measure(mount)).stageW).toBeGreaterThan(before.stageW);
+  const fit = await mount.evaluate((m) => {
+    const stage = m.querySelector('.replay-stage').getBoundingClientRect();
+    return { scrollW: m.scrollWidth, clientW: m.clientWidth, stageRight: stage.right,
+      contentRight: m.getBoundingClientRect().right - parseFloat(getComputedStyle(m).paddingRight) };
+  });
+  expect(fit.scrollW).toBeLessThanOrEqual(fit.clientW);
+  expect(fit.stageRight).toBeLessThanOrEqual(fit.contentRight + 1);
+});

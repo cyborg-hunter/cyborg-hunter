@@ -1024,20 +1024,23 @@
 
     function fullscreenOn() { return !!document.fullscreenElement && document.fullscreenElement === mount; }
 
-    // The room the stage has: the mount's width (capped by maxStageWidth),
-    // and the fit height less the viewer's own controls, measured where they
-    // are laid out (header, lane, scrubber, ticker and the gaps between them,
-    // plus the mount's padding). Fullscreen: the screen, uncapped.
+    // The room the stage has: the mount's content width (capped by
+    // maxStageWidth), and the fit height less the viewer's own controls,
+    // measured where they are laid out (header, lane, scrubber, ticker and the
+    // gaps between them, plus the mount's padding). Fullscreen: the screen,
+    // uncapped. clientWidth includes the padding (the fullscreen rule gives
+    // the viewer some), so it comes off the width as it does off the height.
     var MIN_STAGE_H = 200;
     function fitBox() {
       var full = fullscreenOn();
-      var w = mount.clientWidth || 720;
+      var cs = window.getComputedStyle ? window.getComputedStyle(mount) : null;
+      var w = (mount.clientWidth || 720) -
+        (cs ? (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) : 0);
       var cap = full ? null : num(maxStageWidth);
       if (cap != null) w = Math.min(w, cap);
       var fh = full ? window.innerHeight
         : typeof fitHeightOpt === 'function' ? fitHeightOpt()
         : num(fitHeightOpt) != null ? fitHeightOpt : window.innerHeight;
-      var cs = window.getComputedStyle ? window.getComputedStyle(mount) : null;
       var chrome = (ticker.getBoundingClientRect().bottom - header.getBoundingClientRect().top) -
         stageWrap.getBoundingClientRect().height +
         (cs ? (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) : 0);
