@@ -115,12 +115,6 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trialId/phase now keeps that label on its row; unlabelled steps keep
   `gap-<n>`. Rows recorded by 0.10.x–0.11.x for such steps were labelled
   `gap-<n>`.
-- CLI and analyze page: a participant ID that is a number (a CSV column
-  holding numbers, or a study that stores one) is read as its string. Before,
-  such an ID stopped the whole report at the first plot
-  (`name.replace is not a function`), and `--participant 42` could not find
-  it. `0` and `false` are IDs now; a missing, `null` or empty ID is still
-  `unknown`.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the

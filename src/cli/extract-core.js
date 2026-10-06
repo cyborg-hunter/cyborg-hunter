@@ -17,11 +17,6 @@ import { TRIAL_REPORT_FIELDS } from '../shared/schema.js';
 import { getByPath } from '../shared/paths.js';
 import { collectSegments, reassembleSegments, rebaseTrialReport } from './segment-reassembly.js';
 
-// A value that names a participant. 0 and false do (a CSV's dynamic typing
-// turns a numeric subject id into a number); undefined, null and an empty
-// string do not, as the `||` chain this replaced treated them.
-const present = v => v !== undefined && v !== null && v !== '';
-
 // lab.js's Transmit plugin and datastore.transmit() POST
 // { metadata: { slice, id, payload }, url, data: [rows] }; a server that
 // stores the body as it is yields this envelope. Its rows are the same as a
