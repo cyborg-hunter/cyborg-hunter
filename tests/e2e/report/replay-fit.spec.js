@@ -3,10 +3,12 @@
 // the report's detail pane on both axes (and is wider than the 800 px reading
 // column when the pane has room), 1:1 shows the recorded page at its own
 // pixel size, scrolling inside the fitted box, and fullscreen fits the
-// screen. The report is built by bin/cyborg-hunter.js from the demo fixture
-// (a 1280×900 recording) and opened from file://.
+// screen, centred, while the report's keys stand down behind it. The report is
+// built by bin/cyborg-hunter.js from the demo fixture (a 1280×900 recording)
+// and opened from file://; a second report adds the same session under a
+// second id, so the arrow keys have a participant to move to.
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -18,9 +20,16 @@ test.beforeAll(() => {
   for (const f of ['DEMO-FIXT.json', 'DEMO-FIXT-replay-1785352263344.json']) {
     copyFileSync(join(ROOT, 'tests', 'fixtures', 'demo', f), join(dir, f));
   }
-  execFileSync(process.execPath, [join(ROOT, 'bin', 'cyborg-hunter.js'), 'report', '--data', dir,
-    '--output', join(dir, 'report'), '--no-visuals'],
-  { cwd: dir, env: { ...process.env, NO_UPDATE_NOTIFIER: '1' }, stdio: 'pipe' });
+  const build = (data) => execFileSync(process.execPath, [join(ROOT, 'bin', 'cyborg-hunter.js'), 'report', '--data', data,
+    '--output', join(data, 'report'), '--no-visuals'],
+  { cwd: data, env: { ...process.env, NO_UPDATE_NOTIFIER: '1' }, stdio: 'pipe' });
+  build(dir);
+  const two = join(dir, 'two');
+  mkdirSync(two);
+  for (const f of ['DEMO-FIXT.json', 'DEMO-FIXT-replay-1785352263344.json']) copyFileSync(join(dir, f), join(two, f));
+  const raw = JSON.parse(readFileSync(join(dir, 'DEMO-FIXT.json'), 'utf8'));
+  writeFileSync(join(two, 'DEMO-FIXT-2.json'), JSON.stringify({ ...raw, participantId: 'DEMO-FIXT-2' }));
+  build(two);
 });
 test.afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -81,6 +90,14 @@ test('the viewer goes fullscreen and fits the screen, then fits the pane again',
   await expect.poll(async () => (await measure(mount)).stageW).toBeGreaterThan(before.stageW);
   // The controls stay on the screen with the stage.
   expect(await mount.evaluate((m) => m.querySelector('.replay-ticker').getBoundingClientRect().bottom <= window.innerHeight + 1)).toBe(true);
+  // The height binds on this screen, so the stage (and the lane under it)
+  // stands in the middle of the viewer, not at its left edge.
+  const offCentre = await mount.evaluate((m) => {
+    const mid = (r) => (r.left + r.right) / 2;
+    const viewer = mid(m.getBoundingClientRect());
+    return ['.replay-stage', '.replay-lane'].map((s) => Math.abs(mid(m.querySelector(s).getBoundingClientRect()) - viewer));
+  });
+  for (const d of offCentre) expect(d).toBeLessThanOrEqual(1);
   await full.click();
   await expect.poll(() => mount.evaluate((m) => !!document.fullscreenElement)).toBe(false);
   await expect.poll(() => measure(mount)).toEqual(before);
@@ -102,4 +119,29 @@ test('fullscreen on a narrow screen: the stage fits inside the viewer\'s padding
   });
   expect(fit.scrollW).toBeLessThanOrEqual(fit.clientW);
   expect(fit.stageRight).toBeLessThanOrEqual(fit.contentRight + 1);
+});
+
+test('in fullscreen the report\'s arrow keys and "/" stand down: the participant behind it stays selected', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 700 });
+  await page.goto(pathToFileURL(join(dir, 'two', 'report', 'index.html')).href + '#p-DEMO-FIXT');
+  const selected = () => page.locator('.cohort-row.selected').getAttribute('data-pid');
+  expect(await selected()).toBe('DEMO-FIXT');
+  // The key that would move the selection to the other participant.
+  const away = (await page.locator('.cohort-row').first().getAttribute('data-pid')) === 'DEMO-FIXT' ? 'ArrowDown' : 'ArrowUp';
+  await page.locator('#p-DEMO-FIXT .replay-load-btn').click();
+  const mount = page.locator('#p-DEMO-FIXT .replay-mount');
+  await expect.poll(() => mount.evaluate((m) => !!(m._chReplayDebug && m._chReplayDebug.frameReady())), { timeout: 20000 }).toBe(true);
+  const full = mount.locator('.replay-fullscreen');
+  await full.click();
+  await expect.poll(() => mount.evaluate((m) => document.fullscreenElement === m)).toBe(true);
+  await page.keyboard.press(away);
+  await page.keyboard.press('/');
+  expect(await selected()).toBe('DEMO-FIXT');
+  expect(await page.evaluate(() => document.activeElement === document.querySelector('.search-wrap input'))).toBe(false);
+  expect(await mount.evaluate((m) => m.getBoundingClientRect().width)).toBeGreaterThan(0);
+  await full.click();
+  await expect.poll(() => mount.evaluate(() => !!document.fullscreenElement)).toBe(false);
+  // Out of fullscreen, the same key moves the selection.
+  await page.keyboard.press(away);
+  await expect.poll(selected).toBe('DEMO-FIXT-2');
 });

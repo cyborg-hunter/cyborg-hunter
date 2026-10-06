@@ -1022,16 +1022,13 @@
       }
     }
 
-    function fullscreenOn() { return !!document.fullscreenElement && document.fullscreenElement === mount; }
+    function fullscreenOn() { return document.fullscreenElement === mount; }
 
-    // The room the stage has: the mount's content width (capped by
-    // maxStageWidth), and the fit height less the viewer's own controls,
-    // measured where they are laid out (header, lane, scrubber, ticker and the
-    // gaps between them, plus the mount's padding). Fullscreen: the screen,
-    // uncapped. clientWidth includes the padding (the fullscreen rule gives
-    // the viewer some), so it comes off the width as it does off the height.
-    var MIN_STAGE_H = 200;
-    function fitBox() {
+    // The room the viewer is given: the mount's content width (capped by
+    // maxStageWidth) and the fit height. Fullscreen: the screen, uncapped.
+    // clientWidth includes the padding (the fullscreen rule gives the viewer
+    // some), so it comes off the width as it does off the height below.
+    function roomGiven() {
       var full = fullscreenOn();
       var cs = window.getComputedStyle ? window.getComputedStyle(mount) : null;
       var w = (mount.clientWidth || 720) -
@@ -1041,10 +1038,24 @@
       var fh = full ? window.innerHeight
         : typeof fitHeightOpt === 'function' ? fitHeightOpt()
         : num(fitHeightOpt) != null ? fitHeightOpt : window.innerHeight;
+      return { w: w, fh: num(fh) || 0, cs: cs };
+    }
+
+    // The stage's room inside it: the given width, and the fit height less
+    // the viewer's own controls, measured where they are laid out (header,
+    // lane, scrubber, ticker and the gaps between them, plus the mount's
+    // padding). Measured only when the stage is sized (a segment loads, the
+    // room changes, 1:1 or fullscreen toggles), never to decide whether to
+    // refit: the controls change height during play (a chip shown, a status
+    // wrapping), and the stage holds its size through playback. Such a row
+    // can take the viewer one row past the room until the next refit.
+    var MIN_STAGE_H = 200;
+    function fitBox(room) {
+      var cs = room.cs;
       var chrome = (ticker.getBoundingClientRect().bottom - header.getBoundingClientRect().top) -
         stageWrap.getBoundingClientRect().height +
         (cs ? (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) : 0);
-      return { w: w, h: Math.max(MIN_STAGE_H, (num(fh) || 0) - Math.max(0, chrome)) };
+      return { w: room.w, h: Math.max(MIN_STAGE_H, room.fh - Math.max(0, chrome)) };
     }
 
     // The stage BOX is fixed per segment (sized from the seed camera's aspect)
@@ -1052,12 +1063,13 @@
     // the iframe INSIDE the box. Fitted, the box is the largest of that shape
     // in the room; at 1:1 it is the seed camera's own size (scale 1 at the
     // segment's opening viewport), shown through the wrap at the room's size.
-    var lastBox = null;
+    var lastRoom = null;
     function sizeStage() {
       var seed = seg().camera || {};
       var scw = num(seed.client_w) || num(seed.w) || 1280;
       var sch = num(seed.client_h) || num(seed.h) || 800;
-      var box = lastBox = fitBox();
+      var room = lastRoom = roomGiven();
+      var box = fitBox(room);
       if (oneToOne) {
         stageW = scw;
         stageH = sch;
@@ -2372,6 +2384,11 @@
       scrub.value = '0';
       redraw();
       updateSessionPos();
+      // The header now says what the segment's opening shows (its view
+      // chips, its position), which can add a row: size the stage again
+      // against it. A segment load and a change of room are the only times
+      // the controls are measured (fitBox).
+      refit();
     }
     function selectSegment(i) {
       playing = false;
@@ -2396,9 +2413,11 @@
       drawOverlay();
       drawLane();
     }
+    // Refits when the room given changes (its width or its fit height), not
+    // when the viewer's own controls do: see fitBox.
     function refitIfChanged() {
-      var box = fitBox();
-      if (lastBox && box.w === lastBox.w && box.h === lastBox.h) return;
+      var room = roomGiven();
+      if (lastRoom && room.w === lastRoom.w && room.fh === lastRoom.fh) return;
       refit();
     }
     // The observer's refit waits a frame: resizing the stage inside the

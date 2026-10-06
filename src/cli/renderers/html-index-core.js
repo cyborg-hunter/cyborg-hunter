@@ -276,10 +276,12 @@ ${fontFaceCss}    :root {
       border: 1px solid var(--line); font-weight: 400;
     }
 
-    /* Detail pane base. The replay section is the exception to the 800px
-       reading column: its viewer scales the recording to the room it has, and
-       a recorded desktop page is wider than the column. */
-    .detail .participant > :not(.replay-block) { max-width: 800px; }
+    /* Detail pane base. The replay viewer is the exception to the 800px
+       reading column: it scales the recording to the room it has, and a
+       recorded desktop page is wider than the column. The replay section's
+       own heading and notes keep the column. */
+    .detail .participant > :not(.replay-block),
+    .detail .replay-block > :not(.replay-mount) { max-width: 800px; }
 
     /* Empty-state hint when filter+search combine to hide every row.
        Shown by reconcileSelection() via [data-empty="true"] on .detail. */
@@ -812,9 +814,10 @@ ${fontFaceCss}    :root {
           if (overlay.classList.contains('open')) { closeLightbox(); return; }
           if (!legend.hasAttribute('hidden'))     { closeLegend();   return; }
         }
-        // The enlarged figure covers the report: the keys below act on the
-        // report behind it, so they wait until it closes.
-        if (overlay.classList.contains('open')) return;
+        // The enlarged figure covers the report, and so does anything in
+        // fullscreen (a replay viewer): the keys below act on the report
+        // behind it, so they wait until it closes.
+        if (overlay.classList.contains('open') || document.fullscreenElement) return;
 
         const inInput = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
 

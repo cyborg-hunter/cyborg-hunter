@@ -59,6 +59,46 @@ describe('the stage fits the recorded viewport into the room on both axes', () =
     assert.deepEqual(stageSize(v), [800, 200]);
   });
 
+  it('a header that grows during play (a chip shown) leaves the stage as it is until the room itself changes', () => {
+    const env = { mountWidth: 800, innerHeight: 600 };
+    const v = boot(recordedAt(400, 1000), {}, env);
+    // happy-dom lays nothing out: the controls' height is stated through the
+    // ticker's bottom edge (the header's top is 0, the stage's box 0 px).
+    let controls = 100;
+    v.mount.querySelector('.replay-ticker').getBoundingClientRect = () =>
+      ({ top: controls, bottom: controls, left: 0, right: 0, width: 0, height: 0 });
+    env.innerHeight = 700;
+    v.win.dispatchEvent(new v.win.Event('resize'));
+    assert.deepEqual(stageSize(v), [240, 600]);
+    // A chip appears and wraps the header onto another row. The mount grows,
+    // so its observer (and here the window's resize, which shares the check)
+    // asks again; the room has not changed, so the stage holds.
+    v.mount.querySelector('[data-ch-zoom-note]').style.display = '';
+    controls = 124;
+    v.win.dispatchEvent(new v.win.Event('resize'));
+    assert.deepEqual(stageSize(v), [240, 600]);
+    // The next real change of room measures the controls again.
+    env.innerHeight = 800;
+    v.win.dispatchEvent(new v.win.Event('resize'));
+    assert.deepEqual(stageSize(v), [270, 675]);
+  });
+
+  it('a segment load measures the header as the segment opens, its view chips shown', () => {
+    const env = { mountWidth: 800, innerHeight: 700 };
+    const v = boot(recordedAt(400, 1000), {}, env);
+    // The DPR advisory adds a header row; the controls' height follows it.
+    const dprChip = v.mount.querySelector('[data-ch-dpr-note]');
+    v.mount.querySelector('.replay-ticker').getBoundingClientRect = () => {
+      const b = dprChip.style.display === 'none' ? 100 : 124;
+      return { top: b, bottom: b, left: 0, right: 0, width: 0, height: 0 };
+    };
+    // Recorded at DPR 1, now viewed at DPR 2: the segment's opening shows the chip.
+    Object.defineProperty(v.win, 'devicePixelRatio', { configurable: true, value: 2 });
+    v.dbg.selectSegment(0);
+    assert.equal(dprChip.style.display, '');
+    assert.deepEqual(stageSize(v), [230, 575]);
+  });
+
   it('a window that grows taller refits the stage: its height is watched, not only the mount\'s width', () => {
     const env = { mountWidth: 800, innerHeight: 500 };
     const v = boot(recordedAt(400, 1000), {}, env);
