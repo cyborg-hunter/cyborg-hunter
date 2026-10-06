@@ -150,37 +150,6 @@ describe('ruleChronologicalCompare (pure core)', () => {
   });
 });
 
-// A participant id is a string from the extractor on: the report names its
-// files after it and --participant compares strings. 0 and false are ids
-// (a CSV's dynamic typing turns a numeric subject id into a number); a
-// missing, null or empty id is not.
-describe('participant ids that are not strings', () => {
-  const integ = (id) => ({ trialId: id, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
-
-  for (const [id, key] of [[42, '42'], [0, '0'], [false, 'false']]) {
-    it('Shape 1 with participantId ' + JSON.stringify(id) + ' is keyed "' + key + '"', () => {
-      const r = extractIntegrityData({ participantId: id, trials: [{ integrity: integ('t1') }] }, {});
-      assert.strictEqual(r.participantId, key);
-      assert.ok(!r.warnings.some((w) => w.includes('participantId unresolved')), r.warnings.join(' | '));
-    });
-  }
-  for (const id of [undefined, null, '']) {
-    it('Shape 1 with participantId ' + JSON.stringify(id) + ' stays "unknown", with the warning', () => {
-      const r = extractIntegrityData({ participantId: id, trials: [{ integrity: integ('t1') }] }, {});
-      assert.strictEqual(r.participantId, 'unknown');
-      assert.ok(r.warnings.some((w) => w.includes('participantId unresolved')));
-    });
-  }
-  it('an id in metadata that is a number is keyed by its string', () => {
-    assert.strictEqual(extractIntegrityData({ metadata: { participantId: 7 }, trials: [] }, {}).participantId, '7');
-  });
-  it('a CSV with a numeric id (dynamic typing makes it a number) is keyed by its string, 0 included', () => {
-    const csv = (id) => ['participantId,integrity', id + ',"{""trialId"":""0"",""pasteEvents"":[]}"'].join('\n');
-    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('42'), {}), {}).participantId, '42');
-    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('0'), {}), {}).participantId, '0');
-  });
-});
-
 // The one-line setup on lab.js writes its own id as cyborgHunterParticipantId
 // on every trial row, and as participantId on row 0 only when the study has
 // set none. A participantId that differs from it is the study's own.
@@ -300,6 +269,9 @@ describe('participant ids that are not strings', () => {
       assert.ok(r.warnings.some((w) => w.includes('participantId unresolved')));
     });
   }
+  it('an id in metadata that is a number is keyed by its string', () => {
+    assert.strictEqual(extractIntegrityData({ metadata: { participantId: 7 }, trials: [] }, {}).participantId, '7');
+  });
   it('a top-level array and a Transmit body whose rows carry a numeric id are keyed by its string', () => {
     assert.strictEqual(extractIntegrityData([trialRow(43)], {}).participantId, '43');
     assert.strictEqual(extractIntegrityData([trialRow(0)], {}).participantId, '0');
