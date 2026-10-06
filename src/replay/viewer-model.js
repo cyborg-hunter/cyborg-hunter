@@ -54,6 +54,18 @@ const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
 // derived time is re-rounded to the same precision.
 const round1 = (v) => Math.round(v * 10) / 10;
 
+// <html>'s attributes at a keyframe (CH vendor data, src/replay/root-attrs.js):
+// a null-prototype map of the string values, or null when the keyframe states
+// none (every file before 0.13.0, every foreign producer).
+function rootAttrsOf(s) {
+  const ext = s.extensions && s.extensions['cyborg-hunter'];
+  const attrs = ext && ext.root_attrs;
+  if (!attrs || typeof attrs !== 'object' || Array.isArray(attrs)) return null;
+  const out = Object.create(null);
+  for (const name of Object.keys(attrs)) if (typeof attrs[name] === 'string') out[name] = attrs[name];
+  return out;
+}
+
 // A keyframe is a DomNode OBJECT. A primitive (a v1 HTML string, say) or an
 // array carries none of a DomNode's fields, so treating it as a keyframe
 // would hand `mountTree` something it cannot instantiate and would license
@@ -202,6 +214,7 @@ export function buildViewerModel(recording) {
       // reconstruction is instantiated node by node and is never parsed from
       // markup (design §4).
       initialDom: keyframe ? s.initial_dom : null,
+      rootAttrs: keyframe ? rootAttrsOf(s) : null,
       initialState: s.initial_state || null,
       camera: null,          // filled below, once every span start is known
       // Segment-relative times, as v1's were trial-relative. A pure
@@ -306,6 +319,12 @@ export function buildViewerModel(recording) {
 
     scoring: ext.scoring || null,
     guardViolations: asArray(ext.guard_violations),
+    // <html>'s attribute changes, ABSOLUTE wire time like the other session
+    // streams; sorted, as the walk merges by time.
+    rootAttrEvents: asArray(ext.root_attr_events)
+      .filter((e) => e && typeof e === 'object' && typeof e.name === 'string')
+      .slice()
+      .sort((a, b) => (num(a.t) || 0) - (num(b.t) || 0)),
     // Channel names only: the chip says which channel went dark, and the
     // message/time detail has no surface in the report today.
     captureFailures: asArray(ext.capture_failures).map((f) => f && f.channel).filter(Boolean),

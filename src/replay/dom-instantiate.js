@@ -292,6 +292,34 @@ function applyAttrs(el, attrs, skip, ctx) {
   }
 }
 
+// <html>'s attributes (CH vendor data, src/replay/root-attrs.js): the
+// reconstruction's <html> carries what the recording says the page's carried,
+// through the same §12 filter as any element. `xmlns` belongs to the shell
+// document and is never set from a recording.
+var ROOT_SKIP = { xmlns: true };
+
+// The whole set, as a keyframe states it: every attribute the shell's <html>
+// has that the set lacks is removed, so a backward seek takes back what a
+// later change added.
+function applyRootAttrs(doc, attrs) {
+  var root = doc && doc.documentElement;
+  if (!root) return;
+  var want = attrs || {};
+  for (var i = root.attributes.length - 1; i >= 0; i--) {
+    var name = root.attributes[i].name;
+    if (!Object.prototype.hasOwnProperty.call(want, name)) root.removeAttribute(name);
+  }
+  applyAttrs(root, want, ROOT_SKIP, null);
+}
+
+// One change: a value sets the attribute, null removes it.
+function applyRootAttr(doc, name, value) {
+  var root = doc && doc.documentElement;
+  if (!root || typeof name !== 'string' || ROOT_SKIP[name.toLowerCase()] === true) return;
+  if (value === null || value === undefined) { root.removeAttribute(name); return; }
+  setFilteredAttr(root, name, value, null);
+}
+
 // Frames are recorded as the element only (spec §13) and must stay that way in
 // the reconstruction: no `src` to fetch, no `srcdoc` to parse. §12's network
 // policy is then satisfied structurally — there is nothing to request — with
@@ -794,4 +822,4 @@ function applyPatches(patches, mount) {
 // ONE line of ESM syntax, last, so the build can strip it with a single
 // replace and concatenate the rest into the report's viewer script. Keep it
 // that way — the header explains why, and the test suite fails if it drifts.
-export { instantiateTree, mountTree, applyPatch, applyPatches };
+export { instantiateTree, mountTree, applyPatch, applyPatches, applyRootAttrs, applyRootAttr };

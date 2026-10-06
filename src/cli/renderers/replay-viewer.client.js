@@ -301,6 +301,8 @@
   // and carries any `html{…}` rule it had. Set inline on <html>, as jsPsych
   // does — a node no recorded id can address. Re-run after every mount (the
   // shell, and so this style, survives restores) and every attribute patch.
+  // Since 0.13.0 CH's recorder states <html>'s attributes (root_attrs), and a
+  // file that carries them gets them instead (syncRoot below).
   function syncRootHeight(doc) {
     if (!doc || !doc.body || !doc.documentElement) return;
     var want = /%\s*$/.test(doc.body.style.height || '') ? '100%' : '';
@@ -337,6 +339,11 @@
     }
     // Session-level streams: ABSOLUTE wire times, rebased per segment at use.
     var sheetEvents = model.stylesheetEvents || [];
+    // <html>'s attributes, when the recording states them (CH >= 0.13.0:
+    // root_attrs on every keyframe). Such a file gets its own <html> at every
+    // mount and through the walk; any other keeps the height pin above.
+    var rootAttrEvents = model.rootAttrEvents || [];
+    var recordsRoot = segments.some(function (s) { return !!s.rootAttrs; });
     var viewportChanges = model.viewportChanges || [];
     var scrollbar = model.scrollbar || { w: 0, h: 0 };
 
@@ -904,6 +911,10 @@
           }
         };
         pushStream(sheetEvents, RANK_SHEET, 'stylesheet');
+        // <html>'s attributes are style state too: same rank, pushed after the
+        // sheets so the stable sort keeps a sheet first at an equal `t`. Not a
+        // §7 stream (vendor data), so it takes no rank of its own.
+        if (recordsRoot) pushStream(rootAttrEvents, RANK_SHEET, 'root-attr');
         pushStream(viewportChanges, RANK_VIEWPORT, 'viewport');
         for (var e = 0; e < s.events.length; e++) {
           rows.push({
@@ -1433,7 +1444,7 @@
       // `applyPatch` returns false for anything that is not one of §5.1's four
       // verbs, so the vocabulary dispatch below needs no list of its own.
       if (span && applyPatch(e, span)) {
-        if (e.type === 'dom.attr') syncRootHeight(frameDoc());
+        if (e.type === 'dom.attr' && !recordsRoot) syncRootHeight(frameDoc());
         return;
       }
       var type = e.type;
@@ -1480,10 +1491,21 @@
       evaluateCheck(e);
     }
 
+    // <html> at a mount: the keyframe's own attributes when the recording
+    // states them (an empty set when this span's keyframe does not), else the
+    // height pin a file without them has always had.
+    function syncRoot(doc, rootAttrs) {
+      if (recordsRoot) applyRootAttrs(doc, rootAttrs || {});
+      else syncRootHeight(doc);
+    }
+
     function applyEntry(w) {
       if (w.stream === 'stylesheet') {
         var doc = frameDoc();
         if (doc) applySheetEvent(doc, w.payload);
+      } else if (w.stream === 'root-attr') {
+        var rdoc = frameDoc();
+        if (rdoc) applyRootAttr(rdoc, w.payload.name, w.payload.value);
       } else if (w.stream === 'viewport') {
         foldViewport(w.payload);
       } else {
@@ -1543,7 +1565,7 @@
         span = null; walk = []; appliedIdx = 0; spanStart = -1; spanEnd = -1;
         resetCanvases(doc);
         mediaState = new Map();
-        if (doc) { mountTree(null, doc.body, doc); syncRootHeight(doc); stats.mounts++; }
+        if (doc) { mountTree(null, doc.body, doc); syncRoot(doc, null); stats.mounts++; }
         seedCamera(targetSeg);
         pendingCamSize = true;
         flushCamSize();
@@ -1578,7 +1600,7 @@
       // 1. mount the span keyframe, fresh id map
       if (doc) {
         span = mountTree(start >= 0 ? segments[start].initialDom : null, doc.body, doc);
-        syncRootHeight(doc);
+        syncRoot(doc, start >= 0 ? segments[start].rootAttrs : null);
         stats.mounts++;
       } else {
         span = null;
