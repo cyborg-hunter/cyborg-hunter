@@ -80,7 +80,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 - `data-replay`: records a session replay; save `CyborgHunter.replay()` in your save code.
 - `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
 - Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (a POST form gets it as a hidden `cyborgHunterData` field).
-- Qualtrics: paste the tag into the survey's Look & Feel header and declare one embedded-data field; the CLI reads the CSV export ([docs/qualtrics.md](docs/qualtrics.md)).
+- Qualtrics: paste the `ch-qualtrics.js` tag into the survey's Look & Feel header and declare one embedded-data field; the CLI reads the CSV export ([docs/qualtrics.md](docs/qualtrics.md)).
 
 Walk-through, placement and participant IDs: [docs/quickstart.md](docs/quickstart.md). Moving an experiment wired by hand: [docs/advanced-integration.md](docs/advanced-integration.md#switching-to-the-one-liner).
 

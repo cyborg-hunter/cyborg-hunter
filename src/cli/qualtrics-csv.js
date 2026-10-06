@@ -70,7 +70,7 @@ function isImportIdRow(row, column, rid) {
     .some((c) => String(c ?? '').trim().startsWith('{"ImportId"'));
 }
 
-// A payload of ch.js's Qualtrics writer: a JSON object whose
+// A payload of ch-qualtrics.js's writer: a JSON object whose
 // cyborgHunterOneLiner names the host, as every level and the error marker do.
 function isQualtricsPayload(cell) {
   if (!cell.startsWith('{')) return false;
@@ -101,7 +101,7 @@ function firstPayloadCell(body, column, rid) {
 // Any CSV can have both, so one positive sign that Qualtrics wrote the file
 // is needed too: two of its system columns (the response id counts), the
 // ImportId row, or, in an export cut down to a few columns, a first
-// non-empty payload cell written by ch.js's Qualtrics writer. A CSV without
+// non-empty payload cell written by ch-qualtrics.js's writer. A CSV without
 // both columns (any jsPsych file) is decided by its first line alone.
 export function isQualtricsExport(text, field = QUALTRICS_FIELD) {
   const ids = headerIds(text);

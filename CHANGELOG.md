@@ -6,6 +6,19 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ## [Unreleased]
 
 ### Added
+- One-line setup in Qualtrics surveys: `dist/ch-qualtrics.js` in the
+  survey's Look & Feel header writes a capped summary of the session
+  (scores, counts and event timings, never text the participant typed or
+  pasted) into the declared embedded-data field `__js_cyborg_hunter` at
+  every page submit, and stays silent when Qualtrics runs the header again
+  on the next page. The CLI and the analyze page read the Qualtrics CSV
+  export, one participant per response (`qualtricsField`,
+  `--qualtrics-field`). Replay recordings are never written to Qualtrics.
+  In a report built from a reduced payload (session entries cut to the
+  newest ones), the Sidebar, keyboard-shortcut and AI-extension tiles count
+  the whole session from the carried totals while their event cells list
+  only the kept entries, so a cell can show fewer lines than its tile. See
+  docs/qualtrics.md.
 - Standalone replay recorder (`CyborgHunterReplay.attach()`):
   `resumeSession()` records again after `stopSession()`, in later segments of
   the same recording; call `startTrial()` right after it.

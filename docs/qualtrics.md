@@ -1,7 +1,7 @@
 # Qualtrics
 
-`ch.js`, the one-line setup, runs in a Qualtrics survey from the survey's
-Look & Feel header. At every page submit it writes a summary of the session
+`ch-qualtrics.js`, the one-line setup's file for Qualtrics, runs in a survey
+from the survey's Look & Feel header. At every page submit it writes a summary of the session
 (scores, counts and event timings, never text the participant typed) into one
 embedded-data field. The CLI reads the Qualtrics CSV export directly, one
 participant per response (see [Reading the data](#reading-the-data) for the
@@ -28,7 +28,7 @@ matters.
    the editor to its source view, paste, and save:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter/dist/ch.js" data-participant-id="${e://Field/ResponseID}" data-debug></script>
+   <script src="https://unpkg.com/cyborg-hunter/dist/ch-qualtrics.js" data-participant-id="${e://Field/ResponseID}" data-debug></script>
    ```
 
    Open the header source again after saving: if the tag is gone, the
@@ -65,13 +65,13 @@ Here → Embedded Data, type the field name exactly `__js_cyborg_hunter`, leave
 its value as "Value will be set from Panel or URL", move the element to the
 top of the flow, and save the flow.
 
-`ch.js` writes with `Qualtrics.SurveyEngine.setJSEmbeddedData('cyborg_hunter', …)`;
+`ch-qualtrics.js` writes with `Qualtrics.SurveyEngine.setJSEmbeddedData('cyborg_hunter', …)`;
 the New Survey Taking Experience stores that value in the field
 `__js_cyborg_hunter`, and the export has a column of that name. Under the
 legacy layout the field is `cyborg_hunter` instead
 ([Legacy layout](#legacy-layout)).
 
-`ch.js` cannot tell whether the field is declared. In the survey page,
+`ch-qualtrics.js` cannot tell whether the field is declared. In the survey page,
 Qualtrics' `getJSEmbeddedData` returns whatever the page wrote, declared or
 not; an undeclared value is dropped only on Qualtrics' server. So the
 `data-debug` badge always shows `field __js_cyborg_hunter unknown`, and the
@@ -88,7 +88,7 @@ starts a new session. Qualtrics fills piped text into the header before the
 browser runs the tag: on a live survey the tag received the response's `R_…`
 ID on every page.
 
-`ch.js` takes the first ID it finds, in this order (the same order as on
+`ch-qualtrics.js` takes the first ID it finds, in this order (the same order as on
 [any page](quickstart.md#participant-id)):
 
 1. a recruitment platform's parameter in the survey's address:
@@ -108,7 +108,7 @@ in the same tab continues the first response's session
 If Qualtrics leaves `${e://Field/ResponseID}` unfilled, every payload carries
 that literal text as its ID. The CLI recognises piped text left as written
 (`${…://…}`) and uses each row's `ResponseId` instead (below), so each
-response is still its own participant. `ch.js` does not recognise it, so a
+response is still its own participant. `ch-qualtrics.js` does not recognise it, so a
 retake in the same tab then continues the first response's session, as with
 a recruitment platform's ID. The smoke test checks for this.
 
@@ -121,14 +121,14 @@ ID keeps it.
 
 ## The final page
 
-`ch.js` writes each page from a page-submit callback
+`ch-qualtrics.js` writes each page from a page-submit callback
 (`Qualtrics.SurveyEngine.addOnPageSubmit`) registered from the header.
 Qualtrics shows the next page at once and runs the header script again a
 moment later, which registers the callback for that page. Qualtrics drops
 each page's callbacks after its submit (checked on a live survey), so if the
 participant presses Next before the header has run again, nothing writes
 that page at its submit. On a middle
-page `ch.js` notices at the next header run, writes the missed page then (the
+page `ch-qualtrics.js` notices at the next header run, writes the missed page then (the
 next submit carries it), and notes the gap. After the final page no header
 run follows, so its activity would be lost.
 
@@ -139,10 +139,10 @@ question's JavaScript editor), covers that case:
 Qualtrics.SurveyEngine.addOnPageSubmit(function () { try { if (window.CyborgHunter) CyborgHunter.data(); } catch (e) {} });
 ```
 
-The question's script is in place as soon as the page renders. When ch.js's
+The question's script is in place as soon as the page renders. When ch-qualtrics.js's
 own callback also runs at that submit, in the same task (as it does in our
 simulated survey; whether Qualtrics does the same is not yet checked), the two share one
-write, so the line adds no row. The line never throws: if `ch.js` did not load (a network
+write, so the line adds no row. The line never throws: if `ch-qualtrics.js` did not load (a network
 failure, a blocker), it does nothing, so it cannot stop the participant's
 submit. Keep it in this form. We recommend it for every survey. In the live
 check the header ran again within a moment of each page change and the final
@@ -153,13 +153,13 @@ checked, and the line covers that case.
 ## Smoke test
 
 1. **Preview** the survey. A badge in the bottom-left corner and one console
-   line confirm that `ch.js` runs:
+   line confirm that `ch-qualtrics.js` runs:
 
    ```
    Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off
    ```
 
-   No badge: `ch.js` did not run ([Troubleshooting](#troubleshooting)).
+   No badge: `ch-qualtrics.js` did not run ([Troubleshooting](#troubleshooting)).
 2. **On a page with a text-entry question, paste into the text box, switch
    to another tab for at least five seconds, come back and press Next.** On
    the second page the badge should read
@@ -167,7 +167,7 @@ checked, and the line covers that case.
    The field always reads `unknown` ([Declare the field](#declare-the-field));
    step 3 is the check. `last write` gives the payload's size and the cap,
    both in UTF-8 bytes. Preview shows the survey twice, on the page and in a
-   phone frame, and both run `ch.js`: read the badge on the page. The phone
+   phone frame, and both run `ch-qualtrics.js`: read the badge on the page. The phone
    frame's badge shows `submits missed ×1` and more, because Preview moves
    that copy to the next page without a submit of its own. A published survey
    runs one copy.
@@ -185,7 +185,7 @@ see the badge.
 
 ## Payload size
 
-The payload `ch.js` writes to Qualtrics is a summary of the session: scores,
+The payload `ch-qualtrics.js` writes to Qualtrics is a summary of the session: scores,
 counters, one row per survey page with that page's counts and mouse metrics,
 and events as times, durations and lengths (pastes, copies, drops, tab
 switches, idle gaps, keyboard shortcuts, sidebar and developer-tools
@@ -201,7 +201,7 @@ sees "Something went wrong" and cannot go on until the value is shorter.
 Measured on a live survey on 2026-10-05: a value of exactly 20,000 bytes was
 stored; values of 20,002 bytes (10,001 two-byte characters) and 24,000 bytes
 were refused. Values do not count against each other: a submit that carried
-three 19,000-byte values and the Cyborg Hunter payload was accepted. `ch.js`
+three 19,000-byte values and the Cyborg Hunter payload was accepted. `ch-qualtrics.js`
 caps its payload at 12,000 UTF-8 bytes and never writes a longer string.
 
 Your own embedded data does not share that budget, but the same limit
@@ -211,7 +211,7 @@ participant on the page where it was set and on every page after it: for
 example, a whole jsPsych experiment's data saved into one embedded-data
 field.
 
-When the summary is over the cap, `ch.js` writes the first level of this
+When the summary is over the cap, `ch-qualtrics.js` writes the first level of this
 ladder that fits. The levels are cumulative:
 
 | Level | What is dropped |
@@ -250,27 +250,27 @@ kept for the newest five pages.
 If the session cannot be read, the payload is level 5 with
 `cyborgHunterError: "the Qualtrics payload could not be built"`, and the
 console shows "The Qualtrics payload was reduced". If the summary fails the
-writer's own check, `ch.js` writes a short error record in its place (the
+writer's own check, `ch-qualtrics.js` writes a short error record in its place (the
 participant ID and
 `cyborgHunterError: "the Qualtrics payload could not be written (…)"`) and
 logs "Cyborg Hunter could not write to Qualtrics embedded data". If
-Qualtrics' setter itself fails, nothing is written at that submit; `ch.js`
+Qualtrics' setter itself fails, nothing is written at that submit; `ch-qualtrics.js`
 logs the same message, and its next successful write carries a note. In
 every case the survey goes on.
 
 ## Sessions and surveys in one tab
 
-`ch.js` keeps the session in the browser tab's `sessionStorage`, so a reload
+`ch-qualtrics.js` keeps the session in the browser tab's `sessionStorage`, so a reload
 of the survey would continue the same session instead of starting over.
 Every survey on your Qualtrics domain shares that storage. Under the New
-Survey Taking Experience `ch.js` therefore keeps one session per survey,
+Survey Taking Experience `ch-qualtrics.js` therefore keeps one session per survey,
 named by the survey ID in the page address (`/jfe/form/SV_…`). A second
 survey opened in the same tab starts a session of its own, even under the
 same participant ID.
 
 If your survey's address does not show its ID (for example a custom link that
 does not redirect), add `data-qualtrics-survey-id="${e://Field/SurveyID}"` to
-the `ch.js` tag (Qualtrics fills this pipe in the header, as it does
+the `ch-qualtrics.js` tag (Qualtrics fills this pipe in the header, as it does
 `ResponseID`). Without an ID, every survey in the tab would share one
 session, and the `data-debug` summary says so. Preview is such a case: it
 runs the survey in frames whose address (`/jfe/preview/app`) has no ID. The legacy layout does not keep
@@ -290,7 +290,7 @@ response is one page load, so `pageCount` is 1 plus the number of reloads.
 
 `sessionStorage` belongs to one tab and is gone when the tab closes. If your
 survey lets respondents continue an unfinished response later, a participant
-who closes the tab (or the browser) and comes back starts a new `ch.js`
+who closes the tab (or the browser) and comes back starts a new `ch-qualtrics.js`
 session, and its next write replaces the field's value: the payload then
 holds only what happened after the return, and the earlier pages' data is
 lost. Nothing in the payload marks this. A participant could use it to clear
@@ -335,7 +335,7 @@ reads the same file (earlier versions do not). If the column has another name in
 ## Replay
 
 A session recording (`data-replay`) is far larger than an embedded-data field
-can hold, so `ch.js` never writes it to Qualtrics. To keep recordings, save
+can hold, so `ch-qualtrics.js` never writes it to Qualtrics. To keep recordings, save
 what `CyborgHunter.replay()` returns to your own server from the survey's
 final page. This needs a server of your own that accepts the upload (and
 answers cross-origin requests from your Qualtrics domain). The script below
@@ -373,7 +373,7 @@ Qualtrics.SurveyEngine.addOnload(function () {
 When the final page loads, the script hides Next, stops the recorder and
 posts the recording. It shows Next again when the upload has finished,
 failed, or taken longer than ten seconds, so a slow server never keeps the
-participant on the page. Without `ch.js` it never hides Next, and if
+participant on the page. Without `ch-qualtrics.js` it never hides Next, and if
 anything in it fails, it shows Next again at once and throws nothing into
 Qualtrics. It does not press Next: the participant's own Next submits the
 page, and that submit writes the last Cyborg Hunter payload.
@@ -390,15 +390,17 @@ console says so once ("The jsPsych trials on this survey are not recorded one
 by one"). Rows per trial need `ch.js`, which carries the jsPsych adapter and
 writes them into jsPsych's own data, and writes nothing into embedded data;
 in a Qualtrics header it also logs the double-load error each time the header
-runs again ([known issues](known-issues.md#one-line-setup)).
+runs again ([known issues](known-issues.md#one-line-setup)). That error says
+to keep one of the file's tags, but the header's tag is the only one, so the
+error can be ignored there.
 
 ## Legacy layout
 
 With the New Survey Taking Experience switched off, every survey page is a
-full page load. `ch.js` carries the session from page to page in the tab's
+full page load. `ch-qualtrics.js` carries the session from page to page in the tab's
 `sessionStorage`, as on any page without jsPsych, and writes with
 `setEmbeddedData` to the field `cyborg_hunter`: declare `cyborg_hunter` (not
-`__js_cyborg_hunter`) in Survey Flow. On every page load `ch.js` logs
+`__js_cyborg_hunter`) in Survey Flow. On every page load `ch-qualtrics.js` logs
 "Qualtrics legacy layout detected", naming that field. Counts, scores and
 hard triggers are kept, and `pageCount` counts page loads, which here are the
 survey's pages (plus any reloads). This layout is
@@ -413,14 +415,14 @@ participant ID, continue one session), and the CLI reads the
 
 | What you see | Cause | What to do |
 |---|---|---|
-| No badge in Preview with `data-debug` | `ch.js` did not run: the licence strips scripts, the tag was not saved, or the script could not load | Check the saved header source ([Requirements](#requirements)) and the browser console |
+| No badge in Preview with `data-debug` | `ch-qualtrics.js` did not run: the licence strips scripts, the tag was not saved, or the script could not load | Check the saved header source ([Requirements](#requirements)) and the browser console |
 | View Response or the export has no `__js_cyborg_hunter` value, though the badge showed writes (`last write …`) | The field is missing from Survey Flow; Qualtrics drops the value without an error, and the badge cannot tell (it says `unknown`) | [Declare the field](#declare-the-field) |
 | Preview: the phone frame's badge shows `submits missed ×n` | Preview moves the phone copy to the next page without a submit of its own | Nothing to fix; read the badge on the page ([Smoke test](#smoke-test)) |
-| CLI: "N of M responses carry no Cyborg Hunter data" | Those responses have an empty payload cell: `ch.js` never ran on them (licence without custom JavaScript, header script removed, survey not published after the tag was added, preview before the tag was added), or the field was not declared | Check the header and Survey Flow, and publish the survey; responses collected before the fix have no data |
+| CLI: "N of M responses carry no Cyborg Hunter data" | Those responses have an empty payload cell: `ch-qualtrics.js` never ran on them (licence without custom JavaScript, header script removed, survey not published after the tag was added, preview before the tag was added), or the field was not declared | Check the header and Survey Flow, and publish the survey; responses collected before the fix have no data |
 | CLI: "participantId taken from the ResponseId column" | The payload had no linkable participant ID | Set `data-participant-id` to piped text ([Participant ID](#participant-id)) |
 | The payloads' `participantId` is `${e://Field/ResponseID}`; CLI: "participantId taken from the ResponseId column" on every response | Qualtrics did not fill the pipe in the header | Nothing for the report: each response is its own participant under its `ResponseId`. A retake in the same tab continues the first response's session ([Participant ID](#participant-id)) |
 | Console: "The Qualtrics payload was reduced"; CLI: "Qualtrics payload was reduced" | The summary was over the cap | Nothing to fix ([Payload size](#payload-size)) |
 | Console: "Cyborg Hunter could not write to Qualtrics embedded data" | Qualtrics' setter failed (nothing was written at that submit; the next write carries a note), or the payload failed its check (an error record was written in its place) | [Open an issue](https://github.com/cyborg-hunter/cyborg-hunter/issues) with the console message and your `<script>` tag; never attach participant data |
-| Badge: `submits missed ×n`; CLI: "a Qualtrics page was submitted before Cyborg Hunter's page-submit hook was in place" | A page was submitted before the header ran again; `ch.js` wrote it at the next header run, so nothing was lost | Nothing to fix; add the [final-page line](#the-final-page) so the last page is covered too |
+| Badge: `submits missed ×n`; CLI: "a Qualtrics page was submitted before Cyborg Hunter's page-submit hook was in place" | A page was submitted before the header ran again; `ch-qualtrics.js` wrote it at the next header run, so nothing was lost | Nothing to fix; add the [final-page line](#the-final-page) so the last page is covered too |
 | Console summary: "no survey id in the address or data-qualtrics-survey-id" | The page address has no `SV_…` ID | Add `data-qualtrics-survey-id="${e://Field/SurveyID}"` ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)) |
 | Badge: `page 1` on a later page | The page was reloaded: the badge counts pages since the last load | Nothing to fix; the payload keeps the earlier pages |

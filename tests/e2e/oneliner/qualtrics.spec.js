@@ -114,6 +114,24 @@ for (const scripts of ['element', 'eval']) {
   });
 }
 
+// The wrong one-line file in the header: ch.js on a survey says once which
+// file to load, in the console and on the badge, records the pages as a page
+// without a framework, and writes nothing into embedded data. The header's
+// re-runs on later pages stay silent.
+test('ch.js in the header: one error naming ch-qualtrics.js, also on the badge; nothing written to the field', async ({ page }) => {
+  const log = collectConsole(page);
+  const server = await qualtricsServer(page);
+  await page.goto(at('file=ch.js'));
+  await ready(page, 1);
+  await nextPage(page, 1);
+  await nextPage(page, 2);
+  expect(chErrors(log)).toEqual([MESSAGES.wrongBuild('Qualtrics', 'ch-qualtrics.js', 'ch.js')]);
+  expect(log.error.filter((t) => t.includes('Not redefining'))).toEqual([]);
+  expect(await badgeText(page)).toMatch(/^Cyborg Hunter active · vanilla mode · .* · wrong file: this page runs Qualtrics, load ch-qualtrics\.js$/);
+  expect(server.posts).toHaveLength(2);
+  for (const p of server.posts) expect(p.values[FIELD]).toBeUndefined();
+});
+
 test('over the cap: the payload is reduced before the write, the participant is never blocked', async ({ page }) => {
   const log = collectConsole(page);
   const server = await qualtricsServer(page);
