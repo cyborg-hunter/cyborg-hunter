@@ -587,7 +587,7 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
         const count = viaAlias
           ? (chIdCounts[saneKey(alias)] || 0) + (saneCounts[saneKey(alias)] || 0)
           : saneCounts[sane.toLowerCase()];
-        const via = viaAlias ? ` (named after ch.js's id ${alias}, its cyborgHunterParticipantId)` : '';
+        const via = viaAlias ? ` (named after ch-labjs.js's id ${alias}, its cyborgHunterParticipantId)` : '';
         if (!cand.file.startsWith(name + '-replay-')) {
           warnings.push({ file: cand.path,
             warnings: [`Replay artifact has no embedded participant_id and its filename case does not match "${name}" exactly — not attached.`] });

@@ -173,7 +173,7 @@ export function extractIntegrityData(raw, config) {
     if (fromRows.chIds.length > 1) named.push(`cyborgHunterParticipantId: ${list(fromRows.chIds)}`);
     warnings.push(
       `the rows carry more than one participant id (${named.join('; ')}), as if the file held ` +
-      `several sessions; keyed by "${participantId}", and ch.js's id is not used to attach a replay recording`
+      `several sessions; keyed by "${participantId}", and ch-labjs.js's id is not used to attach a replay recording`
     );
   }
 
