@@ -105,7 +105,8 @@
 // sentinel value, 'ch.js', so cyborg-hunter.min.js's footer and rerun.js read
 // any of them as the one-line setup, and names itself in
 // win.__cyborgHunterFile (non-enumerable), so a later double load names both
-// files. ctx.file is the running file's name (CH_FILE, build-flags.js), for
+// files and rerun.js takes only the same file for a header re-run. ctx.file
+// is the running file's name (CH_FILE, build-flags.js), for
 // the messages that name it. Each call into the jsPsych adapter is guarded by
 // HAS_JSPSYCH, so a file without it drops that code; such a file on a
 // jsPsych page logs one wrongBuild error naming ch.js (ctx.wrongBuild, which

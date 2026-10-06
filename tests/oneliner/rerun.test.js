@@ -11,6 +11,7 @@ import { Window } from 'happy-dom';
 import { VERSION } from '../../src/shared/constants.js';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 import { fakeSurveyEngine } from './support/fake-qualtrics.js';
+import { setBuild } from './support/build-flags.js';
 
 class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
 let win, boot, markRerun, noteRerun, errors, warns, orig, ctx;
@@ -96,6 +97,40 @@ describe('markRerun', () => {
   it('no mark on a page without Qualtrics', () => {
     ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
     assert.strictEqual(win.__cyborgHunterRerunHost, undefined);
+  });
+});
+
+// A header re-run is the same one-line file of the same version. Another
+// one-line file of that version (ch.js where ch-qualtrics.js runs, or the
+// other way round) is a second tag: the loud double load. A window without
+// the file mark ran a one-line file of an earlier release, which is ch.js.
+describe('markRerun compares the one-line file', () => {
+  const ran = (file) => {
+    const w = { __cyborgHunterLoaded: 'ch.js', __cyborgHunterRerunHost: 'qualtrics', CyborgHunter: { VERSION } };
+    if (file) w.__cyborgHunterFile = file;
+    return w;
+  };
+  const as = (file, fn) => {
+    const restore = setBuild({ CH_FILE: file });
+    try { fn(); } finally { restore(); }
+  };
+
+  it('ch-qualtrics.js: false after ch.js of the same version, or a window without the mark; true after ch-qualtrics.js', () => {
+    as('ch-qualtrics.js', () => {
+      const w = ran('ch.js');
+      assert.strictEqual(markRerun(w), false);
+      assert.strictEqual(w.__cyborgHunterRerun, false);
+      assert.strictEqual(markRerun(ran(null)), false);
+      assert.strictEqual(markRerun(ran('ch-qualtrics.js')), true);
+    });
+  });
+
+  it('ch.js: true after ch.js or a window without the mark, as before; false after ch-qualtrics.js', () => {
+    as('ch.js', () => {
+      assert.strictEqual(markRerun(ran(null)), true);
+      assert.strictEqual(markRerun(ran('ch.js')), true);
+      assert.strictEqual(markRerun(ran('ch-qualtrics.js')), false);
+    });
   });
 });
 
