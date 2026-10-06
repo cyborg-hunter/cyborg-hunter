@@ -32,7 +32,7 @@ That is the whole integration. ch.js monitors every trial, nested timelines incl
 
 ### Which file
 
-Each framework has its own one-line file. The files share their source, their API and the tag's `data-*` attributes; each carries the code for its own framework, so participants never download the others. A file on a page that runs another framework logs one console error naming the file to load, and records the page as a page without a framework.
+`ch.js` is the one-line file for jsPsych 7 experiments and for pages without a framework. Each one-line file is built from the same source, with the same API and the same `data-*` attributes, and carries the code for its own framework only; the table lists the files this version ships.
 
 | File | Use it for |
 |---|---|
