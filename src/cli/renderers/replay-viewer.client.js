@@ -858,8 +858,10 @@
       // The restore can show header chips (an iframe or shadow placeholder, a
       // segment defect), and in a browser the shell boots after the segment
       // load's own sizing: size the stage again against the header as it now
-      // is. Nothing plays at boot, and the external-CSS rewrite that also
-      // ends here starts from a click, so the stage still holds during play.
+      // is. Nothing plays at boot. The other shell write, the external-CSS
+      // rewrite, starts from the analyst's "Load external CSS" click, which
+      // may come during play: that refit is analyst-initiated, as a 1:1
+      // toggle's is.
       refit();
     }
 
