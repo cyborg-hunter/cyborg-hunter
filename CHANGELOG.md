@@ -132,6 +132,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - Report (CLI and `/analyze/`): "… +N more" under a session-level signal
   (AI extensions, sidebar events, keyboard shortcuts) now opens the rest of
   the list. Before, it was plain text, and the rest was nowhere in the report.
+- Report (CLI and `/analyze/`): the "Sidebar events" list shows one line per
+  sidebar opening (its width change, its time and how long it stayed open),
+  as many as the Sidebar count above it. Before, it listed every open and
+  close entry of the log, and a sidebar seen by both detectors twice.
 
 ### Removed
 - Internal renderer wrappers removed

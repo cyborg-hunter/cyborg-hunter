@@ -167,30 +167,40 @@ function scopedHardTriggered(trials) {
     typeof thresholds[sig] === 'number' && counts[sig] >= thresholds[sig]);
 }
 
-// Counts distinct sidebar OPENINGS from the session sidebarEvents log. The
+// The distinct sidebar OPENINGS in the session sidebarEvents log, one
+// { opened, closed } per incident: the entry that opened it, and the entry
+// that closed it (null when it was still open at the end of the log). The
 // runtime can emit two "opened" entries for one physical sidebar (the
 // innerWidth_delta and layout_compression checks fire in the same poll tick), so
 // counting raw "opened" entries over-counts. Walk the open/close events as a
 // state machine: an "opened" starts a new incident ONLY when transitioning from
 // the closed state, so coincident double-detection opens (no intervening close)
-// collapse to one, while a genuine open→close→open reopen counts as two — even a
-// fast one. Events are ordered by timestamp when present (double-detection opens
-// share a t and sort adjacent), else by array (push) order.
-export function countSidebarOpenings(sidebarEvents) {
+// collapse to the first, while a genuine open→close→open reopen counts as two —
+// even a fast one. Events are ordered by timestamp when present (double-detection
+// opens share a t and sort adjacent), else by array (push) order. The report's
+// "Sidebar events" cell lists these; countSidebarOpenings counts them.
+export function listSidebarOpenings(sidebarEvents) {
   const events = (sidebarEvents || []).filter(e => e && (e.type === 'opened' || e.type === 'closed'));
   const ordered = events.every(e => typeof e.t === 'number')
     ? [...events].sort((a, b) => a.t - b.t)
     : events;
-  let open = false;
-  let count = 0;
+  const openings = [];
+  let current = null;
   for (const e of ordered) {
     if (e.type === 'opened') {
-      if (!open) { count++; open = true; }
-    } else {
-      open = false;
+      if (!current) { current = { opened: e, closed: null }; openings.push(current); }
+    } else if (current) {
+      current.closed = e;
+      current = null;
     }
   }
-  return count;
+  return openings;
+}
+
+// How many sidebar openings the log holds (listSidebarOpenings above): the
+// count summary.csv, triage and the Sidebar tile use.
+export function countSidebarOpenings(sidebarEvents) {
+  return listSidebarOpenings(sidebarEvents).length;
 }
 
 // Helper: sum an array by applying fn to each element

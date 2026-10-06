@@ -21,6 +21,7 @@
 
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';
+import { listSidebarOpenings } from '../analyzers/summary.js';
 import { resolveScoreWeights, customWeightsText, formatScore } from '../analyzers/score-weights.js';
 import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
@@ -1174,7 +1175,9 @@ function renderReasonQuote(t) {
 // an empty "Session-level signals" heading.
 function renderSessionBlock(s, participant) {
   const aiExt   = s.aiExtensionsFound || [];
-  const sidebar = participant?.session?.sidebarEvents || [];
+  // Openings, not raw log entries: the same walk the Sidebar tile counts with,
+  // so the cell and the tile agree.
+  const sidebar = listSidebarOpenings(participant?.session?.sidebarEvents);
   const kb      = participant?.session?.keyboardShortcuts || [];
 
   if (!aiExt.length && !sidebar.length && !kb.length) {
@@ -1187,7 +1190,7 @@ function renderSessionBlock(s, participant) {
     cells.push(cellHtml('AI extensions', aiExt.map(e => esc(typeof e === 'string' ? e : (e?.name || 'unknown')))));
   }
   if (sidebar.length) {
-    cells.push(cellHtml('Sidebar events', sidebar.map(formatSidebar)));
+    cells.push(cellHtml('Sidebar events', sidebar.map(formatSidebarOpening)));
   }
   if (kb.length) {
     cells.push(cellHtml('Kb shortcuts', kb.map(ev => esc(String(ev?.combo || ev?.key || 'unknown')))));
@@ -1203,7 +1206,7 @@ function renderSessionBlock(s, participant) {
 // inside a <details> whose summary says how many there are. The browser opens
 // it with no script, so it works wherever the report is opened. Caller is
 // responsible for esc'ing every entry in `lines` (we trust the caller here so
-// callers can embed safe markup like the muted span in formatSidebar).
+// callers can embed safe markup like the muted span in formatSidebarOpening).
 const CELL_PREVIEW = 3;
 function cellHtml(title, lines) {
   const rest = lines.slice(CELL_PREVIEW);
@@ -1216,19 +1219,20 @@ function cellHtml(title, lines) {
   </div>`;
 }
 
-// Format one sidebar event row, e.g. "+312px · 00:12" or "−308px · 00:45 (33.0s open)".
-// `deltaIW` is the signed innerWidth change at the event boundary — positive on
-// open (viewport shrank), negative on close. Falls back to `gap` / `gapPx` for
-// older fixtures. Timestamp is rendered as MM:SS from start-of-trial.
-function formatSidebar(ev) {
-  const gap = ev?.deltaIW ?? ev?.gap ?? ev?.gapPx ?? '?';
+// Format one sidebar opening (listSidebarOpenings), e.g. "+312px · 00:12 (33.0s open)".
+// The gap and the time are the opening entry's: `deltaIW` is the signed
+// innerWidth change at the boundary (positive on open: the viewport shrank),
+// with `gap` / `gapPx` for older fixtures, and the time is MM:SS from
+// start-of-trial. The duration is the closing entry's `duration_ms`; an
+// opening with no closing entry (still open at the end) shows none.
+function formatSidebarOpening({ opened, closed }) {
+  const gap = opened?.deltaIW ?? opened?.gap ?? opened?.gapPx ?? '?';
   const gapStr = typeof gap === 'number' ? (gap > 0 ? `+${gap}` : String(gap)) : String(gap);
-  const ts = ev?.t ?? ev?.timestamp ?? 0;
+  const ts = opened?.t ?? opened?.timestamp ?? 0;
   const mm = Math.floor(ts / 60000).toString().padStart(2, '0');
   const ss = Math.floor((ts % 60000) / 1000).toString().padStart(2, '0');
-  // Only "closed" events carry duration_ms; render it as the trailing parenthetical.
-  const dur = (ev?.type === 'closed' && ev?.duration_ms != null)
-    ? ` <span class="muted">(${(ev.duration_ms / 1000).toFixed(1)}s open)</span>`
+  const dur = closed?.duration_ms != null
+    ? ` <span class="muted">(${(closed.duration_ms / 1000).toFixed(1)}s open)</span>`
     : '';
   return `${esc(gapStr)}px · ${mm}:${ss}${dur}`;
 }

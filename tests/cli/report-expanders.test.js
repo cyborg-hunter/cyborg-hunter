@@ -59,3 +59,21 @@ describe('session-signal cells', () => {
     assert.doesNotMatch(await render(), /<li class="muted">… \+\d+ more<\/li>/);
   });
 });
+
+describe('the Sidebar events cell', () => {
+  it('lists openings, as many as the Sidebar tile counts: each with its gap, its time and how long it stayed open', async () => {
+    const html = await render();
+    const tile = html.match(/<span class="signal-value">(\d+)<\/span>\s*<span class="signal-label">Sidebar<\/span>/);
+    assert.equal(tile[1], '5', 'the tile counts five openings');
+    const cell = cellOf(html, 'Sidebar events');
+    const open = cell.slice(0, cell.indexOf('<details'));
+    const more = cell.slice(cell.indexOf('<details'));
+    assert.deepEqual(items(open), [
+      '+312px · 00:01 <span class="muted">(33.0s open)</span>',
+      '+300px · 01:00 <span class="muted">(2.0s open)</span>',
+      '+280px · 01:30 <span class="muted">(5.0s open)</span>',
+    ]);
+    assert.match(more, /<summary class="muted">… \+2 more<\/summary>/);
+    assert.deepEqual(items(more), ['+290px · 02:00 <span class="muted">(1.5s open)</span>', '+305px · 02:30']);
+  });
+});
