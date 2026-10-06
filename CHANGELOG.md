@@ -17,8 +17,8 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   In a report built from a reduced payload (session entries cut to the
   newest ones), the Sidebar, keyboard-shortcut and AI-extension tiles count
   the whole session from the carried totals while their event cells list
-  only the kept entries, so a cell can show fewer lines than its tile. See
-  docs/qualtrics.md.
+  only the kept entries, so a cell's count can be lower than its tile's.
+  See docs/qualtrics.md.
 - Standalone replay recorder (`CyborgHunterReplay.attach()`):
   `resumeSession()` records again after `stopSession()`, in later segments of
   the same recording; call `startTrial()` right after it.

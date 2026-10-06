@@ -214,7 +214,6 @@ describe('error catalogue', () => {
     });
   }
 
-
   it('the double-load message names both scripts in load order', () => {
     assert.ok(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')
       .includes(': cyborg-hunter.min.js was loaded after ch.js. Fix:'));

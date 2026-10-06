@@ -1,9 +1,9 @@
 // src/cli/qualtrics-csv.js
 // Reads a Qualtrics CSV export: one file, one participant per response row.
-// ch.js writes its payload into an embedded-data field (`__js_cyborg_hunter`
-// under the New Survey Taking Experience, `cyborg_hunter` under the legacy
-// layout), so each row's cell holds a vanilla Shape-1 blob that
-// extractIntegrityData reads unchanged. Pure, no Node APIs: the analyze page
+// ch-qualtrics.js writes its payload into an embedded-data field
+// (`__js_cyborg_hunter` under the New Survey Taking Experience,
+// `cyborg_hunter` under the legacy layout), so each row's cell holds a
+// vanilla Shape-1 blob that extractIntegrityData reads unchanged. Pure, no Node APIs: the analyze page
 // bundles it through ingest-core.js.
 //
 // The default exporter writes three header rows: the column ids (StartDate,
@@ -169,8 +169,8 @@ export function parseQualtricsExport(text, { field = QUALTRICS_FIELD } = {}) {
       return;
     }
     raw.metadata = Object.assign({}, raw.metadata, { qualtricsResponseId: responseId });
-    // ch.js falls back to a random `ch-…` id when the tag carries no
-    // participant id, and piped text Qualtrics did not fill in
+    // ch-qualtrics.js falls back to a random `ch-…` id when the tag carries
+    // no participant id, and piped text Qualtrics did not fill in
     // (`${e://Field/ResponseID}` as written) is the same id in every
     // response; the row's ResponseId is the one id that links the payload to
     // the rest of the response.
