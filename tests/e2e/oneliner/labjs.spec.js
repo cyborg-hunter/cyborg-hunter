@@ -1,5 +1,5 @@
 // tests/e2e/oneliner/labjs.spec.js
-// The one-line setup (dist/ch.js) on real lab.js in Chromium: a study in the
+// The one-line setup (dist/ch-labjs.js) on real lab.js in Chromium: a study in the
 // shape the builder exports (lib/lab.js, the tag, a deferred study script).
 // Each spec drives the fixture, takes what the study itself saves
 // (datastore.exportCsv() and exportJson(), kept on window, or the Transmit
@@ -7,7 +7,7 @@
 // and trial ids come from the fixtures' header comments. Paste verdicts use
 // the standard preset's hard paste threshold, 2 (src/shared/constants.js).
 //
-// Rows: ch.js writes its id into every trial row as cyborgHunterParticipantId
+// Rows: ch-labjs.js writes its id into every trial row as cyborgHunterParticipantId
 // and never writes participantId there; row 0 alone gets participantId, and
 // only when the study sets none (the CLI keys lab.js data by it).
 import { test, expect, collectConsole, pasteInto, parseCsv, newTmpDir, cleanupTmpDirs, saveAndReport, rewriteFixture } from './support.mjs';
@@ -118,11 +118,11 @@ test('lab.js 20.2.4: a clean run is not flagged', async ({ page }) => {
   expect(out.summaryCsv[0].hardTriggered).toBe('no');
 });
 
-// A form field named like one of ch.js's columns (labjs-columns.html): the
+// A form field named like one of ch-labjs.js's columns (labjs-columns.html): the
 // participant's answer stays under its name, in the row and in lab.js's
-// state; ch.js's report goes under cyborgHunter_integrity, where the CLI
+// state; ch-labjs.js's report goes under cyborgHunter_integrity, where the CLI
 // reads it.
-test('lab.js 20.2.4: a form field named integrity keeps the participant\'s answer; ch.js writes cyborgHunter_integrity and the CLI reads it', async ({ page }) => {
+test('lab.js 20.2.4: a form field named integrity keeps the participant\'s answer; ch-labjs.js writes cyborgHunter_integrity and the CLI reads it', async ({ page }) => {
   const log = collectConsole(page);
   await page.goto(FIX + 'labjs-columns.html');
   await page.locator('#integrity').waitFor();
@@ -244,7 +244,7 @@ test('data-replay on lab.js: the recorder follows the trials; the canvas is a si
   expect(rows.every((r) => (r.participantId ?? '') === '' || r.participantId === 'RES-3')).toBe(true);
   expect(trialRows(rows).map((r) => r.cyborgHunterParticipantId)).toEqual(['E2E-LAB-3', 'E2E-LAB-3', 'E2E-LAB-3']);
   expect(await page.evaluate(() => window.study.options.datastore.state.participantId)).toBe('RES-3');
-  // The recording, saved under the study's id, carries ch.js's: the CLI
+  // The recording, saved under the study's id, carries ch-labjs.js's: the CLI
   // attaches it through the participant's cyborgHunterParticipantId.
   const tmp = newTmpDir('lab-replay');
   mkdirSync(join(tmp, 'data'), { recursive: true });
@@ -281,7 +281,7 @@ test('perf: the per-trial write stays within budget over 60 lab.js trials, and t
   expect(bytes).toBeLessThan(500 * 1024);
 });
 
-test('ch.js above lib/lab.js: loud error with fix + link, vanilla mode still records', async ({ page }) => {
+test('ch-labjs.js above lib/lab.js: loud error with fix + link, vanilla mode still records', async ({ page }) => {
   const log = collectConsole(page);
   await page.goto(FIX + 'labjs-not-hookable.html');
   await page.click('#start');

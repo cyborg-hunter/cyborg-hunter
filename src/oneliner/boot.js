@@ -24,9 +24,10 @@
 //      here already for that;
 //   4. a monitor (its session starts at step 6);
 //   5. host: 'jspsych' when initJsPsych is already defined, in a file built
-//      with it (HAS_JSPSYCH), else 'labjs' when window.lab is
-//      (adapters/labjs.js; a lab.js 23 build is not hooked yet: one warning,
-//      and the vanilla host), else 'vanilla' (the host adapters install
+//      with it (HAS_JSPSYCH), else 'labjs' when window.lab is, in a file
+//      built with it (HAS_LABJS; adapters/labjs.js; a lab.js 23 build is not
+//      hooked yet: one warning, and the vanilla host), else 'vanilla' (the
+//      host adapters install
 //      their hooks into ctx.handlers). On the
 //      vanilla host a Qualtrics survey is recognised first
 //      (adapters/qualtrics.js: ctx.qualtricsLayout 'new' | 'legacy' | null,
@@ -111,15 +112,18 @@
 // files and rerun.js takes only the same file for a header re-run. ctx.file
 // is the running file's name (CH_FILE, build-flags.js), for
 // the messages that name it. Each call into the jsPsych adapter is guarded by
-// HAS_JSPSYCH, and each into the Qualtrics adapter by HAS_QUALTRICS, so a
-// file without one drops that code. A file on a page whose framework it does
-// not carry logs one wrongBuild error naming the file that does
-// (ctx.wrongBuild, which the data-debug badge shows too) and records the page
-// as a page without a framework: ch.js on a survey without jsPsych names
-// ch-qualtrics.js, a file without the jsPsych adapter on a jsPsych page names
-// ch.js. The exception is ch-qualtrics.js on a survey that also runs jsPsych,
-// whether jsPsych is there at boot or only by DOMContentLoaded: it records
-// the survey as a Qualtrics page and logs one qualtricsJsPsych warning.
+// HAS_JSPSYCH, each into the Qualtrics adapter by HAS_QUALTRICS, and each
+// into the lab.js adapter by HAS_LABJS, so a file without one drops that
+// code. A file on a page whose framework it does not carry logs one
+// wrongBuild error naming the file that does (ctx.wrongBuild, which the
+// data-debug badge shows too) and records the page as a page without a
+// framework: ch.js on a survey without jsPsych names ch-qualtrics.js, a file
+// without the jsPsych adapter on a jsPsych page names ch.js (a page with
+// jsPsych and lab.js is a jsPsych page), and a file without the lab.js
+// adapter on a lab.js page names ch-labjs.js. The exception is
+// ch-qualtrics.js on a survey that also runs jsPsych, whether jsPsych is
+// there at boot or only by DOMContentLoaded: it records the survey as a
+// Qualtrics page and logs one qualtricsJsPsych warning.
 
 import './build-flags.js';
 import { init } from '../core/monitor.js';
@@ -188,8 +192,13 @@ export function boot(opts) {
     // pages.
     var qualtricsSeen = HAS_JSPSYCH && jsPsychPage ? null : detectQualtrics(win);
     var qualtrics = HAS_QUALTRICS ? qualtricsSeen : null;
+    // lab.js's global (adapters/labjs.js), on a page that is neither a
+    // jsPsych page nor a Qualtrics survey.
+    var labjsSeen = jsPsychPage || qualtricsSeen ? null : detectLabJs(win);
+    var labjs = HAS_LABJS ? labjsSeen : null;
     var wrongBuild = qualtricsSeen && !HAS_QUALTRICS ? { host: 'Qualtrics', file: 'ch-qualtrics.js' }
-      : jsPsychPage && !HAS_JSPSYCH && !qualtrics ? { host: 'jsPsych', file: 'ch.js' } : null;
+      : jsPsychPage && !HAS_JSPSYCH && !qualtrics ? { host: 'jsPsych', file: 'ch.js' }
+      : labjsSeen && !HAS_LABJS ? { host: 'lab.js', file: 'ch-labjs.js' } : null;
     if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
     else if (qualtrics && jsPsychPage) console.warn(MESSAGES.qualtricsJsPsych());
     var surveyId = HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
@@ -212,9 +221,6 @@ export function boot(opts) {
     monitor = monitorFactory(Object.assign({}, config.monitor, { participantId: pid.id, preset: config.preset }));
     var differ = createSegmentDiffer(monitor);
     var segmenter = createSegmenter({ monitor: monitor, differ: differ });
-    // lab.js's global (adapters/labjs.js), on a page that is neither a
-    // jsPsych page nor a Qualtrics survey.
-    var labjs = jsPsychPage || qualtricsSeen ? null : detectLabJs(win);
     // A lab.js 23 build is not hooked yet: the page runs as a vanilla page,
     // and the placement check below must not take it for a tag above lib/lab.js.
     var labjsUnsupported = !!(labjs && labjs.generation !== 'classic');
@@ -267,7 +273,7 @@ export function boot(opts) {
           onWrite: ctx.debug ? function () { ctx.debug.refresh(); } : null
         });
       }
-    } else if (host === 'labjs') {
+    } else if (HAS_LABJS && host === 'labjs') {
       ctx.labjsAdapter = installLabJsAdapter({ win: win, ctx: ctx, lab: labjs.lab, version: labjs.version, generation: labjs.generation });
     }
 
@@ -301,7 +307,9 @@ export function boot(opts) {
       }
     });
     else if (!jsPsychPage) noticeLateJsPsych(win, ctx);
-    if (host === 'vanilla' && !labjsUnsupported) watchLabJsPlacement({ win: win, doc: win.document, ctx: ctx });
+    // Not on a page whose framework this file does not carry: lab.js there is
+    // no tag placed above lib/lab.js.
+    if (HAS_LABJS && host === 'vanilla' && !labjsUnsupported && !wrongBuild) watchLabJsPlacement({ win: win, doc: win.document, ctx: ctx });
     try {
       Object.defineProperty(win, '__cyborgHunterFile', {
         value: CH_FILE, writable: false, enumerable: false, configurable: true

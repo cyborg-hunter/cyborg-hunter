@@ -7,7 +7,8 @@
 // "Which file" table in docs/quickstart.md lists the same files.
 export const ONE_LINE_TARGETS = [
   { file: 'ch.js', hosts: ['jspsych'] },
-  { file: 'ch-qualtrics.js', hosts: ['qualtrics'] }
+  { file: 'ch-qualtrics.js', hosts: ['qualtrics'] },
+  { file: 'ch-labjs.js', hosts: ['labjs'] }
 ];
 
 // esbuild's `define` for one target (src/oneliner/build-flags.js): each

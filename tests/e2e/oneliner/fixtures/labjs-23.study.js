@@ -6,7 +6,7 @@
 //   shapes    canvas.Screen, 200 ms timeout
 //   final     html.Form, its <form> carries data-ch-trial="final-q"
 //   root      flow.Sequence
-// ch.js does not hook this line yet, so no row gets integrity columns.
+// ch-labjs.js does not hook this line yet, so no row gets integrity columns.
 // on('end') keeps exportCsv() on window.__csv; the datastore lives on the
 // controller (23 has no options.datastore).
 var study = new lab.flow.Sequence({

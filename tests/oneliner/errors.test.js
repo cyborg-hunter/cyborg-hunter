@@ -195,12 +195,12 @@ const CASES = {
   },
   loadedAboveLabJs: {
     args: [],
-    fix: 'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+    fix: 'move the ch-labjs.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
     link: DOCS + 'labjs.md#placement'
   },
   labjsNotHookable: {
     args: [],
-    fix: 'load lab.js from a <script> tag (lib/lab.js, as the builder exports it) above the ch.js tag; a bundled lab.js build cannot be hooked',
+    fix: 'load lab.js from a <script> tag (lib/lab.js, as the builder exports it) above the ch-labjs.js tag; a bundled lab.js build cannot be hooked',
     link: DOCS + 'labjs.md#placement'
   },
   labjsHookFailed: {
@@ -210,7 +210,7 @@ const CASES = {
   },
   labjsStudyAlreadyRunning: {
     args: [],
-    fix: 'move the ch.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+    fix: 'move the ch-labjs.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
     link: DOCS + 'labjs.md#placement'
   },
   labjsVersionUnsupported: {
@@ -225,7 +225,7 @@ const CASES = {
   },
   labjsColumnTaken: {
     args: ['integrity'],
-    fix: 'nothing is lost; rename your integrity column if you want ch.js\'s value under its usual name',
+    fix: 'nothing is lost; rename your integrity column if you want ch-labjs.js\'s value under its usual name',
     link: DOCS + 'labjs.md#where-the-data-goes'
   }
 };

@@ -40,6 +40,7 @@ That is the whole integration. ch.js monitors every trial, nested timelines incl
 |---|---|
 | `ch.js` | jsPsych 7 experiments, and pages without a framework |
 | `ch-qualtrics.js` | Qualtrics surveys, in the survey's header ([Qualtrics](qualtrics.md)), and pages without a framework |
+| `ch-labjs.js` | lab.js studies, below `lib/lab.js` ([lab.js](labjs.md)), and pages without a framework |
 
 ### Placement
 

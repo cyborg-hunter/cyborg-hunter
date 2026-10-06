@@ -41,7 +41,8 @@ function oneLineBlock() {
 // Qualtrics' __js_cyborg_hunter, is in every file and cannot serve.)
 const MARKERS = {
   jspsych: 'extensions is not an array',
-  qualtrics: 'page-submit hook was in place'
+  qualtrics: 'page-submit hook was in place',
+  labjs: '__cyborgHunterLabJs'
 };
 
 describe('build.js: the one-line targets', () => {

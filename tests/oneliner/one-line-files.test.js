@@ -348,3 +348,69 @@ describe('a file without the jsPsych and Qualtrics adapters on a survey that run
     assert.strictEqual(ctx.host, 'vanilla');
   });
 });
+
+function fakeLab(opts) {
+  class Component { run() {} end() {} }
+  if (opts && opts.flip) Component.prototype.lock = function () {};
+  return { version: (opts && opts.version) || '20.2.4', core: { Component }, flow: {}, html: {} };
+}
+
+describe('ch-labjs.js', () => {
+  let restore;
+  before(() => { restore = setBuild(buildOf('ch-labjs.js')); });
+  after(() => restore());
+
+  it('a lab.js page: the lab.js host, no error', () => {
+    win.lab = fakeLab();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'labjs');
+    assert.ok(ctx.labjsAdapter, 'the lab.js adapter is installed');
+    assert.deepStrictEqual(errors, []);
+    ctx.labjsAdapter.restore();
+  });
+
+  it('a page with jsPsych and lab.js is a jsPsych page: one wrongBuild error naming ch.js', () => {
+    win.lab = fakeLab();
+    win.initJsPsych = jsPsychStub();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-labjs.js')]);
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(ctx.labjsAdapter, undefined);
+  });
+
+  it('a lab.js 23 page: the unsupported-version warning, no error', () => {
+    win.lab = fakeLab({ flip: true, version: '23.0.0-alpha9' });
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(warns, [MESSAGES.labjsVersionUnsupported('23.0.0-alpha9')]);
+    assert.strictEqual(ctx.host, 'vanilla');
+  });
+});
+
+// A file without the lab.js adapter on a lab.js page (a lab.js 23 one too):
+// one error naming ch-labjs.js, the page recorded as one without a framework,
+// lab.js's components left unhooked.
+for (const file of ['ch.js', 'ch-qualtrics.js']) {
+  describe(file + ' on a lab.js page', () => {
+    let restore;
+    before(() => { restore = setBuild(buildOf(file)); });
+    after(() => restore());
+
+    it('one wrongBuild error naming ch-labjs.js, the vanilla host, lab.js unhooked', () => {
+      const lab = fakeLab();
+      const run = lab.core.Component.prototype.run;
+      win.lab = lab;
+      ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+      assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('lab.js', 'ch-labjs.js', file)]);
+      assert.strictEqual(ctx.host, 'vanilla');
+      assert.strictEqual(lab.core.Component.prototype.run, run);
+    });
+
+    it('a lab.js 23 page: the same error, and no version warning', () => {
+      win.lab = fakeLab({ flip: true, version: '23.0.0-alpha9' });
+      ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+      assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('lab.js', 'ch-labjs.js', file)]);
+      assert.deepStrictEqual(warns, []);
+    });
+  });
+}

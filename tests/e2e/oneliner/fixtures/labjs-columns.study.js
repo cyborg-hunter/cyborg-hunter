@@ -1,5 +1,5 @@
 // The study of labjs-columns.html. Its form has a field named integrity, one
-// of ch.js's column names: ch.js keeps the participant's answer there and
+// of ch-labjs.js's column names: ch-labjs.js keeps the participant's answer there and
 // writes its own trial report as cyborgHunter_integrity.
 //   q      html.Form, id 0: a textarea name="integrity" and a submit button   trial
 //   done   html.Screen, id 1, 200 ms timeout                                    trial
