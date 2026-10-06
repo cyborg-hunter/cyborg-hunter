@@ -198,6 +198,90 @@ test('a run with a recording serves the same styled replay model the zip carries
   assert.deepEqual((await w.next('replay-model')).model, fromZip);
 });
 
+// The settings panel's post-hoc keys re-run the report from the participants
+// the last run read. The replay pass inside it rewrites the recordings it
+// styles, so the check that matters is that a second pass writes the same
+// replay files and keeps the first asset note (a re-count after the rewrite
+// says nothing matched).
+test('reanalyze re-renders the last run under another config: the same replay files and notes, new scores', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets.push({ id: 999, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const files = [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/data/DEMO-FIXT.json'),
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/css/style.css', file: new File(['.stim{background:url("../img/bg.png")}'], 'style.css') },
+    { path: 'study/img/bg.png', file: new File([png], 'bg.png') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  const zip1 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  w.send({ type: 'reanalyze', config: { ...checked.config, scoreWeights: { paste: 1 } }, participantIdField: 'participantId' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  assert.equal(strFromU8(zip2['replay/DEMO-FIXT.replay.js']), strFromU8(zip1['replay/DEMO-FIXT.replay.js']), 'the same replay file');
+  assert.equal(second.participants[0].assetNote, first.participants[0].assetNote);
+  assert.match(second.participants[0].assetNote, /1 of 1 stylesheets matched/);
+  // The zip's own report words the note in its replay section, from the pass.
+  assert.match(strFromU8(zip2['index.html']), /Experiment assets: 1 of 1 stylesheets matched/);
+  assert.notEqual(strFromU8(zip2['score-weights.json']), strFromU8(zip1['score-weights.json']), 'the new weights');
+  assert.equal(second.configUsed.scoreWeights.paste, 1);
+  assert.ok(w.messages.every((m) => m.type !== 'progress' || m.phase !== 'ingest'), 'nothing was read again');
+});
+
+test('reanalyze before any run is an error, not a silent no-op', async () => {
+  const w = startWorker();
+  w.send({ type: 'reanalyze', config: {}, participantIdField: 'participantId' });
+  const err = await w.next('error', 'done');
+  assert.deepEqual([err.type, err.phase], ['error', 'reanalyze']);
+  assert.match(err.message, /Build the report first/);
+});
+
+// Under the config the run used, a re-analysis is the run again: every file
+// in the zip, the in-page report and what the page lists beside it. The data's
+// trial phases come back once each, sorted; a trial without one adds none.
+test('reanalyze under the same config gives the first report again, file for file', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets.push({ id: 999, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null });
+  const data = JSON.parse(readFileSync(dir + '/DEMO-FIXT.json', 'utf8'));
+  data.trials.forEach((t, i) => { if (i === 0) delete t.integrity.phase; else t.integrity.phase = i % 2 ? 'warmup' : 'main'; });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const files = [
+    { path: 'study/data/DEMO-FIXT.json', file: new File([JSON.stringify(data)], 'DEMO-FIXT.json') },
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/css/style.css', file: new File(['.stim{background:url("../img/bg.png")}'], 'style.css') },
+    { path: 'study/img/bg.png', file: new File([png], 'bg.png') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  const zip1 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'participantId' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  assert.deepEqual(Object.keys(zip2).sort(), Object.keys(zip1).sort());
+  assert.ok(zip1['replay/DEMO-FIXT.replay.js'], 'the replay pass ran');
+  for (const name of Object.keys(zip1)) assert.ok(Buffer.from(zip2[name]).equals(Buffer.from(zip1[name])), name);
+  assert.equal(second.html, first.html);
+  assert.deepEqual(second.participants, first.participants);
+  assert.deepEqual(second.triageOrder, first.triageOrder);
+  assert.deepEqual(second.files, first.files);
+  assert.deepEqual([first.phases, second.phases], [['main', 'warmup'], ['main', 'warmup']]);
+});
+
 test('a dropped file whose name differs from the recorded URL only in case still styles the replay', async () => {
   const dir = 'tests/fixtures/demo';
   const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));

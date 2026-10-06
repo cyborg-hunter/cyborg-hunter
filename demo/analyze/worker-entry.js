@@ -10,6 +10,9 @@
 //   page → worker
 //     { type: 'check',  files: [{ path, file: File } | { path, bytes: ArrayBuffer }], sample?: true }
 //     { type: 'run',    files, sample?: true, config, participantIdField }
+//     { type: 'reanalyze', config, participantIdField }  the last run's participants
+//                   again under another config: analysis, figures, report and
+//                   zip, with no file read (the settings panel's post-hoc keys)
 //     { type: 'replay', participantId }
 //     { type: 'reset' }  start over: the last run's participants are let go
 //   worker → page
@@ -112,10 +115,16 @@ async function check(msg) {
     configPath: groups.config ? groups.config.path : null });
 }
 
+// The config a run uses: the page's, with the file-system keys this page
+// does not have (it reads dropped files, not a directory).
+function runConfig(msg) {
+  return Object.assign({}, msg.config, { participantIdField: msg.participantIdField, dataDir: '(dropped files)', replayDir: null, outputDir: 'cyborg-hunter-report' });
+}
+
 async function run(msg) {
   var readers = readersFor(msg);
   var groups = classifyFiles(readers);
-  var config = Object.assign({}, msg.config, { participantIdField: msg.participantIdField, dataDir: '(dropped files)', replayDir: null, outputDir: 'cyborg-hunter-report' });
+  var config = runConfig(msg);
   post({ type: 'progress', phase: 'ingest', done: 0, total: groups.participant.length });
   var ingested = await ingestFiles({ participantFiles: groups.participant, replayFiles: groups.replay }, config,
     { gunzip: webGunzip, sha256: webSha256, shellHints: false });
@@ -135,6 +144,29 @@ async function run(msg) {
     if (!p.replay || !p.replay.recording) return;
     try { assetNotes[p.participantId] = assetNoteText(assetMatchSummary(p.replay.recording, assets.assetMap)); } catch (_) { assetNotes[p.participantId] = null; }
   });
+  lastRun = { participants: participants, assetMap: assets.assetMap, assetNotes: assetNotes,
+    warnings: ingested.warnings.concat(assets.report.warnings), assetReport: assets.report };
+  await renderRun(config);
+}
+
+// A re-analysis: the participants the last run read, under the config the
+// page sends now. Ingest, matching and the notes are the run's; everything
+// after them (analysis, figures, the report, the zip) is done again.
+async function reanalyze(msg) {
+  if (!lastRun) {
+    post({ type: 'error', phase: 'reanalyze', message: 'Build the report first: there is nothing to re-analyse.' });
+    return;
+  }
+  await renderRun(runConfig(msg));
+}
+
+// The report pass over lastRun's participants. The replay pass inside
+// buildReport rewrites the recordings it styles, so a second pass over the
+// same objects must write what the first wrote: replay-assets-core.js keeps
+// the first note, and the apply leaves its own output alone
+// (tests/demo/analyze-worker.test.js compares the two zips' replay files).
+async function renderRun(config) {
+  var participants = lastRun.participants, assetNotes = lastRun.assetNotes;
   // Copied before transfer: a pass-through chunk aliases the bytes the sink
   // was given, and keepImages still needs those for the in-page data URIs.
   var zip = createZipSink(function (chunk) { var copy = chunk.slice(); post({ type: 'zip', chunk: copy }, [copy.buffer]); });
@@ -145,13 +177,12 @@ async function run(msg) {
     post({ type: 'progress', phase: 'report', done: 0, total: 0, label: path });
   };
   var built = await buildReport(participants, config, {
-    sink: sink, keepImages: true, assetMap: assets.assetMap,
+    sink: sink, keepImages: true, assetMap: lastRun.assetMap,
     createCanvas: typeof OffscreenCanvas === 'function' ? offscreenCreateCanvas : null, encodePng: offscreenEncodePng,
     replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss,
   });
   zip.end();
   var html = await renderInPageHtml(built, participants, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, bytesToBase64: bytesToBase64 });
-  lastRun = { participants: participants, assetMap: assets.assetMap };
   post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts,
     participants: participants.map(function (p) {
       var has = !!(p.replay && p.replay.recording);
@@ -159,8 +190,19 @@ async function run(msg) {
         assetNote: has ? assetNotes[p.participantId] : null,
         replayError: p.replay && p.replay.error ? (p.replay.reason || p.replay.error) : null };
     }),
-    warnings: ingested.warnings.concat(assets.report.warnings), reportWarnings: built.warnings, assetReport: assets.report,
-    files: fileTexts, configUsed: config, zipBytes: zip.bytes });
+    warnings: lastRun.warnings, reportWarnings: built.warnings, assetReport: lastRun.assetReport,
+    phases: phasesOf(participants), files: fileTexts, configUsed: config, zipBytes: zip.bytes });
+}
+
+// The trial phases in the data, for the settings panel's phase-scope hint.
+function phasesOf(participants) {
+  var seen = Object.create(null), out = [];
+  participants.forEach(function (p) {
+    (p.trials || []).forEach(function (t) {
+      if (t && typeof t.phase === 'string' && t.phase && !seen[t.phase]) { seen[t.phase] = true; out.push(t.phase); }
+    });
+  });
+  return out.sort();
 }
 
 function replay(msg) {
@@ -177,7 +219,8 @@ function replay(msg) {
 self.onmessage = function (ev) {
   var msg = ev.data || {};
   if (msg.type === 'reset') { lastRun = null; return; }
-  var job = msg.type === 'check' ? check(msg) : msg.type === 'run' ? run(msg) : msg.type === 'replay' ? Promise.resolve().then(function () { replay(msg); }) : null;
+  var job = msg.type === 'check' ? check(msg) : msg.type === 'run' ? run(msg) : msg.type === 'reanalyze' ? reanalyze(msg)
+    : msg.type === 'replay' ? Promise.resolve().then(function () { replay(msg); }) : null;
   if (!job) return;
   job.catch(function (e) { post({ type: 'error', phase: msg.type, message: e && e.message ? e.message : String(e) }); });
 };
