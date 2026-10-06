@@ -163,3 +163,35 @@ describe('viewportWidthShifts rename + debounce (upstream feedback)', () => {
       'a shift that settles back must not be logged');
   });
 });
+
+// A page's own click handler can end the trial (a jsPsych response button, a
+// one-line page whose button calls form.submit()). The handler runs before
+// the click reaches the document, so the button events are recorded on the
+// way down: the click belongs to the trial it ended, not to the next one.
+describe('mouse button events are recorded before the page handles them', () => {
+  it('a click whose own handler ends the trial and starts the next is in the trial it ended', () => {
+    monitor = init({ participantId: 'T7' });
+    monitor.startSession();
+    monitor.startTrial({ trialId: 'a' });
+    const button = win.document.createElement('button');
+    win.document.body.appendChild(button);
+    let ended = null;
+    button.addEventListener('click', () => { ended = monitor.endTrial(); monitor.startTrial({ trialId: 'b' }); });
+    button.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true }));
+    button.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true }));
+    button.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    assert.deepStrictEqual(ended.mouseTrack.map((m) => m.type), ['down', 'up', 'click']);
+    assert.deepStrictEqual(monitor.getTrialSnapshot().mouseEvents, [], 'nothing in the trial it started');
+  });
+
+  it('a click whose page handler stops its propagation is still recorded', () => {
+    monitor = init({ participantId: 'T8' });
+    monitor.startSession();
+    monitor.startTrial({ trialId: 'a' });
+    const button = win.document.createElement('button');
+    win.document.body.appendChild(button);
+    button.addEventListener('click', (e) => e.stopPropagation());
+    button.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    assert.deepStrictEqual(monitor.endTrial().mouseTrack.map((m) => m.type), ['click']);
+  });
+});

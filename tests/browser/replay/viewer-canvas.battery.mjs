@@ -51,7 +51,7 @@ import { dirname, join } from 'path';
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import zlib from 'node:zlib';
 
-import { buildViewerModel } from '../../../src/cli/renderers/replay-assets.js';
+import { buildViewerModel } from '../../../src/replay/viewer-model.js';
 import { readReplayClientSrc } from '../../../src/cli/renderers/replay-client-source.js';
 import { inlineSafeJson, inlineSafeSrc } from '../../../src/shared/inline-safe.js';
 

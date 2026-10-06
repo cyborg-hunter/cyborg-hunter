@@ -12,6 +12,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { buildWorkerSrc } from '../../tools/build-analyze.mjs';
 import { REPORT_FILES } from '../../src/cli/report-core.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
+import { NODE_IMPORT } from '../cli/node-import-pattern.js';
 
 if (!globalThis.crypto) globalThis.crypto = (await import('node:crypto')).webcrypto;
 
@@ -67,7 +68,7 @@ test('the worker source reaches no network and no Node API', () => {
   // The page bundle carries this source as an escaped string, where the
   // bundle test's patterns cannot see it; the source itself is checked here.
   assert.equal(workerSrc.includes('registry.npmjs.org'), false, 'update check is unreachable');
-  assert.doesNotMatch(workerSrc, /(from\s*|import\s*\(\s*|require\s*\(\s*)["'](node:[^"']*|fs|path|zlib|crypto)["']/);
+  assert.doesNotMatch(workerSrc, NODE_IMPORT);
 });
 
 test('check on the sample finds three participant files and the id field its config names', async () => {
@@ -145,6 +146,55 @@ test('a run with a recording serves the same styled replay model the zip carries
   // Asked twice, built twice: the same model again.
   w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
   assert.deepEqual((await w.next('replay-model')).model, fromZip);
+});
+
+test('a dropped file whose name differs from the recorded URL only in case still styles the replay', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets.push({ id: 999, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const files = [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/data/DEMO-FIXT.json'),
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/css/style.css', file: new File(['.stim{background:url("../img/bg.png")}'], 'style.css') },
+    { path: 'study/Img/BG.PNG', file: new File([png], 'BG.PNG') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  w.send({ type: 'run', files, config: checked.config, participantIdField: checked.idSuggestion.suggested });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.assetReport.matched.map((m) => m.path).sort(), ['study/Img/BG.PNG', 'study/css/style.css']);
+  assert.match(done.participants[0].assetNote, /1 of 1 images matched/);
+  const zipped = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  assert.ok(strFromU8(zipped['replay/DEMO-FIXT.replay.js']).includes('data:image/png;base64,' + Buffer.from(png).toString('base64')));
+});
+
+test('a recording with fields of the wrong shape, which the viewer keeps, does not stop the run', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets = {};
+  rec.segments[0].initial_dom.children = {};
+  const files = [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/data/DEMO-FIXT.json'),
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/img/bg.png', file: new File([new Uint8Array([1])], 'bg.png') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  w.send({ type: 'run', files, config: checked.config, participantIdField: checked.idSuggestion.suggested });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.participants.map((p) => [p.participantId, p.hasReplay]), [['DEMO-FIXT', true]]);
+  w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
+  const served = await w.next('replay-model', 'error');
+  assert.equal(served.type, 'replay-model', served.message);
 });
 
 test('dropped files sent as bytes (a page opened from file:) check and run as File handles do', async () => {

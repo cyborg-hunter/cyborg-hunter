@@ -12,7 +12,8 @@
 //                          warn line is also collected in the result's warnings
 //   createCanvas(w, h)     absent/null ⇒ no images (visualsRendered false)
 //   encodePng(canvas)      → Promise<Uint8Array>; required with createCanvas
-//   replayClientSrc, fontFaceCss   what html-index.js reads from disk
+//   replayClientSrc, fontFaceCss   the assembled viewer client and the font
+//                          CSS (report.js reads both from disk)
 //   assetMap               styled-replay assets, or null
 //   keepImages             true ⇒ result.images[pid][kind] holds the PNG bytes
 //                          (for renderInPageHtml)
@@ -102,8 +103,8 @@ export async function buildReport(participants, config, deps) {
   sink('extensions.csv', ex.csv);
   log(`  extensions.csv — ${ex.rows} detections`);
 
-  // Plots, through the injected canvas: the same loops and console lines as
-  // the trajectories.js / session-timeline.js / typing-profile.js wrappers.
+  // Plots, through the injected canvas: one PNG per participant from each of
+  // trajectories-core.js, session-timeline-core.js and typing-profile-core.js.
   let visualsRendered = false;
   const images = {};
   if (deps.createCanvas && !config.noVisuals) {
@@ -153,6 +154,9 @@ export async function buildReport(participants, config, deps) {
   // replay section says why), but an analyst watching the CLI must not have
   // to open the HTML to learn a recording did not make it.
   for (const s of replayAssets.skipped) log(`  replay/ — skipped ${s.participantId}: ${s.reason}`);
+  for (const a of replayAssets.assetErrors) {
+    warn(`  [warn] experiment assets not applied to the replay of ${shortId(a.participantId)}: ${a.reason}`);
+  }
 
   // HTML index page — references images/ and replay/ by path (not embedded).
   const html = await renderIndexHtml(summaries, triage, participants, config, visualsRendered,

@@ -6,6 +6,17 @@
 // viewer model: stylesheet text as `css`, images as data: URIs. One matcher,
 // one mapping, both paths — and never a fetch, which the page's policy forbids.
 //
+// An image is an <img>'s src or srcset candidate, a <picture> <source>'s
+// srcset candidate, an SVG <image>'s href or xlink:href, an
+// <input type="image">'s src, a video's poster, or a url() in CSS. Only an
+// <img>'s src is resolved at capture; the rest are recorded as written, and
+// a relative URL matches by its path like any other.
+//
+// What a <video> or <audio> plays is collected too, as media, but never
+// matched or inlined: the viewer shows the element as a placeholder and never
+// plays it, so the note counts media elements in a clause of its own rather
+// than as images that can never match. A video's poster is an image.
+//
 // Data URIs rather than blob URLs on purpose: the zip's replay/*.replay.js is
 // opened from file://, where a blob URL minted in a page that no longer exists
 // means nothing, and the CLI report has no page at all. A data URI is a string
@@ -15,6 +26,11 @@
 // a URL several supplied files matched equally well is recorded as
 // { bytes: null, type: null, candidates } so the report note can say
 // "ambiguous" rather than "missing". Only entries with bytes are inlined.
+//
+// Paths compare exactly first. Only a URL no supplied file matches exactly
+// gets a second, case-blind pass (card_a.png ↔ Card_A.png, common for
+// experiments built on a case-insensitive file system), ranked the same way:
+// one best file is matched under its own spelling, a tie is ambiguous.
 //
 // A stylesheet supplied as a file brings its own references (fonts,
 // background images, @imports). They resolve against the sheet's RECORDED
@@ -31,10 +47,9 @@ const MIME = {
 };
 export const ASSET_EXTENSIONS = Object.keys(MIME);
 const FONT_EXT = /\.(woff2?|ttf|otf)(\?|#|$)/i;
-const SRC_ATTRS = { src: true, poster: true };
-// Only these elements' src/poster are images or media; an iframe's src is a
-// page, which the viewer never loads.
-const SRC_TAGS = { img: true, source: true, video: true, audio: true };
+// Decides a <source> whose parent the recording does not show.
+const MEDIA_EXT = /\.(mp4|webm|ogg|ogv|oga|mp3|wav|m4a|aac|flac|mov)(\?|#|$)/i;
+const MEDIA_TAGS = { video: true, audio: true };
 // One pass over CSS text finds both kinds of reference, and steps over
 // comments (matched first, with no groups, and always left as they are, so an
 // @import or url() inside one stays inert). Case-insensitive, as CSS is
@@ -91,15 +106,21 @@ function cssRefs(css, href) {
   return { imports, urls };
 }
 
+// A recording's lists as the viewer's tolerant loader keeps them: a field of
+// the wrong shape (stylesheets: {}, children: 5) reads as empty, and an entry
+// that is not an object is skipped where it is read.
+const list = (v) => (Array.isArray(v) ? v : []);
+const attrsOf = (n) => (n.attrs && typeof n.attrs === 'object' ? n.attrs : {});
+
 function* walkNodes(node) {
   if (!node || typeof node !== 'object') return;
   yield node;
-  for (const c of node.children || []) yield* walkNodes(c);
+  for (const c of list(node.children)) yield* walkNodes(c);
 }
 
 function* sheetsOf(recording) {
-  for (const s of recording.stylesheets || []) if (s) yield s;
-  for (const ev of recording.stylesheet_events || recording.stylesheetEvents || []) {
+  for (const s of list(recording.stylesheets)) if (s) yield s;
+  for (const ev of list(recording.stylesheet_events || recording.stylesheetEvents)) {
     if (ev && ev.type === 'stylesheet.add' && ev.sheet) yield ev.sheet;
   }
 }
@@ -108,22 +129,164 @@ function* sheetsOf(recording) {
 // is read with no base URL (applyAssetMap rewrites it the same way), so only
 // its absolute references count.
 function* sheetUpdatesOf(recording) {
-  for (const ev of recording.stylesheet_events || recording.stylesheetEvents || []) {
+  for (const ev of list(recording.stylesheet_events || recording.stylesheetEvents)) {
     if (ev && ev.type === 'stylesheet.update' && ev.css) yield ev.css;
   }
 }
 
 function* segmentsOf(recording) {
-  for (const seg of recording.segments || []) {
-    if (!seg) continue;
-    yield { dom: seg.initial_dom !== undefined ? seg.initial_dom : seg.initialDom, events: seg.events || [] };
+  for (const seg of list(recording.segments)) {
+    if (!seg || typeof seg !== 'object') continue;
+    yield { dom: seg.initial_dom !== undefined ? seg.initial_dom : seg.initialDom, events: list(seg.events) };
   }
 }
 
-// Lowercase tag of every element node seen so far, by id: a dom.attr event
-// names its node only by id.
-function noteTags(tags, node) {
-  for (const n of walkNodes(node)) if (n.kind === 'element' && n.id != null) tags.set(n.id, n.tag);
+// Every element node seen so far, by id, as { tag, parent, type, attrs,
+// srcEvent }: a dom.attr event names its node only by id, a <source>'s kind
+// depends on its parent, and an <input>'s src is an image only when its type
+// says so. `parent` is the parent's id (a dom.add root's is the event's);
+// `attrs` and `srcEvent` (the last dom.attr of its src) say where its src is
+// written, for an input that becomes an image button.
+function noteTree(elems, node, parent) {
+  if (!node || typeof node !== 'object') return;
+  if (node.kind === 'element' && node.id != null) {
+    elems.set(node.id, { tag: node.tag, parent, type: attrsOf(node).type, attrs: attrsOf(node), srcEvent: null });
+  }
+  for (const c of list(node.children)) noteTree(elems, c, node.id);
+}
+const parentTagOf = (elems, id) => {
+  const e = elems.get(id);
+  const p = e ? elems.get(e.parent) : undefined;
+  return p ? p.tag : undefined;
+};
+
+// Whether one attribute of an element ({ tag, type }) references an image
+// ('image'), a list of images ('srcset'), a media file ('media'), or nothing
+// to match (null). Only these elements' attributes count: an iframe's src is
+// a page, which the viewer never loads, and a link's href is not an image
+// (an `image` tag is always SVG's: HTML parses <image> as <img>).
+// A <source> is media under <video>/<audio> and an image under <picture>;
+// anywhere else, or under a parent the recording never showed, its
+// extension decides.
+function refKind(el, parentTag, name, value) {
+  const tag = el.tag;
+  if (tag === 'img') return name === 'src' ? 'image' : name === 'srcset' ? 'srcset' : null;
+  if (tag === 'input') return name === 'src' && String(el.type).toLowerCase() === 'image' ? 'image' : null;
+  if (tag === 'image') return name === 'href' || name === 'xlink:href' ? 'image' : null;
+  if (tag === 'video') return name === 'src' ? 'media' : name === 'poster' ? 'image' : null;
+  if (tag === 'audio') return name === 'src' ? 'media' : null;
+  if (tag === 'source' && name === 'srcset') return MEDIA_TAGS[parentTag] ? null : 'srcset';
+  if (tag === 'source' && name === 'src') {
+    if (MEDIA_TAGS[parentTag]) return 'media';
+    if (parentTag === 'picture') return 'image';
+    return MEDIA_EXT.test(value) ? 'media' : 'image';
+  }
+  return null;
+}
+
+// The URLs in a srcset, as [start, end) spans, by the HTML parsing rules:
+// candidates are separated by whitespace and commas; a URL runs to the next
+// whitespace, less any trailing commas (which then end the candidate);
+// otherwise its descriptors run to the next comma outside parentheses. A
+// comma inside a URL (a data: URI has one) stays part of it.
+const SPACE = /[\t\n\f\r ]/;
+function srcsetUrls(text) {
+  const spans = [];
+  let i = 0;
+  while (i < text.length) {
+    while (i < text.length && (SPACE.test(text[i]) || text[i] === ',')) i++;
+    if (i >= text.length) break;
+    const start = i;
+    while (i < text.length && !SPACE.test(text[i])) i++;
+    let end = i;
+    if (text[end - 1] === ',') {
+      while (text[end - 1] === ',') end--;
+    } else {
+      let paren = false;
+      for (; i < text.length; i++) {
+        if (text[i] === '(') paren = true;
+        else if (text[i] === ')') paren = false;
+        else if (text[i] === ',' && !paren) { i++; break; }
+      }
+    }
+    spans.push([start, end]);
+  }
+  return spans;
+}
+
+// Calls visit(kind, value, replace, at) for every image or media reference
+// in the segments' keyframe trees, dom.add subtrees and dom.attr values, in
+// order; replace(v) writes a new value back where the old one was found.
+// Each srcset candidate is visited as an image of its own, and a replaced
+// candidate is spliced back in with the rest of the srcset as written.
+// `media_src` (the resolved URL a video or audio loaded) is always media.
+// A media reference's `at` names the element it belongs to and where on it
+// the URL sits: { owner, slot: 'media_src' | 'src' | 'source' }, the owner of
+// a <source> being its parent (or the source itself when it has none).
+// Node ids restart at every keyframe, so an owner is keyed by the keyframe's
+// span and the id ('2:3'); a segment without a keyframe continues the span
+// before it, and the element table starts afresh at each keyframe.
+function eachRef(segments, visit) {
+  let elems = new Map();
+  let span = 0;
+  const owner = (id) => (typeof id === 'object' ? id : span + ':' + id);
+  const mediaAt = (id, tag, slot) => {
+    if (tag !== 'source') return { owner: owner(id), slot };
+    const e = elems.get(id);
+    return { owner: owner(e && e.parent != null ? e.parent : id), slot: 'source' };
+  };
+  const ref = (kind, value, write, where) => {
+    if (!kind || !value) return;
+    if (kind !== 'srcset') { visit(kind, value, write, kind === 'media' ? where() : undefined); return; }
+    const text = String(value);
+    let out = '', at = 0, changed = false;
+    for (const [start, end] of srcsetUrls(text)) {
+      let url = text.slice(start, end);
+      visit('image', url, (x) => { url = x; changed = true; });
+      out += text.slice(at, start) + url;
+      at = end;
+    }
+    if (changed) write(out + text.slice(at));
+  };
+  const tree = (root) => {
+    for (const n of walkNodes(root)) {
+      if (n.kind !== 'element') continue;
+      const attrs = attrsOf(n);
+      const el = { tag: n.tag, type: attrs.type };
+      const parentTag = parentTagOf(elems, n.id);
+      // An element without an id is its own owner.
+      const id = n.id != null ? n.id : n;
+      for (const name of Object.keys(attrs)) {
+        const v = attrs[name];
+        ref(v ? refKind(el, parentTag, name, v) : null, v, (x) => { attrs[name] = x; }, () => mediaAt(id, n.tag, 'src'));
+      }
+      if (n.media_src) ref('media', n.media_src, (x) => { n.media_src = x; }, () => ({ owner: owner(id), slot: 'media_src' }));
+    }
+  };
+  for (const { dom, events } of segments) {
+    if (dom && typeof dom === 'object') { span++; elems = new Map(); }
+    noteTree(elems, dom, null);
+    tree(dom);
+    for (const ev of events) {
+      if (!ev || typeof ev !== 'object') continue;
+      if (ev.type === 'dom.add') { noteTree(elems, ev.node, ev.parent); tree(ev.node); }
+      else if (ev.type === 'dom.attr' && elems.has(ev.node)) {
+        const el = elems.get(ev.node);
+        if (ev.name === 'type') {
+          el.type = ev.value;
+          // An input that becomes an image button shows the src it has.
+          const at = el.srcEvent;
+          const src = at ? at.value : el.attrs.src;
+          if (el.tag === 'input' && src && refKind(el, null, 'src', src) === 'image') {
+            ref('image', src, at ? (x) => { at.value = x; } : (x) => { el.attrs.src = x; });
+          }
+        } else {
+          if (ev.name === 'src') el.srcEvent = ev;
+          if (ev.value) ref(refKind(el, parentTagOf(elems, ev.node), ev.name, ev.value), ev.value, (x) => { ev.value = x; }, () => mediaAt(ev.node, el.tag, 'src'));
+        }
+      }
+    }
+  }
 }
 
 // An entry is usable for inlining only when a single file matched (bytes set).
@@ -134,22 +297,19 @@ const supplied = (assetMap, url) => {
 
 // The URLs a recording references, by kind. With an asset map, a link sheet
 // the map supplies also contributes the references inside its text (one
-// level: what an @import'ed sheet references is not followed).
+// level: what an @import'ed sheet references is not followed). `media` is
+// listed for the note only; it is never matched.
 function collect(recording, assetMap) {
-  const sheets = [], images = [], fonts = [];
+  const sheets = [], images = [], fonts = [], media = [];
   const seen = new Set();
   const add = (list, url) => { if (typeof url === 'string' && url && !seen.has(url)) { seen.add(url); list.push(url); } };
   // data:/blob: sources are already inline content, not assets to match.
-  const addRef = (url) => { if (typeof url === 'string' && !/^(data:|blob:|#)/i.test(url)) add(FONT_EXT.test(url) ? fonts : images, url); };
+  const inline = (url) => typeof url !== 'string' || /^(data:|blob:|#)/i.test(url);
+  const addRef = (url) => { if (!inline(url)) add(FONT_EXT.test(url) ? fonts : images, url); };
   const addCss = (css, href) => {
     const r = cssRefs(css, href);
     for (const u of r.imports) add(sheets, u);
     for (const u of r.urls) addRef(u);
-  };
-  const addNode = (n) => {
-    if (n.kind !== 'element') return;
-    if (SRC_TAGS[n.tag]) for (const a of Object.keys(SRC_ATTRS)) if (n.attrs && n.attrs[a]) addRef(n.attrs[a]);
-    if (n.media_src) addRef(n.media_src);
   };
   for (const s of sheetsOf(recording)) {
     if (s.kind === 'link' && s.css == null) {
@@ -159,16 +319,43 @@ function collect(recording, assetMap) {
     } else if (s.css) addCss(s.css, s.href);
   }
   for (const css of sheetUpdatesOf(recording)) addCss(css, null);
-  const tags = new Map();
-  for (const { dom, events } of segmentsOf(recording)) {
-    noteTags(tags, dom);
-    for (const n of walkNodes(dom)) addNode(n);
-    for (const ev of events) {
-      if (ev.type === 'dom.add') { noteTags(tags, ev.node); for (const n of walkNodes(ev.node)) addNode(n); }
-      else if (ev.type === 'dom.attr' && SRC_ATTRS[ev.name] && SRC_TAGS[tags.get(ev.node)] && ev.value) addRef(ev.value);
+  // Media is counted per element: one key each (its media_src, else its own
+  // src, else its first <source>'s src, whatever came first in the session),
+  // and elements sharing any URL count once. A captured <video src="a.mp4">
+  // carries both the relative src and the resolved media_src; it is one
+  // element. So is one video in two keyframes when only the later keyframe
+  // has its media_src (currentSrc is empty in the task that inserts it): the
+  // two owners share their src or <source> URL. An inline (data:/blob:)
+  // source is still an element shown as a placeholder, so it counts too.
+  const owners = new Map();
+  eachRef(segmentsOf(recording), (kind, url, replace, at) => {
+    if (kind !== 'media') { addRef(url); return; }
+    if (!owners.has(at.owner)) owners.set(at.owner, { urls: new Set() });
+    const o = owners.get(at.owner);
+    if (o[at.slot] === undefined) o[at.slot] = url;
+    o.urls.add(url);
+  });
+  // Union the owners that share a URL (transitively), then list one key per
+  // group, in the order of its first owner.
+  const list = [...owners.values()];
+  const root = list.map((_, i) => i);
+  const find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+  const ownerOf = new Map();
+  list.forEach((o, i) => {
+    for (const u of o.urls) {
+      if (ownerOf.has(u)) root[find(i)] = find(ownerOf.get(u));
+      else ownerOf.set(u, i);
     }
-  }
-  return { stylesheets: sheets, images, fonts };
+  });
+  const groups = new Map();
+  list.forEach((o, i) => {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, {});
+    const g = groups.get(r);
+    for (const slot of ['media_src', 'src', 'source']) if (g[slot] === undefined && o[slot] !== undefined) g[slot] = o[slot];
+  });
+  for (const g of groups.values()) add(media, g.media_src || g.src || g.source);
+  return { stylesheets: sheets, images, fonts, media };
 }
 
 export function collectAssetUrls(recording) { return collect(recording, null); }
@@ -177,12 +364,32 @@ const normalizePath = (p) => String(p).replace(/\\/g, '/').replace(/^(\.\/)+/, '
 
 // How many trailing path segments a supplied path shares with the URL's path
 // ('/study/css/a.css' and 'exp/css/a.css' share 2). 0 (not even the
-// filename) is no candidate.
-function sharedTail(urlSegs, path) {
+// filename) is no candidate. `fold` is applied to both sides of each
+// comparison: identity for the exact pass, lowercasing for the case-blind one.
+function sharedTail(urlSegs, path, fold) {
   const p = path.split('/');
   let n = 0;
-  while (n < p.length && n < urlSegs.length && p[p.length - 1 - n] === urlSegs[urlSegs.length - 1 - n]) n++;
+  while (n < p.length && n < urlSegs.length && fold(p[p.length - 1 - n]) === fold(urlSegs[urlSegs.length - 1 - n])) n++;
   return n;
+}
+
+const exact = (s) => s;
+const caseBlind = (s) => s.toLowerCase();
+
+// The supplied paths that rank best for one URL, in their own spelling.
+// Rank: a file whose WHOLE path is a suffix of the URL's path first
+// ('img/a.png' over 'lib/img/a.png' for /study/img/a.png), then the longer
+// shared tail ('node_modules/x/a.css' over 'x/a.css'). Only a tie at the top
+// rank is ambiguous.
+function bestCandidates(segs, dropped, fold) {
+  let best = 0, cands = [];
+  for (const p of dropped) {
+    const n = sharedTail(segs, p, fold);
+    if (n === 0) continue;
+    const rank = (n === p.split('/').length ? segs.length + 1 : 0) + n;
+    if (rank > best) { best = rank; cands = [p]; } else if (rank === best) cands.push(p);
+  }
+  return cands;
 }
 
 export function matchAssets(urls, droppedPaths) {
@@ -190,17 +397,9 @@ export function matchAssets(urls, droppedPaths) {
   const matched = new Map(), missing = [], ambiguous = [];
   for (const url of urls) {
     const segs = pathOf(url).split('/').filter(Boolean);
-    // Rank: a file whose WHOLE path is a suffix of the URL's path first
-    // ('img/a.png' over 'lib/img/a.png' for /study/img/a.png), then the
-    // longer shared tail ('node_modules/x/a.css' over 'x/a.css'). Only a tie
-    // at the top rank is ambiguous.
-    let best = 0, cands = [];
-    for (const p of dropped) {
-      const n = sharedTail(segs, p);
-      if (n === 0) continue;
-      const rank = (n === p.split('/').length ? segs.length + 1 : 0) + n;
-      if (rank > best) { best = rank; cands = [p]; } else if (rank === best) cands.push(p);
-    }
+    // Any exact candidate, however weak, wins over a case-blind one.
+    let cands = bestCandidates(segs, dropped, exact);
+    if (cands.length === 0) cands = bestCandidates(segs, dropped, caseBlind);
     if (cands.length === 1) matched.set(url, cands[0]);
     else if (cands.length > 1) ambiguous.push({ url, candidates: cands });
     else missing.push(url);
@@ -208,18 +407,33 @@ export function matchAssets(urls, droppedPaths) {
   return { matched, missing, ambiguous };
 }
 
+// The participant a recording names, for a warning.
+function recordingName(rec) {
+  try { if (rec && typeof rec.participant_id === 'string' && rec.participant_id) return rec.participant_id; } catch { /* unreadable too */ }
+  return 'a participant';
+}
+
 // Two passes: the URLs the recordings reference, then the references inside
-// the stylesheets the first pass supplied. Each file is read once.
+// the stylesheets the first pass supplied. Each file is read once. A
+// recording that cannot be read is left out with a line in report.warnings;
+// the others are matched as usual.
 export async function buildAssetMap(recordings, droppedFiles) {
   const byPath = new Map(droppedFiles.map((f) => [normalizePath(f.path), f]));
   const assetMap = new Map();
   const bytesByPath = new Map();
-  const report = { matched: [], missing: [], ambiguous: [] };
+  const report = { matched: [], missing: [], ambiguous: [], warnings: [] };
   const seen = new Set();
+  const unreadable = new Set();
   for (const pass of [null, assetMap]) {
     const urls = [];
     for (const rec of recordings) {
-      const u = collect(rec, pass);
+      if (unreadable.has(rec)) continue;
+      let u;
+      try { u = collect(rec, pass); } catch (e) {
+        unreadable.add(rec);
+        report.warnings.push(`Experiment assets: the replay of ${recordingName(rec)} could not be read (${e && e.message}); its references are not matched.`);
+        continue;
+      }
       for (const url of [...u.stylesheets, ...u.images, ...u.fonts]) if (!seen.has(url)) { seen.add(url); urls.push(url); }
     }
     const { matched, missing, ambiguous } = matchAssets(urls, [...byPath.keys()]);
@@ -295,33 +509,22 @@ export function applyAssetMap(model, assetMap) {
     if (e) s.css = decodeUtf8(e.bytes);
     if (s.css) s.css = rewriteCss(s.css, s.href, false);
   };
-  const tags = new Map();
-  const node = (n) => {
-    noteTags(tags, n);
-    for (const el of walkNodes(n)) {
-      if (el.kind !== 'element') continue;
-      if (SRC_TAGS[el.tag]) for (const a of Object.keys(SRC_ATTRS)) if (el.attrs && supplied(assetMap, el.attrs[a])) el.attrs[a] = dataUri(el.attrs[a]);
-      if (el.media_src && supplied(assetMap, el.media_src)) el.media_src = dataUri(el.media_src);
-    }
-  };
-  for (const s of model.stylesheets || []) sheet(s);
-  for (const ev of model.stylesheetEvents || []) {
+  for (const s of list(model.stylesheets)) sheet(s);
+  for (const ev of list(model.stylesheetEvents)) {
+    if (!ev) continue;
     if (ev.type === 'stylesheet.add') sheet(ev.sheet);
     else if (ev.type === 'stylesheet.update' && ev.css) ev.css = rewriteCss(ev.css, null, false);
   }
-  for (const seg of model.segments || []) {
-    node(seg.initialDom);
-    for (const ev of seg.events || []) {
-      if (ev.type === 'dom.add') node(ev.node);
-      else if (ev.type === 'dom.attr' && SRC_ATTRS[ev.name] && SRC_TAGS[tags.get(ev.node)] && supplied(assetMap, ev.value)) ev.value = dataUri(ev.value);
-    }
-  }
+  // Media is never matched, so only image references are rewritten.
+  eachRef(segmentsOf(model), (kind, url, replace) => {
+    if (kind === 'image' && supplied(assetMap, url)) replace(dataUri(url));
+  });
   return model;
 }
 
 // Per recording, taken BEFORE applyAssetMap (which rewrites the recording
 // through the model's aliases). Fonts are counted on their own: a supplied
-// stylesheet usually brings them.
+// stylesheet usually brings them. Media has only a total: it is never matched.
 export function assetMatchSummary(recording, assetMap) {
   const u = collect(recording, assetMap);
   const tally = (urls) => ({
@@ -329,7 +532,7 @@ export function assetMatchSummary(recording, assetMap) {
     missing: urls.filter((x) => !assetMap.has(x)).map(lastSegment),
     ambiguous: urls.filter((x) => assetMap.has(x) && !supplied(assetMap, x)).map(lastSegment),
   });
-  return { stylesheets: tally(u.stylesheets), images: tally(u.images), fonts: tally(u.fonts) };
+  return { stylesheets: tally(u.stylesheets), images: tally(u.images), fonts: tally(u.fonts), media: { total: u.media.length } };
 }
 
 export function assetNoteText(summary) {
@@ -343,5 +546,8 @@ export function assetNoteText(summary) {
   if (summary.stylesheets.total > 0) parts.push(word(summary.stylesheets, 'stylesheets'));
   if (summary.images.total > 0) parts.push(word(summary.images, 'images'));
   if (summary.fonts.total > 0) parts.push(word(summary.fonts, 'fonts'));
+  const m = summary.media.total;
+  if (m > 0) parts.push((m === 1 ? '1 video/audio element shown as placeholder' : `${m} video/audio elements shown as placeholders`) +
+    '; replays never play media');
   return parts.length ? 'Experiment assets: ' + parts.join('; ') + '.' : null;
 }

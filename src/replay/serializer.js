@@ -81,6 +81,22 @@ function num(v, fallback) {
   return typeof v === 'number' && isFinite(v) ? v : (fallback == null ? 0 : fallback);
 }
 
+// A segment's vendor data: what the host passed to startTrial, plus CH's own
+// `implicit` flag. An implicitly opened segment (events arrived before any
+// startTrial) is a CH-side fact about bracketing, not a standard field. null
+// when there is neither, the spec's spelling for "nothing". A DEEP copy (the
+// recorder stored a JSON copy, so this cannot throw): each returned
+// recording owns its objects, and editing one changes neither the buffer nor
+// any recording taken later.
+function segmentExtensions(trial) {
+  var ext = trial.extensions ? JSON.parse(JSON.stringify(trial.extensions)) : null;
+  if (trial.implicit) {
+    ext = ext || {};
+    ext['cyborg-hunter'] = Object.assign({ implicit: true }, ext['cyborg-hunter']);
+  }
+  return ext;
+}
+
 /**
  * @param {Object} state - recorder.getState() output
  * @param {Object} opts
@@ -133,9 +149,7 @@ export function serialize(state, opts) {
         return out;
       }),
       host_data: trial.hostData != null ? trial.hostData : null,
-      // An implicitly opened segment (events arrived before any startTrial) is
-      // a CH-side fact about bracketing, not a standard field.
-      extensions: trial.implicit ? { 'cyborg-hunter': { implicit: true } } : null,
+      extensions: segmentExtensions(trial),
     };
   });
 

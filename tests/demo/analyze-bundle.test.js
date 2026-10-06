@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inlineSrcHazards } from '../../src/shared/inline-safe.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
+import { NODE_IMPORT } from '../cli/node-import-pattern.js';
 
 let dir, bundle;
 before(() => {
@@ -37,7 +38,7 @@ test('reaches no network and no Node API', () => {
   assert.equal(bundle.includes('registry.npmjs.org'), false, 'update check is unreachable');
   // ESM imports as well as require(): esbuild keeps either form when a
   // built-in is marked external, so both must be absent.
-  assert.equal(/(from\s*|import\s*\(\s*|require\s*\(\s*)["'](node:[^"']*|fs|path|zlib|crypto)["']/.test(bundle), false);
+  assert.equal(NODE_IMPORT.test(bundle), false);
   assert.equal(/fetch\(\s*["'`]\.\//.test(bundle), false, 'no fetch of the page\'s own files');
 });
 

@@ -7,7 +7,7 @@ import { Window } from 'happy-dom';
 import { createRecorder } from '../../src/replay/recorder.js';
 import { attachTraceCapture } from '../../src/replay/capture-trace.js';
 import { attachDomCapture } from '../../src/replay/capture-dom.js';
-import { buildViewerModel } from '../../src/cli/renderers/replay-assets.js';
+import { buildViewerModel } from '../../src/replay/viewer-model.js';
 import { autoSave } from '../../src/replay/persistence.js';
 
 // ── Shared fakes ──────────────────────────────────────────────

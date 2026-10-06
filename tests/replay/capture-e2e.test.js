@@ -22,6 +22,8 @@ import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
 
 import * as CHReplay from '../../src/replay/index.js';
+import { serializeTree } from '../../src/replay/snapshot.js';
+import { createSpan } from '../../src/replay/span.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 import { createPlayer } from '@cyborg-hunter/sessionrecording-conformance/fuzz/dom-player';
 import { FIXTURES_URL } from '@cyborg-hunter/sessionrecording-conformance/corpus';
@@ -904,6 +906,199 @@ describe('teardown flushes the mutations still queued at stop', () => {
       assert.ok(
         adds.some(e => JSON.stringify(e.node).includes('"id":"abandoned"')),
         'destroy() drains the queue too');
+    } finally {
+      restoreWindow();
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESUME: a stopped recording records again (back/forward cache)
+//
+// The one-line setup stops the recorder at pagehide and resumes it when the
+// browser shows the page again from the back/forward cache. While stopped,
+// the MutationObserver keeps delivering and mapMutations keeps numbering the
+// nodes it sees into the span, but storeEvent drops every record: the span
+// then describes nodes no player was sent. So the first segment after the
+// resume must be a keyframe, whatever the cadence would otherwise say.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('resume after a stop: a keyframe segment in the same recording', () => {
+  let recording;
+
+  before(async () => {
+    installWindow();
+    try {
+      const doc = win.document;
+      const stage = doc.getElementById('stage');
+      // keyframeEvery 10: without the forced keyframe the restored segment
+      // would be a continuation.
+      const api = CHReplay.attach({
+        participantId: 'P-RESUME-01', tier: 'dom', root: '#stage',
+        keyframeEvery: 10, autoSave: { mode: 'none' },
+      });
+      api.startSession();
+      api.startTrial({ trialId: 'span-0' });
+      const one = doc.createElement('div');
+      one.id = 'before-leaving';
+      stage.appendChild(one);
+      await settle();
+      api.endTrial();
+      api.startTrial({ trialId: 'span-1' });   // the cut at pagehide opens the next span
+      api.stopSession('finished');
+
+      // Away: the DOM and the window change while nothing is recorded.
+      const away = doc.createElement('div');
+      away.id = 'changed-while-away';
+      stage.appendChild(away);
+      Object.defineProperty(win, 'innerWidth', { value: 640, configurable: true });
+      await settle();
+
+      api.resumeSession();
+      api.startTrial({ trialId: 'span-1', extensions: { 'cyborg-hunter': { restored_from: 'bfcache' } } });
+      stage.removeChild(away);                  // a node only the new keyframe holds
+      fire(doc.getElementById('go'), 'click');
+      await settle();
+      const last = doc.createElement('div');
+      last.id = 'last-word';
+      stage.appendChild(last);                  // same task as the stop: the flush keeps it
+      api.stopSession('finished');              // closes the open segment, as pagehide's stop does
+      recording = api.getRecording();
+      api.destroy();
+    } finally {
+      restoreWindow();
+    }
+  });
+
+  it('strict-validates', () => {
+    assert.deepEqual(validateStrict(recording).errors, []);
+  });
+
+  it('the restored segment is a keyframe numbered from 1, marked as a restore', () => {
+    assert.deepEqual(recording.segments.map(s => s.label), ['span-0', 'span-1', 'span-1']);
+    const restored = recording.segments[2];
+    assert.ok(restored.initial_dom, 'a keyframe, not a continuation');
+    assert.equal(restored.initial_dom.id, 1);
+    assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'),
+      'the keyframe shows the DOM as it was on return');
+    assert.deepEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
+    assert.deepEqual(recording.segments.slice(0, 2).map(s => s.extensions), [null, null]);
+  });
+
+  it('a conforming player resolves every patch across the restore', () => {
+    let player = null;
+    for (const seg of recording.segments) {
+      const patches = seg.events.filter(e => e.type.startsWith('dom.'));
+      if (seg.initial_dom) player = createPlayer(seg.initial_dom);
+      player.apply(patches);
+    }
+    const ids = [];
+    (function walk(n) {
+      if (n.kind === 'element' && n.attrs && n.attrs.id) ids.push(n.attrs.id);
+      (n.children || []).forEach(walk);
+    })(player.tree());
+    assert.ok(!ids.includes('changed-while-away'), 'its removal resolved');
+    assert.ok(ids.includes('last-word'), 'the second stop flushed the queued add');
+  });
+
+  it('records the click after the restore, ends finished, and states the new viewport', () => {
+    assert.ok(recording.segments[2].events.some(e => e.type === 'mouse.click'));
+    assert.equal(recording.end_reason, 'finished');
+    assert.ok(recording.viewport_changes.some(v => v.w === 640),
+      'the resume states the geometry the restored page is laid out at');
+    assert.deepEqual(recording.extensions['cyborg-hunter'].capture_failures, []);
+  });
+});
+
+// Events between resumeSession() and the next startTrial(). While stopped,
+// mapMutations kept numbering nodes into the span; the first event after the
+// resume opens an implicit segment, whose keyframe renumbers the span. An id
+// resolved against the stale span before that keyframe would name a
+// different node of the new tree. A node is inserted BEFORE the targets
+// while stopped, so pre-order ids shift and a stale id cannot pass by luck.
+describe('resume: an event before the next startTrial resolves against the new span', () => {
+  async function stoppedWithShiftedIds() {
+    const doc = win.document;
+    const stage = doc.getElementById('stage');
+    const api = CHReplay.attach({
+      participantId: 'P-RESUME-02', tier: 'dom', root: '#stage',
+      keyframeEvery: 10, autoSave: { mode: 'none' },
+    });
+    api.startSession();
+    api.startTrial({ trialId: 't0' });
+    await settle();
+    api.stopSession('finished');
+    const away = doc.createElement('section');
+    away.id = 'away';
+    stage.insertBefore(away, stage.firstChild);
+    await settle();
+    api.resumeSession();
+    return { api, doc };
+  }
+
+  function nodeById(n, id) {
+    if (!n) return null;
+    if (n.id === id) return n;
+    for (const c of n.children || []) { const hit = nodeById(c, id); if (hit) return hit; }
+    return null;
+  }
+
+  it('a click names the element it hit, or nothing', async () => {
+    installWindow();
+    try {
+      const { api, doc } = await stoppedWithShiftedIds();
+      fire(doc.getElementById('go'), 'click');
+      await settle();
+      api.stopSession('finished');
+      const rec = api.getRecording();
+      api.destroy();
+      assert.deepEqual(validateStrict(rec).errors, []);
+      const seg = rec.segments[rec.segments.length - 1];
+      const click = seg.events.find(e => e.type === 'mouse.click');
+      assert.ok(click, 'the click is recorded');
+      for (const id of [click.target, click.anchor && click.anchor.node]) {
+        if (id == null) continue;
+        const node = nodeById(seg.initial_dom, id);
+        assert.ok(node && node.kind === 'element' && node.tag === click.anchor.tag,
+          `id ${id} names ${JSON.stringify(node && (node.tag || node.kind))}, not the clicked ${click.anchor.tag}`);
+      }
+    } finally {
+      restoreWindow();
+    }
+  });
+
+  it('a mutation batch replays as what the page did', async () => {
+    installWindow();
+    try {
+      const { api, doc } = await stoppedWithShiftedIds();
+      const kid = doc.createElement('span');
+      kid.textContent = 'x';
+      doc.getElementById('go').appendChild(kid);
+      doc.getElementById('msg').remove();
+      await settle();
+      fire(doc.getElementById('go'), 'click');   // a post-resume segment exists either way
+      await settle();
+      api.stopSession('finished');
+      const rec = api.getRecording();
+      api.destroy();
+      assert.deepEqual(validateStrict(rec).errors, []);
+      let player = null;
+      let keyframedAfterResume = false;
+      rec.segments.forEach((seg, i) => {
+        if (seg.initial_dom) { player = createPlayer(seg.initial_dom); keyframedAfterResume = i > 0; }
+        player.apply(seg.events.filter(e => e.type.startsWith('dom.')));
+      });
+      assert.ok(keyframedAfterResume, 'the segment after the resume is a keyframe');
+      {
+        // The replayed tree must be the page, node for node (ids aside: they
+        // are the span's numbering, not the page's).
+        const shape = (n) => ({ kind: n.kind, tag: n.tag, text: n.text,
+          attrs: n.attrs && Object.keys(n.attrs).length ? n.attrs : null,
+          children: (n.children || []).map(shape) });
+        const live = serializeTree(doc.getElementById('stage'), createSpan(),
+          { redactSelector: '[data-ch-redact]', keepBait: false });
+        assert.deepEqual(shape(player.tree()), shape(live));
+      }
     } finally {
       restoreWindow();
     }

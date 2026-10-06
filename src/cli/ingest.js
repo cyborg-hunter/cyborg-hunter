@@ -39,14 +39,13 @@ export async function ingest(config) {
   return ingestFiles({ participantFiles, replayFiles }, config, { ...nodeDeps, replayDirError });
 }
 
-// Load-bearing re-exports:
-//   - getByPath: html-index.js (and external adopters) import it from ingest.js.
-//   - extractIntegrityData, ruleChronologicalCompare: moved to extract-core.js
-//     (0.7.2 extraction — pure/no Node APIs so a browser demo can bundle it);
-//     this file re-exports both for existing callers — trajectories.js imports
-//     ruleChronologicalCompare from here, and tests/cli/*.test.js import
-//     extractIntegrityData from here.
-//   - migrateArtifact: moved to ingest-core.js; tests import it from here.
+// Re-exports, so callers of this module keep one import path:
+//   - getByPath (src/shared/paths.js) and ruleChronologicalCompare
+//     (extract-core.js): for external callers; the in-repo modules import
+//     them from their own files.
+//   - extractIntegrityData (extract-core.js): tests/cli/*.test.js import it
+//     from here.
+//   - migrateArtifact (ingest-core.js): tests import it from here.
 export { getByPath };
 export { extractIntegrityData, ruleChronologicalCompare };
 export { migrateArtifact };

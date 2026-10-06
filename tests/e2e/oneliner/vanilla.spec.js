@@ -34,8 +34,8 @@ function blobOf(body) {
 // `metaRedirect`: answer page 1's POST with a page that meta-refreshes to
 // page 2 instead of an HTTP redirect. Playwright does not route the request
 // an intercepted redirect leads to, so a rewritten page 2 needs a navigation
-// of its own.
-async function driveMultiPage(page, { pastes, metaRedirect = false }) {
+// of its own. `leave`: how page 1's #next is activated (a click by default).
+async function driveMultiPage(page, { pastes, metaRedirect = false, leave = (p) => p.click('#next') }) {
   const bodies = [];
   await page.route('**/submit', async (route) => {
     bodies.push(route.request().postData());
@@ -52,7 +52,7 @@ async function driveMultiPage(page, { pastes, metaRedirect = false }) {
   await page.goto(FIX + 'vanilla-form-page1.html');
   for (let i = 0; i < pastes; i++) await pasteInto(page, '#answer1', 'pasted text ');
   await page.locator('#answer1').pressSequentially('typed on page 1', { delay: 120 });
-  await page.click('#next');
+  await leave(page);
   await page.waitForURL('**/vanilla-form-page2.html');
 
   const formData = await page.evaluate((field) => {
@@ -115,6 +115,26 @@ test('multi-page form: hidden input on each submit, segments continue across pag
   expect(out.summaryCsv[0].totalPasteEvents).toBe('1');
   expect(out.summaryCsv[0].hardTriggered).toBe('no');   // 1 paste < standard threshold 2
 });
+
+// Page 1's button is type="button" and submits from its own onclick: the
+// cut comes inside the click, before the click reaches the document. The
+// click goes with page 1's span, and page 1 adds no segment after it.
+for (const [how, leave] of [
+  ['clicked', (p) => p.click('#next')],
+  ['activated with Enter', async (p) => { await p.focus('#next'); await p.keyboard.press('Enter'); }],
+]) {
+  test(`multi-page form whose button submits from its onclick (${how}): no extra segment, the click goes with page 1`, async ({ page }) => {
+    await rewriteFixture(page, '**/vanilla-form-page1.html', (html) =>
+      html.replace('<button type="submit" id="next">', '<button type="button" id="next" onclick="this.form.submit()">'));
+    const log = collectConsole(page);
+    const { bodies } = await driveMultiPage(page, { pastes: 1, leave });
+    const first = blobOf(bodies[0]);
+    expect(first.trials.map((t) => t.trialId)).toEqual(['span-0']);
+    expect(first.trials[0].integrity.mouseTrack.filter((m) => m.type === 'click')).toHaveLength(1);
+    expectTwoPageBlob(blobOf(bodies[1]));
+    expect(chErrors(log)).toEqual([]);
+  });
+}
 
 test('multi-page form: two pastes on page 1 and a clean page 2 flag the participant HARD', async ({ page }) => {
   const { bodies } = await driveMultiPage(page, { pastes: 2 });
@@ -212,6 +232,9 @@ test('single page: manual marks + custom fetch save via CyborgHunter.data(), rep
   expect(saved.data.participantId).toBe('E2E-VAN-2');
   expect(saved.data.trials.map((t) => t.trialId)).toEqual(['span-0', 'q1', 'q2', 'q3']);
   for (const t of saved.data.trials) expect(t.cyborgHunterError).toBeUndefined();
+  // Each click is recorded once, in the span it ends: the q1, q2 and q3 marks
+  // and Finish (whose handler calls CyborgHunter.data()).
+  expect(saved.data.trials.map((t) => t.integrity.mouseTrack.filter((m) => m.type === 'click').length)).toEqual([1, 1, 1, 1]);
 
   // The replay recording, loaded from next to dist/ch.js.
   expect(replayRequests).toEqual(['/dist/cyborg-hunter-replay.js']);
@@ -248,5 +271,197 @@ test('ch.js in <head>: boots after DOMContentLoaded without errors; a paste befo
   expect(data.participantId).toBe('E2E-VAN-3');
   expect(data.trials.map((t) => t.trialId)).toEqual(['span-0']);
   expect(data.trials[0].integrity.pasteEvents).toHaveLength(1);
+  expect(chErrors(log)).toEqual([]);
+});
+
+// vanilla-submit-targets.html: submits that leave the page in place, and two
+// that the vanilla host must not misread. The session record is read from
+// sessionStorage once the page has been left for a page without ch.js.
+const TARGETS_KEY = 'cyborg-hunter:oneliner:session:E2E-VAN-4';
+
+function readSession(page) {
+  return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), TARGETS_KEY);
+}
+
+async function leaveAndReadSession(page) {
+  await page.route('**/left', (route) => route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Left</p>' }));
+  await page.goto('/left');
+  return readSession(page);
+}
+
+for (const [form, label] of [['popup', 'a new window'], ['framed', 'a frame']]) {
+  test(`a POST into ${label} carries the blob, and the data recorded after it is kept`, async ({ page }) => {
+    const log = collectConsole(page);
+    const bodies = [];
+    // On the context: the new window's request is not the page's.
+    await page.context().route('**/post-' + form, async (route) => {
+      bodies.push(route.request().postData());
+      await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Received</p>' });
+    });
+    await page.goto(FIX + 'vanilla-submit-targets.html');
+    await pasteInto(page, '#answer', 'before ');
+    const popup = form === 'popup' ? page.waitForEvent('popup') : null;
+    await page.click('#' + form + '-submit');
+    await expect.poll(() => bodies.length).toBe(1);
+    if (popup) await (await popup).close();
+
+    const posted = blobOf(bodies[0]);
+    expect(posted, 'the post carries ' + FIELD).not.toBeNull();
+    expect(posted.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1]);
+
+    await pasteInto(page, '#answer', 'after');
+    const saved = await leaveAndReadSession(page);
+    expect(saved.trials.map((t) => t.trialId)).toEqual(['span-0', 'span-1']);
+    expect(saved.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+    expect(chErrors(log)).toEqual([]);
+  });
+}
+
+test('a submit handler that cancels the event and calls form.submit() saves one segment, not two', async ({ page }) => {
+  const log = collectConsole(page);
+  const bodies = [];
+  await page.route('**/post-handler', async (route) => {
+    bodies.push(route.request().postData());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Thank you</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'answer');
+  await page.click('#handler-submit');
+  await page.getByText('Thank you').waitFor();
+
+  expect(bodies).toHaveLength(1);
+  expect(blobOf(bodies[0]).trials.map((t) => t.trialId)).toEqual(['span-0']);
+  expect((await readSession(page)).trials.map((t) => t.trialId)).toEqual(['span-0']);
+  expect(chErrors(log)).toEqual([]);
+});
+
+// Chromium sends nothing for a dispatched submit event (as WebKit; Firefox
+// does send the form, which this Chromium-only suite cannot cover).
+test('a submit event the page dispatches itself sends nothing in Chromium, and the data after it is kept', async ({ page }) => {
+  const log = collectConsole(page);
+  const requested = [];
+  page.on('request', (r) => { if (r.url().includes('/post-plain')) requested.push(r.url()); });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'before ');
+  await page.evaluate(() => {
+    document.getElementById('plain').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+  await pasteInto(page, '#answer', 'after');
+  const saved = await leaveAndReadSession(page);
+
+  expect(requested).toEqual([]);
+  expect(saved.trials.map((t) => t.trialId)).toEqual(['span-0', 'span-1']);
+  expect(saved.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+  expect(chErrors(log)).toEqual([]);
+});
+
+// A same-window POST answered 204: the navigation never commits and nothing
+// on the page says so. What the participant does next is kept: in the
+// session when they leave, in the post when the page submits a form later.
+for (const exit of ['leave', 'form.submit()']) {
+  test(`a POST answered 204 keeps the page: the data after it is kept (${exit})`, async ({ page }) => {
+    const log = collectConsole(page);
+    let drafts = 0;
+    await page.route('**/post-draft', async (route) => { drafts++; await route.fulfill({ status: 204 }); });
+    const bodies = [];
+    await page.route('**/post-plain', async (route) => {
+      bodies.push(route.request().postData());
+      await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Thank you</p>' });
+    });
+    await page.goto(FIX + 'vanilla-submit-targets.html');
+    await pasteInto(page, '#answer', 'before ');
+    await page.click('#draft-submit');
+    await expect.poll(() => drafts).toBe(1);
+    await page.waitForTimeout(300);   // the 204 is in: the page stays
+    expect(await page.evaluate(() => document.getElementById('answer').value)).toBe('before ');
+    await pasteInto(page, '#answer', 'after');
+
+    let saved;
+    if (exit === 'leave') {
+      saved = await leaveAndReadSession(page);
+    } else {
+      await page.evaluate(() => document.getElementById('plain').submit());
+      await page.getByText('Thank you').waitFor();
+      expect(bodies).toHaveLength(1);
+      expect(blobOf(bodies[0]).trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+      saved = await readSession(page);
+    }
+    expect(saved.trials.map((t) => t.trialId)).toEqual(['span-0', 'span-1']);
+    expect(saved.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+    expect(chErrors(log)).toEqual([]);
+  });
+}
+
+// The page's own submit handler changes the form after ch.js's: the browser
+// sends it by the method and into the window the handler left.
+test('a submit handler that turns a GET form into a POST: the post carries cyborgHunterData', async ({ page }) => {
+  const log = collectConsole(page);
+  const bodies = [];
+  await page.route('**/post-to-post', async (route) => {
+    bodies.push(route.request().postData());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Thank you</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'pasted');
+  await page.click('#to-post-submit');
+  await page.getByText('Thank you').waitFor();
+  expect(new URLSearchParams(bodies[0]).get('q')).toBe('a');
+  expect(blobOf(bodies[0]).trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1]);
+  expect(chErrors(log)).toEqual([]);
+});
+
+test('a submit handler that turns a POST form into a GET: no cyborgHunterData in the URL', async ({ page }) => {
+  const log = collectConsole(page);
+  const urls = [];
+  await page.route('**/get-to-get*', async (route) => {
+    urls.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Results</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'pasted');
+  await page.click('#to-get-submit');
+  await page.getByText('Results').waitFor();
+  const params = new URL(urls[0]).searchParams;
+  expect(params.get('q')).toBe('b');
+  expect(params.has(FIELD)).toBe(false);
+  expect(chErrors(log)).toEqual([]);
+});
+
+test('a submit handler that sends a same-window POST into a new window: the data after it is kept', async ({ page }) => {
+  const log = collectConsole(page);
+  const bodies = [];
+  await page.context().route('**/post-to-blank', async (route) => {
+    bodies.push(route.request().postData());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Received</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await pasteInto(page, '#answer', 'before ');
+  const popup = page.waitForEvent('popup');
+  await page.click('#to-blank-submit');
+  await expect.poll(() => bodies.length).toBe(1);
+  await (await popup).close();
+  expect(blobOf(bodies[0]).trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1]);
+
+  await pasteInto(page, '#answer', 'after');
+  const saved = await leaveAndReadSession(page);
+  expect(saved.trials.map((t) => t.trialId)).toEqual(['span-0', 'span-1']);
+  expect(saved.trials.map((t) => t.integrity.pasteEvents.length)).toEqual([1, 1]);
+  expect(chErrors(log)).toEqual([]);
+});
+
+test('a POST form with a control named "method" still carries cyborgHunterData', async ({ page }) => {
+  const log = collectConsole(page);
+  const bodies = [];
+  await page.route('**/post-clobbered', async (route) => {
+    bodies.push(route.request().postData());
+    await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<p>Thank you</p>' });
+  });
+  await page.goto(FIX + 'vanilla-submit-targets.html');
+  await page.click('#clobbered-submit');
+  await page.getByText('Thank you').waitFor();
+
+  expect(bodies).toHaveLength(1);
+  expect(new URLSearchParams(bodies[0]).get('method')).toBe('by-hand');
+  expect(blobOf(bodies[0]), 'the post carries ' + FIELD).not.toBeNull();
   expect(chErrors(log)).toEqual([]);
 });

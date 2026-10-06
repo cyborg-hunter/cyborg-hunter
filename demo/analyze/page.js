@@ -54,6 +54,12 @@ export function createPage(root, worker, opts) {
   var timers = (opts && opts.timers) || { set: function (fn, ms) { return setTimeout(fn, ms); }, clear: function (id) { clearTimeout(id); } };
   var reportWatchdog = null;
   var reportPosted = false;
+  // A check or run that has sent no progress for stallHintMs gets a hint
+  // that it is still going (the stall-hint element, outside the steps so it
+  // shows under the check as under the run). A hint only: nothing is
+  // cancelled or restarted, since a large cohort can be slow and still finish.
+  var stallHintMs = opts && opts.stallHintMs ? opts.stallHintMs : 60000;
+  var stallTimer = null;
   // True while the error on screen is the watchdog's: a selection that
   // arrives late proves the report rendered after all, and clears it.
   var watchdogErrorShown = false;
@@ -89,6 +95,16 @@ export function createPage(root, worker, opts) {
       watchdogErrorShown = true;
     }, reportWatchdogMs);
   }
+  function hideStallHint() {
+    if (stallTimer) { timers.clear(stallTimer); stallTimer = null; }
+    q(root, 'stall-hint').hidden = true;
+  }
+  // (Re)starts the wait: called when a check or run is sent, and on each of
+  // its progress messages.
+  function armStallHint() {
+    hideStallHint();
+    stallTimer = timers.set(function () { stallTimer = null; q(root, 'stall-hint').hidden = false; }, stallHintMs);
+  }
   function discardZip() {
     state.zipParts = [];
     if (state.zipUrl) { URL.revokeObjectURL(state.zipUrl); state.zipUrl = null; }
@@ -105,6 +121,7 @@ export function createPage(root, worker, opts) {
       if (w) w.reject(handled(message));
       return;
     }
+    hideStallHint();
     for (var k in pending) { pending[k].reject(handled(message)); delete pending[k]; }
     // A failed run goes back to the check step, whose list already holds the
     // config warnings: the run's own go under them.
@@ -164,6 +181,7 @@ export function createPage(root, worker, opts) {
       if (!fontsInstalled) { var style = document.createElement('style'); style.textContent = msg.assets.fontFaceCss; document.head.appendChild(style); fontsInstalled = true; }
       if (opts && opts.onReady) opts.onReady();
     } else if (msg.type === 'progress') {
+      if (busy()) armStallHint();
       var bar = q(root, 'progress');
       if (msg.total > 0) { bar.max = msg.total; bar.value = msg.done; } else { bar.removeAttribute('value'); }
       q(root, 'progress-label').textContent = msg.phase + (msg.label ? ': ' + msg.label : '') + (msg.total ? ' (' + msg.done + '/' + msg.total + ')' : '');
@@ -175,6 +193,7 @@ export function createPage(root, worker, opts) {
       var w = replayWaiters.shift();
       if (w) w.resolve(msg.model);
     } else if (pending[msg.type]) {
+      hideStallHint();
       var p = pending[msg.type]; delete pending[msg.type]; p.resolve(msg);
     }
   }
@@ -208,6 +227,7 @@ export function createPage(root, worker, opts) {
     q(root, 'size-warning').hidden = true;
     var reply = waitFor('checked');
     updateControls();
+    armStallHint();
     sendWithFiles({ type: 'check', sample: state.sample });
     var checked = await reply;
     state.checked = checked;
@@ -254,6 +274,7 @@ export function createPage(root, worker, opts) {
     q(root, 'progress-label').textContent = '';
     var reply = waitFor('done');
     updateControls();
+    armStallHint();
     sendWithFiles({ type: 'run', sample: state.sample, config: state.checked.config, participantIdField: state.idField });
     var done = await reply;
     updateControls();
@@ -285,6 +306,7 @@ export function createPage(root, worker, opts) {
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
     stopWatchdog();
+    hideStallHint();
     discardZip();
     if (replayCard) replayCard.teardown();
     // The previous cohort's report leaves page memory with it.

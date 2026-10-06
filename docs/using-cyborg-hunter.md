@@ -98,6 +98,8 @@ const { meta } = await rec.autoSaveNow({ chSessionReport: monitor.getSessionRepo
 rec.destroy();
 ```
 
+`rec.resumeSession()` records again after `stopSession()`, in later segments of the same recording; `end_reason` is set again by the next stop. Call `startTrial()` right after it. The first segment after a resume is a full DOM snapshot, and an event that arrives before that segment opens loses its target id. `startTrial()` also takes `extensions`, the segment's vendor data (`{ "<vendor>": … }`, vendor names in lowercase with hyphens, such as `"my-lab"`); any other value, or one holding anything a JSON copy would change (a function, `undefined`, `NaN`, a `Date`, a cycle), is left out whole and logged in `capture_failures` as `segment_extensions`. The one-line setup uses both when the browser shows a page again from its back/forward cache (Back), marking that segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
+
 ### Configuration
 
 | Option | Default | Meaning |
@@ -384,9 +386,11 @@ Requirements and limits:
 - The page has been tested with cohorts of up to 150 participants (a
   0.8 MB replay recording each) on a laptop with 24 GB of memory; it states
   that number on screen and, above it, warns that the build may be slow or
-  fail and suggests the CLI (the build is still allowed). If a report loads
-  but never finishes rendering, the page says so; the zip still holds the
-  full report. Firefox did not always finish at about twice that size
+  fail and suggests the CLI (the build is still allowed). If a check or a
+  build reports no progress for a minute, the page says it is still working
+  and suggests reloading if nothing changes in a few minutes; it never stops
+  the build itself. If a report loads but never finishes rendering, the page
+  says so; the zip still holds the full report. Firefox did not always finish at about twice that size
   (300 participants). Memory is the limit: a smaller machine stalls sooner.
 - `.json.gz` recordings are read, including files made of several gzip
   members. Corrupt files are rejected as the CLI rejects them, with one
@@ -396,7 +400,9 @@ Requirements and limits:
 Replays cannot fetch an experiment's external stylesheets or images from the
 web. Drop the experiment's own CSS and image files alongside the data (a
 folder is fine): they are matched to the URLs the recording references and
-inlined, and the replay card says what matched and what is missing. How the
+inlined, and the replay card says what matched and what is missing. When
+you select a participant without a recording in the report, the replay card
+closes any replay it was showing and says that participant has none. How the
 matching works:
 
 - A file is matched to a URL by path. The file whose whole path is the end
@@ -405,10 +411,24 @@ matching works:
   path segments, down to the filename alone.
 - If two files match equally well, the URL is reported as ambiguous and
   nothing is inlined for it.
+- Case counts first: a file spelled exactly as in the URL wins. Only when no
+  file matches exactly is one differing only in upper/lower case used
+  (`Card_A.png` for `card_a.png`), ranked the same way; if several such
+  files fit equally well, the URL is reported as ambiguous.
 - A matched stylesheet's own `url(...)` and `@import` references are matched
   the same way. The ones you did not supply are made absolute against the
   stylesheet's original URL, so they resolve where they did on the
   experiment's server (and are blocked on this page).
+- Images are found wherever a page shows one: an `<img>`'s `src` and each
+  `srcset` candidate (also a `<picture>` `<source>`'s `srcset`), an SVG
+  `<image>`'s `href` or `xlink:href`, an `<input type="image">`'s `src`, and
+  `url(...)` in stylesheets. A srcset candidate you supply is inlined; the
+  others stay as written.
+- Video and audio are never matched: the replay shows each `<video>` or
+  `<audio>` as a placeholder and never plays it, so the card counts these
+  elements apart from images, once per element ("2 video/audio elements
+  shown as placeholders; replays never play media"). A video's `poster` is
+  an image and is matched like one.
 
 The CLI does the same with `assetsDir`: set it to the experiment's folder
 (its stylesheets and images) and the report inlines what matches. This is

@@ -90,6 +90,9 @@ export const REPLAY_DEFAULTS = {
 };
 
 // States: created → session ⇄ trial → stopped; destroyed is terminal.
+// stopped → session is not in the table: only resumeSession() takes it, so
+// startSession() on a stopped recorder still throws (it would reset the
+// recording's time origin).
 const VALID = {
   created:   ['session', 'destroyed'],
   session:   ['trial', 'stopped', 'destroyed'],
@@ -106,18 +109,31 @@ export function createRecorder(userConfig) {
   var listeners = [];
   var intervals = [];
   // Channels with undelivered state to hand over before the recording closes
-  // (see addPreCloseFlush). Drained once, then emptied, so stop-then-destroy
-  // cannot run one twice.
+  // (see addPreCloseFlush). Run once per close: the flag keeps
+  // stop-then-destroy from running them twice, and resumeSession() clears it,
+  // since a resumed recording closes again and has new state to hand over.
   var preCloseFlushes = [];
+  var preCloseFlushed = false;
   function runPreCloseFlushes() {
-    var pending = preCloseFlushes;
-    preCloseFlushes = [];
-    for (var i = 0; i < pending.length; i++) {
-      try { pending[i](); } catch (e) { recorder.captureFailure('pre_close_flush', e); }
+    if (preCloseFlushed) return;
+    preCloseFlushed = true;
+    for (var i = 0; i < preCloseFlushes.length; i++) {
+      try { preCloseFlushes[i](); } catch (e) { recorder.captureFailure('pre_close_flush', e); }
+    }
+  }
+  // Channels holding records they have not pushed yet (see addBoundaryFlush).
+  // Run only while recording: a flush pushes, and outside the recording window
+  // a push is dropped (or, destroyed, throws).
+  var boundaryFlushes = [];
+  function runBoundaryFlushes() {
+    if (state !== 'session' && state !== 'trial') return;
+    for (var i = 0; i < boundaryFlushes.length; i++) {
+      try { boundaryFlushes[i](); } catch (e) { recorder.captureFailure('boundary_flush', e); }
     }
   }
   var trialCounter = 0;
   var trialStartHooks = [];   // capture modules subscribe (e.g. DOM snapshot)
+  var resumeHooks = [];       // capture modules subscribe (see resumeSession)
   // Running byte estimate for the OPEN trial (reset per trial). Kept off the
   // serialized trial object (a WeakMap) so it never pollutes the wire payload.
   var trialChars = new WeakMap();
@@ -202,6 +218,11 @@ export function createRecorder(userConfig) {
       tStart: (opts && opts.tStart) != null ? opts.tStart : null,
       tDomReady: (opts && opts.tDomReady) != null ? opts.tDomReady : null,
       tEnd: null,
+      // The host's segment-level vendor data (spec §2 SegmentRecording
+      // `extensions`, keyed by vendor), e.g. the one-line setup's
+      // { "cyborg-hunter": { restored_from: "bfcache" } }. The serializer
+      // merges CH's own `implicit` flag into it.
+      extensions: hostExtensions(opts && opts.extensions),
       // Spec §3: a keyframe is a DomNode tree, a continuation is null. Null
       // until the DOM capture's trial-start hook fills it, and on trace tier
       // it stays null for the whole recording, which is the honest statement
@@ -212,7 +233,69 @@ export function createRecorder(userConfig) {
     };
   }
 
+  // A JSON copy of the host's segment extensions, taken at startTrial: the
+  // host can change or reuse its object afterwards without changing the
+  // recording, and anything the file could not carry fails HERE, as a
+  // capture failure, rather than in getRecording(). So does a value the
+  // format forbids (spec §9: an object keyed by lowercase vendor slugs, the
+  // pattern the strict validator checks): a string, an array or a
+  // "Cyborg Hunter" key would make the whole file fail strict validation.
+  // And so does a value JSON would not keep as it is (see jsonValueError):
+  // the whole block is refused rather than written altered.
+  function hostExtensions(ext) {
+    if (ext === undefined || ext === null) return null;
+    try {
+      if (!isPlainObject(ext)) throw new Error('extensions must be an object keyed by vendor');
+      for (var k in ext) {
+        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(k)) throw new Error('vendor key "' + k + '" is not a lowercase slug');
+      }
+      var why = jsonValueError(ext, 'extensions', []);
+      if (why) throw new Error(why);
+      return JSON.parse(JSON.stringify(ext));
+    } catch (e) {
+      recorder.captureFailure('segment_extensions', e);
+      return null;
+    }
+  }
+
+  // An object literal's kind, from any window: its prototype is null or a
+  // root prototype (Object.prototype). A Date, a Map or a class instance is
+  // not one: JSON writes it as something else or as {}.
+  function isPlainObject(v) {
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+    var proto = Object.getPrototypeOf(v);
+    return proto === null || Object.getPrototypeOf(proto) === null;
+  }
+
+  // Why `v` is not a value a JSON copy keeps as it is, or null: JSON drops a
+  // function or undefined (or writes null for it in an array), writes NaN and
+  // Infinity as null, and a Date, a Map or a class instance as something
+  // else. Accepted: null, booleans, strings, finite numbers, arrays and plain
+  // objects of those. `path` names the value in the message; `ancestors`
+  // catches a cycle (a value shared by two branches is fine).
+  function jsonValueError(v, path, ancestors) {
+    if (v === null || typeof v === 'string' || typeof v === 'boolean') return null;
+    if (typeof v === 'number') return isFinite(v) ? null : path + ' is ' + v;
+    if (typeof v !== 'object') return path + ' is ' + (typeof v);
+    if (ancestors.indexOf(v) !== -1) return path + ' is a cycle';
+    var isArray = Array.isArray(v);
+    if (!isArray && !isPlainObject(v)) return path + ' is not a plain object';
+    var keys = isArray ? null : Object.keys(v);
+    var n = isArray ? v.length : keys.length;
+    ancestors.push(v);
+    for (var i = 0; i < n; i++) {
+      var why = isArray ? jsonValueError(v[i], path + '[' + i + ']', ancestors)
+        : jsonValueError(v[keys[i]], path + '.' + keys[i], ancestors);
+      if (why) return why;
+    }
+    ancestors.pop();
+    return null;
+  }
+
+  // Pending records first, so they land in the trial that was open when they
+  // happened.
   function closeTrial() {
+    runBoundaryFlushes();
     currentTrial.tEnd = performance.now();
     session.trials.push(currentTrial);
     currentTrial = null;
@@ -370,6 +453,10 @@ export function createRecorder(userConfig) {
     },
 
     startTrial: function (opts) {
+      // Records pending from before this call go to the trial open now, or,
+      // with none open, into an implicit one closed below: never into the
+      // trial this call opens, whose origin is later than they are.
+      runBoundaryFlushes();
       if (state === 'trial') {
         // Standalone users may forget endTrial(); auto-close so events never
         // bleed across trials, and leave an auditable marker. The marker is a
@@ -397,10 +484,39 @@ export function createRecorder(userConfig) {
       if (currentTrial) closeTrial();
     },
 
+    // A stopped recording records again, into later segments of the SAME
+    // recording. The one-line setup calls this when the browser shows a page
+    // again from the back/forward cache (src/oneliner/replay-loader.js).
+    //
+    // Safe because a stop finalizes almost nothing: the open trial is closed
+    // (so the next startTrial opens a fresh one), `ended_at_perf` is derived
+    // from the buffer at serialize time, and `end_reason` is the one field
+    // stopSession sets, cleared here and set again by the next stop. The
+    // capture modules never detached (only destroy() does that), so they are
+    // still wired; their resume hooks (onResume) bring whatever went stale
+    // while every record was dropped up to date: capture-dom empties the
+    // span and forces a keyframe on the next segment, capture-trace states
+    // the viewport. The caller should startTrial() right after: an event
+    // that arrives first opens an implicit segment and loses its target id.
+    resumeSession: function () {
+      if (state !== 'stopped') {
+        throw new Error('[cyborg-hunter-replay] invalid lifecycle call: resumeSession() from ' + state +
+          '. Only a stopped recording resumes.');
+      }
+      state = 'session';
+      session.endReason = null;
+      preCloseFlushed = false;
+      for (var i = 0; i < resumeHooks.length; i++) {
+        try { resumeHooks[i](); } catch (e) { recorder.captureFailure('resume_hook', e); }
+      }
+    },
+
     stopSession: function (reason) {
       // BEFORE anything closes: a channel holding undelivered state gets to
-      // deliver it into the still-open trial.
+      // deliver it into the still-open trial (or, with none open, into an
+      // implicit one).
       runPreCloseFlushes();
+      runBoundaryFlushes();
       if (state === 'trial') {
         state = 'session';
       }
@@ -514,6 +630,10 @@ export function createRecorder(userConfig) {
       trialStartHooks.push(fn);
     },
 
+    onResume: function (fn) {
+      resumeHooks.push(fn);
+    },
+
     setStylesheets: function (sheets) {
       session.stylesheets = sheets || [];
     },
@@ -553,6 +673,17 @@ export function createRecorder(userConfig) {
       if (typeof fn === 'function') preCloseFlushes.push(fn);
     },
 
+    // Work a capture channel must do at every segment boundary: records it
+    // holds back (capture-trace coalesces inputs, scrolls, touch moves and
+    // viewport changes to the next animation frame, each keeping the time of
+    // its event) are pushed before a trial closes or opens and before the
+    // recording stops or is destroyed. Pushed a frame later they would land
+    // in the next segment, timed before its origin, or be dropped after a
+    // stop. Runs only while recording; a throwing flush is a capture failure.
+    addBoundaryFlush: function (fn) {
+      if (typeof fn === 'function') boundaryFlushes.push(fn);
+    },
+
     // Read-only view for serializer + tests. Trials array includes the open
     // trial so mid-session getRecording() sees everything so far.
     // Deliberately readable AFTER destroy(): the buffer survives teardown
@@ -568,8 +699,10 @@ export function createRecorder(userConfig) {
       if (state === 'destroyed') return;
       // A caller that tears down without stopping still gets its pending
       // batch: the buffer survives destroy() by contract, so the patches are
-      // readable afterwards. A no-op after stopSession, which drained it.
+      // readable afterwards. A no-op after stopSession, which already ran
+      // the flushes for this close (the flag is cleared only by a resume).
       runPreCloseFlushes();
+      runBoundaryFlushes();
       transition('destroyed');
       listeners.forEach(function (l) {
         if (l.options && l.options._isObserver) {

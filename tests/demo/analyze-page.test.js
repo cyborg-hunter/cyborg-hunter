@@ -401,6 +401,66 @@ test('a Load click counts as a choice the load-time selection leaves alone', asy
   assert.equal(t.sent.filter((m) => m.type === 'replay').length, 1);
 });
 
+// The report can select a participant who has no recording: the card must not
+// keep showing the previous participant's replay beside that selection.
+test('a report selection without a recording clears the replay card and says so; Load cannot bring the old replay back', async () => {
+  const t = boot();
+  await toResults(t);          // A has no recording, B has one
+  const frame = document.querySelector('iframe.analyze-report');
+  const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+  post('B');                   // the report's load-time pick
+  const loading = t.page.loadReplay();
+  await tick();
+  t.emit({ type: 'replay-model', participantId: 'B', model: { segments: [] } });
+  await loading;
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 1);
+
+  post('A');                   // a row click on a participant without a recording
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0, 'B\'s replay is gone');
+  assert.equal(role('asset-note').textContent, 'Participant A has no replay recording.');
+  assert.equal(action('load-replay').disabled, true);
+  assert.equal(replaySelect().value, 'A', 'the dropdown shows A\'s own (disabled) entry');
+  const requests = t.sent.filter((m) => m.type === 'replay').length;
+  action('load-replay').click();
+  await t.page.loadReplay();
+  await tick();
+  assert.equal(t.sent.filter((m) => m.type === 'replay').length, requests, 'nothing is requested for A, and B is not loaded again');
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0);
+
+  post('B');                   // back to a participant with a recording
+  assert.equal(replaySelect().value, 'B');
+  assert.equal(role('asset-note').textContent, '1 of 2 stylesheets matched');
+  assert.equal(action('load-replay').disabled, false);
+});
+
+test('a report selection the card does not know also clears it', async () => {
+  const t = boot();
+  await toResults(t);
+  const loading = t.page.loadReplay();
+  await tick();
+  t.emit({ type: 'replay-model', participantId: 'B', model: { segments: [] } });
+  await loading;
+  t.page.selectParticipant('Z');
+  assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0);
+  assert.equal(role('asset-note').textContent, 'Participant Z has no replay recording.');
+  assert.equal(replaySelect().selectedIndex, -1);
+  assert.equal(action('load-replay').disabled, true);
+});
+
+test('in a run without any recording, a report selection keeps the run-level note', async () => {
+  const t = boot();
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, participants: [{ participantId: 'A', hasReplay: false }] });
+  await tick();
+  const frame = document.querySelector('iframe.analyze-report');
+  frame.dispatchEvent(new win.Event('load'));
+  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+  assert.equal(role('asset-note').textContent, 'No replay recordings in this run.');
+  assert.equal(action('load-replay').disabled, true);
+});
+
 test('after a worker failure the page retries on a fresh worker from the factory, and the retry completes', async () => {
   document.head.innerHTML = '';
   document.body.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script type="module"'));
@@ -506,6 +566,16 @@ test('a cohort at the tested size shows no warning, and a new check clears an ea
   assert.equal(role('size-warning').hidden, true, 'hidden again while the next check is read');
 });
 
+// A clock the tests advance by hand: nothing here depends on real time.
+// delays() lists the delay asked for by each timer still live.
+function fakeTimers() {
+  const live = new Map();
+  let next = 1;
+  return { set: (fn, ms) => { live.set(next, { fn, ms }); return next++; }, clear: (id) => { live.delete(id); },
+    count: () => live.size, delays: () => [...live.values()].map((x) => x.ms),
+    fire: () => { const xs = [...live.values()]; live.clear(); xs.forEach((x) => x.fn()); } };
+}
+
 // The report posts a selection when its script runs. Without one, a while
 // after the frame loads, the page says the report did not render.
 // happy-dom (page loading disabled) fires `error` on a frame the moment its
@@ -525,13 +595,6 @@ describe('the report render watchdog', () => {
   });
   after(() => { document.createElement = createElement; });
 
-  // A clock the tests advance by hand: nothing here depends on real time.
-  function fakeTimers() {
-    const live = new Map();
-    let next = 1;
-    return { set: (fn) => { live.set(next, fn); return next++; }, clear: (id) => { live.delete(id); },
-      count: () => live.size, fire: () => { const fns = [...live.values()]; live.clear(); fns.forEach((f) => f()); } };
-  }
   async function toLoadedReport(t, done) {
     await toCheck(t);
     action('run').click(); await tick();
@@ -606,7 +669,7 @@ describe('the report render watchdog', () => {
     // A new run started while the old one is armed: reset is the only way back
     // to the check step, so drive run() directly.
     t.page.run();                                        // waits on the worker, which this test never answers
-    assert.equal(clock.count(), 0, 'a new run');
+    assert.deepEqual(clock.delays(), [60000], 'a new run: the watchdog is gone, only the run\'s stall hint timer is live');
   });
 
   test('a report with no participants arms no watchdog: it has nothing to select', async () => {
@@ -658,5 +721,117 @@ describe('the report render watchdog', () => {
     selectFrom(frame2);
     assert.equal(role('error').hidden, false);
     assert.match(role('error').textContent, /bad recording/);
+  });
+});
+
+// A run that goes quiet for a minute gets a hint that it is still going;
+// nothing is cancelled or restarted.
+describe('the still-working hint', () => {
+  const HINT = 'Still working — this is taking longer than usual. If nothing changes in a few minutes, reload the page.';
+  const hint = () => role('stall-hint');
+  const shown = () => !hint().hidden;
+  function bootWatched() {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock });
+    t.terminated = 0;
+    t.worker.terminate = () => { t.terminated++; };
+    return { t, clock };
+  }
+  // Fires only the stall timer (the other clock in play is the render watchdog).
+  const fireStall = (clock) => { assert.deepEqual(clock.delays(), [60000]); clock.fire(); };
+
+  test('the hint is in the markup, hidden, with its text, inside a status live region', () => {
+    boot();
+    assert.equal(hint().hidden, true);
+    assert.equal(hint().textContent, HINT);
+    assert.ok(hint().closest('[role="status"]'), 'announced when it appears');
+  });
+
+  test('a run with no progress for a minute shows the hint; the next progress hides it and restarts the wait', async () => {
+    const { t, clock } = bootWatched();
+    await toCheck(t);
+    assert.equal(clock.count(), 0, 'nothing is armed between the check and the run');
+    action('run').click(); await tick();
+    assert.deepEqual(clock.delays(), [60000]);
+    assert.equal(shown(), false, 'not before the minute is up');
+    t.emit({ type: 'progress', phase: 'ingest', done: 1, total: 3 });
+    assert.deepEqual(clock.delays(), [60000], 'progress restarts the wait');
+    fireStall(clock);
+    assert.equal(shown(), true);
+    assert.equal(hint().textContent, HINT);
+    t.emit({ type: 'progress', phase: 'report', done: 0, total: 0, label: 'index.html' });
+    assert.equal(shown(), false);
+    fireStall(clock);
+    assert.equal(shown(), true, 'a later stall shows it again');
+  });
+
+  test('a stalled check shows the hint too, and its result hides it', async () => {
+    const { t, clock } = bootWatched();
+    action('sample').click(); await tick();
+    fireStall(clock);
+    assert.equal(shown(), true);
+    t.emit(CHECKED); await tick();
+    assert.equal(shown(), false);
+    assert.equal(clock.count(), 0);
+  });
+
+  test('the hint never cancels anything: the run goes on and finishes normally', async () => {
+    const { t, clock } = bootWatched();
+    await toCheck(t);
+    action('run').click(); await tick();
+    const sent = t.sent.length;
+    fireStall(clock);
+    assert.equal(shown(), true);
+    assert.equal(t.terminated, 0, 'the worker is not terminated');
+    assert.equal(t.sent.length, sent, 'nothing is sent to the worker');
+    assert.deepEqual(visibleStep(), ['run']);
+    assert.equal(action('run').disabled, true, 'the run is still in flight');
+    t.emit({ type: 'zip', chunk: new Uint8Array([1]) });
+    t.emit(DONE); await tick();
+    assert.deepEqual(visibleStep(), ['results']);
+    assert.equal(shown(), false, 'the result hides it');
+    assert.equal(clock.count(), 0);
+  });
+
+  test('an error hides the hint; a new run starts with it hidden', async () => {
+    const { t, clock } = bootWatched();
+    await toCheck(t);
+    action('run').click(); await tick();
+    fireStall(clock);
+    t.emit({ type: 'error', phase: 'ingest', message: 'No participant data found in the dropped files.' });
+    await tick();
+    assert.equal(shown(), false);
+    assert.equal(clock.count(), 0);
+    action('run').click(); await tick();
+    assert.equal(shown(), false);
+    assert.deepEqual(clock.delays(), [60000], 'the new run waits afresh');
+  });
+
+  test('a worker failure hides the hint', async () => {
+    const { t, clock } = bootWatched();
+    await toCheck(t);
+    action('run').click(); await tick();
+    fireStall(clock);
+    t.worker.onerror({ message: 'out of memory' });
+    await tick();
+    assert.equal(shown(), false);
+    assert.equal(clock.count(), 0);
+  });
+
+  test('start over hides the hint', async () => {
+    const { t, clock } = bootWatched();
+    await toResults(t);
+    hint().hidden = false;           // as if a late timer had shown it
+    document.querySelectorAll('[data-action="reset"]')[1].click();
+    assert.equal(shown(), false);
+    assert.equal(clock.count(), 0);
+  });
+
+  test('the wait is configurable', async () => {
+    const clock = fakeTimers();
+    const t = boot({ timers: clock, stallHintMs: 5 });
+    await toCheck(t);
+    action('run').click(); await tick();
+    assert.deepEqual(clock.delays(), [5]);
   });
 });

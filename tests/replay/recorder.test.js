@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { createRecorder } from '../../src/replay/recorder.js';
 import { markRedacted } from '../../src/replay/redaction.js';
 import { serialize } from '../../src/replay/serializer.js';
+import { validateStrict } from '@cyborg-hunter/sessionrecording-conformance/validator';
 
 // Minimal window stub: startSession reads viewport geometry if available.
 beforeEach(() => {
@@ -274,6 +275,264 @@ describe('recorder lifecycle', () => {
     assert.deepStrictEqual(adds.sort(), removes.sort(),
       'every add must have a matching remove');
     assert.throws(() => rec.pushRecord({ type: 'mouse.move', x: 0, y: 0 }), /destroyed/);
+  });
+});
+
+// A stopped recording that resumes (the one-line setup does this when the
+// browser shows a page again from the back/forward cache): one recording,
+// whose later segments follow the stop. Nothing is finalized at stop except
+// end_reason; ended_at_perf is derived at serialize time.
+describe('recorder: resumeSession', () => {
+  it('only a stopped recording resumes', () => {
+    const created = freshRecorder();
+    assert.throws(() => created.resumeSession(), /resumeSession/);
+    const live = freshRecorder();
+    live.startSession();
+    assert.throws(() => live.resumeSession(), /resumeSession/);
+    live.startTrial({ trialId: 't1' });
+    assert.throws(() => live.resumeSession(), /resumeSession/);
+    live.stopSession('finished');
+    live.destroy();
+    assert.throws(() => live.resumeSession(), /resumeSession/);
+  });
+
+  it('startSession after a stop still throws (resume is the only way back)', () => {
+    const rec = freshRecorder();
+    rec.startSession();
+    rec.stopSession('finished');
+    assert.throws(() => rec.startSession(), /invalid lifecycle call/);
+  });
+
+  it('records again after a resume, in later segments of the same recording', async () => {
+    const rec = freshRecorder();
+    rec.startSession();
+    const s0 = rec.getState().sessionStart;
+    rec.startTrial({ trialId: 't1' });
+    rec.pushRecord({ type: 'mouse.move', x: 1, y: 1 });
+    rec.stopSession('finished');
+    rec.pushRecord({ type: 'mouse.move', x: 2, y: 2 });   // stopped: dropped
+    const firstEnd = serialize(rec.getState(), {}).ended_at_perf;
+    await new Promise((r) => setTimeout(r, 5));
+
+    rec.resumeSession();
+    assert.strictEqual(rec.getState().state, 'session');
+    assert.strictEqual(rec.getState().endReason, null, 'no longer ended');
+    assert.strictEqual(serialize(rec.getState(), {}).end_reason, 'aborted',
+      'taken while resumed, it reads like any recording that was not stopped');
+    rec.startTrial({ trialId: 't2', extensions: { 'cyborg-hunter': { restored_from: 'bfcache' } } });
+    rec.pushRecord({ type: 'mouse.move', x: 3, y: 3 });
+    rec.stopSession('finished');
+
+    const s = rec.getState();
+    assert.strictEqual(s.sessionStart, s0, 'the same recording');
+    assert.deepStrictEqual(s.trials.map((t) => t.trialId), ['t1', 't2']);
+    assert.deepStrictEqual(s.trials.map((t) => t.events.length), [1, 1]);
+    assert.ok(s.trials[1].tLoad >= s.trials[0].tEnd, 'segments do not overlap');
+    const wire = serialize(s, {});
+    assert.strictEqual(wire.end_reason, 'finished');
+    assert.ok(wire.ended_at_perf > firstEnd, 'ended_at_perf moves to the second stop');
+    assert.deepStrictEqual(wire.segments[1].extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
+    assert.strictEqual(wire.segments[0].extensions, null);
+  });
+
+  it('runs the pre-close flushes at every stop, and destroy after a stop does not run them again', () => {
+    const rec = freshRecorder();
+    let runs = 0;
+    rec.startSession();
+    rec.addPreCloseFlush(() => { runs++; });
+    rec.stopSession('finished');
+    assert.strictEqual(runs, 1);
+    rec.resumeSession();
+    rec.stopSession('finished');
+    assert.strictEqual(runs, 2, 'the second stop flushes too');
+    rec.destroy();
+    assert.strictEqual(runs, 2, 'stop then destroy: once');
+  });
+
+  it('startTrial keeps a copy of the host\'s extensions; extensions that are not JSON are a capture failure', () => {
+    const rec = freshRecorder();
+    rec.startSession();
+    const ext = { 'cyborg-hunter': { restored_from: 'bfcache' } };
+    rec.startTrial({ trialId: 't1', extensions: ext });
+    ext['cyborg-hunter'].restored_from = 'changed later';
+    rec.endTrial();
+    const cyclic = { a: {} };
+    cyclic.a.self = cyclic;
+    assert.doesNotThrow(() => rec.startTrial({ trialId: 't2', extensions: cyclic }));
+    rec.stopSession('finished');
+    const wire = serialize(rec.getState(), {});
+    assert.deepStrictEqual(wire.segments[0].extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
+    assert.strictEqual(wire.segments[1].extensions, null);
+    assert.deepStrictEqual(rec.getState().captureFailures.map((f) => f.channel), ['segment_extensions']);
+  });
+
+  it('startTrial writes only extensions the format allows: an object keyed by lowercase vendor slugs', () => {
+    // Anything else would make the file fail strict validation (spec §9), so
+    // it is a capture failure and the segment carries null, like a cycle.
+    const rejected = {
+      string: 'x',
+      array: [1],
+      number: 5,
+      false: false,
+      'vendor key not a slug': { 'Cyborg Hunter': 1 },
+      'toJSON giving a string': { toJSON() { return 'x'; } },
+      'a Date': new Date(0),
+    };
+    for (const [name, ext] of Object.entries(rejected)) {
+      const rec = freshRecorder();
+      rec.startSession();
+      assert.doesNotThrow(() => rec.startTrial({ trialId: 't1', extensions: ext }), name);
+      rec.stopSession('finished');
+      const wire = serialize(rec.getState(), {});
+      assert.strictEqual(wire.segments[0].extensions, null, name);
+      assert.deepStrictEqual(rec.getState().captureFailures.map((f) => f.channel), ['segment_extensions'], name);
+      assert.deepStrictEqual(validateStrict(wire).errors, [], name);
+    }
+    const accepted = [
+      { 'cyborg-hunter': { restored_from: 'bfcache' } },
+      { 'cyborg-hunter': 5, lab2: [1, 'a'] },
+      {},
+    ];
+    for (const ext of accepted) {
+      const rec = freshRecorder();
+      rec.startSession();
+      rec.startTrial({ trialId: 't1', extensions: ext });
+      rec.stopSession('finished');
+      const wire = serialize(rec.getState(), {});
+      assert.deepStrictEqual(wire.segments[0].extensions, ext);
+      assert.deepStrictEqual(rec.getState().captureFailures, []);
+      assert.deepStrictEqual(validateStrict(wire).errors, []);
+    }
+  });
+
+  it('startTrial refuses the whole block when a nested value is not one JSON would keep as it is', () => {
+    // A JSON copy would drop a function or undefined, write NaN and Infinity
+    // as null and a Date as a string: the file would say what the host did
+    // not. The block is refused and logged, like a cycle.
+    const nested = {
+      'a function': { lab: { cb() {} } },
+      'undefined': { lab: { x: undefined } },
+      'NaN': { lab: { n: NaN } },
+      'Infinity': { lab: [1, -Infinity] },
+      'a Date': { lab: { when: new Date(0) } },
+      'a Map': { lab: new Map() },
+      'a class instance': { lab: new (class Point { constructor() { this.x = 1; } })() },
+      'a sparse array': { lab: [1, , 3] },   // eslint-disable-line no-sparse-arrays
+      'a symbol': { lab: Symbol('s') },
+      'a bigint': { lab: 1n },
+    };
+    for (const [name, ext] of Object.entries(nested)) {
+      const rec = freshRecorder();
+      rec.startSession();
+      assert.doesNotThrow(() => rec.startTrial({ trialId: 't1', extensions: ext }), name);
+      rec.stopSession('finished');
+      const wire = serialize(rec.getState(), {});
+      assert.strictEqual(wire.segments[0].extensions, null, name);
+      const f = rec.getState().captureFailures;
+      assert.deepStrictEqual(f.map((x) => x.channel), ['segment_extensions'], name);
+      assert.match(f[0].message, /lab/, name + ': the message names where');
+    }
+    // Shared (not cyclic) references and an object without a prototype are fine.
+    const shared = { k: 1 };
+    const bare = Object.assign(Object.create(null), { b: true });
+    const rec = freshRecorder();
+    rec.startSession();
+    rec.startTrial({ trialId: 't1', extensions: { lab: { one: shared, two: shared, bare } } });
+    rec.stopSession('finished');
+    assert.deepStrictEqual(rec.getState().captureFailures, []);
+    assert.deepStrictEqual(serialize(rec.getState(), {}).segments[0].extensions,
+      { lab: { one: { k: 1 }, two: { k: 1 }, bare: { b: true } } });
+  });
+
+  it('fires onResume hooks; a throwing hook is a capture failure, not a throw', () => {
+    const rec = freshRecorder();
+    const seen = [];
+    rec.onResume(() => seen.push('a'));
+    rec.onResume(() => { throw new Error('hook broke'); });
+    rec.onResume(() => seen.push('c'));
+    rec.startSession();
+    rec.stopSession('finished');
+    assert.deepStrictEqual(seen, [], 'not at start or stop');
+    rec.resumeSession();
+    assert.deepStrictEqual(seen, ['a', 'c']);
+    const f = rec.getState().captureFailures;
+    assert.strictEqual(f.length, 1);
+    assert.strictEqual(f[0].channel, 'resume_hook');
+    assert.match(f[0].message, /hook broke/);
+  });
+});
+
+// A capture channel holding records it has not pushed yet (capture-trace's
+// frame-coalesced work) hands them over at every segment boundary, into the
+// segment open while they happened.
+describe('recorder: boundary flushes', () => {
+  function withFlush() {
+    const rec = freshRecorder();
+    const pending = [];
+    const calls = [];
+    rec.addBoundaryFlush(() => {
+      calls.push(rec.getState().state);
+      while (pending.length) rec.pushRecord({ type: 'focus' }, pending.shift());
+    });
+    rec.startSession();
+    return { rec, pending, calls };
+  }
+  const shape = (rec) => rec.getState().trials.map((t) => t.trialId + ':' + t.events.length);
+
+  it('runs before a trial closes, so its pending records land in that trial', () => {
+    const { rec, pending } = withFlush();
+    rec.startTrial({ trialId: 'a' });
+    pending.push(1);
+    rec.endTrial();
+    rec.startTrial({ trialId: 'b' });
+    pending.push(2);
+    rec.startTrial({ trialId: 'c' });   // auto-closes b
+    pending.push(3);
+    rec.stopSession('finished');
+    assert.deepStrictEqual(shape(rec), ['a:1', 'b:1', 'c:1']);
+  });
+
+  it('runs before a trial opens with none open: the record gets a segment of its own', () => {
+    const { rec, pending } = withFlush();
+    rec.startTrial({ trialId: 'a' });
+    rec.endTrial();
+    pending.push(1);
+    rec.startTrial({ trialId: 'b' });
+    assert.deepStrictEqual(shape(rec), ['a:0', '__session__:1', 'b:0']);
+  });
+
+  it('runs at a stop or a destroy with no trial open', () => {
+    const { rec, pending } = withFlush();
+    pending.push(1);
+    rec.stopSession('finished');
+    assert.deepStrictEqual(shape(rec), ['__session__:1']);
+    const second = withFlush();
+    second.pending.push(1);
+    second.rec.destroy();
+    assert.deepStrictEqual(shape(second.rec), ['__session__:1']);
+  });
+
+  it('does not run on a call the lifecycle refuses, nor once stopped', () => {
+    const { rec, calls } = withFlush();
+    rec.stopSession('finished');
+    const before = calls.length;
+    assert.throws(() => rec.startTrial({ trialId: 'x' }));
+    assert.throws(() => rec.endTrial());
+    rec.destroy();
+    assert.strictEqual(calls.length, before);
+    assert.ok(calls.every((s) => s === 'session' || s === 'trial'));
+  });
+
+  it('a throwing flush is a capture failure and the boundary still happens', () => {
+    const rec = freshRecorder();
+    rec.addBoundaryFlush(() => { throw new Error('flush broke'); });
+    rec.startSession();
+    rec.startTrial({ trialId: 'a' });
+    assert.doesNotThrow(() => rec.endTrial());
+    const f = rec.getState().captureFailures;
+    assert.ok(f.length >= 1);
+    assert.ok(f.every((x) => x.channel === 'boundary_flush' && /flush broke/.test(x.message)));
+    assert.strictEqual(rec.getState().state, 'session');
   });
 });
 

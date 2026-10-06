@@ -133,14 +133,15 @@ export function injectExtensions(timeline, entries, seen) {
     if (node.data && node.data.trial_type_label === ENTRY_TRIAL_LABEL) result.entryTrialFound = true;
 
     list = list || [];
-    // A researcher's own cyborg-hunter entry written without params (the
-    // manual docs' per-trial loop) would reach on_start and on_load as
-    // `undefined` on every trial, so a late load callback could pass for this
-    // trial's own. Give it a params object; params a researcher wrote are
+    // A researcher's own cyborg-hunter or cyborg-hunter-replay entry written
+    // without params (the manual docs' per-trial loop) would reach on_start
+    // and on_load as `undefined` on every trial, so a late load callback
+    // could pass for this trial's own (both extensions tie the two by the
+    // params object). Give it a params object; params a researcher wrote are
     // never touched. A frozen entry stays as it is (the write would throw and
     // leave the rest of the timeline unmonitored).
     list.forEach(function (e) {
-      if (!e || !isChType(e.type) || e.params != null) return;
+      if (!e || !(isChType(e.type) || nameOf(e) === REPLAY_NAME) || e.params != null) return;
       try { e.params = {}; } catch (err) { /* frozen or sealed: left params-less */ }
     });
     var present = list.map(nameOf);

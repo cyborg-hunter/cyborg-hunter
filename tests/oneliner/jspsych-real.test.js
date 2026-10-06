@@ -139,6 +139,63 @@ describe('ch.js on real jsPsych: a synchronous trial before a named trial', () =
     });
   }
 
+  // The call-function's own row is cut from the span opened at the previous
+  // trial's on_finish (`gap-<index of that trial>`). A trialId/phase the
+  // researcher set on the call-function names that row instead; the cut, the
+  // rotations and the next trial stay as they were.
+  for (const [label, gap] of [['next trial starts synchronously', undefined], ['next trial starts after a post_trial_gap', 20]]) {
+    it(`a labelled call-function row carries its trialId and phase; an unlabelled one stays gap-<n> (${label})`, async () => {
+      const ctx = bootCh();
+      const rotated = [];
+      const rotate = ctx.segmenter.rotate;
+      ctx.segmenter.rotate = (o) => { rotated.push(o.trialId + '|' + o.phase); return rotate(o); };
+      const jsPsych = win.initJsPsych({});
+      const labelled = Object.assign(callFunction(), { extensions: named({ trialId: 'save-step', phase: 'setup' }) });
+      const plain = callFunction();
+      if (gap !== undefined) { labelled.post_trial_gap = gap; plain.post_trial_gap = gap; }
+      const rows = await runTimeline(jsPsych, [
+        { type: Timer, extensions: named({ trialId: 'A-named', phase: 'pA' }) },
+        labelled,
+        { type: Timer, extensions: named({ trialId: 'T-named', phase: 'pT' }) },
+        plain,
+        { type: Timer, extensions: named({ trialId: 'U-named', phase: 'pU' }) }
+      ]);
+      assert.equal(rows.length, 5);
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.equal(rows[1].integrity.trialId, 'save-step');
+      assert.equal(rows[1].integrity.phase, 'setup');
+      assert.equal(rows[1].integritySegment.trialId, 'save-step');
+      // Unlabelled: the span opened at trial 2's on_finish.
+      assert.equal(rows[3].integrity.trialId, 'gap-2');
+      assert.equal(rows[3].integrity.phase, 'default');
+      assert.equal(rows[3].integritySegment.trialId, 'gap-2');
+      for (const [i, id, phase] of [[0, 'A-named', 'pA'], [2, 'T-named', 'pT'], [4, 'U-named', 'pU']]) {
+        assert.equal(rows[i].integrity.trialId, id);
+        assert.equal(rows[i].integrity.phase, phase);
+        assert.equal(rows[i].integritySegment.trialId, id);
+      }
+      assert.deepStrictEqual(rows.map((r) => r.integritySegment.segmentIndex), [0, 1, 2, 3, 4]);
+      assert.equal(rows[4].integritySegmentFinal.segmentIndex, 5);
+      assert.deepStrictEqual(rotated, ['A-named|pA', 'T-named|pT', 'U-named|pU']);
+      assert.deepStrictEqual(errors, []);
+    });
+
+    it(`a call-function labelled with phase only keeps gap-<n> as its trialId (${label})`, async () => {
+      bootCh();
+      const jsPsych = win.initJsPsych({});
+      const cf = Object.assign(callFunction(), { extensions: named({ phase: 'setup' }) });
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const rows = await runTimeline(jsPsych, [{ type: Timer }, cf, { type: Timer }]);
+      assert.equal(rows.length, 3);
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.equal(rows[1].integrity.trialId, 'gap-0');
+      assert.equal(rows[1].integrity.phase, 'setup');
+      assert.equal(rows[1].integritySegment.trialId, 'gap-0');
+      assert.equal(rows[2].integrity.trialId, 'trial-2');
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
   it('a call-function trial last in the timeline does not touch the finished session', async () => {
     bootCh();
     const jsPsych = win.initJsPsych({});
@@ -198,6 +255,30 @@ describe('ch.js on real jsPsych: a synchronous trial before a promise-returning 
       assert.equal(t.integrity.decoy.source, 'skipped');
       assert.equal(t.integritySegment.trialId, 'T-named');
       for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      assert.deepStrictEqual(rotated, ['A-named|pA', 'T-named|pT']);
+      assert.deepStrictEqual(errors, []);
+    });
+
+    it(`a labelled call-function keeps its label and the promise trial after it keeps its own (${label})`, async () => {
+      const ctx = bootCh();
+      const rotated = [];
+      const rotate = ctx.segmenter.rotate;
+      ctx.segmenter.rotate = (o) => { rotated.push(o.trialId + '|' + o.phase); return rotate(o); };
+      const jsPsych = win.initJsPsych({});
+      const cf = Object.assign(callFunction(), { extensions: named({ trialId: 'save-step', phase: 'setup' }) });
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const rows = await runTimeline(jsPsych, [
+        { type: Timer, extensions: named({ trialId: 'A-named', phase: 'pA' }) },
+        cf,
+        { type: PromiseLoad, extensions: named({ trialId: 'T-named', phase: 'pT' }) }
+      ]);
+      assert.equal(rows.length, 3);
+      for (const r of rows) assert.ok(!('cyborgHunterError' in r), JSON.stringify(r.cyborgHunterError));
+      for (const [i, id, phase] of [[0, 'A-named', 'pA'], [1, 'save-step', 'setup'], [2, 'T-named', 'pT']]) {
+        assert.equal(rows[i].integrity.trialId, id);
+        assert.equal(rows[i].integrity.phase, phase);
+        assert.equal(rows[i].integritySegment.trialId, id);
+      }
       assert.deepStrictEqual(rotated, ['A-named|pA', 'T-named|pT']);
       assert.deepStrictEqual(errors, []);
     });
@@ -500,6 +581,71 @@ describe('ch.js on real jsPsych: two instances', () => {
   });
 });
 
+// The manual extension (src/jspsych/extension-cyborg-hunter.js) with no ch.js
+// on the page, every trial opted in by the forEach of
+// docs/advanced-integration.md step 4 (entries without params). A
+// call-function step's late load callback (see the top of this file) must not
+// start a monitor trial: it threw "cannot transition from 'trial'" into
+// jsPsych, and after a post_trial_gap the next trial's row took the step's
+// label.
+describe('manual extension on real jsPsych: a synchronous step', () => {
+  let core;
+  before(async () => { core = await import('../../src/core/index.js'); });
+
+  for (const [label, gap, Next] of [
+    ['next trial starts synchronously', undefined, Timer],
+    ['next trial starts after a post_trial_gap', 20, Timer],
+    ['the next trial returns a Promise', undefined, PromiseLoad],
+  ]) {
+    it(`throws nothing into jsPsych and the next trial keeps its own label (${label})`, async () => {
+      win.CyborgHunter = core;
+      const jsPsych = win.initJsPsych({ extensions: [{ type: CyborgHunterExtension, params: { participantId: 'P-MAN' } }] });
+      current = jsPsych.extensions['cyborg-hunter'];   // afterEach destroys its monitor
+      const cf = callFunction();
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const timeline = [{ type: Timer }, cf, { type: Next }, { type: Timer }];
+      timeline.forEach((t) => { t.extensions = (t.extensions || []).concat([{ type: CyborgHunterExtension }]); });
+      const rows = await runTimeline(jsPsych, timeline);
+      assert.equal(rows.length, 4);
+      assert.deepStrictEqual(rows.map((r) => (r.integrity ? r.integrity.trialId : null)), ['trial-0', null, 'trial-2', 'trial-3']);
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
+  // With a params object per trial (jsPsych copies each trial's parameters
+  // before it runs), a promise trial's monitor trial starts at its own load.
+  it('per-trial entries with params: the promise trial starts at its own on_load', async () => {
+    win.CyborgHunter = core;
+    const jsPsych = win.initJsPsych({ extensions: [{ type: CyborgHunterExtension, params: { participantId: 'P-MAN' } }] });
+    current = jsPsych.extensions['cyborg-hunter'];
+    const timeline = [{ type: Timer }, callFunction(), { type: PromiseLoad }];
+    timeline.forEach((t) => { t.extensions = [{ type: CyborgHunterExtension, params: {} }]; });
+    beforeLoad.length = 0;
+    const rows = await runTimeline(jsPsych, timeline);
+    assert.equal(rows[2].integrity.trialId, 'trial-2');
+    assert.ok(rows[2].integrity.trialStart_perfNow >= beforeLoad[0],
+      'anchor ' + rows[2].integrity.trialStart_perfNow + ' precedes the plugin\'s on_load at ' + beforeLoad[0]);
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
+// The response click ends the trial from the plugin's own listener, before
+// the click reaches the document: it is recorded on the way down, so it is in
+// the row of the trial it ends rather than in the gap span after it.
+describe('ch.js on real jsPsych: the response click', () => {
+  it('a button response is in the mouse track of the trial it ends', async () => {
+    bootCh();
+    const jsPsych = win.initJsPsych({});
+    const done = runTimeline(jsPsych, [{ type: win.jsPsychHtmlButtonResponse, stimulus: '<p>q</p>', choices: ['Yes'] }]);
+    await new Promise((r) => setTimeout(r, 20));
+    win.document.querySelector('.jspsych-btn').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    const rows = await done;
+    assert.equal(rows.length, 1);
+    assert.deepStrictEqual(rows[0].integrity.mouseTrack.filter((m) => m.type === 'click').length, 1);
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
 // data-replay on real jsPsych. initJsPsych runs before cyborg-hunter-replay.js
 // could have loaded, so ch.js lists a proxy whose async initialize() loads it
 // and delegates; run() waits for it (loadExtensions awaits every
@@ -532,6 +678,68 @@ describe('ch.js on real jsPsych: lazy replay', () => {
     assert.equal(recording.host.name, 'jspsych');
     assert.equal(jsPsych.extensions['cyborg-hunter-replay'].inner.api, null, 'the recorder was destroyed');
     assert.deepStrictEqual(errors, []);
+  });
+
+  // A call-function's load callback comes late (see the top of this file):
+  // it must not open a replay segment for a trial that ended, nor for the
+  // next trial before that trial's own on_load.
+  for (const [label, gap] of [['next trial starts synchronously', undefined], ['next trial starts after a post_trial_gap', 20]]) {
+    it(`a call-function's late load opens no replay segment (${label})`, async () => {
+      bootCh({ replay: '' });
+      let recording = null;
+      const jsPsych = win.initJsPsych({ on_finish: () => { recording = win.CyborgHunter.replay(); } });
+      const cf = callFunction();
+      if (gap !== undefined) cf.post_trial_gap = gap;
+      const rows = await runTimeline(jsPsych, [{ type: Timer }, cf, { type: PromiseLoad }]);
+      assert.equal(rows.length, 3);
+      assert.deepStrictEqual(recording.segments.map((s) => s.label).filter(Boolean), ['trial-0', 'trial-2']);
+      const failures = recording.extensions['cyborg-hunter'].capture_failures || [];
+      assert.deepStrictEqual(failures.filter((f) => f.channel === 'lifecycle'), [], 'no trial was auto-closed');
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
+  // A half-migrated page: the manual docs' per-trial replay entry, written
+  // without params, is still there. jsPsych would hand on_start and on_load
+  // `undefined` for every trial, and the late load would pass for the
+  // promise trial's own.
+  it('a researcher\'s params-less per-trial replay entry: the promise trial\'s segment starts at its own on_load', async () => {
+    bootCh({ replay: '' });
+    let recording = null;
+    const jsPsych = win.initJsPsych({ on_finish: () => { recording = win.CyborgHunter.replay(); } });
+    const tl = [{ type: Timer }, callFunction(), { type: PromiseLoad }];
+    tl.forEach((t) => { t.extensions = [{ type: win.jsPsychCyborgHunterReplay }]; });
+    beforeLoad.length = 0;
+    await runTimeline(jsPsych, tl);
+    const seg = recording.segments.find((s) => s.label === 'trial-2');
+    assert.ok(seg, JSON.stringify(recording.segments.map((s) => s.label)));
+    // The file states t_load relative to the session start, rounded to 0.1 ms
+    // (serializer.js wireT), so the start read back can sit up to 0.05 ms
+    // below the real one. The late load this guards against came milliseconds
+    // early.
+    const startedAt = recording.recording_started_at_perf + seg.t_load;
+    const WIRE_ROUNDING_MS = 0.05;
+    assert.ok(startedAt + WIRE_ROUNDING_MS >= beforeLoad[0], 'segment starts at ' + startedAt + ', before the plugin\'s on_load at ' + beforeLoad[0]);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('manual wiring: a labelled call-function\'s late load does not start the next trial\'s segment under its label', async () => {
+    const replayEntry = (params) => [{ type: win.jsPsychCyborgHunterReplay, params }];
+    const jsPsych = win.initJsPsych({
+      extensions: [{ type: win.jsPsychCyborgHunterReplay, params: { participantId: 'P-M', tier: 'trace', autoSave: { mode: 'none' } } }],
+    });
+    const rows = await runTimeline(jsPsych, [
+      { type: Timer, extensions: replayEntry({ trialId: 'first' }) },
+      Object.assign(callFunction(), { extensions: replayEntry({ trialId: 'save-step' }) }),
+      { type: PromiseLoad, extensions: replayEntry({ trialId: 'audio' }) },
+    ]);
+    assert.equal(rows.length, 3);
+    const ext = jsPsych.extensions['cyborg-hunter-replay'];
+    await ext.finalize();
+    const recording = ext.getLastRecording();
+    assert.deepStrictEqual(recording.segments.map((s) => s.label).filter(Boolean), ['first', 'audio']);
+    const failures = recording.extensions['cyborg-hunter'].capture_failures || [];
+    assert.deepStrictEqual(failures.filter((f) => f.channel === 'lifecycle'), []);
   });
 
   it('a replay script that fails to load is reported; the experiment runs without replay', async () => {

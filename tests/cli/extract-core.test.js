@@ -8,6 +8,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { extractIntegrityData, ruleChronologicalCompare } from '../../src/cli/extract-core.js';
+import { parseCsvToRaw } from '../../src/cli/ingest-core.js';
 
 describe('extractIntegrityData (pure core)', () => {
   it('extracts a Shape-1 raw object into { participantId, trials, warnings }', () => {
@@ -52,5 +53,36 @@ describe('ruleChronologicalCompare (pure core)', () => {
     trials.sort(ruleChronologicalCompare);
     assert.deepStrictEqual(trials.map(t => t.phase),
       ['gallery', 'post_gallery_query', 'classification', 'end_requery']);
+  });
+});
+
+// A participant id is a string from the extractor on: the report names its
+// files after it and --participant compares strings. 0 and false are ids
+// (a CSV's dynamic typing turns a numeric subject id into a number); a
+// missing, null or empty id is not.
+describe('participant ids that are not strings', () => {
+  const integ = (id) => ({ trialId: id, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] });
+
+  for (const [id, key] of [[42, '42'], [0, '0'], [false, 'false']]) {
+    it('Shape 1 with participantId ' + JSON.stringify(id) + ' is keyed "' + key + '"', () => {
+      const r = extractIntegrityData({ participantId: id, trials: [{ integrity: integ('t1') }] }, {});
+      assert.strictEqual(r.participantId, key);
+      assert.ok(!r.warnings.some((w) => w.includes('participantId unresolved')), r.warnings.join(' | '));
+    });
+  }
+  for (const id of [undefined, null, '']) {
+    it('Shape 1 with participantId ' + JSON.stringify(id) + ' stays "unknown", with the warning', () => {
+      const r = extractIntegrityData({ participantId: id, trials: [{ integrity: integ('t1') }] }, {});
+      assert.strictEqual(r.participantId, 'unknown');
+      assert.ok(r.warnings.some((w) => w.includes('participantId unresolved')));
+    });
+  }
+  it('an id in metadata that is a number is keyed by its string', () => {
+    assert.strictEqual(extractIntegrityData({ metadata: { participantId: 7 }, trials: [] }, {}).participantId, '7');
+  });
+  it('a CSV with a numeric id (dynamic typing makes it a number) is keyed by its string, 0 included', () => {
+    const csv = (id) => ['participantId,integrity', id + ',"{""trialId"":""0"",""pasteEvents"":[]}"'].join('\n');
+    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('42'), {}), {}).participantId, '42');
+    assert.strictEqual(extractIntegrityData(parseCsvToRaw(csv('0'), {}), {}).participantId, '0');
   });
 });

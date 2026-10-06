@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>one-liner fixture: vanilla submits that keep the page</title>
+  <!-- Fixture for tests/e2e/oneliner/vanilla.spec.js. One page, no marks:
+       the boot span is span-0. Each spec uses one of the forms below:
+         #popup      POST into a new window (target="_blank");
+         #framed     POST into the named iframe "sink";
+         #handler    a submit handler that cancels the event and calls
+                     form.submit(): the page goes, once;
+         #plain      a POST form the spec submits with a synthetic submit
+                     event (dispatchEvent), which sends nothing in Chromium
+                     and WebKit (Firefox does send the form);
+         #clobbered  a POST form with a control named "method";
+         #draft      a same-window POST the spec answers with 204: the
+                     navigation never commits and the page stays;
+         #to-post    a GET form whose submit handler makes it a POST;
+         #to-get     a POST form whose submit handler makes it a GET;
+         #to-blank   a same-window POST whose submit handler sends it into a
+                     new window.
+       #popup, #framed, #draft, #to-blank and the synthetic event in
+       Chromium leave the page in place: the next pagehide closes what was
+       recorded after them. -->
+</head>
+<body>
+  <script src="/dist/ch.js" data-participant-id="E2E-VAN-4" data-guards="none"></script>
+  <textarea id="answer"></textarea>
+  <iframe name="sink" title="sink"></iframe>
+  <form id="popup" method="post" action="/post-popup" target="_blank">
+    <button type="submit" id="popup-submit">Preview</button>
+  </form>
+  <form id="framed" method="post" action="/post-framed" target="sink">
+    <button type="submit" id="framed-submit">Save a draft</button>
+  </form>
+  <form id="handler" method="post" action="/post-handler">
+    <button type="submit" id="handler-submit">Send</button>
+  </form>
+  <form id="plain" method="post" action="/post-plain"></form>
+  <form id="clobbered" method="post" action="/post-clobbered">
+    <input type="hidden" name="method" value="by-hand">
+    <button type="submit" id="clobbered-submit">Send</button>
+  </form>
+  <form id="draft" method="post" action="/post-draft">
+    <button type="submit" id="draft-submit">Save a draft</button>
+  </form>
+  <form id="to-post" action="/post-to-post">
+    <input type="hidden" name="q" value="a">
+    <button type="submit" id="to-post-submit">Send</button>
+  </form>
+  <form id="to-get" method="post" action="/get-to-get">
+    <input type="hidden" name="q" value="b">
+    <button type="submit" id="to-get-submit">Search</button>
+  </form>
+  <form id="to-blank" method="post" action="/post-to-blank">
+    <button type="submit" id="to-blank-submit">Preview</button>
+  </form>
+  <script>
+    document.getElementById('handler').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      ev.target.submit();
+    });
+    document.getElementById('to-post').addEventListener('submit', function (ev) { ev.target.method = 'post'; });
+    document.getElementById('to-get').addEventListener('submit', function (ev) { ev.target.method = 'get'; });
+    document.getElementById('to-blank').addEventListener('submit', function (ev) { ev.target.target = '_blank'; });
+  </script>
+</body>
+</html>

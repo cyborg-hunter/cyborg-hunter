@@ -1,12 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { existsSync, rmSync, mkdirSync, readFileSync } from 'fs';
-import { join } from 'path';
-import { renderHtmlIndex } from '../../src/cli/renderers/html-index.js';
+import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 
-describe('renderHtmlIndex (cohort-triage redesign)', () => {
-  const outDir = '/tmp/cyborg-hunter-html-test';
-
+describe('renderIndexHtml (cohort-triage redesign)', () => {
   function buildFixture() {
     // Minimal hand-built triage/summary/participants arrays. The renderer
     // should not read anything not present here; if it does, it's pulling
@@ -96,13 +92,9 @@ describe('renderHtmlIndex (cohort-triage redesign)', () => {
   }
 
   it('renders a 4-participant hard/soft/clean/legacy mix with all expected structure', async () => {
-    if (existsSync(outDir)) rmSync(outDir, { recursive: true });
-    mkdirSync(outDir, { recursive: true });
     const { participants, summaries, triage } = buildFixture();
 
-    await renderHtmlIndex(summaries, triage, participants, { outputDir: outDir }, true);
-
-    const html = readFileSync(join(outDir, 'index.html'), 'utf8');
+    const html = await renderIndexHtml(summaries, triage, participants, {}, true);
 
     // Structural
     assert.ok(html.includes('Cyborg Hunter Report'), 'title');
@@ -154,13 +146,9 @@ describe('renderHtmlIndex (cohort-triage redesign)', () => {
   });
 
   it('handles visualsRendered=false by collapsing image sections', async () => {
-    if (existsSync(outDir)) rmSync(outDir, { recursive: true });
-    mkdirSync(outDir, { recursive: true });
     const { participants, summaries, triage } = buildFixture();
 
-    await renderHtmlIndex(summaries, triage, participants, { outputDir: outDir }, false);
-
-    const html = readFileSync(join(outDir, 'index.html'), 'utf8');
+    const html = await renderIndexHtml(summaries, triage, participants, {}, false);
     assert.ok(html.includes('Visual renderers not available'), 'fallback note present');
     assert.ok(!html.includes('images/trajectories_'), 'no trajectory image refs');
     assert.ok(!html.includes('images/tab_timeline_'), 'no tab-timeline refs');
@@ -170,9 +158,7 @@ describe('renderHtmlIndex (cohort-triage redesign)', () => {
 
 // 0.6.1 — retro item 8: platform (Prolific/MTurk) ID as a secondary line in
 // the participant detail header, behind showPlatformId (default OFF, privacy).
-describe('renderHtmlIndex — platform ID line (0.6.1)', () => {
-  const outDir = '/tmp/cyborg-hunter-html-platform-test';
-
+describe('renderIndexHtml — platform ID line (0.6.1)', () => {
   const participants = [{
     participantId: 'SID-1',
     trials: [{ trialId: 't1', pasteEvents: [] }],
@@ -199,11 +185,8 @@ describe('renderHtmlIndex — platform ID line (0.6.1)', () => {
     hardTriggered: false, softFlagged: false, summary: summaries[0], edgeExitCount: 0,
   }];
 
-  async function renderWith(config) {
-    if (existsSync(outDir)) rmSync(outDir, { recursive: true });
-    mkdirSync(outDir, { recursive: true });
-    await renderHtmlIndex(summaries, triage, participants, { outputDir: outDir, ...config }, false);
-    return readFileSync(join(outDir, 'index.html'), 'utf8');
+  function renderWith(config) {
+    return renderIndexHtml(summaries, triage, participants, config, false);
   }
 
   it('OFF by default: platformIdField alone must not leak the platform ID', async () => {

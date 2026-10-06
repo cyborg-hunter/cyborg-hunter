@@ -129,6 +129,39 @@ describe('segmenter', () => {
     assert.ok(!('gap' in next.segment), 'the gap buffer is cleared at each cut');
   });
 
+  // A host trial that finished without rotating (jsPsych call-function) is
+  // cut from the gap span; a label names that cut and nothing else.
+  it('cut({ label }) names the closing span\'s report and segment; counts and the next span are unchanged', () => {
+    const seg = setup();
+    seg.start();
+    paste('hello');
+    const out = seg.cut({ source: 'host', nextTrialId: 'gap-1', label: { trialId: 'save-step', phase: 'setup' } });
+    assert.ok(!out.error, out.error);
+    assert.equal(out.segment.trialId, 'save-step');
+    assert.equal(out.trialReport.trialId, 'save-step');
+    assert.equal(out.trialReport.phase, 'setup');
+    assert.equal(out.segment.counters.pasteCount, 1);
+    assert.equal(out.trialReport.pasteEvents.length, 1, 'the span\'s own evidence stays on its report');
+    assert.ok(!('gap' in out.segment));
+    assert.equal(seg.state().currentTrialId, 'gap-1');
+    assert.equal(seg.state().segmentIndex, 1);
+    const next = seg.cut({ source: 'host' });
+    assert.equal(next.segment.trialId, 'gap-1', 'the label does not carry over');
+    assert.equal(next.trialReport.phase, 'default');
+  });
+
+  it('cut({ label }) applies only the labels present', () => {
+    const seg = setup();
+    seg.start({ trialId: 'gap-0' });
+    const phaseOnly = seg.cut({ source: 'host', label: { phase: 'setup' } });
+    assert.equal(phaseOnly.segment.trialId, 'gap-0');
+    assert.equal(phaseOnly.trialReport.trialId, 'gap-0');
+    assert.equal(phaseOnly.trialReport.phase, 'setup');
+    const idOnly = seg.cut({ source: 'host', label: { trialId: 'save-step' } });
+    assert.equal(idOnly.segment.trialId, 'save-step');
+    assert.equal(idOnly.trialReport.phase, 'default');
+  });
+
   it('segmentIndex increments across cuts and honours setSegmentIndex', () => {
     const seg = setup();
     seg.start();
@@ -310,6 +343,59 @@ describe('segmenter', () => {
     assert.equal(seg.cut({ source: 'host' }).error, 'finished');
     assert.equal(seg.state().open, false, 'nothing was reopened');
     assert.doesNotThrow(() => { monitor.startTrial({ trialId: 'host' }); monitor.endTrial(); });
+  });
+
+  // What makes a span worth cutting where the host would otherwise skip it
+  // (the vanilla host after a same-window submit, adapters/vanilla.js).
+  it('holdsEvidence: anything the participant did since the last cut, not movement or background samples', () => {
+    const fakeSession = { windowPositions: [], tabAwayEvents: [] };
+    let trial = null;
+    const seg = setup((real) => wrap(real, {
+      getTrialSnapshot: () => trial,
+      getSessionReport: () => Object.assign(real.getSessionReport(), fakeSession),
+    }));
+    assert.equal(seg.holdsEvidence(), false, 'no open span');
+    seg.start();
+    trial = { pasteEvents: [], mouseEvents: [], elementTrace: [], decoy: { level: 0 } };
+    assert.equal(seg.holdsEvidence(), false, 'an empty trial');
+    trial.mouseEvents.push({ type: 'move' });
+    trial.elementTrace.push({ tag: 'div' });
+    fakeSession.windowPositions.push({ x: 0 });
+    assert.equal(seg.holdsEvidence(), false, 'movement and window-position samples alone');
+    trial.mouseEvents.push({ type: 'click' });
+    assert.equal(seg.holdsEvidence(), true, 'a click');
+    trial.mouseEvents = [];
+    trial.pasteEvents.push({ pastedLength: 3 });
+    assert.equal(seg.holdsEvidence(), true, 'a paste');
+    trial.pasteEvents = [];
+    fakeSession.tabAwayEvents.push({ duration_ms: 50 });
+    assert.equal(seg.holdsEvidence(), true, 'a new session entry');
+    seg.cut({ source: 'host' });
+    trial = { pasteEvents: [] };
+    assert.equal(seg.holdsEvidence(), false, 'the cut took the session entry');
+    fakeSession.tabAwayEvents.push({ duration_ms: 60 });
+    assert.equal(seg.holdsEvidence(), true, 'one more after the cut');
+    seg.finish({ source: 'final' });
+    assert.equal(seg.holdsEvidence(), false, 'finished');
+  });
+
+  // The idle-gap check is a timer: an entry says the participant did
+  // nothing, so a slow page load alone must not make a segment.
+  it('holdsEvidence: an idle gap alone is not evidence', () => {
+    let trial = null;
+    const seg = setup((real) => wrap(real, { getTrialSnapshot: () => trial }));
+    seg.start();
+    trial = { pasteEvents: [], idleGaps: [{ duration_ms: 12000, t: 1 }] };
+    assert.equal(seg.evidence(), 0);
+    assert.equal(seg.holdsEvidence(), false);
+    trial.pasteEvents.push({ pastedLength: 2 });
+    assert.equal(seg.evidence(), 1);
+  });
+
+  it('holdsEvidence: a monitor that cannot be read counts as evidence', () => {
+    const seg = setup((real) => wrap(real, { getTrialSnapshot: () => { throw new Error('boom'); } }));
+    seg.start();
+    assert.equal(seg.holdsEvidence(), true);
   });
 });
 

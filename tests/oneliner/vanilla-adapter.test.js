@@ -12,6 +12,8 @@ import { Window } from 'happy-dom';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 import { VERSION } from '../../src/shared/constants.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { attach as attachRecorder } from '../../src/replay/index.js';
+import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 
 class StubResizeObserver {
   constructor(cb) { this.cb = cb; }
@@ -145,6 +147,21 @@ describe('vanilla host: marks', () => {
     const btn = el('<button data-ch-trial=""><span>Next</span></button>');
     click(btn.firstElementChild);
     assert.deepStrictEqual(ctx.segmenter.state().currentTrialId, 'span-1');
+  });
+
+  // ch.js cuts at a mark from its own click listener on the document. The
+  // mouse button events are recorded before any document listener runs, so
+  // each mark click is in the span it ends (as a jsPsych response click is
+  // in the trial it ends), once.
+  it('each mark click is recorded once, in the span it ends', () => {
+    start();
+    const press = (node) => {
+      for (const type of ['mousedown', 'mouseup', 'click']) node.dispatchEvent(new win.MouseEvent(type, { bubbles: true, cancelable: true }));
+    };
+    press(el('<button data-ch-trial="q1">Start</button>'));
+    press(el('<button data-ch-trial="q2"><span>Next</span></button>').firstElementChild);
+    const kinds = win.CyborgHunter.data().trials.map((t) => t.trialId + ':' + t.integrity.mouseTrack.map((m) => m.type).join(','));
+    assert.deepStrictEqual(kinds, ['span-0:down,up,click', 'q1:down,up,click', 'q2:']);
   });
 
   it('CyborgHunter.mark(id), startTrial({ trialId }) and endTrial() cut segments', () => {
@@ -294,6 +311,118 @@ describe('vanilla host: forms and page loads', () => {
     win.dispatchEvent(new win.Event('pagehide'));
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
   });
+
+  // Browsers read the target as written: with spaces around it, " _self " or
+  // " " is the name of another window, so the page stays.
+  for (const target of [' ', ' _self ']) {
+    it(`a form target of ${JSON.stringify(target)} names another window; pagehide keeps the data after it`, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit"></form>');
+      f.setAttribute('target', target);
+      submit(f);   // not prevented: the post goes to that other window
+      await tick();
+      paste('after');
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+      assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+    });
+  }
+
+  // form.dispatchEvent(new Event('submit')) runs the page's submit handlers.
+  // Chromium and WebKit submit nothing for it; Firefox still sends the form.
+  // happy-dom leaves isTrusted unset; a browser sets it to false on such an
+  // event.
+  function untrustedSubmit(f) {
+    const ev = new win.Event('submit', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'isTrusted', { value: false });
+    f.dispatchEvent(ev);
+  }
+
+  it('a submit event the page dispatches itself is not counted as leaving; a later pagehide keeps the data after it', async () => {
+    const ctx = start();
+    const f = el('<form method="post" action="/submit"></form>');
+    untrustedSubmit(f);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 1, 'its handlers still see the blob');
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+  });
+
+  // Firefox: the dispatched event sends the form and the page goes. The post
+  // carries everything so far, and pagehide closes at most one extra,
+  // empty segment.
+  it('a dispatched submit event that does send the form loses nothing; pagehide adds at most one empty segment', async () => {
+    start();
+    paste('before');
+    const f = el('<form method="post" action="/submit"></form>');
+    untrustedSubmit(f);
+    const posted = JSON.parse(f.querySelector('input[name=cyborgHunterData]').value);
+    assert.deepStrictEqual(posted.trials.map((t) => t.integrity.pasteEvents.length), [1]);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));   // the page leaves, with nothing recorded since
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY)).trials;
+    assert.strictEqual(saved[0].integrity.pasteEvents.length, 1, 'the data before the submit is kept');
+    assert.ok(saved.length <= 2, 'at most one extra segment');
+    for (const t of saved.slice(1)) {
+      assert.strictEqual(t.integrity.pasteEvents.length, 0);
+      assert.strictEqual(t.integritySoftScore, 0, 'the extra segment is empty');
+    }
+  });
+
+  // In a browser a control named "method" shadows form.method (the form's
+  // named properties override its own); happy-dom does not do that, so the
+  // test puts the control in its place.
+  for (const name of ['method', 'getAttribute']) {
+    it(`a POST form with a control named "${name}" still gets the hidden input`, () => {
+      start();
+      const f = form();
+      const field = el(`<input name="${name}" value="by-hand">`);
+      f.appendChild(field);
+      Object.defineProperty(f, name, { value: field, configurable: true });
+      submit(f);
+      assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 1);
+      assert.deepStrictEqual(errors, []);
+    });
+  }
+
+  it('a method="dialog" form with a control named "method" is still a dialog submit; pagehide keeps the data after it', () => {
+    const ctx = start();
+    paste('before');
+    const f = el('<form method="dialog"><button>OK</button></form>');
+    const field = el('<input name="method" value="by-hand">');
+    f.appendChild(field);
+    Object.defineProperty(f, 'method', { value: field, configurable: true });
+    submit(f);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    assert.strictEqual(saved.trials.length, 1);
+    assert.strictEqual(saved.trials[0].integrity.pasteEvents.length, 2);
+  });
+
+  // The target is read the same way: a control named "getAttribute" or
+  // "hasAttribute" does not break the post into another window.
+  for (const name of ['getAttribute', 'hasAttribute']) {
+    it(`a target="_blank" POST with a control named "${name}" carries the blob; pagehide keeps the data after it`, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit" target="_blank"></form>');
+      const field = el(`<input name="${name}" value="by-hand">`);
+      f.appendChild(field);
+      Object.defineProperty(f, name, { value: field, configurable: true });
+      submit(f);
+      assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 1);
+      await tick();
+      paste('after');
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+      assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.pasteEvents.length, 1);
+      assert.deepStrictEqual(errors, []);
+    });
+  }
 
   it('page loads: the next page restores the index, the earlier trials and the page count', () => {
     const ctx1 = start();
@@ -578,6 +707,23 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(saved.trials[2].integrity.pasteEvents.length, 1);
   });
 
+  // The same post that never left, then form.submit() into a new window: that
+  // submit keeps the page too, so pagehide closes what came after the post.
+  // (Where the window post's own span ends is not pinned here: only that
+  // nothing after it is lost.)
+  it('a same-window submit that did not leave, then form.submit() into a new window: pagehide still cuts', async () => {
+    const posted = stubNativeSubmit();
+    start();
+    submit(el('<form method="post" action="/a"></form>'));
+    await tick();
+    el('<form method="post" action="/preview" target="_blank"></form>').submit();
+    assert.strictEqual(posted.length, 1);
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));
+    const trials = JSON.parse(win.sessionStorage.getItem(KEY)).trials;
+    assert.strictEqual(trials[trials.length - 1].integrity.pasteEvents.length, 1);
+  });
+
   it('a mark from the page\'s own submit handler leaves the next pagehide its cut', async () => {
     const ctx = start();
     const f = el('<form method="post" action="/a"></form>');
@@ -615,6 +761,226 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 3);
     assert.strictEqual(JSON.parse(win.sessionStorage.getItem(KEY)).trials[2].integrity.pasteEvents.length, 1);
   });
+
+  // A same-window submit whose navigation never commits: the answer is a 204
+  // or a download, the action is javascript:, or the participant answers a
+  // beforeunload prompt with "Stay". The page stays and nothing says so; what
+  // the participant does next must still reach the session and the next post.
+  const pasteCounts = (trials) => trials.map((t) => t.integrity.pasteEvents.length);
+
+  it('a same-window submit that never leaves: what comes after it is cut at pagehide', async () => {
+    start();
+    paste('before');
+    submit(el('<form method="post" action="/save"></form>'));   // not prevented: the page would go
+    await tick();
+    paste('after');
+    win.dispatchEvent(new win.Event('pagehide'));   // the participant leaves by a link
+    assert.deepStrictEqual(pasteCounts(JSON.parse(win.sessionStorage.getItem(KEY)).trials), [1, 1]);
+  });
+
+  it('a same-window submit that never leaves, then form.submit(): the post carries what came after it', async () => {
+    const posted = stubNativeSubmit();
+    start();
+    paste('before');
+    submit(el('<form method="post" action="/save"></form>'));
+    await tick();
+    paste('after');
+    el('<form method="post" action="/final"></form>').submit();
+    assert.strictEqual(posted.length, 1);
+    assert.deepStrictEqual(pasteCounts(JSON.parse(posted[0].data).trials), [1, 1]);
+    win.dispatchEvent(new win.Event('pagehide'));   // that post leaves: no empty extra segment
+    assert.deepStrictEqual(pasteCounts(JSON.parse(win.sessionStorage.getItem(KEY)).trials), [1, 1]);
+  });
+
+  it('a same-window submit that never leaves, then a click: pagehide keeps the click', async () => {
+    const ctx = start();
+    submit(el('<form method="post" action="/save"></form>'));
+    await tick();
+    click(el('<button type="button">Next</button>'));
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    const clicks = JSON.parse(win.sessionStorage.getItem(KEY)).trials[1].integrity.mouseTrack.filter((m) => m.type === 'click');
+    assert.strictEqual(clicks.length, 1);
+  });
+
+  // Mouse movement alone is not counted: a participant who moves the mouse
+  // while the next page loads would otherwise add a segment to every page.
+  it('a submit then pagehide with only mouse movement in between adds no segment', async () => {
+    const ctx = start();
+    submit(el('<form method="post" action="/submit"></form>'));
+    await tick();
+    win.document.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 40, clientY: 40 }));
+    assert.ok(ctx.monitor.getTrialSnapshot().mouseEvents.length > 0, 'the movement was recorded');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+  });
+
+  // A page that submits from its own click handler (onclick="form.submit()",
+  // a link's onclick, a listener added by the page's script): the handler
+  // runs before the click reaches the document, so the cut comes in the
+  // middle of the click. The click belongs to the span the submit closes,
+  // and the span it opens holds nothing: its pagehide adds no segment.
+  const clicksPerRow = (trials) => trials.map((t) => t.integrity.mouseTrack.filter((m) => m.type === 'click').length);
+  const selfSubmitting = {
+    'a button whose click handler calls form.submit()': (f) => {
+      const b = el('<button type="button">Next</button>');
+      b.addEventListener('click', () => f.submit());
+      return b;
+    },
+    'a link whose click handler calls form.submit()': (f) => {
+      const a = el('<a href="#next">Next</a>');
+      a.addEventListener('click', (e) => { e.preventDefault(); f.submit(); });
+      return a;
+    },
+  };
+  for (const [name, make] of Object.entries(selfSubmitting)) {
+    it(`${name}: the click is posted with the span it closes, and pagehide adds no segment`, async () => {
+      const posted = stubNativeSubmit();
+      const ctx = start();
+      const f = el('<form method="post" action="/next"></form>');
+      click(make(f));
+      assert.strictEqual(posted.length, 1);
+      assert.deepStrictEqual(clicksPerRow(JSON.parse(posted[0].data).trials), [1]);
+      await tick();
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 1, 'no extra segment');
+    });
+  }
+
+  // The click's own consequences in the same task (a checkbox's input and
+  // change events come after the click) are the submit's, not something the
+  // participant did on a page that stayed.
+  it('a checkbox whose click handler submits: its input event after the click adds no segment', async () => {
+    const posted = stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/next"><input type="checkbox" name="agree"></form>');
+    const box = f.querySelector('input');
+    box.addEventListener('click', () => f.submit());
+    click(box);   // happy-dom toggles it and fires input and change after the click, as browsers do
+    assert.strictEqual(posted.length, 1);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+  });
+
+  it('a second click on such a button submits again, with that click in the span it closes', async () => {
+    const posted = stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/next"></form>');
+    const b = selfSubmitting['a button whose click handler calls form.submit()'](f);
+    click(b);
+    await tick();
+    click(b);   // again, before the next page arrives
+    assert.strictEqual(posted.length, 2);
+    assert.deepStrictEqual(clicksPerRow(JSON.parse(posted[1].data).trials), [1, 1]);
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+  });
+
+  it('a page that stays after such a submit: a later click is kept at pagehide', async () => {
+    stubNativeSubmit();
+    const ctx = start();
+    const f = el('<form method="post" action="/next"></form>');
+    click(selfSubmitting['a button whose click handler calls form.submit()'](f));
+    await tick();   // the answer was a 204: the page stays
+    click(el('<button type="button">Back to the task</button>'));
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    assert.deepStrictEqual(clicksPerRow(JSON.parse(win.sessionStorage.getItem(KEY)).trials), [1, 1]);
+  });
+
+  // The browser reads a submission's method and target after the submit
+  // handlers ran, and builds its entry list (the formdata event) in between.
+  // happy-dom fires no formdata event: this dispatches the one the browser
+  // would, with the FormData it would post.
+  function formdata(f) {
+    const fd = new win.FormData(f);
+    const ev = new win.Event('formdata', { bubbles: true });
+    Object.defineProperty(ev, 'formData', { value: fd });
+    f.dispatchEvent(ev);
+    return fd;
+  }
+
+  it('a submit handler that turns a GET form into a POST: the post carries cyborgHunterData', () => {
+    start();
+    paste('before');
+    const f = el('<form action="/sink"><input name="q" value="a"></form>');
+    f.addEventListener('submit', () => f.setAttribute('method', 'post'));
+    submit(f);
+    const fd = formdata(f);
+    assert.strictEqual(fd.get('q'), 'a');
+    assert.deepStrictEqual(pasteCounts(JSON.parse(fd.get('cyborgHunterData')).trials), [1]);
+  });
+
+  it('a submit handler that turns a POST form into a GET: the blob stays out of the URL', () => {
+    start();
+    const f = el('<form method="post" action="/sink"><input name="q" value="a"></form>');
+    f.addEventListener('submit', () => f.setAttribute('method', 'get'));
+    submit(f);
+    const fd = formdata(f);
+    assert.strictEqual(fd.get('q'), 'a');
+    assert.strictEqual(fd.has('cyborgHunterData'), false);
+    assert.strictEqual(f.querySelectorAll('input[name=cyborgHunterData]').length, 0);
+  });
+
+  // A guard against double submission: the page's handler disables every
+  // control, ch.js's hidden input included, and a disabled control is left
+  // out of the entry list. The blob goes in all the same.
+  it('a submit handler that disables every input: the post still carries cyborgHunterData', () => {
+    start();
+    paste('before');
+    const f = el('<form method="post" action="/sink"><input name="q" value="a"></form>');
+    f.addEventListener('submit', () => f.querySelectorAll('input').forEach((i) => { i.disabled = true; }));
+    submit(f);
+    const fd = formdata(f);
+    assert.strictEqual(fd.has('q'), false, 'the page\'s own field stays out, as it asked');
+    assert.deepStrictEqual(pasteCounts(JSON.parse(fd.get('cyborgHunterData')).trials), [1]);
+  });
+
+  it('a formdata event outside a submission (the page\'s own FormData) is left alone', () => {
+    start();
+    const f = el('<form method="post" action="/submit"><input name="q" value="a"></form>');
+    assert.strictEqual(formdata(f).has('cyborgHunterData'), false);
+  });
+
+  // form.submit() posts by the form's own method: a submitter of the event
+  // whose handler called it has no say.
+  it('form.submit() from the handler of a formmethod="get" submit still posts the blob', () => {
+    const posted = [];
+    win.HTMLFormElement.prototype.submit = function () { posted.push(formdata(this).get('cyborgHunterData')); };
+    start();
+    const f = el('<form method="post" action="/submit"><button formmethod="get">Search</button></form>');
+    f.addEventListener('submit', (e) => { e.preventDefault(); f.submit(); });
+    f.dispatchEvent(new win.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: f.querySelector('button') }));
+    assert.strictEqual(posted.length, 1);
+    assert.strictEqual(JSON.parse(posted[0]).trials.length, 1);
+  });
+
+  for (const withFormdata of [true, false]) {
+    const how = withFormdata ? '' : ' (no formdata event)';
+    it('a submit handler that sends a same-window post into a new window: pagehide still cuts' + how, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit"></form>');
+      f.addEventListener('submit', () => f.setAttribute('target', '_blank'));
+      submit(f);
+      if (withFormdata) formdata(f);
+      await tick();
+      win.dispatchEvent(new win.Event('pagehide'));   // the page stayed: its span is cut like any page's
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 2);
+    });
+
+    it('a submit handler that sends a new-window post into this window: no empty extra segment' + how, async () => {
+      const ctx = start();
+      const f = el('<form method="post" action="/submit" target="_blank"></form>');
+      f.addEventListener('submit', () => f.removeAttribute('target'));
+      submit(f);
+      if (withFormdata) formdata(f);
+      await tick();
+      win.dispatchEvent(new win.Event('pagehide'));
+      assert.strictEqual(ctx.segmenter.state().segmentIndex, 1);
+    });
+  }
 
   it('form.submit() never throws into the page and always calls the browser\'s submit', () => {
     const posted = stubNativeSubmit();
@@ -1073,9 +1439,10 @@ describe('vanilla host: data-replay', () => {
         log.cfg = cfg;
         return {
           startSession: () => log.push('startSession'),
-          startTrial: (o) => log.push('startTrial:' + o.trialId),
+          startTrial: (o) => { log.push('startTrial:' + o.trialId); if (o.extensions) log.extensions = o.extensions; },
           endTrial: () => log.push('endTrial'),
           stopSession: (r) => log.push('stopSession:' + r),
+          resumeSession: () => log.push('resumeSession'),
           getRecording: () => { log.push('getRecording'); return { schema_version: 2 }; },
           destroy: () => log.push('destroy')
         };
@@ -1116,6 +1483,152 @@ describe('vanilla host: data-replay', () => {
     win.CyborgHunter.mark('q9');
     win.dispatchEvent(new win.Event('pagehide'));
     assert.deepStrictEqual([...log], ['stopSession:finished', 'getRecording', 'destroy']);
+  });
+
+  // The back/forward cache: the browser shows the page again with its
+  // scripts' memory intact (pageshow, persisted) and runs no script again.
+  function pageshow(persisted) {
+    const ev = new win.Event('pageshow');
+    Object.defineProperty(ev, 'persisted', { value: persisted });
+    win.dispatchEvent(ev);
+  }
+
+  it('back/forward cache: pagehide stops the recorder, a persisted pageshow resumes it with a segment marked as a restore', async () => {
+    const log = fakeReplay();
+    const ctx = start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual(log.slice(2), ['endTrial', 'startTrial:span-1', 'stopSession:finished']);
+    // A later page saved the session further on.
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    saved.segmentIndex = 4;
+    win.sessionStorage.setItem(KEY, JSON.stringify(saved));
+
+    pageshow(false);
+    assert.strictEqual(log.length, 5, 'a pageshow that is not a restore does nothing');
+    pageshow(true);
+    assert.deepStrictEqual(log.slice(5), ['resumeSession', 'startTrial:span-1']);
+    assert.deepStrictEqual(log.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 4, 'integrity re-adopts the saved session as before');
+    win.CyborgHunter.mark('q1');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.deepStrictEqual(log.slice(7), ['endTrial', 'startTrial:q1', 'endTrial', 'startTrial:span-6', 'stopSession:finished']);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('back/forward cache with replay off: nothing is started', async () => {
+    const log = fakeReplay();
+    start();
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    pageshow(true);
+    assert.deepStrictEqual([...log], []);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('back/forward cache: a recorder that fails to resume is a catalogue error, and integrity carries on', async () => {
+    const log = fakeReplay();
+    const attach = win.CyborgHunterReplay.attach;
+    win.CyborgHunterReplay.attach = (cfg) => Object.assign(attach(cfg), { resumeSession: () => { throw new Error('cannot resume'); } });
+    const ctx = start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    const saved = JSON.parse(win.sessionStorage.getItem(KEY));
+    saved.segmentIndex = 4;
+    win.sessionStorage.setItem(KEY, JSON.stringify(saved));
+    pageshow(true);
+    assert.strictEqual(errors.length, 1);
+    const [head] = MESSAGES.replayRestoreFailed('\u0000').split('\u0000');
+    assert.ok(errors[0].startsWith(head) && errors[0].includes('cannot resume'), errors[0]);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 4);
+    paste('after the restore');
+    const blob = win.CyborgHunter.data();
+    assert.strictEqual(blob.trials[blob.trials.length - 1].integrity.pasteEvents.length, 1, 'integrity records on');
+    assert.deepStrictEqual(log.slice(2), ['endTrial', 'startTrial:span-1', 'stopSession:finished'],
+      'the recorder that did not resume is left alone');
+  });
+
+  it('back/forward cache without a saved session (storage blocked): the recorder still resumes', async () => {
+    const log = fakeReplay();
+    start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    win.sessionStorage.removeItem(KEY);
+    pageshow(true);
+    assert.deepStrictEqual(log.slice(5), ['resumeSession', 'startTrial:span-1']);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('back/forward cache with the real recorder: replay() returns one recording, the restored visit in a keyframe segment marked as a restore', async () => {
+    win.CyborgHunterReplay = { attach: attachRecorder };
+    start({ replay: 'dom' });
+    await tick();
+    el('<p id="first-visit">one</p>');
+    win.CyborgHunter.mark('q1');
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    el('<p id="changed-while-away">two</p>');   // dropped: the recorder is stopped
+    await tick();
+    pageshow(true);
+    click(el('<button id="after-back">Next</button>'));
+    await tick();
+    const rec = win.CyborgHunter.replay();
+
+    assert.deepStrictEqual(validateStrict(rec).errors, []);
+    assert.deepStrictEqual(rec.segments.map((s) => s.label), ['span-0', 'q1', 'span-2', 'span-2']);
+    const restored = rec.segments[3];
+    assert.deepStrictEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
+    assert.strictEqual(restored.initial_dom.id, 1, 'a keyframe, ids from 1');
+    assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'));
+    assert.ok(restored.events.some((e) => e.type === 'mouse.click'), 'the click after Back is recorded');
+    assert.deepStrictEqual(rec.segments.slice(0, 3).map((s) => s.extensions), [null, null, null]);
+    assert.strictEqual(rec.end_reason, 'finished');
+    assert.strictEqual(win.CyborgHunter.replay(), rec, 'later calls return the same recording');
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('back/forward cache after a span failed to reopen: the restored segment takes no closed span\'s name', async () => {
+    const log = fakeReplay();
+    const ctx = start({ replay: '' });
+    await tick();
+    win.dispatchEvent(new win.Event('pagehide'));
+    // The monitor refused to open the next span: the segmenter is closed,
+    // and currentTrialId still names the span it just cut.
+    const state = ctx.segmenter.state;
+    ctx.segmenter.state = () => Object.assign(state(), { open: false });
+    pageshow(true);
+    assert.deepStrictEqual(log.slice(5), ['resumeSession', 'startTrial:null']);
+    assert.deepStrictEqual(log.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } }, 'still marked');
+  });
+
+  it('back/forward cache, three times over with the real recorder: one marked keyframe per restore, no doubled capture', async () => {
+    win.CyborgHunterReplay = { attach: attachRecorder };
+    start({ replay: 'dom' });
+    await tick();
+    const button = el('<button id="b">Next</button>');
+    for (let i = 0; i < 3; i++) {
+      win.dispatchEvent(new win.Event('pagehide'));
+      el('<p>away ' + i + '</p>');
+      await tick();
+      pageshow(true);
+      click(button);
+      await tick();
+    }
+    const rec = win.CyborgHunter.replay();
+    assert.deepStrictEqual(validateStrict(rec).errors, []);
+    const marked = rec.segments.filter((s) => s.extensions && s.extensions['cyborg-hunter'] &&
+      s.extensions['cyborg-hunter'].restored_from === 'bfcache');
+    assert.strictEqual(marked.length, 3);
+    for (const s of marked) {
+      assert.strictEqual(s.initial_dom && s.initial_dom.id, 1, 'segment ' + s.index + ' is a keyframe');
+      assert.strictEqual(s.events.filter((e) => e.type === 'mouse.click').length, 1,
+        'one click recorded once in segment ' + s.index + ' (no listener added per resume)');
+    }
+    assert.deepStrictEqual(rec.segments.map((s) => s.label),
+      ['span-0', 'span-1', 'span-1', 'span-2', 'span-2', 'span-3', 'span-3']);
+    assert.deepStrictEqual(rec.extensions['cyborg-hunter'].capture_failures, []);
+    assert.strictEqual(rec.end_reason, 'finished');
+    assert.deepStrictEqual(errors, []);
   });
 
   it('without data-replay nothing is loaded and replay() warns', async () => {

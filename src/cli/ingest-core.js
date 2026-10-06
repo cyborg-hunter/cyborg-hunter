@@ -531,7 +531,7 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
     const chosen = owned[owned.length - 1];
     // The targeted version is 2: the viewer is v2-only and a v1
     // artifact is skipped with a note when the report is built
-    // (replay-assets.js). Warning "this CLI targets 1" was the previous
+    // (replay-assets-core.js). Warning "this CLI targets 1" was the previous
     // era's sentence and is now exactly backwards. Attach either way —
     // ingest never drops participant data on a version judgement.
     if (chosen.recording.schema_version !== 2) {

@@ -171,6 +171,7 @@ export function boot(opts) {
     if (win.document.body) startMonitoring(ctx);
     else {
       win.document.addEventListener('DOMContentLoaded', function () {
+        if (ctx.bootError) return;   // boot failed after this was registered: logged, monitor gone
         try { startMonitoring(ctx); } catch (e) { failDeferred(ctx, adapter, e); }
       }, { once: true });
     }

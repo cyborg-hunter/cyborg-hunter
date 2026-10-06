@@ -44,6 +44,16 @@
 // (jsPsych calls the extension's on_start on every trial that lists it, so
 // every real on_load is armed.)
 //
+// The synchronous trial's own row is therefore cut from the gap span the
+// previous cut opened, named `gap-<index of the previous trial>`. When
+// on_finish finds the load still armed with this trial's params (it never
+// rotated in) and those params carry a trialId and/or phase, the cut takes
+// them as the closed span's label (segmenter.js cut's `label`): the row's
+// integrity and integritySegment carry the researcher's names. Only the names
+// change: the span, its counts and timing, and the next trial's naming and
+// rotation stay as they are. Without a trialId or phase the row keeps
+// `gap-<n>`; a label missing one of the two keeps the span's own value for it.
+//
 // After the session has ended (the final hook ran, ctx.jspsych.finalized),
 // both hooks leave the segmenter alone: rows of a second jsPsych instance
 // that runs afterwards get no cyborgHunterError ('finished') marker; the
@@ -64,6 +74,15 @@
 // existing at all keeps the researcher's save code after it running.
 
 import { MESSAGES } from '../errors.js';
+
+// The names a researcher set on a trial, or null when there are none.
+function labelOf(params) {
+  if (!params) return null;
+  var label = {};
+  if (params.trialId) label.trialId = params.trialId;
+  if (params.phase) label.phase = params.phase;
+  return label.trialId || label.phase ? label : null;
+}
 
 export class OneLinerExtension {
   static info = {
@@ -149,8 +168,11 @@ export class OneLinerExtension {
     try { if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh(); } catch (_) { /* a debug aid */ }
   }
 
-  on_finish(_params) {
+  on_finish(params) {
     var ctx = OneLinerExtension.ctx;
+    // Still armed with this trial's params: its on_load never came (a
+    // synchronous plugin, see the header).
+    var neverLoaded = this._loadArmed && params === this._armedParams;
     this._loadArmed = false;
     this._armedParams = undefined;
     if (!ctx || ctx.bootError || (ctx.jspsych && ctx.jspsych.finalized)) return {};
@@ -159,7 +181,10 @@ export class OneLinerExtension {
     var out;
     try {
       var idx = this.jsPsych.getProgress().current_trial_global;
-      var r = ctx.segmenter.cut({ source: 'host', nextTrialId: 'gap-' + idx });
+      var cutOpts = { source: 'host', nextTrialId: 'gap-' + idx };
+      var label = neverLoaded ? labelOf(params) : null;
+      if (label) cutOpts.label = label;
+      var r = ctx.segmenter.cut(cutOpts);
       if (r && r.segment) {
         var report = r.trialReport || {};
         report.trialStart_perfNow = this._trialStart_perfNow;

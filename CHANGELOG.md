@@ -3,6 +3,137 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+- Standalone replay recorder (`CyborgHunterReplay.attach()`):
+  `resumeSession()` records again after `stopSession()`, in later segments of
+  the same recording; call `startTrial()` right after it.
+  `startTrial({ extensions })` sets a segment's vendor `extensions`. The
+  one-line setup uses both for a page restored from the back/forward cache,
+  marking its segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
+  A value that is not an object keyed by lowercase vendor names (`"my-lab"`),
+  or that holds anything a JSON copy would change (a function, `undefined`,
+  `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
+  capture failure.
+
+### Changed
+- Experiment assets (`assetsDir`, files dropped on `/analyze/`): a file whose
+  path differs from the recorded URL only in upper/lower case now matches
+  when no file matches exactly. Such files are ranked the same way as exact
+  ones: the best-fitting one is used; if several fit equally well, the URL
+  is reported as ambiguous.
+- The experiment-assets note no longer counts video and audio sources as
+  images that never match: it says how many video/audio elements are shown as
+  placeholders and that replays never play media. A video's poster is still
+  an image.
+- Experiment assets now also cover `srcset` candidates (on `<img>` and on a
+  `<picture>`'s `<source>`), an SVG `<image>`'s `href`/`xlink:href`, and an
+  `<input type="image">`'s `src` (also when the input becomes an image button
+  later in the session): each is matched, inlined when supplied, and counted
+  among the images in the note.
+- `/analyze/`: when a check or a build sends no progress for a minute, the
+  page shows "Still working — this is taking longer than usual. If nothing
+  changes in a few minutes, reload the page." under the step. The next
+  progress, the result, an error or Start over hides it. Nothing is cancelled
+  or restarted.
+- A jsPsych call-function (or other synchronous) step labelled with
+  trialId/phase now keeps that label on its row; unlabelled steps keep
+  `gap-<n>`. Rows recorded by 0.10.x–0.11.x for such steps were labelled
+  `gap-<n>`.
+- CLI and analyze page: a participant ID that is a number (a CSV column
+  holding numbers, or a study that stores one) is read as its string. Before,
+  such an ID stopped the whole report at the first plot
+  (`name.replace is not a function`), and `--participant 42` could not find
+  it. `0` and `false` are IDs now; a missing, `null` or empty ID is still
+  `unknown`.
+
+### Fixed
+- One-line setup on pages without jsPsych: more form submits that keep the
+  page no longer lose the data recorded after them. A form target with
+  spaces around it (`target=" "`, `" _self "`) names another window, as
+  browsers read it. A `submit` event the page dispatches itself
+  (`form.dispatchEvent(new Event('submit'))`) is no longer taken for a page
+  load; Chromium and WebKit submit nothing for it. Firefox does send the
+  form, and on such pages its participants get one extra, empty segment;
+  nothing is lost. A POST form with a control named `method` now gets the
+  `cyborgHunterData` hidden input, so its backend receives that field too;
+  a `method="dialog"` form with such a control counts as a dialog submit,
+  not a page load. A form with a control named `getAttribute` or
+  `hasAttribute` no longer makes the submit handling throw; before, an error
+  was logged and the post carried no `cyborgHunterData`.
+- One-line setup on pages without jsPsych: what the participant does after
+  a same-window form submit is no longer lost when the page stays (the
+  server answers 204 or with a download, the action is `javascript:`, or the
+  participant answers a "leave this page?" prompt with Stay) or while the
+  next page is still loading. It is saved as its own segment when the page
+  is left, and a later `form.submit()` posts it. A submit that the next page
+  follows with nothing done in between still adds no segment; mouse movement
+  or waiting alone does not count.
+- One-line setup on pages without jsPsych: a form whose own `submit` handler
+  changes its method or target is handled as the browser sends it. Switched
+  from GET to POST, it now carries `cyborgHunterData`; switched from POST to
+  GET, the blob no longer goes into the URL; sent into a new window instead
+  of this one, the data recorded after it is kept. A handler that disables
+  the form's inputs (against double submission) no longer drops
+  `cyborgHunterData` either. Browsers without the `formdata` event keep the
+  earlier behaviour for these.
+- One-line setup: a boot that fails before the page has loaded (ch.js in
+  `<head>`) logs one "Cyborg Hunter did not start" error with its cause;
+  before, a second one followed, quoting a monitor lifecycle message that
+  hid the cause.
+- `/analyze/`: selecting a participant without a replay recording in the
+  report no longer leaves the previous participant's replay on screen. The
+  replay card closes it and says `Participant <id> has no replay recording.`;
+  Load stays disabled until a participant with a recording is selected.
+- One-line setup with `data-replay` on pages without jsPsych: a page the
+  browser shows again from the back/forward cache (Back) now records on, from
+  a keyframe segment marked
+  `extensions["cyborg-hunter"].restored_from: "bfcache"`. If
+  `CyborgHunter.replay()` was not called before the participant left,
+  recording continues in the same recording. If it was (for example in the
+  submit handler, as the docs recommend), `replay()` after Back returns a new
+  recording of the restored visit, starting with that marked segment, instead
+  of the earlier recording again; save every recording it returns. Before,
+  everything after Back was missing from the replay.
+- Integrity monitor: mouse clicks (and mousedown/mouseup) are recorded
+  before the page's own handlers on the document and its elements run. A click that ends a trial, such as a
+  jsPsych response button, a `data-ch-trial` mark or a button whose `onclick`
+  submits the form, is now in that trial's `mouseTrack`; before, it was
+  recorded in the span after it or not at all. A click whose handler stops
+  its propagation is recorded too.
+- Session replay: an input value, scroll, touch move or viewport change in
+  the last animation frame before a segment ends now stays in that segment.
+  Before, it arrived a frame later in the next segment, timed before that
+  segment began; at a stop (`stopSession()`, `CyborgHunter.replay()`, leaving
+  the page) it was lost; and on a page restored from the back/forward cache
+  it landed in the restored segment.
+- Report (CLI and `/analyze/`): a replay recording with a list field of the
+  wrong shape that the viewer still plays (`stylesheets: {}`, a node's
+  `children: {}`, a `null` event) no longer stops the whole report. Before,
+  the index page failed on such a recording, and with experiment assets so
+  did the asset matching. A recording the matcher cannot read at all is left
+  out of the matching with a warning, and keeps its replay without the note.
+- jsPsych extension (`jsPsychCyborgHunter`, manual wiring): the late load
+  callback of a synchronous step (a `call-function`, say) no longer starts a
+  monitor trial. With every trial opted in, as the docs' `forEach` does, it
+  threw `invalid lifecycle call: cannot transition from 'trial'` into
+  jsPsych, and after a `post_trial_gap` the next trial's row carried the
+  step's `trial-<n>` label.
+- jsPsych replay extension: the late load callback of a synchronous step (a
+  `call-function`, say) no longer opens a replay segment. Followed by a
+  `post_trial_gap`, it opened a segment for the step that had ended;
+  followed by a trial that returns a Promise (audio plugins), it started that
+  trial's segment early, under the step's `trialId`. Either way the real
+  start then logged a `lifecycle` capture failure. With the one-line setup a
+  researcher's own per-trial replay entry without `params` is covered too.
+
+### Removed
+- Internal renderer wrappers removed
+  (`src/cli/renderers/{trajectories,session-timeline,typing-profile,html-index,replay-assets}.js`).
+  The report is unchanged. Deep imports of these undocumented paths no longer
+  resolve.
+
 ## [0.11.0] — 2026-10-02
 
 The report in the browser: the `/analyze/` page on the project site builds

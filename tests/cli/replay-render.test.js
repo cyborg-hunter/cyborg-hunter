@@ -2,15 +2,12 @@
 // Viewer model conversion (wire → trial-relative), JSONP asset emission,
 // html-index Replay section states, viewer client syntactic health.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, existsSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import {
-  buildViewerModel, renderReplayAssets,
-} from '../../src/cli/renderers/replay-assets.js';
-import { renderHtmlIndex } from '../../src/cli/renderers/html-index.js';
+import { readFileSync } from 'fs';
+import { buildViewerModel } from '../../src/replay/viewer-model.js';
+import { buildReplayAssets } from '../../src/cli/renderers/replay-assets-core.js';
+import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import {
   readReplayClientSrc, assembleReplayClientSrc,
 } from '../../src/cli/renderers/replay-client-source.js';
@@ -103,6 +100,23 @@ function v1Recording() {
   };
 }
 
+// The replay pass as report-core.js runs it: each asset goes to the sink,
+// here a map of path → script text.
+function buildAssets(participants) {
+  const files = new Map();
+  const res = buildReplayAssets(participants, {
+    sink: (path, bytes) => files.set(path, new TextDecoder().decode(bytes)),
+  });
+  return { res, files };
+}
+
+// The report page with the assembled viewer client inlined, as report.js
+// hands it to report-core.js.
+function renderPage(summaries, triage, participants) {
+  return renderIndexHtml(summaries, triage, participants, {}, false,
+    { replayClientSrc: readReplayClientSrc() });
+}
+
 describe('buildViewerModel', () => {
   it('converts event times to segment-relative and carries tier/scoring', () => {
     const m = buildViewerModel(wireRecording());
@@ -131,23 +145,18 @@ describe('buildViewerModel', () => {
   });
 });
 
-describe('renderReplayAssets', () => {
-  let dir;
-  before(() => { dir = mkdtempSync(join(tmpdir(), 'ch-replay-assets-')); });
-  after(() => { rmSync(dir, { recursive: true, force: true }); });
-
-  it('writes JSONP-style per-participant files and reports totals', () => {
+describe('buildReplayAssets', () => {
+  it('emits JSONP-style per-participant files and reports totals', () => {
     const participants = [
       { participantId: 'P1', replay: { recording: wireRecording(), file: 'x.json', meta: null } },
       { participantId: 'P2', replay: null },
     ];
-    const res = renderReplayAssets(participants, dir);
+    const { res, files } = buildAssets(participants);
     assert.strictEqual(res.count, 1);
     assert.ok(res.totalBytes > 200);
-    const files = readdirSync(join(dir, 'replay'));
-    assert.deepStrictEqual(files, ['P1.replay.js']);
+    assert.deepStrictEqual([...files.keys()], ['replay/P1.replay.js']);
     // The file must be executable JS assigning into window.__chReplay
-    const src = readFileSync(join(dir, 'replay', 'P1.replay.js'), 'utf8');
+    const src = files.get('replay/P1.replay.js');
     const windowStub = {};
     new Function('window', src)(windowStub);
     assert.ok(windowStub.__chReplay['P1']);
@@ -157,36 +166,29 @@ describe('renderReplayAssets', () => {
   });
 
   it('disambiguates colliding sanitized filenames and stamps assetPath', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-collide-'));
-    try {
-      const recA = wireRecording(); recA.participant_id = 'a/b';
-      const recB = wireRecording(); recB.participant_id = 'a_b';
-      const participants = [
-        { participantId: 'a/b', replay: { recording: recA, file: 'x', meta: null } },
-        { participantId: 'a_b', replay: { recording: recB, file: 'y', meta: null } },
-      ];
-      const res = renderReplayAssets(participants, sub);
-      assert.strictEqual(res.count, 2);
-      const files = readdirSync(join(sub, 'replay')).sort();
-      assert.strictEqual(files.length, 2, 'colliding names must not overwrite');
-      assert.notStrictEqual(participants[0].replay.assetPath, participants[1].replay.assetPath);
-      // each asset defines its OWN raw pid key
-      for (const p of participants) {
-        const src = readFileSync(join(sub, p.replay.assetPath), 'utf8');
-        const w = {};
-        new Function('window', src)(w);
-        assert.ok(w.__chReplay[p.participantId], `store key for ${p.participantId}`);
-      }
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+    const recA = wireRecording(); recA.participant_id = 'a/b';
+    const recB = wireRecording(); recB.participant_id = 'a_b';
+    const participants = [
+      { participantId: 'a/b', replay: { recording: recA, file: 'x', meta: null } },
+      { participantId: 'a_b', replay: { recording: recB, file: 'y', meta: null } },
+    ];
+    const { res, files } = buildAssets(participants);
+    assert.strictEqual(res.count, 2);
+    assert.strictEqual(files.size, 2, 'colliding names must not overwrite');
+    assert.notStrictEqual(participants[0].replay.assetPath, participants[1].replay.assetPath);
+    // each asset defines its OWN raw pid key
+    for (const p of participants) {
+      const src = files.get(p.replay.assetPath);
+      const w = {};
+      new Function('window', src)(w);
+      assert.ok(w.__chReplay[p.participantId], `store key for ${p.participantId}`);
+    }
   });
 
-  it('writes nothing when no participant has a replay', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-none-'));
-    try {
-      const res = renderReplayAssets([{ participantId: 'X', replay: null }], sub);
-      assert.strictEqual(res.count, 0);
-      assert.ok(!existsSync(join(sub, 'replay')));
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+  it('emits nothing when no participant has a replay', () => {
+    const { res, files } = buildAssets([{ participantId: 'X', replay: null }]);
+    assert.strictEqual(res.count, 0);
+    assert.strictEqual(files.size, 0, 'nothing reaches the sink, so the CLI creates no replay/ directory');
   });
 
   // ── the buildViewerModel throw ────────────────────────────────────────────
@@ -195,33 +197,27 @@ describe('renderReplayAssets', () => {
   // participant, stamp the failure where the report already has a state for
   // it (renderReplaySection's error branch), and keep going.
   it('skips an unloadable artifact and still writes the rest of the cohort', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-unloadable-'));
-    try {
-      const participants = [
-        { participantId: 'BAD', replay: { recording: v1Recording(), file: 'BAD-replay-1.json', meta: null } },
-        { participantId: 'GOOD', replay: { recording: wireRecording(), file: 'GOOD-replay-2.json', meta: null } },
-      ];
-      const res = renderReplayAssets(participants, sub);
-      assert.strictEqual(res.count, 1, 'the healthy participant still gets an asset');
-      assert.deepStrictEqual(readdirSync(join(sub, 'replay')), ['GOOD.replay.js']);
-      assert.strictEqual(res.skipped.length, 1);
-      assert.strictEqual(res.skipped[0].participantId, 'BAD');
-      assert.match(res.skipped[0].reason, /schema_version/,
-        'the §11 rejection reason travels, not a bare "failed"');
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+    const participants = [
+      { participantId: 'BAD', replay: { recording: v1Recording(), file: 'BAD-replay-1.json', meta: null } },
+      { participantId: 'GOOD', replay: { recording: wireRecording(), file: 'GOOD-replay-2.json', meta: null } },
+    ];
+    const { res, files } = buildAssets(participants);
+    assert.strictEqual(res.count, 1, 'the healthy participant still gets an asset');
+    assert.deepStrictEqual([...files.keys()], ['replay/GOOD.replay.js']);
+    assert.strictEqual(res.skipped.length, 1);
+    assert.strictEqual(res.skipped[0].participantId, 'BAD');
+    assert.match(res.skipped[0].reason, /schema_version/,
+      'the §11 rejection reason travels, not a bare "failed"');
   });
 
   it('stamps the skipped participant so the report can say why', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-stamp-'));
-    try {
-      const p = { participantId: 'BAD', replay: { recording: v1Recording(), file: 'BAD-replay-1.json', meta: null } };
-      renderReplayAssets([p], sub);
-      assert.strictEqual(p.replay.error, 'unloadable');
-      assert.match(p.replay.reason, /schema_version must be the integer 2/);
-      assert.strictEqual(p.replay.file, 'BAD-replay-1.json');
-      assert.ok(!p.replay.recording,
-        'the recording must be cleared, or the index renders a load button for an asset that was never written');
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+    const p = { participantId: 'BAD', replay: { recording: v1Recording(), file: 'BAD-replay-1.json', meta: null } };
+    buildAssets([p]);
+    assert.strictEqual(p.replay.error, 'unloadable');
+    assert.match(p.replay.reason, /schema_version must be the integer 2/);
+    assert.strictEqual(p.replay.file, 'BAD-replay-1.json');
+    assert.ok(!p.replay.recording,
+      'the recording must be cleared, or the index renders a load button for an asset that was never written');
   });
 
   // ── refusals stamped one layer earlier ────────────────────────────────
@@ -232,55 +228,42 @@ describe('renderReplayAssets', () => {
   // and the CLI line is one of them, so `skipped` has to account for both
   // origins or the console is a partial account of what did not make it.
   it('reports an artifact already stamped unloadable by ingest', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-ingeststamp-'));
-    try {
-      const participants = [
-        { participantId: 'REFUSED', replay: { error: 'unloadable', file: 'REFUSED-replay-1.json',
-          reason: 'trials[1].trial_index (7) must equal its array position (1).' } },
-        { participantId: 'GOOD', replay: { recording: wireRecording(), file: 'GOOD-replay-2.json', meta: null } },
-      ];
-      const res = renderReplayAssets(participants, sub);
-      assert.strictEqual(res.count, 1, 'the healthy participant still gets an asset');
-      assert.strictEqual(res.skipped.length, 1);
-      assert.strictEqual(res.skipped[0].participantId, 'REFUSED');
-      assert.match(res.skipped[0].reason, /trial_index/,
-        "the converter's own sentence reaches the console, not a bare 'unloadable'");
-      assert.strictEqual(participants[0].replay.error, 'unloadable',
-        'the stamp ingest wrote is left exactly as it was');
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+    const participants = [
+      { participantId: 'REFUSED', replay: { error: 'unloadable', file: 'REFUSED-replay-1.json',
+        reason: 'trials[1].trial_index (7) must equal its array position (1).' } },
+      { participantId: 'GOOD', replay: { recording: wireRecording(), file: 'GOOD-replay-2.json', meta: null } },
+    ];
+    const { res } = buildAssets(participants);
+    assert.strictEqual(res.count, 1, 'the healthy participant still gets an asset');
+    assert.strictEqual(res.skipped.length, 1);
+    assert.strictEqual(res.skipped[0].participantId, 'REFUSED');
+    assert.match(res.skipped[0].reason, /trial_index/,
+      "the converter's own sentence reaches the console, not a bare 'unloadable'");
+    assert.strictEqual(participants[0].replay.error, 'unloadable',
+      'the stamp ingest wrote is left exactly as it was');
   });
 
   it('reports ingest-stamped refusals even when nothing in the cohort is loadable', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-allrefused-'));
-    try {
-      const res = renderReplayAssets([
-        { participantId: 'R1', replay: { error: 'unloadable', reason: 'refused', file: 'a.json' } },
-      ], sub);
-      assert.strictEqual(res.count, 0);
-      assert.strictEqual(res.skipped.length, 1,
-        'the early return for "no recordings to write" must not swallow the account');
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+    const { res } = buildAssets([
+      { participantId: 'R1', replay: { error: 'unloadable', reason: 'refused', file: 'a.json' } },
+    ]);
+    assert.strictEqual(res.count, 0);
+    assert.strictEqual(res.skipped.length, 1,
+      'the early return for "no recordings to write" must not swallow the account');
   });
 
   // The boundary, stated so it is not read as an oversight: a corrupted file
   // (ingest's `parse_failed`) keeps its own lead text in the report and its own
   // ingest warning, and does not join this list.
   it('does not report a corrupted artifact as a skip', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-corruptskip-'));
-    try {
-      const res = renderReplayAssets([
-        { participantId: 'C1', replay: { error: 'parse_failed', reason: 'Unexpected end of JSON input', file: 'c.json' } },
-      ], sub);
-      assert.strictEqual(res.skipped.length, 0);
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+    const { res } = buildAssets([
+      { participantId: 'C1', replay: { error: 'parse_failed', reason: 'Unexpected end of JSON input', file: 'c.json' } },
+    ]);
+    assert.strictEqual(res.skipped.length, 0);
   });
 });
 
 describe('html-index replay section', () => {
-  let dir;
-  before(() => { dir = mkdtempSync(join(tmpdir(), 'ch-replay-html-')); });
-  after(() => { rmSync(dir, { recursive: true, force: true }); });
-
   function baseTriage(pid) {
     return [{
       participantId: pid, score: 0, reason: 'clean', hardTriggered: false,
@@ -289,13 +272,11 @@ describe('html-index replay section', () => {
     }];
   }
 
-  async function renderAll(participants) {
-    const config = { outputDir: dir };
-    await renderHtmlIndex(
+  function renderAll(participants) {
+    return renderPage(
       participants.map(p => p.summary || { participantId: p.participantId, trialCount: 1 }),
       participants.flatMap(p => baseTriage(p.participantId)),
-      participants, config, false);
-    return readFileSync(join(dir, 'index.html'), 'utf8');
+      participants);
   }
   const render = (participant) => renderAll([participant]);
 
@@ -366,9 +347,9 @@ describe('html-index replay section', () => {
       { participantId: 'GOOD', trials: [{}],
         replay: { recording: wireRecording(), file: 'GOOD-replay-2.json', meta: null } },
     ];
-    // Real report order: assets first (report.js:149), index second (:156),
+    // Real report order (report-core.js): assets first, index second,
     // over the SAME participant array — which is how the stamp travels.
-    renderReplayAssets(participants, dir);
+    buildAssets(participants);
     const html = await renderAll(participants);
     assert.match(html, /Replay artifact could not be loaded/i);
     assert.match(html, /schema_version must be the integer 2/);
@@ -406,19 +387,13 @@ describe('the inlined viewer client survives HTML parsing', () => {
   // modules discuss "</script> breakouts" in their comments, so the report
   // shipped a viewer that could not parse. demo/replay-host.js already
   // neutralizes the sequence for its own inlining; the report did not.
-  let dir;
-  before(() => { dir = mkdtempSync(join(tmpdir(), 'ch-replay-inline-')); });
-  after(() => { rmSync(dir, { recursive: true, force: true }); });
-
   it('parses as JavaScript when cut the way a browser cuts it', async () => {
-    await renderHtmlIndex(
+    const html = await renderPage(
       [{ participantId: 'P1', trialCount: 1 }],
       [{ participantId: 'P1', score: 0, reason: 'clean', hardTriggered: false,
         softFlagged: false, edgeExitCount: 0, summary: { participantId: 'P1', trialCount: 1 } }],
       [{ participantId: 'P1', trials: [{}],
-        replay: { recording: wireRecording(), file: 'x.json', meta: null } }],
-      { outputDir: dir }, false);
-    const html = readFileSync(join(dir, 'index.html'), 'utf8');
+        replay: { recording: wireRecording(), file: 'x.json', meta: null } }]);
     // Exactly the browser's rule: from the tag open to the first closer.
     const blocks = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script/g)].map(m => m[1]);
     const viewerBlock = blocks.find(b => b.includes('initChReplayViewer'));
@@ -503,24 +478,21 @@ describe('viewer client file', () => {
   });
 
   it('escapes < in JSONP payloads (script-breakout proofing)', () => {
-    const sub = mkdtempSync(join(tmpdir(), 'ch-replay-esc-'));
-    try {
-      const rec = wireRecording();
-      // v2 carries the hostile string as DomNode TEXT, never as markup — the
-      // reconstruction is instantiated, not parsed. The JSONP escape is still
-      // required: the asset is a <script> in the report.
-      rec.segments[0].initial_dom.children[0].children[0].text =
-        '</script><script>alert(1)</script>';
-      renderReplayAssets([{ participantId: 'PX', replay: { recording: rec, file: 'x', meta: null } }], sub);
-      const src = readFileSync(join(sub, 'replay', 'PX.replay.js'), 'utf8');
-      assert.ok(!src.includes('</script>'), 'no literal </script> in the asset');
-      const w = {};
-      new Function('window', src)(w);
-      assert.strictEqual(
-        w.__chReplay['PX'].segments[0].initialDom.children[0].children[0].text,
-        '</script><script>alert(1)</script>',
-        'payload still decodes to the original content');
-    } finally { rmSync(sub, { recursive: true, force: true }); }
+    const rec = wireRecording();
+    // v2 carries the hostile string as DomNode TEXT, never as markup — the
+    // reconstruction is instantiated, not parsed. The JSONP escape is still
+    // required: the asset is a <script> in the report.
+    rec.segments[0].initial_dom.children[0].children[0].text =
+      '</script><script>alert(1)</script>';
+    const { files } = buildAssets([{ participantId: 'PX', replay: { recording: rec, file: 'x', meta: null } }]);
+    const src = files.get('replay/PX.replay.js');
+    assert.ok(!src.includes('</script>'), 'no literal </script> in the asset');
+    const w = {};
+    new Function('window', src)(w);
+    assert.strictEqual(
+      w.__chReplay['PX'].segments[0].initialDom.children[0].children[0].text,
+      '</script><script>alert(1)</script>',
+      'payload still decodes to the original content');
   });
 
   it('viewer frame is non-interactive and CSP blocks forms/frames/connect', () => {

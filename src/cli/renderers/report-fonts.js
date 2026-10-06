@@ -2,9 +2,9 @@
 // The report's typefaces, embedded so the report stays a single offline file.
 // Reads the committed WOFF2 files listed in fonts/FONTS_MANIFEST.json and
 // returns one @font-face block of base64 data URIs (≈227 KB for the six
-// families). html-index.js passes it to renderIndexHtml as opts.fontFaceCss,
-// the same way it passes the replay viewer source, so html-index-core.js
-// stays pure (no fs) and can be bundled for the browser demo.
+// families). report.js passes it to buildReport as fontFaceCss, the same way
+// it passes the replay viewer source, so report-core.js and html-index-core.js
+// stay pure (no fs) and can be bundled for the browser /analyze/ page.
 //
 // Node only: keep this module out of anything src/cli/preview-entry.js
 // imports (npm run demo:preview fails the build if it leaks in).

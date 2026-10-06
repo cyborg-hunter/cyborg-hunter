@@ -417,6 +417,39 @@ await withPage('file input after setInputFiles leaks neither value nor filename'
   check(!/fakepath/i.test(json), 'no fakepath value anywhere in the recording');
 });
 
+// 15. Events between resumeSession() and the next startTrial(). While the
+//     recording was stopped, Chromium's observer kept delivering and the
+//     mapper kept numbering nodes into the span; a node inserted BEFORE the
+//     targets shifts every pre-order id. The resume must empty the span, so
+//     what arrives first resolves to nothing rather than to a node of the
+//     implicit segment's new keyframe.
+await withPage('events after resumeSession and before startTrial resolve against the new span', async (page) => {
+  await start(page, '<p id="msg">hi</p><button id="go">Go</button>', { keyframeEvery: 10 });
+  await page.evaluate((src) => window.BAT.pauseResume(src),
+    "var s=document.createElement('section'); s.id='away'; stage.insertBefore(s, stage.firstChild);");
+  // The mutation batch is the first thing recorded after the resume; a
+  // scripted click follows (page.click would send pointer moves first, whose
+  // segment-opening keyframe would hide the stale span from the click).
+  await task(page, "var k=document.createElement('span'); k.textContent='x'; stage.querySelector('#go').appendChild(k); stage.querySelector('#msg').remove();");
+  await task(page, "stage.querySelector('#go').click();");
+  const { recording, finalShape } = await page.evaluate(() => window.BAT.stopAndTake());
+  const seg = recording.segments[recording.segments.length - 1];
+  check(recording.segments.length === 2 && !!seg.initial_dom,
+    'the first event after the resume opened a keyframed segment (' + recording.segments.length + ' segments)');
+  const click = seg.events.find((e) => e.type === 'mouse.click');
+  check(!!click, 'the click is recorded');
+  const goId = idOf(seg.initial_dom, 'go');
+  check(click && (click.target == null || click.target === goId),
+    'the click names the button or nothing (target ' + (click && click.target) + ', button ' + goId + ')');
+  let player = null;
+  for (const s of recording.segments) {
+    if (s.initial_dom) player = createPlayer(s.initial_dom);
+    player.apply(s.events.filter((e) => e.type.startsWith('dom.')));
+  }
+  check(shapeOfPlayer(player) === finalShape,
+    'the player ends with the page\'s tree\n        player: ' + shapeOfPlayer(player) + '\n        page:   ' + finalShape);
+});
+
 await browser.close();
 
 console.log('\n══ battery summary ══');

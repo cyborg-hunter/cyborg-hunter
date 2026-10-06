@@ -12,7 +12,11 @@
 //                               no segment; the gap report is buffered for the
 //                               next cut() and also returned
 //                               → gapReport | null (nothing was open) | { error }
-//   cut({ source, nextTrialId?, nextOpts? })   close + segment + open next
+//   cut({ source, nextTrialId?, nextOpts?, label? })   close + segment + open next
+//                               label { trialId?, phase? } renames the span
+//                               being closed, on its report and segment only
+//                               (a host trial that never rotated in, e.g.
+//                               jsPsych call-function, adapters/jspsych-extension.js)
 //                               → { segment, trialReport }          success
 //                               → { segment, trialReport, error }   cut OK, reopen failed
 //                               → { error }                         nothing was cut
@@ -22,6 +26,10 @@
 //                               → null | { error }
 //   state()                     { open, segmentIndex, currentTrialId }
 //   setSegmentIndex(n)          multi-page restore
+//   evidence()                  how many entries of the open span count as
+//                               something the participant did (see below);
+//                               0 with no open span, Infinity when unreadable
+//   holdsEvidence(floor?)       evidence() > floor (default 0) → boolean
 // }
 //   differ: createSegmentDiffer(monitor) (src/oneliner/segment-diff.js)
 //   clock:  () => number, the page origin (performance.timeOrigin); injectable
@@ -47,6 +55,26 @@
 //     drop it, and endTrial's removeTrialListeners cleans up whatever attached;
 //   - a startTrial rejected "from 'trial'" means a trial we thought closed is
 //     still open → close it, keep its report as a gap, and retry once.
+
+// What evidence() counts. Every entry in one of the open trial's arrays (a
+// paste, a copy, an edit, a click, a tab-away...) and every new entry in a
+// session array (segment-diff.js newEntries()), but not the samples that
+// accumulate with movement alone: mouse moves (a click, mousedown or mouseup
+// still counts) and the element trace, sampled under the pointer while it
+// moves. Nor what timers record whatever the participant does: idle gaps
+// (the idle check says nobody acted) and the background window-position
+// samples (BACKGROUND_KEYS). A participant who moves the mouse, or waits,
+// while the next page loads would otherwise add a segment to every page.
+var NOT_ACTIONS = { elementTrace: true, idleGaps: true };
+function trialEvidence(trial) {
+  var n = 0;
+  Object.keys(trial).forEach(function (k) {
+    var v = trial[k];
+    if (!Array.isArray(v) || NOT_ACTIONS[k]) return;
+    n += k === 'mouseEvents' ? v.filter(function (m) { return !m || m.type !== 'move'; }).length : v.length;
+  });
+  return n;
+}
 
 // Mirrors the message thrown by monitor.js transition(); null when `e` is not
 // a lifecycle rejection.
@@ -103,10 +131,16 @@ export function createSegmenter(opts) {
   }
 
   // Close the open trial and turn everything since the last cut into a segment.
-  function closeAndSegment(source) {
+  // A label renames the closed span after the fact: the monitor ran it under
+  // its old name (decoy lookup, signal callbacks), only the saved names change.
+  // The report is endTrial's own copy, so renaming it touches nothing else.
+  function closeAndSegment(source, label) {
     var report = closeTrial();
+    var trialId = currentTrialId;
+    if (label && label.trialId) { trialId = label.trialId; if (report) report.trialId = label.trialId; }
+    if (label && label.phase && report) report.phase = label.phase;
     var segment = differ.cut({
-      segmentIndex: segmentIndex, source: source, trialId: currentTrialId,
+      segmentIndex: segmentIndex, source: source, trialId: trialId,
       pageOrigin: clock(), trialReport: report, gapReports: gapReports
     });
     gapReports = [];
@@ -147,7 +181,7 @@ export function createSegmenter(opts) {
       o = o || {};
       var out;
       try {
-        out = closeAndSegment(o.source || sourceDefault);
+        out = closeAndSegment(o.source || sourceDefault, o.label);
       } catch (e) { return fail('segment write', e); }
       try {
         openTrial(o.nextTrialId || spanId(), o.nextOpts);
@@ -181,6 +215,21 @@ export function createSegmenter(opts) {
       return { open: open, segmentIndex: segmentIndex, currentTrialId: currentTrialId };
     },
 
-    setSegmentIndex: function (n) { segmentIndex = n; }
+    setSegmentIndex: function (n) { segmentIndex = n; },
+
+    // A read that fails counts as evidence (Infinity): the host then cuts,
+    // which costs at most an extra segment, where a wrong "nothing" would
+    // lose one.
+    evidence: function () {
+      if (latched || !open) return 0;
+      try {
+        var trial = monitor.getTrialSnapshot();
+        return (trial ? trialEvidence(trial) : 0) + differ.newEntries(monitor.getSessionReport());
+      } catch (e) { return Infinity; }
+    },
+
+    holdsEvidence: function (floor) {
+      return this.evidence() > (floor || 0);
+    }
   };
 }

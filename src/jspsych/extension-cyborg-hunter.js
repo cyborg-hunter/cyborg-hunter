@@ -20,6 +20,8 @@ class CyborgHunterExtension {
     this.params = {};
     this._monitoring = false;
     this._trialStart_perfNow = null;
+    this._loadArmed = false;
+    this._armedParams = undefined;
   }
 
   // jsPsych calls this once during initJsPsych setup.
@@ -37,14 +39,35 @@ class CyborgHunterExtension {
     this.monitor.startSession();
   }
 
-  // jsPsych 7 unconditionally calls on_start for every trial that lists this
-  // extension, even though the actual setup happens in on_load (after DOM
-  // render). Without this no-op, the very next trial throws
-  // "this.extensions['cyborg-hunter'].on_start is not a function".
-  on_start(_params) {}
+  // jsPsych 7 calls on_start for every trial that lists this extension (the
+  // setup itself happens in on_load, after DOM render); here it arms that
+  // trial's on_load.
+  //
+  // A late on_load is dropped. A synchronous plugin (call-function) finishes
+  // inside its own trial() call, and jsPsych runs that trial's load callback
+  // only afterwards (jspsych.js 7.3.1 :3046-3056, :3101-3103): after the next
+  // trial's on_start and on_load, after its own on_finish (a post_trial_gap
+  // defers the next trial), or, when the next trial() returns a Promise,
+  // between that trial's on_start and its own on_load. Taken as a real one it
+  // started a monitor trial on top of an open one, which threw "cannot
+  // transition from 'trial'" into jsPsych, or opened one for the step that
+  // had ended, whose label the next trial's row then carried. jsPsych hands
+  // one trial's on_start and on_load the same params object, so on_load
+  // counts only while armed and only with that object, and on_finish
+  // disarms. Entries without params (the docs' forEach) all pass undefined:
+  // the late load is still dropped in the first two orders, and in the third
+  // it passes for the promise trial's own, whose monitor trial then starts
+  // at its on_start rather than at its load.
+  on_start(params) {
+    this._loadArmed = true;
+    this._armedParams = params;
+  }
 
   // Called per trial after DOM render. Per-trial extension params arrive here.
   on_load(params) {
+    if (!this._loadArmed || params !== this._armedParams) return;
+    this._loadArmed = false;
+    this._armedParams = undefined;
     this._monitoring = false;
 
     // Explicit opt-in mode: only monitor trials that pass a trialId.
@@ -83,6 +106,8 @@ class CyborgHunterExtension {
   // merges into the trial's data under the key declared in static info.data
   // (i.e., data.integrity).
   on_finish(_params) {
+    this._loadArmed = false;
+    this._armedParams = undefined;
     if (!this._monitoring) return {};
     this._monitoring = false;
     const report = this.monitor.endTrial();

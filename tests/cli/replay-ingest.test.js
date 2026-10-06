@@ -305,7 +305,7 @@ describe('replay artifact ingest', () => {
       // Where the analyst actually READS it: a successful run prints only
       // `Found N participants (M files had warnings)` — the warning text
       // surfaces on the no-valid-participants path (report.js:43-49). What
-      // tells them at the console is renderReplayAssets' skip line, which
+      // tells them at the console is report-core.js's `replay/ — skipped` line, which
       // carries the §11 reason.
     } finally { rmSync(d, { recursive: true, force: true }); }
   });

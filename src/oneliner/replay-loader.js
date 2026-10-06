@@ -17,7 +17,8 @@
 //            starts once the page has loaded (DOMContentLoaded) and follows
 //            the segmenter: adapters/vanilla.js ends its trial and starts the
 //            next span's at every cut, and stops it at pagehide. Recordings
-//            are per page.
+//            are per page. A page the browser shows again from the
+//            back/forward cache records on (see restore() below).
 //
 // CyborgHunter.replay() stops the recorder, serializes it and returns the
 // recording for the researcher's own save code (default autoSave mode
@@ -161,11 +162,34 @@ export function makeReplayProxy(opts) {
   return ReplayProxyExtension;
 }
 
+// The first segment recorded after a back/forward-cache restore says so, in
+// the segment's vendor data (spec §2 SegmentRecording `extensions`).
+var RESTORED_FROM_BFCACHE = { 'cyborg-hunter': { restored_from: 'bfcache' } };
+
 // createVanillaReplay({ win, doc, src, ctx, timeoutMs? })
-//   → Promise<{ api, startTrial(trialId), endTrial(), stop() }>
+//   → Promise<{ api, startTrial(trialId), endTrial(), stop(), restore(trialId) }>
 // The wrappers never throw (the recorder's lifecycle calls do, on a call out
 // of order) and do nothing once stop() ran or replay() took the recording
-// (handle.api is null then).
+// (handle.api is null then), until restore().
+//
+// restore(trialId): the browser showed the page again from the back/forward
+// cache (pageshow with persisted; adapters/vanilla.js). No script runs again,
+// and pagehide stopped the recorder, so without this everything the
+// participant does after pressing Back is missing from the replay. The
+// recording RESUMES (recorder resumeSession) rather than a new one starting:
+// a stop finalizes only end_reason, so the stopped recording can take later
+// segments, and CyborgHunter.replay() keeps returning one recording per page,
+// now holding both visits. A new recorder would have to replace this one
+// (attach() destroys the previous recorder), and replay() would then need a
+// second return value for a recording nobody saved yet. The first segment
+// after the restore is a keyframe (capture-dom forces one on resume) and
+// carries RESTORED_FROM_BFCACHE.
+// One case cannot resume: replay() already took the recording (the
+// researcher saved it before leaving, as the docs advise), and that destroyed
+// the recorder. A new recorder starts then, and replay() returns the restored
+// visit's recording; the earlier one is already in the researcher's hands.
+// A failure is a catalogue error (MESSAGES.replayRestoreFailed); the stopped
+// recording, or the one already taken, stays what replay() returns.
 export function createVanillaReplay(opts) {
   var win = opts.win, doc = opts.doc, src = opts.src, ctx = opts.ctx;
   var ready = win.CyborgHunterReplay ? Promise.resolve() : loadScript(doc, src, opts.timeoutMs, ctx.scriptNonce);
@@ -188,6 +212,28 @@ export function createVanillaReplay(opts) {
         if (!handle.api || handle.stopped) return;
         handle.stopped = true;
         try { handle.api.stopSession('finished'); } catch (_) { /* replay only */ }
+      },
+      restore: function (trialId) {
+        try {
+          if (handle.api && handle.stopped) {
+            handle.api.resumeSession();
+          } else if (!handle.api) {
+            var fresh = win.CyborgHunterReplay.attach(recorderConfig(ctx, ctx.config.replay));
+            try { fresh.startSession(); } catch (e) {
+              try { fresh.destroy(); } catch (_) { /* already failing */ }
+              throw e;
+            }
+            handle.api = fresh;
+            ctx.replayRecording = null;   // replay() takes the new recording
+          } else {
+            return;   // still recording: no pagehide stopped it
+          }
+          handle.stopped = false;
+        } catch (e) {
+          console.error(MESSAGES.replayRestoreFailed(message(e)));
+          return;
+        }
+        try { handle.api.startTrial({ trialId: trialId, extensions: RESTORED_FROM_BFCACHE }); } catch (_) { /* replay only */ }
       }
     };
     try {

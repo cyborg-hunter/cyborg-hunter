@@ -7,8 +7,8 @@
 // tags load fine. The report injects the script lazily when the analyst
 // opens a participant's Replay section.
 //
-// No fs or Buffer here: report-core.js hands every asset to its sink, and
-// replay-assets.js writes them to disk for renderReplayAssets.
+// No fs or Buffer here: report-core.js hands every asset to its sink (a disk
+// sink in report.js, a zip sink on the browser /analyze/ page).
 
 import { sanitizeId as sanitize } from '../../shared/constants.js';
 import { buildViewerModel } from '../../replay/viewer-model.js';
@@ -48,15 +48,19 @@ import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.
  * Repeated calls now return the same list (both classes are recognised from
  * the stamp), which retires the non-idempotence noted in review. One caller
  * today (`report-core.js`), which renders the index from the
- * same array; replay-assets.js's renderReplayAssets is its fs form.
+ * same array.
  *
  * `assetMap` (asset-match.js's styled-replay assets, or null) is applied to
  * each model, and `p.replay.assetNote` records what matched for the report.
+ * A recording the matcher cannot read keeps its replay (unstyled, or styled
+ * as far as the apply got) without a note, and is listed in `assetErrors`
+ * [{participantId, reason}].
  */
 export function buildReplayAssets(participants, { sink, assetMap = null }) {
   let count = 0;
   let totalBytes = 0;
   const skipped = [];
+  const assetErrors = [];
   for (const p of participants) {
     if (p.replay && !p.replay.recording && p.replay.error === 'unloadable') {
       skipped.push({ participantId: p.participantId, file: p.replay.file || null,
@@ -64,7 +68,7 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
     }
   }
   const withReplay = participants.filter((p) => p.replay && p.replay.recording);
-  if (withReplay.length === 0) return { count, totalBytes, skipped };
+  if (withReplay.length === 0) return { count, totalBytes, skipped, assetErrors };
 
   // Sanitization is lossy ('a/b' and 'a_b' both map to a_b) — dedupe with a
   // stable numeric suffix so a later write can never overwrite an earlier
@@ -90,8 +94,13 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
     // Summary FIRST: the model aliases the recording's sheets and DOM, so
     // after the apply a matched sheet no longer looks external.
     if (assetMap) {
-      p.replay.assetNote = assetNoteText(assetMatchSummary(p.replay.recording, assetMap));
-      model = applyAssetMap(model, assetMap);
+      try {
+        p.replay.assetNote = assetNoteText(assetMatchSummary(p.replay.recording, assetMap));
+        model = applyAssetMap(model, assetMap);
+      } catch (e) {
+        p.replay.assetNote = null;
+        assetErrors.push({ participantId: p.participantId, reason: e && e.message ? e.message : String(e) });
+      }
     }
     // The store is keyed by the RAW participant id (what the report's
     // loader passes); the filename uses the sanitized form.
@@ -114,5 +123,5 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
     count++;
     totalBytes += bytes.byteLength;
   }
-  return { count, totalBytes, skipped };
+  return { count, totalBytes, skipped, assetErrors };
 }

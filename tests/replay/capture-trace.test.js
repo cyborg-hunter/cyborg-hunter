@@ -1235,6 +1235,103 @@ describe('recording lifecycle (spec §5.7)', () => {
   });
 });
 
+// Inputs, scrolls, touch moves and viewport changes wait for the next frame,
+// keeping the time of the event that queued them. A segment that closes in
+// between keeps them: they are handed over before it closes, not a frame
+// later into the next segment (stamped before its origin) or after a stop
+// (dropped, or after a back/forward-cache restore, into the restored segment).
+describe('frame-coalesced records close with their own segment', () => {
+  function typedField() {
+    const { root, doc: p } = page('<div id="stage"><input id="f"><div id="pane">p</div></div>');
+    return { span: keyframe(root), field: p.getElementById('f'), pane: p.getElementById('pane') };
+  }
+  const typesOf = (trial) => trial.events.map((e) => e.type);
+
+  it('an input, a scroll and a touch move pending at endTrial land in that trial', () => {
+    const { span, field, pane } = typedField();
+    const { rec, doc, win, env } = harness({}, { span });
+    rec.startTrial({ trialId: 'a' });
+    field.value = 'last keystroke';
+    doc.fire('input', { target: field });
+    win.fire('scroll', { target: pane });
+    doc.fire('touchmove', { touches: [{ identifier: 0, clientX: 5, clientY: 6 }] });
+    rec.endTrial();
+    rec.startTrial({ trialId: 'b' });
+    env.flushRaf();                     // the frame comes after the boundary
+    const [a, b] = rec.getState().trials;
+    assert.deepStrictEqual(typesOf(a).sort(), ['input.value', 'scroll.element', 'touch.move']);
+    assert.strictEqual(a.events.find((e) => e.type === 'input.value').value, 'last keystroke');
+    assert.deepStrictEqual(typesOf(b), [], 'nothing arrives a frame late, and nothing twice');
+  });
+
+  it('a startTrial that auto-closes the open trial hands its pending input over first', () => {
+    const { span, field } = typedField();
+    const { rec, doc, env } = harness({}, { span });
+    rec.startTrial({ trialId: 'a' });
+    doc.fire('input', { target: field });
+    rec.startTrial({ trialId: 'b' });   // no endTrial: the recorder closes 'a' itself
+    env.flushRaf();
+    const [a, b] = rec.getState().trials;
+    assert.deepStrictEqual(typesOf(a), ['input.value']);
+    assert.deepStrictEqual(typesOf(b), []);
+  });
+
+  it('an input pending between trials lands before the next trial opens', () => {
+    const { span, field } = typedField();
+    const { rec, doc, env } = harness({}, { span });
+    rec.startTrial({ trialId: 'a' });
+    rec.endTrial();
+    doc.fire('input', { target: field });
+    rec.startTrial({ trialId: 'b' });
+    env.flushRaf();
+    const trials = rec.getState().trials;
+    assert.deepStrictEqual(trials.map((t) => t.trialId), ['a', '__session__', 'b']);
+    assert.deepStrictEqual(typesOf(trials[1]), ['input.value']);
+    assert.deepStrictEqual(typesOf(trials[2]), []);
+  });
+
+  it('stopSession keeps the pending input and viewport change; the later frame adds nothing', () => {
+    const { span, field } = typedField();
+    const { rec, doc, win, env } = harness({}, { span });
+    rec.startTrial({ trialId: 'a' });
+    doc.fire('input', { target: field });
+    win.innerWidth = 640;
+    win.fire('resize', {});
+    rec.stopSession('finished');
+    env.flushRaf();
+    const st = rec.getState();
+    assert.deepStrictEqual(st.trials.map(typesOf), [['input.value']]);
+    assert.deepStrictEqual(st.viewportChanges.map((v) => v.w), [640]);
+  });
+
+  it('destroy without a stop keeps the pending input', () => {
+    const { span, field } = typedField();
+    const { rec, doc } = harness({}, { span });
+    rec.startTrial({ trialId: 'a' });
+    doc.fire('input', { target: field });
+    rec.destroy();
+    assert.deepStrictEqual(rec.getState().trials.map(typesOf), [['input.value']]);
+  });
+
+  it('what is queued while stopped stays out of the resumed recording', () => {
+    const { span, field } = typedField();
+    const { rec, doc, win, env } = harness({}, { span });
+    rec.startTrial({ trialId: 'a' });
+    rec.stopSession('finished');
+    doc.fire('input', { target: field });        // after the stop: not recorded
+    win.fire('scroll', { target: null });
+    rec.resumeSession();
+    rec.startTrial({ trialId: 'restored' });
+    env.flushRaf();                               // the frame comes after the restore
+    const restored = rec.getState().trials[1];
+    assert.strictEqual(restored.trialId, 'restored');
+    assert.deepStrictEqual(typesOf(restored), []);
+    doc.fire('input', { target: field });        // and the channel still works
+    env.flushRaf();
+    assert.deepStrictEqual(typesOf(rec.getState().trials[1]), ['input.value']);
+  });
+});
+
 describe('one verdict per discrete event (per-keystroke cost)', () => {
   // CH's studies are typing-heavy, and an aligned key.down used to ask both
   // floors in the handler and again inside anchorFor: two ancestor walks of the

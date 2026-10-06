@@ -1,10 +1,9 @@
 // src/cli/renderers/session-timeline-core.js
 //
 // Pure drawing core for per-participant SESSION timeline images — no Node
-// APIs, so a browser demo can bundle it directly (0.7.2-style extraction
-// from cli/renderers/session-timeline.js, which is now a thin fs wrapper
-// around this module: it acquires node-canvas, calls drawSessionTimeline,
-// and writes the returned canvas to a PNG).
+// APIs, so the browser /analyze/ page bundles it directly. report-core.js
+// calls drawSessionTimeline per participant with an injected canvas factory
+// and hands the encoded PNG to its sink.
 //
 // drawSessionTimeline(p, config, createCanvas) draws every recorded
 // integrity signal for one participant along a single shared time axis from
@@ -101,7 +100,7 @@ const C = {
 
 // ── Per-participant renderer ─────────────────────────────────────────────
 // Returns the drawn canvas, or null if there's no data anywhere to draw
-// (caller decides what "no data" means — the fs wrapper skips the PNG write).
+// (caller decides what "no data" means — report-core.js writes no PNG).
 async function renderOne(p, config, createCanvas) {
   const events = collectEvents(p, config);
   const phases = derivePhases(p);
@@ -233,7 +232,7 @@ export function collectEvents(p, config) {
     // library screened this participant with (e.g. 5s for strict), saved in
     // session.config. Keeps the timeline's bins and footer consistent with
     // summary.csv instead of a hardcoded 3s. Three-tier precedence mirrors
-    // summary.js / typing-profile.js: the participant's saved threshold first,
+    // summary.js / typing-profile-core.js: the participant's saved threshold first,
     // then an analyst-side CLI override (for re-screening legacy cohorts that
     // predate persisted thresholds), then the default.
     tabFlickerCutoffMs: p.session?.config?.thresholds?.tabAwayDurationMs

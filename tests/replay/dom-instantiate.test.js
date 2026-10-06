@@ -707,7 +707,7 @@ describe('tolerant instantiation — a malformed node must not abort a mount', (
 
 describe('the module is concatenable into the report viewer as a plain script', () => {
   // The viewer client is an IIFE inlined verbatim into the report by
-  // html-index.js; it cannot `import`. The recorded decision is that
+  // html-index-core.js; it cannot `import`. The recorded decision is that
   // the BUILD concatenates this module's source ahead of the client rather than
   // the client carrying a second copy of it — so the module has to stay plain
   // script text with exactly one strippable ESM statement. These two tests are

@@ -108,6 +108,26 @@
           });
         },
 
+        // Stop the recording, run `src` while it is stopped (nothing is
+        // recorded, but the observer still delivers), then resume WITHOUT a
+        // startTrial: the next event opens an implicit segment.
+        pauseResume: function (src) {
+          rec.stopSession('finished');
+          /* jshint evil:true */
+          (new Function('stage', src))(stage);
+          return settle().then(function () { rec.resumeSession(); });
+        },
+
+        // finish() for a recording whose open segment is implicit (no
+        // endTrial to call): stop, serialize, tear down.
+        stopAndTake: function () {
+          rec.stopSession('finished');
+          var r = rec.getRecording();
+          rec.destroy();
+          rec = null;
+          return { recording: r, finalShape: shape(stage) };
+        },
+
         finish: function () {
           rec.endTrial();
           rec.stopSession('finished');

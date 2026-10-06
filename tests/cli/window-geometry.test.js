@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { pickWindowGeometryForTrial, chooseScreenFrame, computeZoomScale } from '../../src/cli/renderers/trajectories.js';
+import { pickWindowGeometryForTrial, chooseScreenFrame, computeZoomScale } from '../../src/cli/renderers/trajectories-core.js';
 
 // Companion fix to task #25 (window-vs-viewport nested rectangles).
-// trajectories.js already had chooseScreenFrame() that knows how to draw
+// trajectories-core.js already had chooseScreenFrame() that knows how to draw
 // nested rectangles when given metadata.{screenWidth,screenHeight,windowX,Y,W,H}.
 // What was missing: a step that translates session.windowPositions[] (the
 // 2-second-poll samples from core/signals/browser.js) into that per-trial
@@ -171,7 +171,7 @@ describe('computeZoomTag', () => {
   // outerWidth/outerWidth = 1 every time, so the tag never appeared on
   // jsPsych extension data even when the participant was clearly zoomed.
   it('flags zoom-out when innerWidth > outerWidth, even with windowWidth alias present', async () => {
-    const { computeZoomTag } = await import('../../src/cli/renderers/trajectories.js');
+    const { computeZoomTag } = await import('../../src/cli/renderers/trajectories-core.js');
     // Real shape from quillien-verify: 80% zoom, windowWidth aliased to outerWidth.
     const tag = computeZoomTag({ outerWidth: 3372, innerWidth: 4215, windowWidth: 3372, windowHeight: 1440 });
     assert.ok(tag, 'should produce a tag string for clearly-zoomed data');
@@ -179,13 +179,13 @@ describe('computeZoomTag', () => {
   });
 
   it('returns null when zoom is within ±10% of 100% (no false alarms)', async () => {
-    const { computeZoomTag } = await import('../../src/cli/renderers/trajectories.js');
+    const { computeZoomTag } = await import('../../src/cli/renderers/trajectories-core.js');
     // Typical 100% zoom with normal scrollbar offset (~17px on macOS).
     assert.equal(computeZoomTag({ outerWidth: 1200, innerWidth: 1183 }), null);
   });
 
   it('prefers visualViewport.scale when present (more direct than the inferred ratio)', async () => {
-    const { computeZoomTag } = await import('../../src/cli/renderers/trajectories.js');
+    const { computeZoomTag } = await import('../../src/cli/renderers/trajectories-core.js');
     const tag = computeZoomTag({ visualViewportScale: 1.5, outerWidth: 1200, innerWidth: 1200 });
     assert.equal(tag, 'zoom × 1.50');
   });

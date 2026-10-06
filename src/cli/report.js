@@ -79,6 +79,7 @@ export async function run(args) {
     console.log(`\nExperiment assets (${config.assetsDir}): ${built.report.matched.length} matched, ` +
       `${built.report.missing.length} missing, ${built.report.ambiguous.length} ambiguous`);
     for (const a of built.report.ambiguous) console.warn(`[cyborg-hunter] ${a.url} matches several files: ${a.candidates.join(', ')} — not inlined`);
+    for (const w of built.report.warnings) console.warn(`[cyborg-hunter] ${w}`);
   }
 
   // 3+4. Analyze and render, through the pure core (report-core.js) with a

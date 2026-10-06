@@ -1,9 +1,9 @@
 // src/cli/renderers/html-index-core.js
 // Pure string-returning core of the cohort-triage HTML report page — no
-// Node APIs, so a browser demo can bundle it directly (0.7.2 extraction from
-// cli/renderers/html-index.js, which is now a thin fs wrapper around this
-// module: it reads the replay viewer client from disk, calls renderIndexHtml,
-// and writes the result to outputDir/index.html).
+// Node APIs, so the browser /analyze/ page bundles it directly.
+// report-core.js calls renderIndexHtml and hands the page to its sink as
+// index.html; report.js reads the replay viewer client and the fonts from
+// disk and passes them in.
 //
 // The replay client source and the "visuals not rendered" fallback note are
 // both caller-supplied via `opts` (see renderIndexHtml below) rather than
@@ -32,9 +32,8 @@ import { inlineSafeJson, inlineSafeSrc } from '../../shared/inline-safe.js';
  * replay-viewer.client.js source to embed verbatim (defaults to '' — callers
  * that don't pass it get a page with an empty replay <script> block, not a
  * crash); `opts.visualsUnavailableNote` is the fallback message shown in each
- * detail pane when visualsRendered is false (defaults to the CLI wrapper's
- * historical string, so a caller that omits it sees the same text the
- * pre-split renderHtmlIndex always rendered).
+ * detail pane when visualsRendered is false (defaults to the string the CLI
+ * report shows, since report-core.js does not pass one).
  */
 export async function renderIndexHtml(summaries, triage, participants, config, visualsRendered, opts = {}) {
   // Inlining JS into an HTML <script> means owning the one sequence the HTML
@@ -106,7 +105,7 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // `hidden` attribute on the others. Each pane carries its own
   // `visualsRendered=false` fallback note inline (see renderDetail), so we no
   // longer need a top-level swap — the per-participant fallback is the contract
-  // exercised by html-index.test.js (wrapper default) and
+  // exercised by html-index.test.js (default note) and
   // html-index-core.test.js (injected override).
   const detailHtml = triage.map((t, i) => {
     const participant = participants.find(p => p.participantId === t.participantId);
@@ -1006,10 +1005,10 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
   const s = t.summary || {};
 
   // Image sections — three .image-block wrappers (session timeline, typing
-  // profile, mouse trajectories). The renderers in session-timeline.js /
-  // typing-profile.js /
-  // trajectories.js skip participants under various conditions, so not every
-  // participant has every image. The wrapper exists so onerror can hide both
+  // profile, mouse trajectories). The plot cores (session-timeline-core.js,
+  // typing-profile-core.js, trajectories-core.js) skip participants under
+  // various conditions, so not every participant has every image. The
+  // wrapper exists so onerror can hide both
   // the heading and the image together — without it, a missing PNG would leave
   // an orphan section heading floating above nothing.
   //
@@ -1090,7 +1089,7 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
     const tier = demoModel
       ? (demoModel.tier || 'trace')
       : inferTier(replay.recording);
-    // assetPath is stamped by replay-assets.js (collision-deduped filename)
+    // assetPath is stamped by replay-assets-core.js (collision-deduped filename)
     // and must be preferred — recomputing from the sanitized pid here would
     // resurrect the lossy-name collision the assets renderer just resolved.
     // Fallback uses the SHARED sanitizer (persistence/ingest/assets),
@@ -1107,8 +1106,9 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
     // in-viewer opt-in went unread through a whole session (2026-09-03).
     // Rendered only when it applies, so recordings with inlined CSS keep the
     // exact markup the snapshot tests pin.
-    const externalSheets = replay && replay.recording
-      ? (replay.recording.stylesheets || []).filter((sh) => sh && sh.kind === 'link' && sh.css == null).length
+    // Read as the viewer's tolerant loader reads it: a non-list counts none.
+    const externalSheets = replay && replay.recording && Array.isArray(replay.recording.stylesheets)
+      ? replay.recording.stylesheets.filter((sh) => sh && sh.kind === 'link' && sh.css == null).length
       : 0;
     const fetchCssLabel = externalSheets > 0
       ? `

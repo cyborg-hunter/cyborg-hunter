@@ -414,7 +414,7 @@ function startTour(participantId, capabilities, manifest) {
     if (duration >= 10000) return { key: 'tabAwayLong', detail: '≥10s bin' };
     // Strict > matches the library convention: a tab-away exactly at
     // the cutoff is an unscored flicker (scoring.js:63, summary.js
-    // "same `>` boundary" comment, session-timeline.js flicker bin).
+    // "same `>` boundary" comment, session-timeline-core.js flicker bin).
     if (duration > manifest.signals.tabAway.durationMs) return { key: 'tabAwayMid', detail: '3–10s bin' };
     // ≤ the cutoff: a flicker — under-3s tab-aways read as noise (a
     // notification, a stray click), so they get their own, non-hard
