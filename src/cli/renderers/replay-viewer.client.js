@@ -816,6 +816,12 @@
       shellReady = true;
       restore(segIdx, playhead);
       redraw();
+      // The restore can show header chips (an iframe or shadow placeholder, a
+      // segment defect), and in a browser the shell boots after the segment
+      // load's own sizing: size the stage again against the header as it now
+      // is. Nothing plays at boot, and the external-CSS rewrite that also
+      // ends here starts from a click, so the stage still holds during play.
+      refit();
     }
 
     // ── Stylesheet state (spec §2 / design §5 step 2) ──

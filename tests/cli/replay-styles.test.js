@@ -18,4 +18,13 @@ describe('replay styles: one shared copy', () => {
     const used = [...new Set([...REPLAY_STYLES_CSS.matchAll(/var\((--[\w-]+)\)/g)].map(m => m[1]))];
     assert.deepEqual(used.filter(v => !(v in declared)), []);
   });
+
+  // A classic scrollbar appearing in the fullscreen viewer during play (a
+  // chip taking it one row past the screen) would take its width from the
+  // room and rescale the stage; the gutter is kept from the start instead,
+  // on both edges, so the stage stays centred (replay-fit.spec.js).
+  it('the fullscreen viewer keeps its scrollbar gutter, on both edges', () => {
+    const rule = REPLAY_STYLES_CSS.match(/\.replay-viewer:fullscreen\s*\{([^}]*)\}/)[1];
+    assert.match(rule, /scrollbar-gutter:\s*stable both-edges/);
+  });
 });

@@ -30,11 +30,20 @@ test.beforeAll(() => {
   const raw = JSON.parse(readFileSync(join(dir, 'DEMO-FIXT.json'), 'utf8'));
   writeFileSync(join(two, 'DEMO-FIXT-2.json'), JSON.stringify({ ...raw, participantId: 'DEMO-FIXT-2' }));
   build(two);
+  // A recording (participant BAT-1) whose opening holds an iframe and a
+  // shadow host, so the viewer shows its placeholder chips when the shell
+  // boots; the participant file is the demo's under that id.
+  const placeholders = join(dir, 'placeholders');
+  mkdirSync(placeholders);
+  copyFileSync(join(ROOT, 'tests', 'browser', 'replay', 'fixtures', 'alignment-v2-frozen.json'), join(placeholders, 'BAT-1-replay-1.json'));
+  writeFileSync(join(placeholders, 'BAT-1.json'), JSON.stringify({ ...raw, participantId: 'BAT-1' }));
+  build(placeholders);
 });
 test.afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-async function loadReplay(page) {
-  await page.goto(pathToFileURL(join(dir, 'report', 'index.html')).href);
+// sub: the report's data directory under dir ('' for the demo fixture's).
+async function loadReplay(page, sub = '') {
+  await page.goto(pathToFileURL(join(dir, sub, 'report', 'index.html')).href);
   await page.locator('.replay-load-btn:visible').first().click();
   const mount = page.locator('.replay-mount').first();
   await expect.poll(() => mount.evaluate((m) => !!(m._chReplayDebug && m._chReplayDebug.frameReady())), { timeout: 20000 }).toBe(true);
@@ -56,6 +65,18 @@ test('the replay fits the pane on both axes and keeps the recorded shape', async
   const m = await measure(await loadReplay(page));
   expect(m.viewerH).toBeLessThanOrEqual(m.room + 1);
   expect(Math.abs(m.stageW / m.stageH - 1280 / 900)).toBeLessThan(0.01);
+});
+
+// The placeholder chips appear when the reconstruction's shell boots, which a
+// browser does after the segment's own sizing (the shell loads
+// asynchronously); the stage is sized again with them in the header.
+test('a recording whose opening shows placeholder chips still fits the pane once its shell boots', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 700 });
+  const mount = await loadReplay(page, 'placeholders');
+  await expect(mount.locator('[data-ch-iframe-warn]')).toBeVisible();
+  await expect(mount.locator('[data-ch-shadow-warn]')).toBeVisible();
+  const m = await measure(mount);
+  expect(m.viewerH).toBeLessThanOrEqual(m.room + 1);
 });
 
 test('with room to spare the replay is wider than the 800 px reading column', async ({ page }) => {

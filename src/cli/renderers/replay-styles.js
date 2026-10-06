@@ -67,7 +67,7 @@ export const REPLAY_STYLES_CSS = `    /* Replay viewer (see replay-viewer.client
       font-family: var(--ff-recursive); font-size: 13px; }
     .replay-size[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
     .replay-stage-wrap.replay-actual { overflow: auto; }
-    .replay-viewer:fullscreen { background: var(--surface); padding: 12px 16px; overflow: auto; }
+    .replay-viewer:fullscreen { background: var(--surface); padding: 12px 16px; overflow: auto; scrollbar-gutter: stable both-edges; }
     /* In fullscreen the stage, its lane and its scrubber stand in the middle
        of the screen when the height binds; at 1:1 the stage's box does. */
     .replay-viewer:fullscreen .replay-stage, .replay-viewer:fullscreen .replay-lane,
