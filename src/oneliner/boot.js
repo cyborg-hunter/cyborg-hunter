@@ -366,7 +366,10 @@ export function boot(opts) {
 // Qualtrics survey (ch-qualtrics.js; ctx.qualtricsLayout is set only with
 // HAS_QUALTRICS) that is a Qualtrics page, with the same qualtricsJsPsych
 // warning; elsewhere a page without a framework, with one wrongBuild error
-// naming ch.js.
+// naming ch.js. The exception is ch-labjs.js on a lab.js page (lab.js there
+// at boot, hooked): it logs the same error, but the message's "page without
+// a framework" does not hold there, since lab.js stays hooked and its rows
+// keep their columns.
 function noticeLateJsPsych(win, ctx) {
   var doc = win.document;
   if (doc.readyState !== 'loading') return;

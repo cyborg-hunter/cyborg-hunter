@@ -385,6 +385,23 @@ describe('ch-labjs.js', () => {
     assert.deepStrictEqual(warns, [MESSAGES.labjsVersionUnsupported('23.0.0-alpha9')]);
     assert.strictEqual(ctx.host, 'vanilla');
   });
+
+  // lab.js is there at boot and hooked; jsPsych appears only by
+  // DOMContentLoaded. The late look says once that this is a jsPsych page,
+  // and lab.js stays hooked: its rows keep their columns.
+  it('a lab.js page whose jsPsych loads late: lab.js stays hooked, one wrongBuild error naming ch.js', async () => {
+    loading();
+    win.lab = fakeLab();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.initJsPsych = jsPsychStub();
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-labjs.js')]);
+    assert.strictEqual(ctx.host, 'labjs');
+    assert.ok(ctx.labjsAdapter, 'the lab.js adapter stays installed');
+    assert.deepStrictEqual(ctx.wrongBuild, { host: 'jsPsych', file: 'ch.js' });
+    ctx.labjsAdapter.restore();
+  });
 });
 
 // A file without the lab.js adapter on a lab.js page (a lab.js 23 one too):
