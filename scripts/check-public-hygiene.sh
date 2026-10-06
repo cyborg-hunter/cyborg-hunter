@@ -13,9 +13,9 @@
 # (PROLIFIC_PID env var, Prolific completionCode) are treated as leakage.
 # One path-scoped exception: the one-line setup reads Prolific's documented
 # URL parameter, so the literal is allowed in its resolver, tests and docs and
-# in the built dist/ch.js under $GATE_SCAN_DIR, and the analyze page's bundle
-# and offline file there, which carry the resolver's parameter list (PID_ALLOW_RE
-# below).
+# in the built one-line files (dist/ch.js, dist/ch-<name>.js) under
+# $GATE_SCAN_DIR, and the analyze page's bundle and offline file there, which
+# carry the resolver's parameter list (PID_ALLOW_RE below).
 #
 # The personal Pages host konukcan.github.io is banned. One allowlisted
 # exception: konukcan.github.io/cyborg-hunter, the demo's PRE-org-migration
@@ -57,15 +57,16 @@ PAGES_ALLOWLIST='konukcan.github.io/cyborg-hunter'
 # suite and its docs. Anywhere else (any other source, test, doc or script)
 # it still fails the gate, which keeps guarding the author's own study code.
 # Hits are `path:line:text`; the `:` after the path stops a later path-like
-# string in the text from matching. Under $GATE_SCAN_DIR only three built
-# files are allowed (filter_hits' second arg): dist/ch.js,
+# string in the text from matching. Under $GATE_SCAN_DIR only these built
+# files are allowed (filter_hits' second arg): the one-line files, dist/ch.js
+# and dist/ch-<name>.js (one per target in build-targets.js), and
 # analyze/analyze.bundle.js and analyze/cyborg-hunter-analyze.html.
 PID_ALLOW_RE='^(src/oneliner/participant-id\.js|tests/oneliner/participant-id\.test\.js|tests/oneliner/debug\.test\.js|tests/e2e/oneliner/[^:]*|docs/quickstart\.md|docs/advanced-integration\.md):'
 
 # Filters raw hit lines for a given pattern through the Pages allowlist when
 # the pattern is the personal-host ban, and through the PROLIFIC_PID path
 # allowlist (tracked files; or, given a scan dir as $2, that dir's
-# three built files only); every other pattern passes through unfiltered. The
+# built files above only); every other pattern passes through unfiltered. The
 # trailing `|| true` keeps this 0-exit under `set -e` even when grep -v
 # filters out every line (its normal "no output" exit is 1).
 filter_hits() {
@@ -73,9 +74,10 @@ filter_hits() {
   if [ "$pat" = 'konukcan\.github\.io' ]; then
     grep -vF "$PAGES_ALLOWLIST" || true
   elif [ "$pat" = 'PROLIFIC_PID' ] && [ -n "$scan_dir" ]; then
-    # Literal prefix matches (no regex escaping of the dir name needed): the
-    # one-line setup bundle, and the analyze page's bundle and offline file.
-    awk -v d="${scan_dir%/}/" 'index($0, d "dist/ch.js:") != 1 && index($0, d "analyze/analyze.bundle.js:") != 1 && index($0, d "analyze/cyborg-hunter-analyze.html:") != 1'
+    # The scan dir is a literal prefix (no regex escaping of the dir name
+    # needed). After it: the one-line files (dist/ch.js, dist/ch-<name>.js),
+    # and the analyze page's bundle and offline file.
+    awk -v d="${scan_dir%/}/" 'index($0, d) == 1 { p = substr($0, length(d) + 1); if (p ~ /^dist\/ch(-[a-z0-9]+)?\.js:/ || index(p, "analyze/analyze.bundle.js:") == 1 || index(p, "analyze/cyborg-hunter-analyze.html:") == 1) next } { print }'
   elif [ "$pat" = 'PROLIFIC_PID' ]; then
     grep -vE "$PID_ALLOW_RE" || true
   else
