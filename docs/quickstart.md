@@ -30,6 +30,14 @@ For production studies pin an exact version (see [README § Install](../README.m
 
 That is the whole integration. ch.js monitors every trial, nested timelines included, records each trial as its own segment, turns the honeypot on, and writes the integrity data into the rows your experiment already saves (`localSave`, DataPipe, your own server). You don't add an extension list, a per-trial loop or a `finalize()` call. It monitors the whole page, the trials and the time between them ([what that means for the scores](advanced-integration.md#data-format-the-rolling-snapshot)). The honeypot adds hidden bait to the page: read the [ethics and IRB note](advanced-integration.md#honeypot-ethics-and-irb-note) before launching. Already wiring the jsPsych extension by hand? See [Switching to the one-liner](advanced-integration.md#switching-to-the-one-liner).
 
+### Which file
+
+Each framework has its own one-line file. The files share their source, their API and the tag's `data-*` attributes; each carries the code for its own framework, so participants never download the others. A file on a page that runs another framework logs one console error naming the file to load, and records the page as a page without a framework.
+
+| File | Use it for |
+|---|---|
+| `ch.js` | jsPsych 7 experiments, and pages without a framework |
+
 ### Placement
 
 ch.js has to wrap `initJsPsych` before your code calls it, so the tag goes after `jspsych.js` and before the code that calls `initJsPsych`, in `<head>` or `<body>`. A misplaced tag logs one of two console errors:

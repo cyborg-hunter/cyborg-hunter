@@ -6,7 +6,8 @@
 //   4. guard-friction extension — deterrence (dist/extension-guard-friction.js)
 //   5. guard-honeypot extension — detection  (dist/extension-guard-honeypot.js)
 //   6. replay recorder + jsPsych adapter (dist/cyborg-hunter-replay.js)
-//   7. one-line setup bundle (dist/ch.js)
+//   7. the one-line setup, one file per framework (dist/ch.js and the
+//      others in build-targets.js)
 //
 // The two guard-extension files are SELF-CONTAINED — each bundles its
 // core IIFE plus the jsPsych extension adapter, so a study only loads
@@ -15,12 +16,13 @@
 // cyborg-hunter.min.js AND extension-cyborg-hunter.js (keeps the
 // standalone core useful for non-jsPsych studies).
 //
-// BUILD_OUTDIR (default dist) writes the seven files to another directory;
+// BUILD_OUTDIR (default dist) writes every file to another directory;
 // tests/oneliner/build.test.js uses it to build without touching dist/.
 
 import esbuild from 'esbuild';
 import { readFileSync } from 'fs';
 import { MESSAGES } from './src/oneliner/errors.js';
+import { ONE_LINE_TARGETS, defineFor } from './build-targets.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const OUT = process.env.BUILD_OUTDIR || 'dist';
@@ -117,15 +119,21 @@ async function build() {
     banner: { js: `// cyborg-hunter-replay v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
   });
 
-  // ch.js — the one-line setup. Bundles the core, the guard cores and the
-  // host adapters; NO globalName: entry.js assigns window.CyborgHunter itself
-  // after the double-load check, so a second load never clobbers the first.
-  await esbuild.build({
-    entryPoints: ['src/oneliner/entry.js'],
-    bundle: true, minify: true, format: 'iife', platform: 'browser',
-    outfile: OUT + '/ch.js',
-    banner: { js: `// cyborg-hunter one-line setup v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
-  });
+  // The one-line setup, one file per framework (build-targets.js). Each
+  // bundles the core, the guard cores and its own host adapters: `define`
+  // turns the host flags into literals (src/oneliner/build-flags.js), so the
+  // other hosts' adapters are dropped. NO globalName: entry.js assigns
+  // window.CyborgHunter itself after the double-load check, so a second load
+  // never clobbers the first.
+  for (const target of ONE_LINE_TARGETS) {
+    await esbuild.build({
+      entryPoints: ['src/oneliner/entry.js'],
+      bundle: true, minify: true, format: 'iife', platform: 'browser',
+      define: defineFor(target),
+      outfile: OUT + '/' + target.file,
+      banner: { js: `// cyborg-hunter one-line setup v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
+    });
+  }
 
   console.log('Build complete: ' + OUT + '/');
 }
