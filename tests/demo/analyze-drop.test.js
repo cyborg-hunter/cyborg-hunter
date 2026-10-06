@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { collectDropped, filesFromInput } from '../../demo/analyze/drop.js';
+import { mergeEntries, removeEntry } from '../../demo/analyze/files-panel.js';
 
 // A fake DataTransfer whose items vanish the moment the handler yields: the
 // real one does exactly that, which is why entries are collected synchronously.
@@ -57,4 +58,24 @@ test('a file item without an entry is kept beside the items that have one', asyn
 test('filesFromInput prefers webkitRelativePath', () => {
   const out = filesFromInput({ files: [{ name: 'a.csv', webkitRelativePath: 'd/a.csv' }, { name: 'b.csv', webkitRelativePath: '' }] });
   assert.deepEqual(out.map((e) => e.path), ['d/a.csv', 'b.csv']);
+});
+
+// The one-step file list (demo/analyze/files-panel.js): drops add, the same
+// file is listed once, a colliding path moves to its own folder.
+const listed = (path, size, lastModified) => ({ path, file: { size, lastModified } });
+
+test('a second drop adds to the list; the same file dropped again is listed once', () => {
+  const first = [listed('data/a.csv', 10, 1), listed('cyborg-hunter.config.json', 5, 1)];
+  const merged = mergeEntries(first, [listed('data/a.csv', 10, 1), listed('replays/A-replay-1.json', 900, 2)], 2);
+  assert.deepEqual(merged.map((e) => e.path), ['data/a.csv', 'cyborg-hunter.config.json', 'replays/A-replay-1.json']);
+});
+
+test('a different file under a path already taken moves to its own drop folder', () => {
+  const merged = mergeEntries([listed('data/a.json', 10, 1)], [listed('data/a.json', 11, 1)], 3);
+  assert.deepEqual(merged.map((e) => e.path), ['data/a.json', 'drop3/data/a.json']);
+});
+
+test('removing a file by its listed path', () => {
+  const list = [listed('a.csv', 1, 1), listed('drop2/a.csv', 2, 1)];
+  assert.deepEqual(removeEntry(list, 'drop2/a.csv').map((e) => e.path), ['a.csv']);
 });

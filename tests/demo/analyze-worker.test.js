@@ -113,6 +113,27 @@ test('check skips replay recordings when it suggests the id field: jsPsych CSVs 
   assert.equal(checked.recordings, 1);
 });
 
+// The page's file table lists every file with what the check read it as.
+test('check tells what it read each file as: data, recording, asset, config, ignored, unreadable', async () => {
+  const dir = 'tests/fixtures/demo';
+  const files = [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/DEMO-FIXT.json'),
+    fileEntry(dir, 'DEMO-FIXT-replay-1785352263344.json', 'study/DEMO-FIXT-replay-1785352263344.json'),
+    fileEntry(dir, 'cyborg-hunter.config.json', 'study/cyborg-hunter.config.json'),
+    { path: 'study/css/style.css', file: new File(['p{}'], 'style.css') },
+    { path: 'study/.DS_Store', file: new File(['x'], '.DS_Store') },
+    { path: 'study/broken.json', file: new File(['{nope'], 'broken.json') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.deepEqual(checked.files.map((f) => [f.path.replace('study/', ''), f.kind]), [
+    ['DEMO-FIXT.json', 'data'], ['DEMO-FIXT-replay-1785352263344.json', 'recording'], ['cyborg-hunter.config.json', 'config'],
+    ['css/style.css', 'asset'], ['.DS_Store', 'ignored'], ['broken.json', 'unreadable']]);
+  assert.equal(checked.configPath, 'study/cyborg-hunter.config.json');
+});
+
 test('run on the sample streams a zip of the full report and returns the in-page report', async () => {
   const w = startWorker();
   w.send({ type: 'check', sample: true });

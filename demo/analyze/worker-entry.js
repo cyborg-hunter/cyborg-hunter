@@ -16,7 +16,9 @@
 //     ready         on boot: the baked assets and the tested cohort size
 //     checked       file counts, the merged config and its warnings, the id suggestion
 //                   (sampled: the data files it was read from; recordings: the
-//                   replay recordings among the JSON files, never sampled)
+//                   replay recordings among the JSON files, never sampled),
+//                   and every file with what it was read as (files: [{path, kind}],
+//                   kind data | recording | asset | config | ignored | unreadable)
 //     progress      { phase: 'check' | 'ingest' | 'report', done, total, label? }
 //     zip           { chunk } — the report zip, in order, buffer transferred
 //     done          the in-page report html and what the page lists beside it
@@ -84,8 +86,15 @@ async function check(msg) {
   // A recording's keys are no data file's, and a field must be in every peeked
   // file to be suggested: one recording in the list left no candidate at all.
   var peeks = [], recordings = 0;
+  // What each file was read as, for the page's file table: by name for
+  // assets, the config and ignored files; by the peek for the rest.
+  var kinds = Object.create(null);
+  readers.forEach(function (r) { kinds[r.path] = 'ignored'; });
+  groups.assets.forEach(function (r) { kinds[r.path] = 'asset'; });
+  if (groups.config) kinds[groups.config.path] = 'config';
   for (var i = 0; i < groups.participant.length; i++) {
     var peek = await peekParticipantFile(groups.participant[i]);
+    kinds[groups.participant[i].path] = peek && peek.recording ? 'recording' : peek ? 'data' : 'unreadable';
     if (peek && peek.recording) recordings++;
     else if (peek) peeks.push(peek);
     post({ type: 'progress', phase: 'check', done: i + 1, total: groups.participant.length });
@@ -98,7 +107,9 @@ async function check(msg) {
   post({ type: 'checked',
     counts: { participant: groups.participant.length, replay: groups.replay.length, assets: groups.assets.length, ignored: groups.ignored.length },
     configFound: !!groups.config, config: merged.config, configWarnings: configWarnings,
-    idSuggestion: idSuggestion, sampled: peeks.length, recordings: recordings });
+    idSuggestion: idSuggestion, sampled: peeks.length, recordings: recordings,
+    files: readers.map(function (r) { return { path: r.path, kind: kinds[r.path] }; }),
+    configPath: groups.config ? groups.config.path : null });
 }
 
 async function run(msg) {
