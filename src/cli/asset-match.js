@@ -451,6 +451,16 @@ export async function buildAssetMap(recordings, droppedFiles) {
   return { assetMap, report };
 }
 
+// The sheets and stylesheet updates applyAssetMap has rewritten. A viewer
+// model aliases its recording's (viewer-model.js), so a second model over the
+// same recording (the analyze page re-rendering a report, or serving one
+// replay) hands back text this module already rewrote, and rewriting it again
+// is not a no-op: a spliced sheet keeps its own supplied imports as URLs,
+// which a second pass finds at the top level and splices as well. Each one is
+// rewritten once; the set lives outside the objects, so the model's JSON does
+// not change. Images need no mark: a data: URI is never looked up again.
+const cssApplied = new WeakSet();
+
 export function applyAssetMap(model, assetMap) {
   if (!assetMap || assetMap.size === 0) return model;
   const uris = new Map();
@@ -504,16 +514,20 @@ export function applyAssetMap(model, assetMap) {
     return hoisted.length ? hoisted.join('\n') + '\n' + out : out;
   };
   const sheet = (s) => {
-    if (!s) return;
+    if (!s || typeof s !== 'object' || cssApplied.has(s)) return;
+    cssApplied.add(s);
     const e = s.kind === 'link' && s.css == null ? supplied(assetMap, s.href) : null;
     if (e) s.css = decodeUtf8(e.bytes);
     if (s.css) s.css = rewriteCss(s.css, s.href, false);
   };
   for (const s of list(model.stylesheets)) sheet(s);
   for (const ev of list(model.stylesheetEvents)) {
-    if (!ev) continue;
+    if (!ev || typeof ev !== 'object') continue;
     if (ev.type === 'stylesheet.add') sheet(ev.sheet);
-    else if (ev.type === 'stylesheet.update' && ev.css) ev.css = rewriteCss(ev.css, null, false);
+    else if (ev.type === 'stylesheet.update' && ev.css && !cssApplied.has(ev)) {
+      cssApplied.add(ev);
+      ev.css = rewriteCss(ev.css, null, false);
+    }
   }
   // Media is never matched, so only image references are rewritten.
   eachRef(segmentsOf(model), (kind, url, replace) => {

@@ -184,6 +184,27 @@ describe('references inside a supplied stylesheet', () => {
     const once = JSON.stringify(model);
     assert.strictEqual(JSON.stringify(applyAssetMap(model, assetMap)), once, 'a second apply changes nothing');
   });
+  // The model aliases the recording's sheets and events, so a second model
+  // over the same recording (the analyze page re-rendering, or serving one
+  // replay) starts from the text the first apply wrote. A spliced sheet keeps
+  // its own supplied imports as URLs, which a second apply would find at the
+  // top level and splice as well.
+  it('a second apply over the same recording leaves a diamond of supplied @imports as the first wrote it', async () => {
+    const files = [
+      { path: 'css/style.css', read: async () => bytes('@import "theme.css";\n@import "vars.css";\nh1{color:red}') },
+      { path: 'css/theme.css', read: async () => bytes('@import "vars.css";\n.t{}') },
+      { path: 'css/vars.css', read: async () => bytes(':root{--v:1}') },
+    ];
+    const rec = hrefOnly();
+    rec.stylesheet_events = [{ type: 'stylesheet.update', t: 5, id: 1, css: '@import url(https://exp.example.org/study/css/theme.css);\n.u{}' }];
+    const { assetMap } = await buildAssetMap([rec], files);
+    const first = applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(first.stylesheets[0].css, '@import url("https://exp.example.org/study/css/vars.css");\n.t{}\n:root{--v:1}\nh1{color:red}');
+    assert.strictEqual(first.stylesheetEvents[0].css, '@import url("https://exp.example.org/study/css/vars.css");\n.t{}\n.u{}');
+    const once = JSON.stringify(first);
+    assert.strictEqual(JSON.stringify(applyAssetMap(buildViewerModel(rec), assetMap)), once, 'a second model, a second apply');
+    assert.strictEqual(JSON.stringify(applyAssetMap(first, assetMap)), once, 'the same model applied again');
+  });
   it('an @import in recorded CSS counts as a stylesheet, not an image, and is spliced in, never turned into a data: URI', async () => {
     const r = hrefOnly();
     r.stylesheets = [{ id: 1, kind: 'link', href: 'https://exp.example.org/study/css/main.css',

@@ -245,8 +245,11 @@ test('reanalyze before any run is an error, not a silent no-op', async () => {
 });
 
 // Under the config the run used, a re-analysis is the run again: every file
-// in the zip, the in-page report and what the page lists beside it. The data's
-// trial phases come back once each, sorted; a trial without one adds none.
+// in the zip, the in-page report and what the page lists beside it. The
+// stylesheet imports two sheets, one of which imports the other: a spliced
+// sheet keeps its own imports as URLs, which a second pass over the same
+// recording must leave as the first wrote them. The data's trial phases come
+// back once each, sorted; a trial without one adds none.
 test('reanalyze under the same config gives the first report again, file for file', async () => {
   const dir = 'tests/fixtures/demo';
   const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
@@ -255,10 +258,13 @@ test('reanalyze under the same config gives the first report again, file for fil
   const data = JSON.parse(readFileSync(dir + '/DEMO-FIXT.json', 'utf8'));
   data.trials.forEach((t, i) => { if (i === 0) delete t.integrity.phase; else t.integrity.phase = i % 2 ? 'warmup' : 'main'; });
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const style = '@import "theme.css";\n@import "vars.css";\n.stim{background:url("../img/bg.png")}';
   const files = [
     { path: 'study/data/DEMO-FIXT.json', file: new File([JSON.stringify(data)], 'DEMO-FIXT.json') },
     { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
-    { path: 'study/css/style.css', file: new File(['.stim{background:url("../img/bg.png")}'], 'style.css') },
+    { path: 'study/css/style.css', file: new File([style], 'style.css') },
+    { path: 'study/css/theme.css', file: new File(['@import "vars.css";\n.t{}'], 'theme.css') },
+    { path: 'study/css/vars.css', file: new File([':root{--v:1}'], 'vars.css') },
     { path: 'study/img/bg.png', file: new File([png], 'bg.png') },
   ];
   const w = startWorker();
