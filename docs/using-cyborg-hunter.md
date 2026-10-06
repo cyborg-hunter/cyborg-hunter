@@ -368,8 +368,8 @@ re-analyses at once, without dropping the files again. "Load sample data"
 runs the whole pipeline on the bundled synthetic pilot first, so you can see
 what you get before dropping real data. "Export config" writes a
 `cyborg-hunter.config.json` with every setting that differs from the CLI's
-defaults, so `cyborg-hunter report` in a folder holding the same files
-builds the same report.
+defaults, so `cyborg-hunter report` in a folder whose `data/` holds the
+same files (or whose `dataDir` points at them) builds the same report.
 
 **Nothing leaves your browser.** Every web page can declare a security policy
 that the browser enforces. This page's policy has four parts: no data requests

@@ -940,12 +940,15 @@ const setField = (name, value) => {
   if (el.type === 'checkbox') el.checked = value; else el.value = value;
   form.dispatchEvent(new win.Event('change', { bubbles: true }));
 };
+const downloads = () => [...document.querySelectorAll('[data-action="download"], [data-action="download-zip"]')];
 
 test('the settings show from the first check on, and a run sends their config', async () => {
   const t = boot();
   assert.equal(role('settings').hidden, true, 'nothing to set before a check');
   await toCheck(t);
   assert.equal(role('settings').hidden, false);
+  assert.equal(role('settings-form').querySelector('fieldset > legend').textContent, 'Settings');
+  assert.ok(role('id-field').closest('label'), 'the id field has its label');
   setField('softScoreThreshold', '4');
   setField('phaseInclude', 'game, practice');
   assert.equal(t.sent.length, 1, 'no run before Build');
@@ -964,6 +967,10 @@ test('on the results, a post-hoc setting re-analyses without reading the files, 
   assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID',
     config: { ...PANEL_DEFAULTS, scoring: { softScoreThreshold: 2 } } });
   assert.equal(role('rerun-status').hidden, false);
+  // Announced: the live region is always there, its text appears in it.
+  const live = role('rerun-status').parentElement;
+  assert.equal(live.getAttribute('role'), 'status');
+  assert.equal(live.hidden, false);
   assert.deepEqual(visibleStep(), ['results'], 'the page stays on its results');
   t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
   t.emit({ ...DONE, html: '<p>re-analysed</p>' });
@@ -1009,6 +1016,7 @@ test('one re-analysis at a time: the settings are disabled and a change sends no
   const sent = t.sent.length;
   assert.equal(t.page.state.zipUrl, null, 'the last run\'s zip is let go before the re-analysis streams its own');
   assert.equal(role('settings-form').querySelector('fieldset').disabled, true);
+  assert.ok(downloads().every((b) => b.disabled), 'the downloads wait: they would hand out the last run\'s files');
   setField('softScoreThreshold', '3');
   await tick();
   assert.equal(t.sent.length, sent, 'nothing sent while the first is in flight');
@@ -1016,7 +1024,20 @@ test('one re-analysis at a time: the settings are disabled and a change sends no
   t.emit(DONE);
   await tick();
   assert.equal(role('settings-form').querySelector('fieldset').disabled, false);
+  assert.ok(downloads().every((b) => !b.disabled), 'the re-analysis\'s downloads');
   assert.ok(t.page.state.zipUrl, 'the new zip is offered');
+});
+
+test('on the results, another Participant ID field reads the files again under it', async () => {
+  const t = boot();
+  await toResults(t);
+  const sel = role('id-field');
+  sel.value = 'run_id';
+  sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'run', sample: true, files: [], participantIdField: 'run_id', config: PANEL_DEFAULTS });
+  assert.equal(role('rerun-status').hidden, false);
+  assert.deepEqual(visibleStep(), ['results']);
 });
 
 test('a failed re-analysis goes back to the file list with its error, its partial zip discarded', async () => {

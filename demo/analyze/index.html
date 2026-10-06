@@ -21,7 +21,7 @@ table.files{ border-collapse:collapse; width:100%; font-size:13px; margin:8px 0 
 table.files th,table.files td{ border-bottom:1px solid var(--line); padding:4px 6px; text-align:left; vertical-align:top }
 /* Hundreds of rows scroll here: the counts, the id field and Run stay in reach. */
 .files-list{ max-height:min(45vh,400px); overflow:auto; margin:8px 0 } .files-list table.files{ margin:0 }
-.settings-panel{ border:1px solid var(--line); background:var(--surface); padding:16px 20px; margin:0 0 16px } .settings-panel fieldset{ border:0; padding:0; margin:0 }
+.settings-panel{ border:1px solid var(--line); background:var(--surface); padding:16px 20px; margin:0 0 16px } .settings-panel fieldset{ border:0; padding:0; margin:0 } .settings-panel legend{ font:600 15px var(--ff-space); padding:0; margin:0 0 6px }
 .settings-panel[hidden]{ display:none } table.weights{ border-collapse:collapse; font-size:13px } table.weights td,table.weights th{ padding:2px 8px 2px 0; text-align:left } table.weights input{ width:6em }
 .dropzone{ border:2px dashed var(--line); padding:28px; text-align:center; margin:12px 0 } .dropzone.over{ border-color:var(--ink); background:var(--bg) }
 button{ font:600 13px var(--ff-recursive); padding:6px 12px; border:1px solid var(--ink); background:var(--ink); color:var(--surface); cursor:pointer }
@@ -73,7 +73,7 @@ iframe.analyze-report{ width:100%; height:min(80vh,900px); border:1px solid var(
     <button class="secondary" data-action="download" data-file="event-log.csv">event-log.csv</button>
     <button class="secondary" data-action="reset">Start over</button>
   </div>
-  <p class="hint" data-role="rerun-status" role="status" hidden>Re-analysing…</p>
+  <div class="hint" role="status"><span data-role="rerun-status" hidden>Re-analysing…</span></div>
   <ul class="warnings" data-role="run-warnings"></ul>
   <div data-role="report"></div>
   <div data-role="replay"></div>

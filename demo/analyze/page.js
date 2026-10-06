@@ -107,6 +107,12 @@ export function createPage(root, worker, opts) {
     runButton.disabled = busy() || !state.checked || kindCount(state.checked, 'data') === 0;
     resetButtons.forEach(function (b) { b.disabled = busy(); });
     settingsPanel.setDisabled(busy());
+    // The downloads are the last answer's: while a run or a re-analysis is on
+    // its way they would hand out files the settings on screen no longer
+    // stand for, so they wait for its answer.
+    var files = state.result ? state.result.files : {};
+    root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = busy() || typeof files[b.dataset.file] !== 'string'; });
+    root.querySelector('[data-action="download-zip"]').disabled = busy() || !state.zipUrl;
   }
   function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; watchdogErrorShown = false; }
   function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; watchdogErrorShown = false; }
@@ -401,14 +407,13 @@ export function createPage(root, worker, opts) {
   // A run's or a re-analysis's answer on screen: the summary, the downloads,
   // the report frame swapped in place, the replay card's list.
   function showResults(done) {
-    updateControls();
     state.result = done;
     state.zipUrl = URL.createObjectURL(new Blob(state.zipParts, { type: 'application/zip' }));
+    updateControls();
     goTo('results');
     q(root, 'summary').textContent = done.triageOrder.length + ' participants: ' + done.counts.flaggedHard + ' hard, ' +
       done.counts.flaggedSoft + ' soft, ' + done.counts.clean + ' clean. Zip: ' + Math.round(done.zipBytes / 1024) + ' KB.';
     listWarnings(q(root, 'run-warnings'), done.warnings.concat(done.reportWarnings));
-    root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = typeof done.files[b.dataset.file] !== 'string'; });
     // reportUrl moves to the new document only once it has loaded: a failed
     // swap has already revoked its own url, and the old one is still showing.
     var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; armWatchdog(); },

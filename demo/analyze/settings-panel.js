@@ -77,8 +77,8 @@ function weightRows() {
 
 var PANEL_HTML =
   '<form data-role="settings-form"><fieldset>' +
-  '<h3>Settings</h3>' +
-  '<p>Participant ID field: <select data-role="id-field" name="participantIdField"></select> <span class="hint" data-role="id-files"></span></p>' +
+  '<legend>Settings</legend>' +
+  '<p><label>Participant ID field: <select data-role="id-field" name="participantIdField"></select></label> <span class="hint" data-role="id-files"></span></p>' +
   '<p class="hint">Settings a report applies after the data were collected. Each participant\'s tier comes from the scores their session saved: the weights order participants within a tier, the threshold re-tiers them against the saved soft scores, the phases rescope them. A change to the ID, integrity or session-report field reads the files again.</p>' +
   '<p><label>Soft-score threshold <input type="number" min="0" step="any" name="softScoreThreshold" placeholder="each participant\'s saved one"></label></p>' +
   '<p><label>Phases to include <input type="text" name="phaseInclude" placeholder="all"></label> ' +
