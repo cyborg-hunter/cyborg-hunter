@@ -127,6 +127,8 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trial's segment early, under the step's `trialId`. Either way the real
   start then logged a `lifecycle` capture failure. With the one-line setup a
   researcher's own per-trial replay entry without `params` is covered too.
+- Report (CLI and `/analyze/`): the ▸ toggle beside a long paste now shows
+  its full text. Before, a click hid the preview and showed nothing.
 
 ### Removed
 - Internal renderer wrappers removed

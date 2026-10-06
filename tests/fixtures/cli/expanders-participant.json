@@ -1,0 +1,48 @@
+{
+  "participantId": "EXP-1",
+  "metadata": {
+    "integritySession": {
+      "softScore": 0,
+      "anyHardTriggered": false,
+      "trialsCompleted": 1,
+      "aiExtensionsFound": [],
+      "sidebarEvents": [
+        { "type": "opened", "method": "innerWidth_delta", "t": 1000, "deltaIW": 312 },
+        { "type": "opened", "method": "layout_compression", "t": 1000, "deltaIW": 312 },
+        { "type": "closed", "method": "innerWidth_delta", "t": 34000, "deltaIW": -312, "duration_ms": 33000 },
+        { "type": "closed", "method": "layout_compression", "t": 34000, "deltaIW": -312, "duration_ms": 33000 },
+        { "type": "opened", "method": "innerWidth_delta", "t": 60000, "deltaIW": 300 },
+        { "type": "closed", "method": "innerWidth_delta", "t": 62000, "deltaIW": -300, "duration_ms": 2000 },
+        { "type": "opened", "method": "innerWidth_delta", "t": 90000, "deltaIW": 280 },
+        { "type": "closed", "method": "innerWidth_delta", "t": 95000, "deltaIW": -280, "duration_ms": 5000 },
+        { "type": "opened", "method": "innerWidth_delta", "t": 120000, "deltaIW": 290 },
+        { "type": "closed", "method": "innerWidth_delta", "t": 121500, "deltaIW": -290, "duration_ms": 1500 },
+        { "type": "opened", "method": "innerWidth_delta", "t": 150000, "deltaIW": 305 }
+      ],
+      "keyboardShortcuts": [
+        { "combo": "Ctrl+C" }, { "combo": "Ctrl+V" }, { "combo": "Ctrl+Tab" },
+        { "combo": "Alt+Tab" }, { "combo": "Ctrl+F" }, { "combo": "Ctrl+T" }
+      ]
+    }
+  },
+  "trials": [
+    {
+      "trialId": "t1",
+      "integrity": {
+        "trialId": "t1",
+        "participantId": "EXP-1",
+        "libraryVersion": "0.11.0",
+        "startTime": 1000,
+        "duration_ms": 160000,
+        "trialSoftScore": 0,
+        "trialSignals": {},
+        "pasteEvents": [
+          { "t": 500, "text": "BEGIN The rule is that a card wins when its suit matches the dealer's suit and its rank is higher than every other card in the same column; ties go to the earlier column, and a face card always beats a number card of the same suit. END" }
+        ],
+        "copyEvents": [],
+        "dropEvents": [],
+        "tabAwayEvents": []
+      }
+    }
+  ]
+}

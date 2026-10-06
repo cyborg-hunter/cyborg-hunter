@@ -1336,11 +1336,15 @@ function renderPasteEvidence(participant) {
     // For short pastes we render a static · marker — nothing to expand.
     const toggleGlyph = isLong ? '▸' : '·';
     const toggleAttr = isLong ? '' : ' disabled aria-label="No expansion needed"';
+    // The full text has no `hidden` attribute: the stylesheet hides it until
+    // the entry is expanded (.paste-entry:not(.expanded) .paste-full), and
+    // `[hidden]` is `display: none !important` there, which the click handler's
+    // .expanded class could never override.
     return `<div class="paste-entry">
       <button class="paste-toggle" type="button" aria-expanded="false"${toggleAttr}>${toggleGlyph}</button>
       <span class="mono paste-trial">[${esc(p.trialId)}]</span>
       <span class="paste-preview mono">${esc(preview)}</span>
-      ${isLong ? `<span class="paste-full mono" hidden>${esc(p.text)}</span>` : ''}
+      ${isLong ? `<span class="paste-full mono">${esc(p.text)}</span>` : ''}
     </div>`;
   }).join('');
 
