@@ -61,8 +61,11 @@ for (const build of ['20.2.4', '23.0.0-alpha9']) {
 // Teardown: Node's own globals the window shadowed come back, and a frame still
 // pending from an unfinished study never fires against a closed window. The
 // natives are read at import time, before any window existed.
-const NATIVE = ['fetch', 'Event', 'EventTarget', 'CustomEvent', 'navigator', 'Blob', 'FormData'];
-const NODE_GLOBALS = new Map(NATIVE.map((k) => [k, globalThis[k]]));
+// Names the window copies over Node's own globals. Which of them Node defines
+// depends on its version (navigator arrived in Node 21), so the test checks
+// that each one is Node's again where Node has it, and gone where it does not.
+const COPIED = ['fetch', 'Event', 'EventTarget', 'CustomEvent', 'navigator', 'Blob', 'FormData'];
+const NODE_GLOBALS = new Map(COPIED.map((k) => [k, globalThis[k]]));
 
 describe('closeLabWindow restores the process', () => {
   for (const build of ['20.2.4', '23.0.0-alpha9']) {
@@ -86,9 +89,8 @@ describe('closeLabWindow restores the process', () => {
       await closeLabWindow(win);
       await tick(40);
       assert.strictEqual(firedAfterClose, 0, 'no frame fired after close');
-      for (const k of NATIVE) {
-        assert.ok(NODE_GLOBALS.get(k) !== undefined, k + ' is a Node global');
-        assert.strictEqual(globalThis[k], NODE_GLOBALS.get(k), k + ' is Node\'s again');
+      for (const k of COPIED) {
+        assert.strictEqual(globalThis[k], NODE_GLOBALS.get(k), NODE_GLOBALS.get(k) === undefined ? k + ' is gone again' : k + ' is Node\'s again');
       }
       assert.strictEqual(globalThis.window, undefined);
       assert.strictEqual(globalThis.document, undefined);
