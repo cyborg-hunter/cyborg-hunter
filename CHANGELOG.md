@@ -136,6 +136,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   sidebar opening (its width change, its time and how long it stayed open),
   as many as the Sidebar count above it. Before, it listed every open and
   close entry of the log, and a sidebar seen by both detectors twice.
+- `/analyze/`: a replay recording among the dropped files no longer empties
+  the participant ID suggestion. The check step skips recordings when it
+  reads the files' columns; before, one recording left no candidate and the
+  page fell back to `participantId`, which is wrong for jsPsych's
+  `subject_ID`. The line beside the field counts the data files read and
+  the recordings skipped.
 
 ### Removed
 - Internal renderer wrappers removed

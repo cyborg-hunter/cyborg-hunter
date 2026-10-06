@@ -15,6 +15,8 @@
 //   worker → page
 //     ready         on boot: the baked assets and the tested cohort size
 //     checked       file counts, the merged config and its warnings, the id suggestion
+//                   (sampled: the data files it was read from; recordings: the
+//                   replay recordings among the JSON files, never sampled)
 //     progress      { phase: 'check' | 'ingest' | 'report', done, total, label? }
 //     zip           { chunk } — the report zip, in order, buffer transferred
 //     done          the in-page report html and what the page lists beside it
@@ -79,10 +81,13 @@ async function check(msg) {
   // is not an object gets mergeConfig's warning, as in the CLI.
   var merged = mergeConfig(fileConfig);
   configWarnings = configWarnings.concat(merged.warnings);
-  var peeks = [];
+  // A recording's keys are no data file's, and a field must be in every peeked
+  // file to be suggested: one recording in the list left no candidate at all.
+  var peeks = [], recordings = 0;
   for (var i = 0; i < groups.participant.length; i++) {
     var peek = await peekParticipantFile(groups.participant[i]);
-    if (peek) peeks.push(peek);
+    if (peek && peek.recording) recordings++;
+    else if (peek) peeks.push(peek);
     post({ type: 'progress', phase: 'check', done: i + 1, total: groups.participant.length });
   }
   var idSuggestion = suggestIdField(peeks);
@@ -93,7 +98,7 @@ async function check(msg) {
   post({ type: 'checked',
     counts: { participant: groups.participant.length, replay: groups.replay.length, assets: groups.assets.length, ignored: groups.ignored.length },
     configFound: !!groups.config, config: merged.config, configWarnings: configWarnings,
-    idSuggestion: idSuggestion, sampled: peeks.length });
+    idSuggestion: idSuggestion, sampled: peeks.length, recordings: recordings });
 }
 
 async function run(msg) {

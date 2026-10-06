@@ -27,6 +27,13 @@ function download(name, blobOrText, type) {
   // Revoked later, not now: the browser may still be reading the blob.
   setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
 }
+// What the id suggestion was read from: the data files peeked, and the
+// replay recordings among the dropped JSON files, which the peek leaves out.
+function filesInspectedText(sampled, recordings) {
+  var text = sampled + ' data file' + (sampled === 1 ? '' : 's') + ' inspected';
+  if (recordings) text += '; ' + recordings + ' replay recording' + (recordings === 1 ? '' : 's') + ' skipped';
+  return text;
+}
 function listWarnings(ul, items) {
   ul.innerHTML = '';
   (items || []).forEach(function (w) {
@@ -253,7 +260,7 @@ export function createPage(root, worker, opts) {
     }
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
     state.idField = sel.value;
-    q(root, 'id-reason').textContent = checked.sampled + ' file(s) inspected';
+    q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
     listWarnings(q(root, 'check-warnings'), checked.configWarnings);
     var tested = state.limits && state.limits.testedParticipants;
     if (tested && c.participant > tested) {
