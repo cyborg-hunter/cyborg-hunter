@@ -39,8 +39,9 @@
 # Process labels: source, tests, tools and packages must not carry labels from
 # how the code was built (plan task numbers, review-round and finding ids).
 # They mean nothing to an outside reader. The label_patterns below run over
-# those paths only (src, tests, tools, packages, bin, build.js, demo; never
-# docs, never this file), and over $GATE_SCAN_DIR when it is set.
+# those paths only (src, tests, tools, packages, bin, build.js,
+# build-targets.js, demo; never docs, never this file), and over
+# $GATE_SCAN_DIR when it is set.
 #
 # Runs from anywhere in the repo. Scans tracked files (git grep) plus,
 # optionally, $GATE_SCAN_DIR (plain grep).
@@ -153,7 +154,7 @@ label_patterns=(
   '[A-Z][0-9] review'                   # "A3 review"
   'Sol (round|R[0-9])'                  # "Sol round-1", "Sol R2"
 )
-label_paths=(src tests tools packages bin build.js demo)
+label_paths=(src tests tools packages bin build.js build-targets.js demo)
 for pat in "${label_patterns[@]}"; do
   if raw=$(git grep -I -nE "$pat" -- "${label_paths[@]}" ":(exclude)$self" 2>/dev/null); then
     echo "PROCESS LABEL /$pat/:"

@@ -27,6 +27,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'build.js'
+      - 'build-targets.js'
       - 'playwright.config.js'
       - '.github/workflows/pages.yml'
   push:
@@ -42,6 +43,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'build.js'
+      - 'build-targets.js'
       - 'playwright.config.js'
       - '.github/workflows/pages.yml'
 

@@ -1,5 +1,5 @@
 // build.js — esbuild configuration for cyborg-hunter.
-// Produces seven build targets:
+// Produces these build targets:
 //   1. IIFE for <script> tag users (dist/cyborg-hunter.min.js)
 //   2. ESM for bundler users (dist/cyborg-hunter.esm.js)
 //   3. cyborg-hunter jsPsych extension (dist/extension-cyborg-hunter.js)
