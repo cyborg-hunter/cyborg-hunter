@@ -33,12 +33,13 @@
 //
 //   On a Qualtrics survey (ctx.qualtricsLayout, set by boot from
 //   adapters/qualtrics.js detectQualtrics) the host and count parts become
-//     Qualtrics detected · page <P> · field __js_cyborg_hunter <declared|unknown>
+//     Qualtrics detected · page <P> · field __js_cyborg_hunter unknown
 //   (legacy layout: "Qualtrics detected (legacy layout, field cyborg_hunter)"
-//   and "field cyborg_hunter <...>"). P and the field state come from the
-//   writer's handle ctx.qualtrics (page(), declared() true|null; the
-//   writer answers null at present, so the field reads unknown); with no
-//   handle yet they read page 1 and unknown. The badge also ends with
+//   and "field cyborg_hunter unknown"). P comes from the writer's handle
+//   ctx.qualtrics (page()); with no handle yet it reads page 1. The field
+//   always reads unknown: the writer's declared() is always null, since no
+//   read-back on the page can tell a declared field from an undeclared one
+//   (adapters/qualtrics.js). The badge also ends with
 //   " · header re-run ×<ctx.rerunCount>" when the header ran again,
 //   " · submits missed ×<n>" when a page was submitted before the writer's
 //   hook was in place (ctx.qualtrics.missed()), and
@@ -117,16 +118,14 @@ export function createDebug(opts) {
   }
 
   // The Qualtrics pieces. ctx.qualtrics (the writer's handle) may be absent:
-  // the summary then shows page 1 and the field as unknown.
+  // the summary then shows page 1.
   function qualtricsParts(live) {
     var q = ctx.qualtrics;
     var legacy = ctx.qualtricsLayout === 'legacy';
-    var declared = q ? q.declared() : null;
     var out = {
       host: legacy ? 'Qualtrics detected (legacy layout, field ' + LEGACY_FIELD + ')' : 'Qualtrics detected',
       page: 'page ' + (q ? q.page() : 1),
-      field: 'field ' + (legacy ? LEGACY_FIELD : STORED_FIELD) + ' ' +
-        (declared === true ? 'declared' : 'unknown'),
+      field: 'field ' + (legacy ? LEGACY_FIELD : STORED_FIELD) + ' unknown',
       live: []
     };
     if (live) {

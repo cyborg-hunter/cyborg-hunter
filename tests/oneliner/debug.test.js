@@ -20,14 +20,14 @@ function jsCtx(extra) {
 
 // A Qualtrics page: the vanilla host with ctx.qualtricsLayout (and, on the
 // new layout, the survey id) set at boot and the adapter handle (page,
-// declared field, last write) on ctx.qualtrics.
+// declared() as the writer answers it, null; last write) on ctx.qualtrics.
 function qxCtx(extra) {
   return Object.assign({
     host: 'vanilla',
     qualtricsLayout: 'new',
     qualtricsSurveyId: 'SV_test',
     rerunCount: 0,
-    qualtrics: { page: () => 1, declared: () => true, lastWrite: () => null },
+    qualtrics: { page: () => 1, declared: () => null, lastWrite: () => null },
     participantIdSource: 'attribute',
     config: { debug: true, guards: { honeypot: true, friction: false }, replay: null },
     win: null
@@ -196,10 +196,10 @@ describe('createDebug', () => {
 });
 
 describe('createDebug under Qualtrics', () => {
-  it('summary under Qualtrics names the page and the declared field', () => {
+  it('summary under Qualtrics names the page and the field, whose state is unknown', () => {
     var d = createDebug({ doc: win.document, ctx: qxCtx({ win: win }), log: log });
     assert.strictEqual(d.summary(),
-      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · ID from data-participant-id · honeypot on · friction off');
+      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off');
   });
 
   it('badge under Qualtrics shows re-runs and the last write', () => {
@@ -216,7 +216,7 @@ describe('createDebug under Qualtrics', () => {
   it('new layout without a survey id: the summary, not the badge, says the saved session is shared', () => {
     var d = createDebug({ doc: win.document, ctx: qxCtx({ win: win, qualtricsSurveyId: null }), log: log });
     assert.strictEqual(d.summary(),
-      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter declared · ID from data-participant-id · honeypot on · friction off · ' +
+      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off · ' +
       'no survey id in the address or data-qualtrics-survey-id: the saved session is shared by every survey in this tab');
     assert.ok(!d.badgeText().includes('survey id'), d.badgeText());
   });
@@ -230,7 +230,7 @@ describe('createDebug under Qualtrics', () => {
     var c = qxCtx({ win: win, qualtricsLayout: 'legacy' });
     var s = createDebug({ doc: win.document, ctx: c, log: log }).summary();
     assert.match(s, /^Cyborg Hunter active · Qualtrics detected \(legacy layout, field cyborg_hunter\) · page 1 · /);
-    assert.match(s, / · field cyborg_hunter declared · /);
+    assert.match(s, / · field cyborg_hunter unknown · /);
     assert.ok(!s.includes('__js_cyborg_hunter'), s);
   });
 
