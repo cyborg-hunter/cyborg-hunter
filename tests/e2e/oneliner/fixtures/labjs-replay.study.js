@@ -1,5 +1,5 @@
 // The study of labjs-replay.html. The intro screen sets the study's own
-// participantId (RES-3), which ch.js never overwrites; ch.js's id goes into
+// participantId (RES-3), which ch-labjs.js never overwrites; ch-labjs.js's id goes into
 // cyborgHunterParticipantId and the recording.
 //   intro     html.Screen, id 0, data { participantId: 'RES-3' }, ends on the Start click   trial
 //   shapes    canvas.Screen, id 1, 300 ms timeout                                           trial
