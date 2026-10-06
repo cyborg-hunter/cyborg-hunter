@@ -213,6 +213,7 @@ export function boot(opts) {
         }
       }
     });
+    else noticeLateJsPsych(win, ctx);
     try {
       Object.defineProperty(win, '__cyborgHunterFile', {
         value: CH_FILE, writable: false, enumerable: false, configurable: true
@@ -231,6 +232,22 @@ export function boot(opts) {
     fail(win, ctx || { monitor: monitor }, adapter, e);
     return null;
   }
+}
+
+// A file without the jsPsych adapter whose tag sits above jspsych.js: the
+// check at step 5 ran before initJsPsych existed, so the file looks once more
+// when the DOM is parsed (the jsPsych adapter's placement check does the same
+// for ch.js). A document already parsed at boot was fully seen by step 5. It
+// only reports: initJsPsych is left alone and the page stays a page without a
+// framework.
+function noticeLateJsPsych(win, ctx) {
+  var doc = win.document;
+  if (doc.readyState !== 'loading') return;
+  doc.addEventListener('DOMContentLoaded', function () {
+    if (ctx.wrongBuild || typeof win.initJsPsych !== 'function') return;
+    ctx.wrongBuild = { host: 'jsPsych', file: 'ch.js' };
+    console.error(MESSAGES.wrongBuild('jsPsych', 'ch.js', CH_FILE));
+  }, { once: true });
 }
 
 // The monitor's session and the first span ('span-<index>'). Skipped after a

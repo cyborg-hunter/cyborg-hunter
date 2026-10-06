@@ -8,7 +8,7 @@ import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { Window } from 'happy-dom';
 import { MESSAGES } from '../../src/oneliner/errors.js';
-import { setBuild } from './support/build-flags.js';
+import { setBuild, buildOf } from './support/build-flags.js';
 
 class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
 let win, boot, errors, warns, infos, orig, ctx;
@@ -31,6 +31,9 @@ afterEach(() => {
   delete global.window; delete global.document; delete global.Node; delete global.MutationObserver; delete global.ResizeObserver;
 });
 const script = (dataset) => ({ dataset: dataset || {}, src: 'https://cdn/x/ch.js' });
+// A tag in <head>, still parsing (as boot.test.js 'host diagnosis' does).
+const loading = () => Object.defineProperty(win.document, 'readyState', { value: 'loading', configurable: true });
+const tick = () => new Promise((r) => setTimeout(r, 10));
 
 describe('every one-line file sets the same sentinel and names itself', () => {
   it('ch.js: ctx.file and a non-enumerable window.__cyborgHunterFile; the sentinel is ch.js', () => {
@@ -161,6 +164,54 @@ describe('a file without the jsPsych adapter (HAS_JSPSYCH false)', () => {
     const original = function () {};
     win.initJsPsych = original;
     boot({ script: script({ participantId: 'P1' }), win, monitorFactory: () => { throw new Error('kaboom'); } });
+    assert.strictEqual(win.initJsPsych, original);
+  });
+
+  // A tag above jspsych.js: initJsPsych is defined only after boot, so the
+  // file looks again once the DOM is parsed, and only once.
+  it('jsPsych defined after the tag: one wrongBuild error at DOMContentLoaded, initJsPsych untouched', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(ctx.wrongBuild, null);
+    const original = function () {};
+    win.initJsPsych = original;
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-labjs.js')]);
+    assert.deepStrictEqual(ctx.wrongBuild, { host: 'jsPsych', file: 'ch.js' });
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(win.initJsPsych, original);
+  });
+
+  it('no jsPsych by DOMContentLoaded: no error', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, []);
+    assert.strictEqual(ctx.wrongBuild, null);
+  });
+});
+
+// The same late jsPsych with ch.js, which carries the adapter: the placement
+// check reports the tag above jspsych.js (adapters/jspsych.js), and the page
+// is not a wrong-file page.
+describe('ch.js (its own flags): jsPsych defined after the tag', () => {
+  let restore;
+  before(() => { restore = setBuild(buildOf('ch.js')); });
+  after(() => restore());
+
+  it('no wrongBuild; only the placement error', async () => {
+    loading();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    const original = function () {};
+    win.initJsPsych = original;
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, [MESSAGES.loadedAboveJsPsych()]);
+    assert.strictEqual(ctx.wrongBuild, null);
     assert.strictEqual(win.initJsPsych, original);
   });
 });
