@@ -76,14 +76,32 @@ function escapeJsonForScript(value) {
 // esbuild folds '<' + 'script>' back into one literal; a variable it keeps.
 var SCRIPT_TAG = 'script';
 
+// The host's height, posted to the page that frames it at load and whenever
+// it changes, so the page can size the frame to the viewer and the replay
+// shows whole, with no scrollbar of its own (demo/analyze/replay-card.js).
+// Only a number crosses. The target is '*' because the offline single file's
+// documents have no origin to name.
+var HEIGHT_REPORTER =
+  '(function () {' +
+  'var last = -1;' +
+  'function post() {' +
+  'var h = Math.ceil(document.documentElement.getBoundingClientRect().height);' +
+  'if (h === last) return;' +
+  'last = h;' +
+  'window.parent.postMessage({ type: \'cyborg-hunter:replay-height\', height: h }, \'*\');' +
+  '}' +
+  'if (typeof ResizeObserver === \'function\') new ResizeObserver(post).observe(document.body);' +
+  'post();' +
+  '})();';
+
 // Pure: the host document's full HTML. DOM-free — see
 // tests/demo/replay-host.test.js. `styles.replayCss` is the CLI's own
 // REPLAY_STYLES_CSS and `styles.fontFaceCss` the report's base64 @font-face
 // block, both handed down by the analyze page (baked into its bundle);
 // without them the viewer renders unstyled in system faces.
 // `viewerOpts` (optional) becomes initChReplayViewer's third argument (the
-// analyze page passes { noExternalCss: true }); absent, the output is exactly
-// what it was before the argument existed.
+// analyze page passes noExternalCss, maxStageWidth and fitHeight); absent,
+// the output is exactly what it was before the argument existed.
 export function buildReplayHostHtml(replayModel, replayClientSrc, styles, viewerOpts) {
   var clientScript = escapeScriptClose(replayClientSrc || '');
   var modelJson = escapeJsonForScript(replayModel);
@@ -97,6 +115,7 @@ export function buildReplayHostHtml(replayModel, replayClientSrc, styles, viewer
     '<div id="ch-replay-mount"></div>' +
     '<' + SCRIPT_TAG + '>' + clientScript + '</' + SCRIPT_TAG + '>' +
     '<' + SCRIPT_TAG + '>window.initChReplayViewer(document.getElementById(\'ch-replay-mount\'), ' + modelJson + optsArg + ');</' + SCRIPT_TAG + '>' +
+    '<' + SCRIPT_TAG + '>' + HEIGHT_REPORTER + '</' + SCRIPT_TAG + '>' +
     '</body></html>'
   );
 }

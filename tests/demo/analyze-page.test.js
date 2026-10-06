@@ -1259,3 +1259,31 @@ describe('annotations', () => {
     assert.ok(controls().every((c) => !c.disabled));
   });
 });
+
+// The replay frame (demo/analyze/replay-card.js): it may go fullscreen, it
+// asks the viewer to fit the page's window, and it takes the height its own
+// document posts (demo/replay-host.js), from that frame only.
+test('the replay frame may go fullscreen, fits the window, and takes the height its document posts', async () => {
+  const t = boot();
+  await toResults(t);
+  const made = [];
+  const saved = URL.createObjectURL;
+  // Recorded, and still a real blob: URL, so the frame has a window to post from.
+  URL.createObjectURL = (blob) => { made.push(blob); return saved.call(URL, blob); };
+  let host;
+  try {
+    const loading = t.page.loadReplay();
+    await tick();
+    t.emit({ type: 'replay-model', participantId: 'B', model: { segments: [] } });
+    await loading;
+    host = document.querySelector('iframe.replay-host-frame');
+  } finally { URL.createObjectURL = saved; }
+  assert.equal(host.getAttribute('allow'), 'fullscreen *');
+  assert.match(await made.at(-1).text(), /, \{"noExternalCss":true,"maxStageWidth":null,"fitHeight":\d+\}\);/);
+  const post = (data, source) => window.dispatchEvent(new win.MessageEvent('message', { data, source }));
+  post({ type: 'cyborg-hunter:replay-height', height: 700 }, host.contentWindow);
+  assert.equal(host.style.height, '702px', 'the document\'s height and the frame\'s border');
+  post({ type: 'cyborg-hunter:replay-height', height: 900 }, {});                  // another window
+  post({ type: 'cyborg-hunter:replay-height', height: 'tall' }, host.contentWindow);
+  assert.equal(host.style.height, '702px');
+});

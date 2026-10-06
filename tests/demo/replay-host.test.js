@@ -92,3 +92,27 @@ test('the host :root matches the report palette (high-contrast lines)', () => {
   assert.match(html, /--ink:#0f0f0f/);
   assert.match(html, /--line:#b9b2a2/);
 });
+
+// The host tells the page that frames it how tall it is (demo/analyze/
+// replay-card.js sizes the frame from it). The script is taken from the
+// built document and run over stand-ins for the three globals it reads.
+test('the host posts its document height to the framing page, and again whenever it changes', () => {
+  const html = buildReplayHostHtml({ segments: [] }, '');
+  const reporter = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1])
+    .find((s) => s.includes('cyborg-hunter:replay-height'));
+  assert.ok(reporter, 'a script of its own');
+  const sent = [];
+  let height = 300;
+  let observed = null;
+  const document = { body: {}, documentElement: { getBoundingClientRect: () => ({ height }) } };
+  const window = { parent: { postMessage: (msg, target) => sent.push([msg, target]) } };
+  function ResizeObserver(cb) { this.observe = (el) => { observed = { el, cb }; }; }
+  new Function('window', 'document', 'ResizeObserver', reporter)(window, document, ResizeObserver);
+  assert.deepEqual(sent, [[{ type: 'cyborg-hunter:replay-height', height: 300 }, '*']]);
+  assert.equal(observed.el, document.body);
+  observed.cb();                      // the same height: nothing posted
+  height = 512.4;
+  observed.cb();
+  assert.deepEqual(sent, [[{ type: 'cyborg-hunter:replay-height', height: 300 }, '*'],
+    [{ type: 'cyborg-hunter:replay-height', height: 513 }, '*']]);
+});

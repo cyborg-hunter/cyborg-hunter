@@ -109,3 +109,43 @@ test('a figure in the report frame goes fullscreen, and closing it leaves fullsc
   await expect.poll(() => box.evaluate((el) => !!el.ownerDocument.fullscreenElement)).toBe(false);
   await assertOnlyAllowed(page, seen, allow);
 });
+
+// The replay frame takes the height its document posts, so the viewer shows
+// whole with no scrollbar of its own and fits the window; and the viewer's
+// fullscreen works inside it. From the offline single file, whose documents
+// have no origin a named allowlist could match.
+test('the replay frame is as tall as the viewer, fits the window, and the viewer goes fullscreen', async ({ page }) => {
+  const sentinel = await startSentinel();
+  const cohort = makeReplayCohort(sentinel.url);
+  const url = pathToFileURL(OFFLINE_FILE).href;
+  const allow = [url];
+  const seen = await guardNetwork(page, allow, { route: false });
+  try {
+    await page.goto(url);
+    await waitReady(page);
+    await page.setInputFiles('[data-role="file-input"]', cohort.files);
+    await buildReport(page);
+    await reportSelected(page);
+    await page.selectOption('[data-role="replay-select"]', 'DEMO-FIXT');
+    const load = page.locator('[data-action="load-replay"]');
+    await load.scrollIntoViewIfNeeded();
+    await load.click();
+    const frame = page.locator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT"]');
+    const mount = page.frameLocator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT"]').locator('#ch-replay-mount');
+    await expect.poll(() => mount.evaluate((m) => !!(m._chReplayDebug && m._chReplayDebug.frameReady())), { timeout: 30000 }).toBe(true);
+    const docHeight = () => mount.evaluate(() => Math.ceil(document.documentElement.getBoundingClientRect().height));
+    await expect.poll(async () => Math.abs((await frame.evaluate((f) => f.clientHeight)) - (await docHeight()))).toBeLessThanOrEqual(1);
+    expect(await frame.evaluate((f) => f.getBoundingClientRect().height <= window.innerHeight)).toBe(true);
+    const full = mount.locator('.replay-fullscreen');
+    // Shown only where the frame's document may go fullscreen.
+    await expect(full).toBeVisible();
+    await full.click();
+    await expect.poll(() => mount.evaluate((m) => document.fullscreenElement === m)).toBe(true);
+    // Leaving needs no user gesture, so the click is dispatched: headless
+    // Chromium does not deliver a pointer click into a fullscreen frame
+    // (the top-level case is clicked in tests/e2e/report/replay-fit.spec.js).
+    await full.dispatchEvent('click');
+    await expect.poll(() => mount.evaluate(() => !!document.fullscreenElement)).toBe(false);
+    await assertOnlyAllowed(page, seen, allow);
+  } finally { cohort.cleanup(); await sentinel.close(); }
+});

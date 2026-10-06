@@ -180,6 +180,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the viewer the whole screen. In the CLI report the replay takes the detail
   pane's full width and height, beyond the 800 px column the rest of the pane
   keeps.
+- `/analyze/`: the replay frame is as tall as the viewer inside it (it was a
+  fixed 640 px, so a tall replay scrolled inside it), the viewer fits the
+  page's window, and its **Fullscreen** control works there, the offline
+  single file included.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the
