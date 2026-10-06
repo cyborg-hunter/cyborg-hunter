@@ -30,7 +30,7 @@ test('the offline single file works from file:// and makes no request at all', a
   await page.goto(url);
   await waitReady(page);
   await page.setInputFiles('[data-role="file-input"]', pilotFiles());
-  await expect(page.locator('[data-role="counts"]')).toContainText('3 data files (3 CSV, 0 JSON');
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 data or replay files (3 CSV, 0 JSON)');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
   await buildReport(page);
   expect(await railOrder(page)).toEqual(PILOT_ORDER);
