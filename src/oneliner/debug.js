@@ -33,10 +33,10 @@
 //
 //   On a Qualtrics survey (ctx.qualtricsLayout, set by boot from
 //   adapters/qualtrics.js detectQualtrics) the host and count parts become
-//     Qualtrics detected · page <P> · field __js_cyborg_hunter <declared|NOT DECLARED|unknown>
+//     Qualtrics detected · page <P> · field __js_cyborg_hunter <declared|unknown>
 //   (legacy layout: "Qualtrics detected (legacy layout, field cyborg_hunter)"
 //   and "field cyborg_hunter <...>"). P and the field state come from the
-//   writer's handle ctx.qualtrics (page(), declared() true|false|null; the
+//   writer's handle ctx.qualtrics (page(), declared() true|null; the
 //   writer answers null at present, so the field reads unknown); with no
 //   handle yet they read page 1 and unknown. The badge also ends with
 //   " · header re-run ×<ctx.rerunCount>" when the header ran again,
@@ -126,7 +126,7 @@ export function createDebug(opts) {
       host: legacy ? 'Qualtrics detected (legacy layout, field ' + LEGACY_FIELD + ')' : 'Qualtrics detected',
       page: 'page ' + (q ? q.page() : 1),
       field: 'field ' + (legacy ? LEGACY_FIELD : STORED_FIELD) + ' ' +
-        (declared === true ? 'declared' : declared === false ? 'NOT DECLARED' : 'unknown'),
+        (declared === true ? 'declared' : 'unknown'),
       live: []
     };
     if (live) {

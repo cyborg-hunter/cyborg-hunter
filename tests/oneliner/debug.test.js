@@ -212,11 +212,6 @@ describe('createDebug under Qualtrics', () => {
     assert.ok(!d.summary().includes('last write'), d.summary());
   });
 
-  it('an undeclared field is shouted in the summary', () => {
-    var c = qxCtx({ win: win, qualtrics: { page: () => 1, declared: () => false, lastWrite: () => null } });
-    assert.match(createDebug({ doc: win.document, ctx: c, log: log }).summary(), / · field __js_cyborg_hunter NOT DECLARED · /);
-  });
-
   // The saved session is kept per survey only when boot found the survey id.
   it('new layout without a survey id: the summary, not the badge, says the saved session is shared', () => {
     var d = createDebug({ doc: win.document, ctx: qxCtx({ win: win, qualtricsSurveyId: null }), log: log });

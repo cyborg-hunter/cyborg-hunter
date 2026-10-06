@@ -262,16 +262,6 @@ export const MESSAGES = {
       'nothing to change for the page rows; rows per trial need ch.js, which writes them into jsPsych\'s data and writes nothing into embedded data',
       DOCS + 'qualtrics.md#jspsych-inside-a-survey');
   },
-  // console.error: the field is missing from Survey Flow and every write is
-  // lost. `field` is the Survey Flow name: __js_cyborg_hunter, or
-  // cyborg_hunter under the legacy layout. Not logged at present: the page
-  // cannot tell an undeclared field (adapters/qualtrics.js declared()).
-  qualtricsFieldUndeclared: function (field) {
-    return formatError('The Qualtrics field ' + field + ' is not declared',
-      'values written to an undeclared embedded-data field are dropped by Qualtrics without an error',
-      'add an Embedded Data element named ' + field + ' at the top of Survey Flow',
-      DOCS + 'qualtrics.md#declare-the-field');
-  },
   // console.error: the embedded-data setter threw, or the payload could not
   // be built within the cap (msg starts with a code: build-failed, no-json,
   // invalid-json, over-cap; an error marker then takes its place). The

@@ -178,11 +178,6 @@ const CASES = {
     fix: 'nothing to change for the page rows; rows per trial need ch.js, which writes them into jsPsych\'s data and writes nothing into embedded data',
     link: DOCS + 'qualtrics.md#jspsych-inside-a-survey'
   },
-  qualtricsFieldUndeclared: {
-    args: ['__js_cyborg_hunter'],
-    fix: 'add an Embedded Data element named __js_cyborg_hunter at the top of Survey Flow',
-    link: DOCS + 'qualtrics.md#declare-the-field'
-  },
   qualtricsWriteFailed: {
     args: ['setJSEmbeddedData threw'],
     fix: 'open an issue with this message and your <script> tag',
@@ -219,12 +214,6 @@ describe('error catalogue', () => {
     });
   }
 
-  it('the undeclared-field message names the field it is given (the legacy layout stores cyborg_hunter)', () => {
-    const msg = MESSAGES.qualtricsFieldUndeclared('cyborg_hunter');
-    assert.ok(msg.startsWith('[cyborg-hunter] The Qualtrics field cyborg_hunter is not declared:'), msg);
-    assert.ok(msg.includes('named cyborg_hunter at the top'), msg);
-    assert.ok(!msg.includes('__js_'), msg);
-  });
 
   it('the double-load message names both scripts in load order', () => {
     assert.ok(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')
