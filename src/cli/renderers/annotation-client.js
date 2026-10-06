@@ -5,7 +5,9 @@
 // "N of M reviewed" line with the exports and the import in the rail footer.
 // The annotations are kept in the report's own localStorage under
 // ch-annot:<runId>, so a report opened again from disk shows them again; the
-// JSON export is the durable copy (another browser, another machine).
+// JSON export is the durable copy (another browser, another machine). Each
+// change is written over what storage holds at that moment, so two tabs of
+// the report (or two reports of the same participants) keep each other's.
 //
 // Inline script text, not a module: the report is one HTML file. Kept as
 // String.raw so the code reads as it runs (its regexes and "\n" stay as
@@ -36,6 +38,8 @@ export const ANNOTATION_CSS = `    .annot { display: flex; flex-wrap: wrap; alig
 export const ANNOTATION_BUILDERS_JS = String.raw`
       var ANNOTATION_LABELS = ['include', 'exclude', 'flag'];
       var ANNOTATIONS_FORMAT = 'cyborg-hunter-annotations';
+      var NOTE_MAX_LENGTH = 2000;
+      var MESSAGE_IDS = 10;
       function csvCell(value) {
         var s = String(value == null ? '' : value);
         return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -55,28 +59,39 @@ export const ANNOTATION_BUILDERS_JS = String.raw`
       function annotationsJson(runId, annotations, exportedAt) {
         return JSON.stringify({ format: ANNOTATIONS_FORMAT, runId: runId, exportedAt: exportedAt, annotations: annotations }, null, 2) + '\n';
       }
+      function checkAnnotations(map, cohortIds) {
+        var known = null;
+        if (cohortIds) {
+          known = Object.create(null);
+          cohortIds.forEach(function (id) { known[id] = true; });
+        }
+        var annotations = Object.create(null), unknown = [], skipped = [];
+        Object.keys(map).forEach(function (id) {
+          var a = map[id];
+          if (known && !known[id]) { unknown.push(id); return; }
+          if (!a || typeof a !== 'object' || (a.label != null && ANNOTATION_LABELS.indexOf(a.label) < 0) ||
+              (a.note != null && (typeof a.note !== 'string' || a.note.length > NOTE_MAX_LENGTH))) { skipped.push(id); return; }
+          annotations[id] = { label: a.label || null, note: a.note || '', annotatedAt: typeof a.annotatedAt === 'string' ? a.annotatedAt : '' };
+        });
+        return { annotations: annotations, unknown: unknown, skipped: skipped };
+      }
       function readAnnotationsImport(text, cohortIds, runId) {
         var data = JSON.parse(text);
         if (!data || data.format !== ANNOTATIONS_FORMAT || !data.annotations || typeof data.annotations !== 'object') {
           throw new Error('not a cyborg-hunter annotations file');
         }
-        var known = Object.create(null);
-        cohortIds.forEach(function (id) { known[id] = true; });
-        var annotations = Object.create(null), unknown = [], skipped = [];
-        Object.keys(data.annotations).forEach(function (id) {
-          var a = data.annotations[id];
-          if (!known[id]) { unknown.push(id); return; }
-          if (!a || typeof a !== 'object' || (a.label != null && ANNOTATION_LABELS.indexOf(a.label) < 0) ||
-              (a.note != null && typeof a.note !== 'string')) { skipped.push(id); return; }
-          annotations[id] = { label: a.label || null, note: a.note || '', annotatedAt: typeof a.annotatedAt === 'string' ? a.annotatedAt : '' };
-        });
-        return { annotations: annotations, unknown: unknown, skipped: skipped, otherRun: data.runId !== runId };
+        var read = checkAnnotations(data.annotations, cohortIds);
+        return { annotations: read.annotations, unknown: read.unknown, skipped: read.skipped, otherRun: data.runId !== runId };
+      }
+      function idList(ids) {
+        if (ids.length <= MESSAGE_IDS) return ids.join(', ');
+        return ids.slice(0, MESSAGE_IDS).join(', ') + ' … and ' + (ids.length - MESSAGE_IDS) + ' more';
       }
       function importMessage(result) {
         var n = Object.keys(result.annotations).length;
         var text = 'Imported ' + n + ' annotation' + (n === 1 ? '' : 's') + '.';
-        if (result.unknown.length) text += ' Not in this report: ' + result.unknown.join(', ') + '.';
-        if (result.skipped.length) text += ' Not read: ' + result.skipped.join(', ') + '.';
+        if (result.unknown.length) text += ' Not in this report: ' + idList(result.unknown) + '.';
+        if (result.skipped.length) text += ' Not read: ' + idList(result.skipped) + '.';
         if (result.otherRun) text += ' The file comes from another report.';
         return text;
       }
@@ -87,36 +102,61 @@ export const ANNOTATION_UI_JS = String.raw`
       var RUN_ID = cfg.runId;
       var KEY = 'ch-annot:' + RUN_ID;
       var TEXT = { include: 'Include', exclude: 'Exclude', flag: 'Flag' };
+      // A note is saved after a pause in typing this long, when its field is
+      // left, and when the page goes away.
+      var NOTE_SAVE_MS = 400;
       // Rail rows and detail panes are emitted in the same (triage) order, so
       // the i-th pane belongs to the i-th row, whose data-pid is the raw id.
       var rows = [].slice.call(document.querySelectorAll('.cohort-row'));
       var panes = [].slice.call(document.querySelectorAll('.participant'));
       var ids = rows.map(function (r) { return r.dataset.pid; });
 
-      function toMap(obj) {
-        var m = Object.create(null);
-        if (obj && typeof obj === 'object') Object.keys(obj).forEach(function (k) { m[k] = obj[k]; });
-        return m;
+      // What storage holds for this run, read as an import is: any page of
+      // the same origin can write the key (under file:, any local page), so
+      // only entries for ids of this report, with a known label and a text
+      // note, are kept. Throws where storage is refused.
+      function readStored() {
+        var saved = null;
+        var text = localStorage.getItem(KEY);
+        try { saved = JSON.parse(text || '{}'); } catch (e) { /* unreadable: start empty */ }
+        return checkAnnotations(saved && typeof saved === 'object' ? saved : {}, ids).annotations;
       }
       function load() {
-        try { return toMap(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return Object.create(null); }
+        try { return readStored(); } catch (e) { return Object.create(null); }
       }
-      // Storage can be refused (a private window, a blocked file: origin): the
-      // annotations then last as long as the page, and Export JSON keeps them.
-      function save() {
-        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* see above */ }
+      // One change (a function that applies it to a state), written over what
+      // storage holds now rather than over this page's copy: another tab may
+      // have written since this one loaded, and its annotations stay. The page
+      // then holds the merged state. Storage can be refused (a private window,
+      // a blocked file: origin): the annotations then last as long as the
+      // page, Export JSON keeps them, and the footer says so once.
+      var refusalShown = false;
+      function save(change) {
+        try {
+          var stored = readStored();
+          change(stored);
+          localStorage.setItem(KEY, JSON.stringify(stored));
+          state = stored;
+        } catch (e) {
+          if (refusalShown) return;
+          refusalShown = true;
+          message.textContent = 'This browser does not let the report store annotations: they last until the page is closed. Export JSON keeps them.';
+        }
       }
       var state = load();
 
       function setAnnotation(id, label, note) {
-        if (!label && !note) delete state[id];
-        else state[id] = { label: label || null, note: note || '', annotatedAt: new Date().toISOString() };
-        save();
+        var entry = label || note ? { label: label || null, note: note || '', annotatedAt: new Date().toISOString() } : null;
+        function change(map) { if (entry) map[id] = entry; else delete map[id]; }
+        change(state);
+        save(change);
         render();
       }
 
       // In each pane's header: the three labels (the pressed one pressed
-      // again clears it) and a note, saved when the field loses focus.
+      // again clears it) and a note, saved as it is typed (after a pause),
+      // when the field is left, and when the page goes away (a reload, a
+      // closed tab), whichever comes first.
       var controls = panes.map(function (pane, i) {
         var id = ids[i];
         var header = pane.querySelector('.detail-header');
@@ -130,10 +170,20 @@ export const ANNOTATION_UI_JS = String.raw`
         note.rows = 1;
         note.placeholder = 'Note';
         note.setAttribute('aria-label', 'Note on this participant');
-        note.addEventListener('change', function () {
+        note.maxLength = NOTE_MAX_LENGTH;
+        var timer = null;
+        function saveNote() {
+          clearTimeout(timer);
+          timer = null;
           var a = own(state, id);
+          if (note.value === (a ? a.note : '')) return;
           setAnnotation(id, a ? a.label : null, note.value);
+        }
+        note.addEventListener('input', function () {
+          clearTimeout(timer);
+          timer = setTimeout(saveNote, NOTE_SAVE_MS);
         });
+        note.addEventListener('change', saveNote);
         var buttons = ANNOTATION_LABELS.map(function (label) {
           var b = document.createElement('button');
           b.type = 'button';
@@ -149,7 +199,10 @@ export const ANNOTATION_UI_JS = String.raw`
         });
         box.appendChild(note);
         header.appendChild(box);
-        return { buttons: buttons, note: note };
+        return { buttons: buttons, note: note, flush: function () { if (timer) saveNote(); } };
+      });
+      window.addEventListener('pagehide', function () {
+        controls.forEach(function (c) { if (c) c.flush(); });
       });
 
       // A badge on each rail row, before its score.
@@ -169,6 +222,10 @@ export const ANNOTATION_UI_JS = String.raw`
       count.className = 'annot-count';
       count.setAttribute('role', 'status');
       bar.appendChild(count);
+      // One line: what an import did, or that storage was refused.
+      var message = document.createElement('span');
+      message.className = 'annot-msg';
+      message.setAttribute('role', 'status');
       document.querySelector('.rail-footer').appendChild(bar);
       addTools();
 
@@ -207,17 +264,15 @@ export const ANNOTATION_UI_JS = String.raw`
         file.hidden = true;
         bar.appendChild(file);
         tool('Import…', function () { file.click(); });
-        var message = document.createElement('span');
-        message.className = 'annot-msg';
-        message.setAttribute('role', 'status');
         bar.appendChild(message);
         file.addEventListener('change', function () {
           var chosen = file.files && file.files[0];
           if (!chosen) return;
           chosen.text().then(function (text) {
             var result = readAnnotationsImport(text, ids, RUN_ID);
-            Object.keys(result.annotations).forEach(function (id) { state[id] = result.annotations[id]; });
-            save();
+            function change(map) { Object.keys(result.annotations).forEach(function (id) { map[id] = result.annotations[id]; }); }
+            change(state);
+            save(change);
             render();
             message.textContent = importMessage(result);
           }).catch(function (e) {
@@ -226,16 +281,31 @@ export const ANNOTATION_UI_JS = String.raw`
         });
       }
 
-      // i, e and f set the label of the participant on screen; not while
-      // typing in a field, and not with a modifier key.
+      // Another tab's change (storage tells the other pages of its origin),
+      // shown here too.
+      window.addEventListener('storage', function (e) {
+        if (e.key !== KEY && e.key !== null) return;
+        state = load();
+        render();
+      });
+
+      // i, e and f set the label of the selected participant: the rail's
+      // selected row, since two ids that sanitize alike share one pane id and
+      // both panes then show. Not while typing in a field, not with a modifier
+      // key, not for a held key's repeats, and not while the legend or an
+      // enlarged image is open.
       document.addEventListener('keydown', function (e) {
         var label = e.key === 'i' ? 'include' : e.key === 'e' ? 'exclude' : e.key === 'f' ? 'flag' : null;
-        if (!label || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (!label || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
         if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-        var i = panes.findIndex(function (p) { return !p.hasAttribute('hidden'); });
-        if (i < 0 || ids[i] === undefined) return;
-        var a = own(state, ids[i]);
-        setAnnotation(ids[i], a && a.label === label ? null : label, a ? a.note : '');
+        var legend = document.getElementById('legend-modal');
+        var lightbox = document.getElementById('lightbox');
+        if ((legend && !legend.hasAttribute('hidden')) || (lightbox && lightbox.classList.contains('open'))) return;
+        var row = document.querySelector('.cohort-row.selected');
+        if (!row) return;
+        var id = row.dataset.pid;
+        var a = own(state, id);
+        setAnnotation(id, a && a.label === label ? null : label, a ? a.note : '');
       });
 
       function render() {

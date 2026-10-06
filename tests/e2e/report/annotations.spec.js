@@ -2,8 +2,9 @@
 // The CLI report's annotations in each engine, opened from file://: a label
 // and a note survive a reload (the report's own storage, under its run id),
 // the rail badge and the counter follow, i/e/f set the label of the
-// participant on screen, the exports carry the labels, and an import names
-// the ids this report does not have. The report is built by
+// selected participant, the exports carry the labels, an import names the
+// ids this report does not have, two tabs keep each other's changes, and a
+// note is kept while it is still being typed. The report is built by
 // bin/cyborg-hunter.js from the synthetic pilot (three participants).
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -76,4 +77,33 @@ test('an import applies what this report has and names what it does not', async 
   await expect(page.locator('.annot-msg')).toHaveText('Imported 1 annotation. Not in this report: SYN-OTHER-99.');
   await expect(badge(page, 'SYN-CLEAN-01')).toHaveText('include');
   await expect(page.locator('.annot-count')).toHaveText('1 of 3 reviewed');
+});
+
+test('two tabs of the same report keep each other\'s labels', async ({ page, context }) => {
+  const other = await context.newPage();
+  const otherErrors = [];
+  other.on('pageerror', (err) => otherErrors.push(err.message));
+  await openReport(page);
+  await openReport(other);
+  // Each tab labels a participant after both have loaded: neither has the
+  // other's change in memory when it writes.
+  await page.locator('#p-SYN-HARD-03').getByRole('button', { name: 'Exclude' }).click();
+  await other.locator('.cohort-row[data-pid="SYN-SOFT-02"]').click();
+  await other.locator('#p-SYN-SOFT-02').getByRole('button', { name: 'Flag' }).click();
+  for (const p of [page, other]) {
+    await p.reload();
+    await expect(badge(p, 'SYN-HARD-03')).toHaveText('exclude');
+    await expect(badge(p, 'SYN-SOFT-02')).toHaveText('flag');
+    await expect(p.locator('.annot-count')).toHaveText('2 of 3 reviewed');
+  }
+  expect(otherErrors).toEqual([]);
+});
+
+test('a note still being typed is kept through a reload', async ({ page }) => {
+  await openReport(page);
+  const note = page.locator('#p-SYN-HARD-03').getByRole('textbox', { name: 'Note on this participant' });
+  await note.fill('pasted, then typed over');
+  await expect(note).toBeFocused();
+  await page.reload();
+  await expect(note).toHaveValue('pasted, then typed over');
 });

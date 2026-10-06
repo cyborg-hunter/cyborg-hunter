@@ -1,12 +1,15 @@
 // Per-participant annotations: the export and import builders
 // (annotations-core.js), the report's own copy of them (annotation-client.js,
 // run here in a vm context, since an inline script cannot import), and where
-// the report emits its controls. The clicks, the storage and the downloads
-// are tests/e2e/report/annotations.spec.js.
-import { describe, it } from 'node:test';
+// the report emits its controls; then the report's annotation script itself,
+// run over real report markup in happy-dom (which label a key sets, what it
+// reads from storage and how it writes there). The clicks, the browsers'
+// storage and the downloads are tests/e2e/report/annotations.spec.js.
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { Window } from 'happy-dom';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
@@ -14,6 +17,7 @@ import { rankTriage } from '../../src/cli/analyzers/triage.js';
 import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import * as core from '../../src/cli/renderers/annotations-core.js';
 import { ANNOTATION_BUILDERS_JS, ANNOTATION_UI_JS } from '../../src/cli/renderers/annotation-client.js';
+import { inlineSrcHazards } from '../../src/shared/inline-safe.js';
 
 const ROWS = [
   { participantId: 'P-hard', tier: 'hard', triageScore: 15 },
@@ -66,8 +70,29 @@ describe('annotation exports and imports', () => {
     assert.throws(() => core.readAnnotationsImport('{"annotations":{}}', IDS, 'abc'), /not a cyborg-hunter annotations file/);
   });
 
+  it('a note longer than NOTE_MAX_LENGTH is not read; the message names ten ids of a kind, then counts the rest', () => {
+    assert.equal(core.NOTE_MAX_LENGTH, 2000);
+    const annotations = { 'P-hard': { label: 'flag', note: 'x'.repeat(2001), annotatedAt: '' }, 'P-clean': { label: 'include', note: 'x'.repeat(2000), annotatedAt: '' } };
+    for (let i = 1; i <= 12; i++) annotations['P-gone-' + i] = { label: 'include', note: '', annotatedAt: '' };
+    const r = core.readAnnotationsImport(JSON.stringify({ format: 'cyborg-hunter-annotations', runId: 'abc', annotations }), IDS, 'abc');
+    assert.deepEqual(Object.keys(r.annotations), ['P-clean']);
+    assert.deepEqual(r.skipped, ['P-hard']);
+    assert.equal(r.unknown.length, 12);
+    assert.equal(core.importMessage(r), 'Imported 1 annotation. Not in this report: P-gone-1, P-gone-2, P-gone-3, P-gone-4, P-gone-5, ' +
+      'P-gone-6, P-gone-7, P-gone-8, P-gone-9, P-gone-10 … and 2 more. Not read: P-hard.');
+  });
+
+  it('a stored state is read as an import is: ids of this report, one of the three labels or none, a text note', () => {
+    const stored = { 'P-hard': STATE['P-hard'], 'P-clean': { label: 'exclude', note: 42 }, 'P-gone': { label: 'flag', note: '', annotatedAt: 't' } };
+    const r = core.checkAnnotations(stored, IDS);
+    assert.deepEqual({ ...r.annotations }, { 'P-hard': STATE['P-hard'] });
+    assert.deepEqual([r.unknown, r.skipped], [['P-gone'], ['P-clean']]);
+    // Without the report's ids, only the entries are checked.
+    assert.deepEqual(Object.keys(core.checkAnnotations(stored).annotations), ['P-hard', 'P-gone']);
+  });
+
   it('the report\'s own copy gives the same results as the module', () => {
-    const copy = runInNewContext(ANNOTATION_BUILDERS_JS + '\n;({ annotationsCsv, annotationsJson, readAnnotationsImport, importMessage })');
+    const copy = runInNewContext(ANNOTATION_BUILDERS_JS + '\n;({ annotationsCsv, annotationsJson, readAnnotationsImport, importMessage, checkAnnotations, NOTE_MAX_LENGTH })');
     for (const unreviewed of [false, true]) {
       assert.equal(copy.annotationsCsv(ROWS, STATE, 'abc', unreviewed), core.annotationsCsv(ROWS, STATE, 'abc', unreviewed));
     }
@@ -77,6 +102,13 @@ describe('annotation exports and imports', () => {
     const r = core.readAnnotationsImport(MIXED, IDS, 'abc');
     assert.equal(copy.importMessage(r), core.importMessage(r));
     assert.throws(() => copy.readAnnotationsImport('{}', IDS, 'abc'), /not a cyborg-hunter annotations file/);
+    assert.equal(copy.NOTE_MAX_LENGTH, core.NOTE_MAX_LENGTH);
+    const stored = { ...STATE, 'P-gone': STATE['P-hard'], 'P-hard': { label: 'flag', note: 'x'.repeat(2001) } };
+    for (const ids of [IDS, undefined]) {
+      assert.equal(JSON.stringify(copy.checkAnnotations(stored, ids)), JSON.stringify(core.checkAnnotations(stored, ids)));
+    }
+    const many = { annotations: {}, unknown: Array.from({ length: 11 }, (_, i) => 'u' + i), skipped: Array.from({ length: 12 }, (_, i) => 's' + i), otherRun: false };
+    assert.equal(copy.importMessage(many), core.importMessage(many));
   });
 });
 
@@ -103,5 +135,139 @@ describe('the report emits its annotation controls only with a run id', () => {
 
   it('the inlined script holds no script-end tag', () => {
     assert.equal(/<\/script/i.test(ANNOTATION_BUILDERS_JS + ANNOTATION_UI_JS), false);
+    // Nor what would make the page's own script-end tag close nothing.
+    assert.deepEqual(inlineSrcHazards(ANNOTATION_BUILDERS_JS + ANNOTATION_UI_JS), []);
+  });
+});
+
+// The annotation script over the real report markup of two participants whose
+// ids sanitize alike: 'a_b' and 'a b' share the pane id p-a_b, so selecting
+// either shows both panes. The page is loaded without its own scripts; only
+// the annotation script runs, in a vm context, over a stand-in storage.
+describe('the report\'s annotation script', () => {
+  const RUN = '0123456789abcdef';
+  const KEY = 'ch-annot:' + RUN;
+  const REFUSED = 'This browser does not let the report store annotations: they last until the page is closed. Export JSON keeps them.';
+  const config = { outputDir: '.', participantIdField: 'participantId' };
+  let html;
+  before(async () => {
+    const p = extractIntegrityData(JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8')), config);
+    const ps = [{ ...p, participantId: 'a_b' }, { ...p, participantId: 'a b' }];
+    const summaries = computeSummary(ps, config);
+    html = await renderIndexHtml(summaries, rankTriage(summaries, detectEdgeExits(ps, config), config), ps, config, false, {});
+  });
+
+  // A storage like the browser's. refuse: every call throws, as in a private
+  // window or a blocked file: origin.
+  function memoryStorage(refuse) {
+    const items = new Map();
+    const check = () => { if (refuse) throw new Error('SecurityError'); };
+    return { items, getItem: (k) => { check(); return items.has(k) ? items.get(k) : null; }, setItem: (k, v) => { check(); items.set(k, String(v)); } };
+  }
+  function mount(storage) {
+    const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
+    const doc = win.document;
+    doc.write(html);
+    runInNewContext('(function (cfg) {' + ANNOTATION_BUILDERS_JS + ANNOTATION_UI_JS + '})(cfg);',
+      { cfg: { runId: RUN }, window: win, document: doc, localStorage: storage, setTimeout, clearTimeout, URL, Blob });
+    const rows = [...doc.querySelectorAll('.cohort-row')];
+    const paneOf = (pid) => doc.querySelectorAll('.participant')[rows.findIndex((r) => r.dataset.pid === pid)];
+    return {
+      win, doc,
+      stored: () => JSON.parse(storage.items.get(KEY) || '{}'),
+      labels: () => Object.fromEntries(Object.entries(JSON.parse(storage.items.get(KEY) || '{}')).map(([k, v]) => [k, v.label])),
+      // What the report's selectById does for an id of p-a_b: its row
+      // selected, and both panes shown.
+      select: (pid) => {
+        rows.forEach((r) => r.classList.toggle('selected', r.dataset.pid === pid));
+        doc.querySelectorAll('.participant').forEach((pane) => pane.removeAttribute('hidden'));
+      },
+      key: (key, over) => doc.dispatchEvent(new win.KeyboardEvent('keydown', { key, bubbles: true, ...over })),
+      badge: (pid) => doc.querySelector('.cohort-row[data-pid="' + pid + '"] .annot-badge'),
+      note: (pid) => paneOf(pid).querySelector('.annot-note'),
+    };
+  }
+
+  it('i, e and f label the selected row\'s participant, though both panes of its pane id show', () => {
+    const r = mount(memoryStorage());
+    assert.equal(r.doc.querySelectorAll('.participant[id="p-a_b"]').length, 2, 'the two ids share a pane id');
+    r.select('a b');
+    r.key('e');
+    assert.deepEqual(r.labels(), { 'a b': 'exclude' });
+    assert.equal(r.badge('a b').textContent, 'exclude');
+    assert.equal(r.badge('a_b').hidden, true);
+  });
+
+  it('a held key\'s repeats, and the keys while the legend or an enlarged image is open, label nothing', () => {
+    const storage = memoryStorage();
+    const r = mount(storage);
+    r.select('a b');
+    r.key('e', { repeat: true });
+    r.doc.getElementById('legend-modal').removeAttribute('hidden');
+    r.key('e');
+    r.doc.getElementById('legend-modal').setAttribute('hidden', '');
+    r.doc.getElementById('lightbox').classList.add('open');
+    r.key('e');
+    assert.equal(storage.items.has(KEY), false);
+    r.doc.getElementById('lightbox').classList.remove('open');
+    r.key('e');
+    assert.deepEqual(r.labels(), { 'a b': 'exclude' });
+  });
+
+  it('each change is written over what storage holds now, and another tab\'s change shows here', () => {
+    const storage = memoryStorage();
+    const r = mount(storage);
+    // Another tab of the report writes after this one has loaded.
+    storage.items.set(KEY, JSON.stringify({ a_b: { label: 'exclude', note: '', annotatedAt: 't' } }));
+    r.select('a b');
+    r.key('f');
+    assert.deepEqual(r.labels(), { a_b: 'exclude', 'a b': 'flag' });
+    assert.equal(r.badge('a_b').textContent, 'exclude', 'the page shows what it wrote');
+    // A change in another tab, with none here: the storage event.
+    storage.items.set(KEY, JSON.stringify({ a_b: { label: 'include', note: '', annotatedAt: 't' } }));
+    r.win.dispatchEvent(new r.win.StorageEvent('storage', { key: KEY }));
+    assert.equal(r.badge('a_b').textContent, 'include');
+    assert.equal(r.badge('a b').hidden, true);
+    assert.equal(r.doc.querySelector('.annot-count').textContent, '1 of 2 reviewed');
+  });
+
+  it('what storage holds is read as an import is: an id of this report, one of the three labels', () => {
+    const storage = memoryStorage();
+    storage.items.set(KEY, JSON.stringify({ a_b: { label: 'exclude', note: 'ok', annotatedAt: 't' }, 'a b': { label: 'reject', note: '' },
+      zz: { label: 'flag', note: '', annotatedAt: 't' } }));
+    const r = mount(storage);
+    assert.equal(r.doc.querySelector('.annot-count').textContent, '1 of 2 reviewed');
+    assert.equal(r.badge('a b').hidden, true);
+    r.select('a_b');
+    r.key('f');
+    assert.deepEqual(r.labels(), { a_b: 'flag' }, 'the next write drops what was not read');
+  });
+
+  it('a refused save keeps the change on the page and says so, once', () => {
+    const r = mount(memoryStorage(true));
+    const msg = r.doc.querySelector('.annot-msg');
+    r.select('a b');
+    r.key('e');
+    assert.equal(r.badge('a b').textContent, 'exclude');
+    assert.equal(msg.textContent, REFUSED);
+    msg.textContent = '';
+    r.key('f');
+    assert.equal(r.badge('a b').textContent, 'flag');
+    assert.equal(msg.textContent, '', 'only on the first failure');
+  });
+
+  it('a note is saved as it is typed, when the field is left, and when the page goes away; it has a length limit', () => {
+    const r = mount(memoryStorage());
+    const note = r.note('a b');
+    assert.equal(note.maxLength, 2000);
+    note.value = 'first';
+    note.dispatchEvent(new r.win.Event('input'));
+    r.win.dispatchEvent(new r.win.Event('pagehide'));
+    assert.equal(r.stored()['a b'].note, 'first');
+    note.value = 'second';
+    note.dispatchEvent(new r.win.Event('input'));
+    note.dispatchEvent(new r.win.Event('change'));
+    assert.equal(r.stored()['a b'].note, 'second');
+    assert.equal(r.stored()['a b'].label, null);
   });
 });

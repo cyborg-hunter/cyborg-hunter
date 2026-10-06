@@ -493,10 +493,11 @@ The report's top bar names its run, for example `run 3f9c2a7b1d4e8a60 ·
 2026-10-05 14:03 UTC`. The id is a hash of the participant ids, so a report
 rebuilt from the same files keeps it, whatever the settings. In each
 participant's header, **Include**, **Exclude** and **Flag** record your
-decision and the note field your reason. Pressing the chosen label again
-clears it; a participant without a label is not reviewed. The keys `i`, `e`
-and `f` do the same for the participant on screen. The rail shows each label
-beside the participant and, at the bottom, how many are reviewed.
+decision and the note field (up to 2,000 characters) your reason. Pressing
+the chosen label again clears it; a participant without a label is not
+reviewed. The keys `i`, `e` and `f` do the same for the participant selected
+in the rail. The rail shows each label beside the participant and, at the
+bottom, how many are reviewed.
 
 The report keeps the annotations in this browser, under its run id, so they
 are there when you open the same `index.html` again. **Export JSON** saves
