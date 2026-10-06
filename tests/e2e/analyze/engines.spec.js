@@ -4,7 +4,7 @@
 // the same for the offline single file opened from disk, through dropped
 // files, which requests nothing but itself.
 import { pathToFileURL } from 'node:url';
-import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportSelected, downloadZip, pilotFiles, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, OFFLINE_FILE } from './support.mjs';
+import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip, pilotFiles, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, OFFLINE_FILE } from './support.mjs';
 
 test('the page makes no request beyond its own files, sample → report → zip', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -84,4 +84,28 @@ test('the offline single file reads a gzipped recording and plays it; the record
     expect(requested(seen).filter((u) => u.startsWith(sentinel.url))).toEqual([]);
     await assertOnlyAllowed(page, seen, allow);
   } finally { cohort.cleanup(); await sentinel.close(); }
+});
+
+// The report frame's document has an opaque origin (sandbox="allow-scripts").
+// Fullscreen inside it needs the frame's permission, and Firefox and WebKit
+// refuse the default allowlist for an opaque origin (Chromium does not), so
+// this is checked on every engine.
+test('a figure in the report frame goes fullscreen, and closing it leaves fullscreen', async ({ page, baseURL }) => {
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  await page.goto('/analyze/');
+  await waitReady(page);
+  await loadSample(page);
+  await buildReport(page);
+  const frame = reportFrame(page);
+  await frame.locator('a.zoomable:visible').first().click();
+  const box = frame.locator('#lightbox');
+  await expect(box).toHaveClass(/open/);
+  // Shown only where the frame's document may go fullscreen.
+  await expect(frame.locator('.lightbox-fullscreen')).toBeVisible();
+  await frame.locator('.lightbox-fullscreen').click();
+  await expect.poll(() => box.evaluate((el) => el.ownerDocument.fullscreenElement === el)).toBe(true);
+  await frame.locator('.lightbox-close').click();
+  await expect.poll(() => box.evaluate((el) => !!el.ownerDocument.fullscreenElement)).toBe(false);
+  await assertOnlyAllowed(page, seen, allow);
 });

@@ -36,6 +36,11 @@ export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
     // etc.), so the most restrictive sandbox that still runs the report is
     // the right default.
     iframe.setAttribute('sandbox', 'allow-scripts');
+    // The report's figures may go fullscreen, and nothing else is granted.
+    // The allowlist is '*' because the framed document's origin is opaque,
+    // which no named origin matches: Firefox and WebKit refuse the default
+    // ('src') for it, Chromium does not (measured 2026-10-05).
+    iframe.setAttribute('allow', 'fullscreen *');
     iframe.title = title;
     container.appendChild(iframe);
   }

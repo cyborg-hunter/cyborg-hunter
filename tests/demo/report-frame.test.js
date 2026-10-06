@@ -32,6 +32,9 @@ test('swapIframe creates a sandboxed iframe with the given class and revokes the
     });
     const iframe = container.querySelector('iframe.analyze-report');
     assert.equal(iframe.getAttribute('sandbox'), 'allow-scripts');
+    // The report's figures may go fullscreen. '*', not the default allowlist:
+    // the framed document's origin is opaque, which no named origin matches.
+    assert.equal(iframe.getAttribute('allow'), 'fullscreen *');
     assert.equal(iframe.title, 'Report');
     assert.deepEqual(revoked, ['blob:prev']);
     assert.equal(iframe.src, url);

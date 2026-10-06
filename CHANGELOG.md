@@ -19,6 +19,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - `/analyze/`: the same annotations in the in-page report. The page keeps
   them under the report's run id, so a re-analysis keeps them, and the
   results step has the CSV and JSON exports and the import.
+- Report (CLI and `/analyze/`): an enlarged figure has a **1:1** control
+  that shows it at the size it was drawn, scrolling inside the overlay (a
+  click on the figure switches too), and a **Fullscreen** control wherever
+  the page may go fullscreen. On `/analyze/` the report frame now allows it.
 - One-line setup: one file per framework. `ch.js` stays the file for jsPsych
   and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
   surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
