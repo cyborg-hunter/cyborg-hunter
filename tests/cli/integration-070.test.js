@@ -76,8 +76,9 @@ describe('attach-pass censuses survive prototype-key participant ids', () => {
     });
     assert.strictEqual(participants.length, 2);
     for (const p of participants) {
-      assert.strictEqual(p.replay, null,
+      assert.strictEqual(p.replay.recording, undefined,
         'ambiguous duplicate-id + multi-artifact case must attach nothing');
+      assert.strictEqual(p.replay.error, 'ambiguous', 'and say why on the participant');
     }
     const flat = warnings.flatMap(w => w.warnings);
     assert.ok(flat.some(w => /Cannot associate 2 replay artifacts/.test(w)),

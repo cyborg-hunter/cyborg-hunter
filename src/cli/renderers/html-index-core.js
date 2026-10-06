@@ -1206,6 +1206,15 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
       </div>
     </div>`;
   }
+  // Replays that were found but attached to nobody (ingest-core.js: several
+  // records share the id and several replays claim it). Not a file problem,
+  // so the note gives ingest's reason and no file name.
+  if (replay && replay.error === 'ambiguous') {
+    return `<div class="image-block replay-block">
+      <h4 class="section-heading">Session replay</h4>
+      <p class="replay-note replay-warn">Replay not shown: ${esc(replay.reason)}</p>
+    </div>`;
+  }
   if (replay && replay.error) {
     // Two ways an attached artifact fails to reach the viewer, and the
     // analyst needs to tell them apart: 'parse_failed' (ingest could not read

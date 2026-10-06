@@ -35,11 +35,16 @@ export function createReplayCard(container, assets, requestModel) {
   function teardown() { generation++; teardownReplayHost(mount); }
   // missing: the id of a participant the report selected who has no
   // recording here. In a run without any recording the run-level note says
-  // more, and there is no other replay it could be mistaken for.
+  // more, and there is no other replay it could be mistaken for, unless the
+  // participant's replay was found and not shown (`replayError`, from the
+  // worker: a file that could not be loaded, or replays that could not be
+  // told apart), which is said first.
   function showNote(missing) {
     var p = current();
     var none = !participants.some(function (x) { return x.hasReplay; });
-    note.textContent = none ? 'No replay recordings in this run.'
+    var declined = missing ? participants.find(function (x) { return x.participantId === missing && x.replayError; }) : null;
+    note.textContent = declined ? 'Participant ' + missing + ': ' + declined.replayError
+      : none ? 'No replay recordings in this run.'
       : missing ? 'Participant ' + missing + ' has no replay recording.'
       : (p && p.assetNote ? p.assetNote : '');
     loadButton.disabled = !(p && p.hasReplay);
@@ -50,7 +55,7 @@ export function createReplayCard(container, assets, requestModel) {
     participants.forEach(function (p) {
       var o = document.createElement('option');
       o.value = p.participantId;
-      o.textContent = p.participantId + (p.hasReplay ? '' : ' (no replay)');
+      o.textContent = p.participantId + (p.hasReplay ? '' : p.replayError ? ' (replay not shown)' : ' (no replay)');
       o.disabled = !p.hasReplay;
       select.appendChild(o);
     });

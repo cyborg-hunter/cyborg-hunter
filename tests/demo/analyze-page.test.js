@@ -1295,3 +1295,21 @@ test('the replay frame may go fullscreen, fits the window, and takes the height 
   post({ type: 'cyborg-hunter:replay-height', height: 20000 }, host.contentWindow);
   assert.equal(host.style.height, '10000px', 'never taller than 10000 px');
 });
+
+// A participant whose replays were found but not attached (two sessions under
+// one id) says why, in the replay card's list and in its note.
+test('the replay card says why a participant\'s replay is not shown', async () => {
+  const t = boot();
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  const why = '2 records share the participant id "A" and 2 replays claim it (A-replay-1.json, A-replay-2.json), so which replay belongs to which session cannot be told and none is shown.';
+  t.emit({ ...DONE, participants: [{ participantId: 'A', hasReplay: false, assetNote: null, replayError: why }, { participantId: 'B', hasReplay: true, assetNote: null }] });
+  await tick();
+  const frame = document.querySelector('iframe.analyze-report');
+  frame.dispatchEvent(new win.Event('load'));
+  assert.deepEqual([...replaySelect().options].map((o) => o.textContent), ['A (replay not shown)', 'B']);
+  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+  assert.equal(role('asset-note').textContent, 'Participant A: ' + why);
+  assert.equal(action('load-replay').disabled, true);
+});

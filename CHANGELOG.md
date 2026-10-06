@@ -296,6 +296,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   default key and replaced your own `dataDir`, `filePattern` and `outputDir`
   with fixed values. With experiment files dropped, it sets `assetsDir` to
   `./assets`, and the page says where to put them.
+- Report and `/analyze/`: when several data records share a participant ID
+  and several replays claim it, no replay is attached, and the replay section
+  said the session was never recorded. It now says why no replay is shown and
+  names the replay files. The analyze page's replay card gives the reason
+  too, and does the same for a replay file that could not be loaded.
 
 ### Removed
 - Internal renderer wrappers removed
