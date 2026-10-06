@@ -1,10 +1,11 @@
-// A host that re-renders its header (Qualtrics re-executes the header's ch.js
-// tag on every page, same window) runs the same ch.js again. rerun.js tells
-// that apart from a real double load before the guard cores evaluate: the
-// same version on a page where ch.js started the Qualtrics host is silent and
-// keeps the first monitor; anything else, a second tag of the same version on
-// any other page included, stays the loud double load. Bootstrap mirrors
-// boot.test.js (modules load after the happy-dom globals).
+// A host that re-renders its header (Qualtrics re-executes the header's
+// one-line tag on every page, same window) runs the same file again. rerun.js
+// tells that apart from a real double load before the guard cores evaluate:
+// the same one-line file at the same version, on a page where the first copy
+// found a Qualtrics survey, is silent and keeps the first monitor; anything
+// else (another one-line file, another version, or a second tag of the same
+// file and version on any other page) stays the loud double load. Bootstrap
+// mirrors boot.test.js (modules load after the happy-dom globals).
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { Window } from 'happy-dom';

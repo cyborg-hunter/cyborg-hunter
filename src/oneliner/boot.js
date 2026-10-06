@@ -108,10 +108,15 @@
 // files and rerun.js takes only the same file for a header re-run. ctx.file
 // is the running file's name (CH_FILE, build-flags.js), for
 // the messages that name it. Each call into the jsPsych adapter is guarded by
-// HAS_JSPSYCH, so a file without it drops that code; such a file on a
-// jsPsych page logs one wrongBuild error naming ch.js (ctx.wrongBuild, which
-// the data-debug badge shows too) and records the page as a page without a
-// framework.
+// HAS_JSPSYCH, and each into the Qualtrics adapter by HAS_QUALTRICS, so a
+// file without one drops that code. A file on a page whose framework it does
+// not carry logs one wrongBuild error naming the file that does
+// (ctx.wrongBuild, which the data-debug badge shows too) and records the page
+// as a page without a framework: ch.js on a survey without jsPsych names
+// ch-qualtrics.js, a file without the jsPsych adapter on a jsPsych page names
+// ch.js. The exception is ch-qualtrics.js on a survey that also runs jsPsych,
+// whether jsPsych is there at boot or only by DOMContentLoaded: it records
+// the survey as a Qualtrics page and logs one qualtricsJsPsych warning.
 
 import './build-flags.js';
 import { init } from '../core/monitor.js';
@@ -330,13 +335,17 @@ export function boot(opts) {
 // check at step 5 ran before initJsPsych existed, so the file looks once more
 // when the DOM is parsed (the jsPsych adapter's placement check does the same
 // for ch.js). A document already parsed at boot was fully seen by step 5. It
-// only reports: initJsPsych is left alone and the page stays a page without a
-// framework.
+// only reports: initJsPsych is left alone and the page stays as boot found it.
+// On a Qualtrics survey (ch-qualtrics.js; ctx.qualtricsLayout is set only
+// with HAS_QUALTRICS) that is a Qualtrics page, with the qualtricsJsPsych
+// warning step 5 gives a survey whose jsPsych is already there; elsewhere a
+// page without a framework, with one wrongBuild error naming ch.js.
 function noticeLateJsPsych(win, ctx) {
   var doc = win.document;
   if (doc.readyState !== 'loading') return;
   doc.addEventListener('DOMContentLoaded', function () {
     if (ctx.wrongBuild || typeof win.initJsPsych !== 'function') return;
+    if (ctx.qualtricsLayout) { console.warn(MESSAGES.qualtricsJsPsych()); return; }
     ctx.wrongBuild = { host: 'jsPsych', file: 'ch.js' };
     console.error(MESSAGES.wrongBuild('jsPsych', 'ch.js', CH_FILE));
   }, { once: true });

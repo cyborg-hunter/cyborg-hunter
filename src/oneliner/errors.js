@@ -251,7 +251,8 @@ export const MESSAGES = {
       'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
       DOCS + 'qualtrics.md#legacy-layout');
   },
-  // console.warn, once at boot (on every page under the legacy layout):
+  // console.warn, once at boot (on every page under the legacy layout), or
+  // once at DOMContentLoaded when jsPsych is defined only after the tag:
   // ch-qualtrics.js on a survey that also runs jsPsych (boot.js). The survey
   // is recorded as a Qualtrics page; the jsPsych trials get no rows of their
   // own, which needs the jsPsych adapter this file does not carry.

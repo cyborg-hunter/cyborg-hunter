@@ -259,6 +259,28 @@ describe('ch-qualtrics.js', () => {
     assert.strictEqual(ctx.host, 'vanilla');
     assert.strictEqual(win.__cyborgHunterRerunHost, undefined);
   });
+
+  // The tag above jspsych.js on a survey: jsPsych is defined only after boot,
+  // and the look at DOMContentLoaded says what boot says when it is already
+  // there, once: the one warning, no wrongBuild.
+  it('a survey whose jsPsych is defined after the tag: the same one warning at DOMContentLoaded, no error', async () => {
+    loading();
+    const qx = fakeSurveyEngine();
+    win.Qualtrics = { SurveyEngine: qx.SE };
+    ctx = qx.runHeader(() => boot({ script: script({ participantId: 'P1', guards: 'none' }), win }));
+    assert.deepStrictEqual(warns, []);
+    const original = jsPsychStub();
+    win.initJsPsych = original;
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(warns, [MESSAGES.qualtricsJsPsych()]);
+    assert.strictEqual(ctx.wrongBuild, null);
+    assert.strictEqual(ctx.qualtricsLayout, 'new');
+    assert.ok(ctx.qualtrics, 'the Qualtrics writer is installed');
+    assert.strictEqual(win.initJsPsych, original);
+  });
 });
 
 // ch.js on a survey: one error naming ch-qualtrics.js, the page recorded as
