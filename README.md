@@ -50,7 +50,15 @@ Browser (experiment page): one tag, below `jspsych.js` and above your experiment
 <script src="https://unpkg.com/cyborg-hunter@0.11.0/dist/ch.js"></script>
 ```
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.11.0/dist/...`. You can also copy `dist/ch.js` (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
+Each framework has its own one-line file, with the same API and the same tag attributes ([quickstart § Which file](docs/quickstart.md#which-file)):
+
+| File | Use it for |
+|---|---|
+| `ch.js` | jsPsych 7 experiments, and pages without a framework |
+| `ch-qualtrics.js` | Qualtrics surveys, in the survey's header ([docs/qualtrics.md](docs/qualtrics.md)) |
+| `ch-labjs.js` | lab.js studies, below `lib/lab.js` ([docs/labjs.md](docs/labjs.md)) |
+
+For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.11.0/dist/...`. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
 
 Manual mode (advanced), for experiments that wire the jsPsych extension themselves: see [docs/advanced-integration.md](docs/advanced-integration.md#manual-mode). It loads these files instead of `ch.js`:
 
