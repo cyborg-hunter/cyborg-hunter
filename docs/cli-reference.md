@@ -27,7 +27,7 @@ Running `cyborg-hunter` with no subcommand defaults to `report`.
 | `--integrity-field <name>` | Override `integrityField` |
 | `--session-integrity-path <path>` | Dotted path to the session-level integrity object (e.g. `payload.cyborgHunter`) |
 | `--qualtrics-field <name>` | Override `qualtricsField`, the Qualtrics export column holding the payload (default `__js_cyborg_hunter`) |
-| `--participant <id>` | Filter to a single participant, by the key the report shows (for lab.js data keyed by the study's own `participantId`, that id, not ch.js's) |
+| `--participant <id>` | Filter to a single participant, by the key the report shows (for lab.js data keyed by the study's own `participantId`, that id, not ch-labjs.js's) |
 | `--no-visuals` | Skip image generation (no `canvas` package required) |
 
 Unknown flags exit with an error rather than silently falling back to whatever config file is in cwd (fixed in v0.3.0).

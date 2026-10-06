@@ -81,7 +81,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 - `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
 - Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (a POST form gets it as a hidden `cyborgHunterData` field).
 - Qualtrics: paste the `ch-qualtrics.js` tag into the survey's Look & Feel header and declare one embedded-data field; the CLI reads the CSV export ([docs/qualtrics.md](docs/qualtrics.md)).
-- lab.js: the same tag below `lib/lab.js` and above the study script; every lab.js screen is a trial, and the integrity data lands in lab.js's own rows ([docs/labjs.md](docs/labjs.md)).
+- lab.js: the `ch-labjs.js` tag below `lib/lab.js` and above the study script; every lab.js screen is a trial, and the integrity data lands in lab.js's own rows ([docs/labjs.md](docs/labjs.md)).
 
 Walk-through, placement and participant IDs: [docs/quickstart.md](docs/quickstart.md). Moving an experiment wired by hand: [docs/advanced-integration.md](docs/advanced-integration.md#switching-to-the-one-liner).
 

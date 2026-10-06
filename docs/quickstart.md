@@ -2,7 +2,7 @@
 
 From zero to a triage report, for a jsPsych 7 experiment.
 
-**Not using jsPsych?** The same tag works on any page. On a [lab.js](labjs.md) study it takes the trials from lab.js's components and writes into lab.js's rows; [labjs.md](labjs.md) has the setup. On other pages, mark trials with `data-ch-trial="q1"` on a clickable element or with `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` with your own save code (a POST form gets it automatically, as a hidden `cyborgHunterData` field). The details are in [advanced-integration.md → Vanilla segmentation reference](advanced-integration.md#vanilla-segmentation-reference). Steps 1 and 4–6 apply unchanged.
+**Not using jsPsych?** The same tag works on any page. On a [lab.js](labjs.md) study load `ch-labjs.js` instead: it takes the trials from lab.js's components and writes into lab.js's rows; [labjs.md](labjs.md) has the setup. On other pages, mark trials with `data-ch-trial="q1"` on a clickable element or with `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` with your own save code (a POST form gets it automatically, as a hidden `cyborgHunterData` field). The details are in [advanced-integration.md → Vanilla segmentation reference](advanced-integration.md#vanilla-segmentation-reference). Steps 1 and 4–6 apply unchanged.
 
 **You need:** a jsPsych 7 experiment, Node.js ≥ 18 on the machine where you'll analyze data, and a way to save each participant's data to a file (CSV or JSON). You almost certainly have all three already.
 
