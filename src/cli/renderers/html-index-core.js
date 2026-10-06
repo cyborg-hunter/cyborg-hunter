@@ -92,6 +92,14 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
     ? "\n        try { window.parent.postMessage({ type: 'cyborg-hunter:select', participantId: pid }, '*'); } catch (e) { /* no parent */ }"
     : '';
 
+  // The run line in the top bar (report-core.js passes both when it can hash
+  // the cohort): the run id the annotations are stored under, and the time
+  // the report was built. Absent => the top bar is unchanged.
+  const runLine = opts.runId
+    ? ` &middot; run <code class="mono run-id">${esc(opts.runId)}</code>` +
+      (opts.generatedAt ? ` &middot; <time class="run-time" datetime="${esc(opts.generatedAt)}">${esc(formatRunTime(opts.generatedAt))}</time>` : '')
+    : '';
+
   // Cohort counts for filter chips and totals footer. The triage array is
   // already sorted tier-first (hard → soft → clean, score-desc within tier) by
   // triage.js — we don't re-sort here; the default "Tier" sort matches it.
@@ -516,7 +524,7 @@ ${fontFaceCss}    :root {
 <body data-filter="all">
   <header class="topbar">
     <h1>Cyborg Hunter Report</h1>
-    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}</span>
+    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${runLine}</span>
     <button class="legend-btn" type="button" aria-haspopup="dialog" aria-controls="legend-modal">Legend &#9432;</button>
   </header>
   <div class="layout">
@@ -1302,6 +1310,11 @@ function renderScoreBreakdown(t, config) {
 function scoreWeightsNote(config) {
   const { weights, isDefault } = resolveScoreWeights(config?.scoreWeights);
   return isDefault ? '' : ` &middot; custom score weights: ${esc(customWeightsText(weights))}`;
+}
+
+// The run time in the top bar: "2026-10-05T14:03:12.345Z" → "2026-10-05 14:03 UTC".
+function formatRunTime(iso) {
+  return String(iso).slice(0, 16).replace('T', ' ') + ' UTC';
 }
 
 // Format milliseconds as "Xs" / "Xm Ys".

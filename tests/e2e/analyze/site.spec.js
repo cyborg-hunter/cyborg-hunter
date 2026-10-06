@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
-  pilotFiles, cliPilotTree, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT } from './support.mjs';
+  pilotFiles, cliPilotTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT } from './support.mjs';
 
 test('dropped synthetic pilot: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -34,7 +34,8 @@ test('dropped synthetic pilot: same triage order as the sample, zip tree matches
     expect(pngs.every((n) => /^images\/(trajectories|session_timeline|typing_profile)_SYN-(HARD-03|SOFT-02|CLEAN-01)\.png$/.test(n))).toBe(true);
     const cliPngs = cli.names.filter((n) => n.endsWith('.png'));
     // With node-canvas on the CLI side the zip's index.html is the CLI-identical render: compare it byte for byte.
-    if (cliPngs.length) { expect(pngs).toEqual(cliPngs); expect(zip.text('index.html')).toEqual(cli.text('index.html')); }
+    expect(cli.text('index.html')).toMatch(/<code class="mono run-id">[0-9a-f]{16}<\/code>/);
+    if (cliPngs.length) { expect(pngs).toEqual(cliPngs); expect(withoutRunTime(zip.text('index.html'))).toEqual(withoutRunTime(cli.text('index.html'))); }
   } finally { cli.cleanup(); }
   await assertOnlyAllowed(page, seen, allow);
 });

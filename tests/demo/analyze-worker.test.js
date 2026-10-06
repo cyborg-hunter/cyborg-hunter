@@ -286,7 +286,10 @@ test('a reset while the report renders does not turn the render into an error', 
 // sheet keeps its own imports as URLs, which a second pass over the same
 // recording must leave as the first wrote them. The data's trial phases come
 // back once each, sorted; a trial without one is listed as 'default', the
-// name phase scope gives it (src/cli/analyzers/phase-scope.js).
+// name phase scope gives it (src/cli/analyzers/phase-scope.js). The time a
+// report was built is the one part of index.html that differs between the two
+// passes (the run id is the cohort's own), so the reports compare without it.
+const withoutRunTime = (html) => html.replace(/<time class="run-time" datetime="[^"]*">[^<]*<\/time>/, '<time class="run-time"></time>');
 test('reanalyze under the same config gives the first report again, file for file', async () => {
   const dir = 'tests/fixtures/demo';
   const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
@@ -317,12 +320,34 @@ test('reanalyze under the same config gives the first report again, file for fil
   const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
   assert.deepEqual(Object.keys(zip2).sort(), Object.keys(zip1).sort());
   assert.ok(zip1['replay/DEMO-FIXT.replay.js'], 'the replay pass ran');
-  for (const name of Object.keys(zip1)) assert.ok(Buffer.from(zip2[name]).equals(Buffer.from(zip1[name])), name);
-  assert.equal(second.html, first.html);
+  for (const name of Object.keys(zip1)) {
+    if (name === 'index.html') assert.equal(withoutRunTime(strFromU8(zip2[name])), withoutRunTime(strFromU8(zip1[name])), name);
+    else assert.ok(Buffer.from(zip2[name]).equals(Buffer.from(zip1[name])), name);
+  }
+  assert.equal(second.runId, first.runId);
+  assert.equal(withoutRunTime(second.html), withoutRunTime(first.html));
   assert.deepEqual(second.participants, first.participants);
   assert.deepEqual(second.triageOrder, first.triageOrder);
   assert.deepEqual(second.files, first.files);
   assert.deepEqual([first.phases, second.phases], [['default', 'main', 'warmup'], ['default', 'main', 'warmup']]);
+});
+
+// The run id names the cohort (report-core.js runIdOf): a re-analysis of the
+// same participants keeps it, so annotations stored under it stay with the
+// report.
+test('done carries the run id, and a re-analysis keeps it', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  assert.match(first.runId, /^[0-9a-f]{16}$/);
+  assert.ok(first.html.includes('<code class="mono run-id">' + first.runId + '</code>'), 'the in-page report shows it');
+  w.send({ type: 'reanalyze', config: { ...checked.config, scoreWeights: { paste: 1 } }, participantIdField: 'subject_ID' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  assert.equal(second.runId, first.runId);
 });
 
 test('a dropped file whose name differs from the recorded URL only in case still styles the replay', async () => {

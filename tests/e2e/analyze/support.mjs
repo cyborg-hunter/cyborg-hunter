@@ -183,6 +183,10 @@ export async function downloadZip(page) {
 export const pilotFiles = () => readdirSync(join(PILOT_DIR, 'data')).filter((f) => f.endsWith('.csv')).sort().map((f) => join(PILOT_DIR, 'data', f))
   .concat([join(PILOT_DIR, 'cyborg-hunter.config.json')]);
 
+// The time a report was built is the one part of index.html that differs
+// between two runs over the same files (the run id is the cohort's own).
+export const withoutRunTime = (html) => html.replace(/<time class="run-time" datetime="[^"]*">[^<]*<\/time>/, '<time class="run-time"></time>');
+
 // The CLI's tree for the synthetic pilot (images when node-canvas is
 // installed), for the zip-tree comparison.
 export function cliPilotTree() {

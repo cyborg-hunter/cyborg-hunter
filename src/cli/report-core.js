@@ -17,6 +17,11 @@
 //   assetMap               styled-replay assets, or null
 //   keepImages             true ⇒ result.images[pid][kind] holds the PNG bytes
 //                          (for renderInPageHtml)
+//   sha256(text)           → hex string, or a Promise of one (ingest's own
+//                          injected hash): the run id (runIdOf). Absent ⇒ the
+//                          report carries no run id, no run time and no
+//                          annotation controls
+//   now()                  → the run's time as an ISO string (default: the clock)
 // }
 import { computeSummary } from './analyzers/summary.js';
 import { detectEdgeExits } from './analyzers/edge-exit.js';
@@ -38,6 +43,15 @@ import { bytesToBase64 } from '../shared/base64.js';
 // The text files every report contains, in write order (images/ and replay/
 // files, when there are any, come between extensions.csv and index.html).
 export const REPORT_FILES = ['summary.csv', 'score-weights.json', 'triage.md', 'event-log.csv', 'extensions.csv', 'index.html'];
+
+// The run id: the cohort's participant ids, sorted, as JSON, hashed with the
+// injected sha256; its first 16 hex digits. It names the cohort, not the
+// settings: a rebuild of the same files under another config keeps it, so the
+// annotations stored under it (ch-annot:<runId>) stay with the report.
+export async function runIdOf(participants, sha256) {
+  const ids = participants.map((p) => String(p.participantId)).sort();
+  return String(await sha256(JSON.stringify(ids))).slice(0, 16);
+}
 
 export async function buildReport(participants, config, deps) {
   const sink = deps.sink;
@@ -158,14 +172,19 @@ export async function buildReport(participants, config, deps) {
     warn(`  [warn] experiment assets not applied to the replay of ${shortId(a.participantId)}: ${a.reason}`);
   }
 
+  // The run id and time, shown in the report's top bar. Both stay null
+  // without deps.sha256, and the page is then the one it always was.
+  const runId = deps.sha256 ? await runIdOf(participants, deps.sha256) : null;
+  const generatedAt = runId ? (deps.now ? deps.now() : new Date().toISOString()) : null;
+
   // HTML index page — references images/ and replay/ by path (not embedded).
   const html = await renderIndexHtml(summaries, triage, participants, config, visualsRendered,
-    { replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss });
+    { replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, runId, generatedAt });
   sink('index.html', html);
   log('  index.html — report page');
 
   return { summaries, triage, triageOrder: triage.map(t => t.participantId),
-    counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images };
+    counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images, runId, generatedAt };
 }
 
 // The in-page report: the SAME summaries/triage and the SAME PNG bytes the zip
@@ -187,5 +206,6 @@ export async function renderInPageHtml(built, participants, config, deps) {
   return renderIndexHtml(built.summaries, built.triage, participants, config, built.visualsRendered, {
     imageSources, replayShownExternally: true, selectionPostMessage: true,
     replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss,
+    runId: built.runId, generatedAt: built.generatedAt,
   });
 }

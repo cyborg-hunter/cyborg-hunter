@@ -6,6 +6,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ## [Unreleased]
 
 ### Added
+- Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
+  14:03 UTC`). The id is a hash of the participant ids, so a report rebuilt
+  from the same files keeps it, whatever the settings.
 - One-line setup: one file per framework. `ch.js` stays the file for jsPsych
   and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
   surveys and `ch-labjs.js` for lab.js studies. The files share the API, the

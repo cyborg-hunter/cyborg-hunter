@@ -64,10 +64,14 @@ async function viaBrowserPath(dataDir, fileConfig) {
     sink: (p, d) => files.set(p, typeof d === 'string' ? Buffer.from(d, 'utf8') : Buffer.from(d)),
     createCanvas: canvasMod ? canvasMod.createCanvas : null,
     encodePng: async (c) => new Uint8Array(c.toBuffer('image/png')),
-    replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss(),
+    replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss(), sha256: webSha256,
   });
   return files;
 }
+
+// The time a report was built is the one part of index.html that differs
+// between two runs over the same files (the run id is the cohort's own).
+const withoutRunTime = (html) => html.replace(/<time class="run-time" datetime="[^"]*">[^<]*<\/time>/, '<time class="run-time"></time>');
 
 async function assertParity(dataDir, fileConfig, tmp) {
   const cliDir = await viaCli(dataDir, fileConfig, tmp);
@@ -75,7 +79,10 @@ async function assertParity(dataDir, fileConfig, tmp) {
   const cliFiles = walk(cliDir);
   assert.deepStrictEqual([...web.keys()].sort(), cliFiles, 'same file tree');
   for (const f of cliFiles) {
-    assert.ok(readFileSync(join(cliDir, f)).equals(web.get(f)), `${f} differs`);
+    if (f !== 'index.html') { assert.ok(readFileSync(join(cliDir, f)).equals(web.get(f)), `${f} differs`); continue; }
+    const cliIndex = readFileSync(join(cliDir, f), 'utf8');
+    assert.match(cliIndex, /<code class="mono run-id">[0-9a-f]{16}<\/code>/, 'the CLI report carries its run id');
+    assert.strictEqual(withoutRunTime(web.get(f).toString('utf8')), withoutRunTime(cliIndex), 'index.html differs');
   }
   return cliFiles;
 }

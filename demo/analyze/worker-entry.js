@@ -27,7 +27,8 @@
 //     progress      { phase: 'check' | 'ingest' | 'report', done, total, label? }
 //     zip           { chunk } — the report zip, in order, buffer transferred
 //     done          the in-page report html and what the page lists beside it;
-//                   phases: the trial phases in the data, sorted
+//                   phases: the trial phases in the data, sorted; runId: the
+//                   run id (report-core.js runIdOf)
 //     replay-model  { participantId, model }
 //     error         { phase, message }, phase 'ingest' or the type of the message
 //                   that failed: 'check' | 'run' | 'reanalyze' | 'replay'
@@ -198,11 +199,11 @@ async function renderRun(state, config) {
   var built = await buildReport(participants, config, {
     sink: sink, keepImages: true, assetMap: state.assetMap,
     createCanvas: typeof OffscreenCanvas === 'function' ? offscreenCreateCanvas : null, encodePng: offscreenEncodePng,
-    replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss,
+    replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, sha256: webSha256,
   });
   zip.end();
   var html = await renderInPageHtml(built, participants, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, bytesToBase64: bytesToBase64 });
-  post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts,
+  post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts, runId: built.runId,
     participants: participants.map(function (p) {
       var has = !!(p.replay && p.replay.recording);
       return { participantId: p.participantId, hasReplay: has,
