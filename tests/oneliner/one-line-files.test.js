@@ -9,6 +9,7 @@ import assert from 'node:assert';
 import { Window } from 'happy-dom';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 import { setBuild, buildOf } from './support/build-flags.js';
+import { fakeSurveyEngine } from './support/fake-qualtrics.js';
 
 class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
 let win, boot, errors, warns, infos, orig, ctx;
@@ -25,6 +26,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   console.error = orig.error; console.warn = orig.warn; console.info = orig.info;
+  if (ctx && ctx.qualtrics) ctx.qualtrics.teardown();
   if (ctx && ctx.vanilla) ctx.vanilla.teardown();
   if (ctx && ctx.monitor) { try { ctx.monitor.destroy(); } catch { /* already destroyed */ } }
   win.close();
@@ -223,5 +225,86 @@ describe('every host in (the node default): a jsPsych page is a jsPsych page', (
     assert.strictEqual(ctx.host, 'jspsych');
     assert.strictEqual(ctx.wrongBuild, null);
     assert.deepStrictEqual(errors, []);
+  });
+});
+
+const jsPsychStub = () => function () { return { data: { addProperties() {} }, run() {} }; };
+
+// ch-qualtrics.js looks for the survey before jsPsych: a survey whose page
+// also runs jsPsych is a Qualtrics page, with one warning and no error.
+describe('ch-qualtrics.js', () => {
+  let restore;
+  before(() => { restore = setBuild(buildOf('ch-qualtrics.js')); });
+  after(() => restore());
+
+  it('a survey that also runs jsPsych: a Qualtrics page, one warning, page rows written, header re-runs silent', () => {
+    const qx = fakeSurveyEngine();
+    win.Qualtrics = { SurveyEngine: qx.SE };
+    win.initJsPsych = jsPsychStub();
+    ctx = qx.runHeader(() => boot({ script: script({ participantId: 'P1', guards: 'none' }), win }));
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(ctx.qualtricsLayout, 'new');
+    assert.ok(ctx.qualtrics, 'the Qualtrics writer is installed');
+    assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(warns, [MESSAGES.qualtricsJsPsych()]);
+    qx.rerunHeader(win, script());
+    assert.deepStrictEqual(errors, []);
+    assert.ok(qx.submit().__js_cyborg_hunter, 'the page row is in embedded data');
+  });
+
+  it('a jsPsych page outside Qualtrics: one wrongBuild error naming ch.js', () => {
+    win.initJsPsych = jsPsychStub();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-qualtrics.js')]);
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(win.__cyborgHunterRerunHost, undefined);
+  });
+});
+
+// ch.js on a survey: one error naming ch-qualtrics.js, the page recorded as
+// one without a framework (nothing in embedded data), and the header's
+// re-runs on later pages silent, so the error is said once.
+describe('ch.js on a Qualtrics survey', () => {
+  let restore;
+  before(() => { restore = setBuild(buildOf('ch.js')); });
+  after(() => restore());
+
+  it('one wrongBuild error naming ch-qualtrics.js, no writer, header re-runs silent', () => {
+    const qx = fakeSurveyEngine();
+    win.Qualtrics = { SurveyEngine: qx.SE };
+    ctx = qx.runHeader(() => boot({ script: script({ participantId: 'P1', guards: 'none' }), win }));
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('Qualtrics', 'ch-qualtrics.js', 'ch.js')]);
+    assert.strictEqual(ctx.host, 'vanilla');
+    assert.strictEqual(ctx.qualtricsLayout, null);
+    assert.strictEqual(ctx.qualtrics, undefined);
+    qx.rerunHeader(win, script());
+    qx.rerunHeader(win, script());
+    assert.strictEqual(ctx.rerunCount, 2);
+    assert.strictEqual(errors.length, 1, errors.join('\n'));
+    assert.strictEqual(qx.submit().__js_cyborg_hunter, undefined);
+  });
+
+  it('a survey whose page runs jsPsych is a jsPsych page, as before', () => {
+    win.Qualtrics = { SurveyEngine: fakeSurveyEngine().SE };
+    win.initJsPsych = jsPsychStub();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.strictEqual(ctx.host, 'jspsych');
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
+// A file with neither adapter on a survey that also runs jsPsych: one error,
+// for the survey.
+describe('a file without the jsPsych and Qualtrics adapters on a survey that runs jsPsych', () => {
+  let restore;
+  before(() => { restore = setBuild({ HAS_JSPSYCH: false, HAS_QUALTRICS: false, CH_FILE: 'ch-labjs.js' }); });
+  after(() => restore());
+
+  it('one wrongBuild error, naming ch-qualtrics.js', () => {
+    win.Qualtrics = { SurveyEngine: fakeSurveyEngine().SE };
+    win.initJsPsych = jsPsychStub();
+    ctx = boot({ script: script({ participantId: 'P1', guards: 'none' }), win });
+    assert.deepStrictEqual(errors, [MESSAGES.wrongBuild('Qualtrics', 'ch-qualtrics.js', 'ch-labjs.js')]);
+    assert.strictEqual(ctx.host, 'vanilla');
   });
 });

@@ -131,34 +131,34 @@ function nums(v) {
 }
 
 // Events, in the shapes src/core/signals writes them.
-var PASTE = listOf({ type: label, t: num, pastedLength: num, isKnownInput: bool });   // never `text`
-var COPY = listOf({ type: label, t: num, selectedLength: num });
-var DROP = listOf({ type: label, t: num, droppedLength: num, isKnownInput: bool });   // never `text`
-var TAB_AWAY = listOf({ start: num, duration_ms: num, type: label, timestamp: label });
-var IDLE = listOf({ duration_ms: num, t: num });
-var INSERTION = listOf({ type: label, t: num, dataLength: num });
+var PASTE = /* @__PURE__ */ listOf({ type: label, t: num, pastedLength: num, isKnownInput: bool });   // never `text`
+var COPY = /* @__PURE__ */ listOf({ type: label, t: num, selectedLength: num });
+var DROP = /* @__PURE__ */ listOf({ type: label, t: num, droppedLength: num, isKnownInput: bool });   // never `text`
+var TAB_AWAY = /* @__PURE__ */ listOf({ start: num, duration_ms: num, type: label, timestamp: label });
+var IDLE = /* @__PURE__ */ listOf({ duration_ms: num, t: num });
+var INSERTION = /* @__PURE__ */ listOf({ type: label, t: num, dataLength: num });
 // Never `data` (the typed text), nor the target's id or class: a page widget
 // can set those from what was typed. The tag and the kind of input are fixed
 // sets.
-var FOREIGN = listOf({ t: num, targetTag: label, inputType: label });
+var FOREIGN = /* @__PURE__ */ listOf({ t: num, targetTag: label, inputType: label });
 
 // The trial report's event arrays (level 2 empties them on older rows).
 var EVENTS = { pasteEvents: PASTE, copyEvents: COPY, dropEvents: DROP, tabAwayEvents: TAB_AWAY,
   idleGaps: IDLE, syntheticInsertions: INSERTION, foreignInputEvents: FOREIGN };
 
-var HARD_SIGNAL = fields({ trialHits: num, sessionTotal: num, countThreshold: num });
-var SOFT_SIGNAL = fields({ hits: num, capped: num, score: num });
+var HARD_SIGNAL = /* @__PURE__ */ fields({ trialHits: num, sessionTotal: num, countThreshold: num });
+var SOFT_SIGNAL = /* @__PURE__ */ fields({ hits: num, capped: num, score: num });
 // A trial report (monitor.js endTrial) without mouseTrack, elementTrace,
 // editTimestamps, the mouse-cap flags and decoy (whose injectedText is page
 // text).
-var TRIAL = Object.assign({
+var TRIAL = /* @__PURE__ */ Object.assign({
   trialId: label, phase: label, startTime: num, duration_ms: num, libraryVersion: label, participantId: label,
   timestamp: label, charsPerSec: num, trialSoftScore: num,
-  mouseMetrics: fields({ pathEfficiency: num, directionChanges: num, speedVariance: num, moveCount: num }),
-  trialSignals: fields({
-    hard: fields({ paste: HARD_SIGNAL, copy: HARD_SIGNAL, drop: HARD_SIGNAL }),
-    soft: fields({ copy: SOFT_SIGNAL, tabAway: SOFT_SIGNAL, sidebarEvent: SOFT_SIGNAL, devTools: SOFT_SIGNAL,
-      foreignInput: SOFT_SIGNAL, typingSpeed: fields({ charsPerSec: num, threshold: num, hit: num, score: num }) })
+  mouseMetrics: /* @__PURE__ */ fields({ pathEfficiency: num, directionChanges: num, speedVariance: num, moveCount: num }),
+  trialSignals: /* @__PURE__ */ fields({
+    hard: /* @__PURE__ */ fields({ paste: HARD_SIGNAL, copy: HARD_SIGNAL, drop: HARD_SIGNAL }),
+    soft: /* @__PURE__ */ fields({ copy: SOFT_SIGNAL, tabAway: SOFT_SIGNAL, sidebarEvent: SOFT_SIGNAL, devTools: SOFT_SIGNAL,
+      foreignInput: SOFT_SIGNAL, typingSpeed: /* @__PURE__ */ fields({ charsPerSec: num, threshold: num, hit: num, score: num }) })
   })
 }, EVENTS);
 
@@ -166,32 +166,32 @@ var TRIAL = Object.assign({
 // windowPositions (a 2 s poll of where the window sits on the screen).
 var DELTAS = {
   tabAwaySums: nums, tabAwayEvents: TAB_AWAY, charsPerSec: nums, idleGaps: IDLE,
-  sidebarEvents: listOf({ type: label, method: label, deltaIW: num, innerWidth: num, baselineIW: num, gap: num, duration_ms: num, t: num }),
-  devToolsEvents: listOf({ t: num }),
-  aiExtensionsFound: listOf({ name: label, t: num }),
-  keyboardShortcuts: listOf({ combo: label, t: num }),
-  extensionInjections: listOf({ tag: label, hasShadow: bool, t: num }),
-  viewportWidthShifts: listOf({ oldWidth: num, newWidth: num, delta: num, t: num }),
-  zoomChanges: listOf({ from: num, to: num, t: num })
+  sidebarEvents: /* @__PURE__ */ listOf({ type: label, method: label, deltaIW: num, innerWidth: num, baselineIW: num, gap: num, duration_ms: num, t: num }),
+  devToolsEvents: /* @__PURE__ */ listOf({ t: num }),
+  aiExtensionsFound: /* @__PURE__ */ listOf({ name: label, t: num }),
+  keyboardShortcuts: /* @__PURE__ */ listOf({ combo: label, t: num }),
+  extensionInjections: /* @__PURE__ */ listOf({ tag: label, hasShadow: bool, t: num }),
+  viewportWidthShifts: /* @__PURE__ */ listOf({ oldWidth: num, newWidth: num, delta: num, t: num }),
+  zoomChanges: /* @__PURE__ */ listOf({ from: num, to: num, t: num })
 };
 
-var HARD = fields({ count: num, threshold: num, triggered: bool });
-var SEGMENT = fields({
+var HARD = /* @__PURE__ */ fields({ count: num, threshold: num, triggered: bool });
+var SEGMENT = /* @__PURE__ */ fields({
   segmentIndex: num, source: label, trialId: label, pageOrigin: num,
-  deltas: fields(DELTAS),
-  counters: fields({ pasteCount: num, copyCount: num, dropCount: num }),
-  score: fields({ hardScore: fields({ paste: HARD, copy: HARD, drop: HARD }), softScore: num,
+  deltas: /* @__PURE__ */ fields(DELTAS),
+  counters: /* @__PURE__ */ fields({ pasteCount: num, copyCount: num, dropCount: num }),
+  score: /* @__PURE__ */ fields({ hardScore: /* @__PURE__ */ fields({ paste: HARD, copy: HARD, drop: HARD }), softScore: num,
     softScoreThreshold: num, anyHardTriggered: bool, trialsCompleted: num }),
-  gap: listOf({ duration_ms: num, pasteEvents: PASTE, copyEvents: COPY, dropEvents: DROP, syntheticInsertions: INSERTION }),
-  config: fields({ preset: label, participantId: label, thresholds: fields({ tabAwayDurationMs: num, typingSpeedCps: num }) }),
+  gap: /* @__PURE__ */ listOf({ duration_ms: num, pasteEvents: PASTE, copyEvents: COPY, dropEvents: DROP, syntheticInsertions: INSERTION }),
+  config: /* @__PURE__ */ fields({ preset: label, participantId: label, thresholds: /* @__PURE__ */ fields({ tabAwayDurationMs: num, typingSpeedCps: num }) }),
   libraryVersion: label
 });
-var ROW = fields({
-  trialId: label, integrity: fields(TRIAL), integritySegment: SEGMENT,
+var ROW = /* @__PURE__ */ fields({
+  trialId: label, integrity: /* @__PURE__ */ fields(TRIAL), integritySegment: SEGMENT,
   integrityPasteCount: num, integrityCopyCount: num, integrityDropCount: num,
   integritySoftScore: num, integrityAnyHardTriggered: bool, cyborgHunterError: note
 });
-var VIOLATION = listOf({ reason: label, start: num, end: num, duration: num, in_progress: bool, pageOrigin: num });
+var VIOLATION = /* @__PURE__ */ listOf({ reason: label, start: num, end: num, duration: num, in_progress: bool, pageOrigin: num });
 
 // Level 0 for one trial report (exported for the tests).
 export function trimTrialReport(report) { return pick(report, TRIAL); }

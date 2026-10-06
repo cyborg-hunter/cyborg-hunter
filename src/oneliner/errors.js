@@ -235,7 +235,7 @@ export const MESSAGES = {
   // an embedded-data field holds a few thousand characters.
   replayQualtrics: function () {
     return formatError('data-replay is on under Qualtrics',
-      'recordings never fit in embedded data, so ch.js does not write them',
+      'recordings never fit in embedded data, so ch-qualtrics.js does not write them',
       'save CyborgHunter.replay() to your own server from a final-page question script',
       DOCS + 'qualtrics.md#replay');
   },
@@ -247,6 +247,16 @@ export const MESSAGES = {
       'setJSEmbeddedData is missing, so the payload is written with setEmbeddedData to the field cyborg_hunter',
       'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
       DOCS + 'qualtrics.md#legacy-layout');
+  },
+  // console.warn, once at boot (on every page under the legacy layout):
+  // ch-qualtrics.js on a survey that also runs jsPsych (boot.js). The survey
+  // is recorded as a Qualtrics page; the jsPsych trials get no rows of their
+  // own, which needs the jsPsych adapter this file does not carry.
+  qualtricsJsPsych: function () {
+    return formatError('The jsPsych trials on this survey are not recorded one by one',
+      'ch-qualtrics.js carries the Qualtrics adapter but not the jsPsych one, so it records this survey as a Qualtrics page: rows per page in embedded data, none per jsPsych trial',
+      'nothing to change for the page rows; rows per trial need ch.js, which writes them into jsPsych\'s data and writes nothing into embedded data',
+      DOCS + 'qualtrics.md#jspsych-inside-a-survey');
   },
   // console.error: the field is missing from Survey Flow and every write is
   // lost. `field` is the Survey Flow name: __js_cyborg_hunter, or

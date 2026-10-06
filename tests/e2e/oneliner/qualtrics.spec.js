@@ -1,5 +1,6 @@
 // tests/e2e/oneliner/qualtrics.spec.js
-// The one-line setup (dist/ch.js) inside a Qualtrics survey, in Chromium.
+// The one-line setup's Qualtrics file (dist/ch-qualtrics.js) inside a
+// Qualtrics survey, in Chromium.
 // fixtures/qualtrics-harness.html stands in for the New Survey Taking
 // Experience (one window for the whole survey, the header re-rendered and its
 // script run again on every page, each page posted to /jfe/next) and, with
@@ -496,10 +497,10 @@ async function finishWithoutCh(page, server) {
   expect(errors).toEqual([]);
 }
 
-test('ch.js fails to load, with the final-page line and the replay recipe: every page submits, Next is never left hidden', async ({ page }) => {
+test('ch-qualtrics.js fails to load, with the final-page line and the replay recipe: every page submits, Next is never left hidden', async ({ page }) => {
   const server = await qualtricsServer(page);
   const chStatus = [];
-  page.on('response', (r) => { if (r.url().endsWith('/ch.js')) chStatus.push(r.status()); });
+  page.on('response', (r) => { if (r.url().endsWith('/ch-qualtrics.js')) chStatus.push(r.status()); });
   await page.goto(at('chjs=missing&finalLine=1&recipe=1&replay=1'));
   await finishWithoutCh(page, server);
   expect(chStatus.length).toBeGreaterThan(0);

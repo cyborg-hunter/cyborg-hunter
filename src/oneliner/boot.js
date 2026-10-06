@@ -164,17 +164,26 @@ export function boot(opts) {
 
     var script = opts.script || null;
     var config = readConfig({ dataset: (script && script.dataset) || {}, globalConfig: win.CyborgHunterConfig });
-    // The page's framework, against the ones this file carries (step 5).
+    // The page's framework, against the ones this file carries (step 5). A
+    // file with the jsPsych adapter takes a page with jsPsych for a jsPsych
+    // page, Qualtrics or not. The others look for a Qualtrics survey first:
+    // ch-qualtrics.js records a survey that also runs jsPsych as a Qualtrics
+    // page, with one warning that its trials get no rows of their own. A
+    // framework the file does not carry gets one wrongBuild error naming the
+    // file that does, and the page is recorded as a page without a framework.
     var jsPsychPage = typeof win.initJsPsych === 'function';
-    var wrongBuild = jsPsychPage && !HAS_JSPSYCH ? { host: 'jsPsych', file: 'ch.js' } : null;
+    // A Qualtrics survey (the vanilla host; the layout goes on ctx at step
+    // 5). Under the new layout the kept id and the saved session are per
+    // survey. Not under the legacy layout, where every page is a new load: an
+    // address without the survey id on a later page would lose the earlier
+    // pages.
+    var qualtricsSeen = HAS_JSPSYCH && jsPsychPage ? null : detectQualtrics(win);
+    var qualtrics = HAS_QUALTRICS ? qualtricsSeen : null;
+    var wrongBuild = qualtricsSeen && !HAS_QUALTRICS ? { host: 'Qualtrics', file: 'ch-qualtrics.js' }
+      : jsPsychPage && !HAS_JSPSYCH && !qualtrics ? { host: 'jsPsych', file: 'ch.js' } : null;
     if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
-    // A Qualtrics survey (no jsPsych, so the vanilla host; the layout goes on
-    // ctx at step 5). Under the new layout the kept id and the saved session
-    // are per survey. Not under the legacy layout, where every page is a new
-    // load: an address without the survey id on a later page would lose the
-    // earlier pages.
-    var qualtrics = typeof win.initJsPsych === 'function' ? null : detectQualtrics(win);
-    var surveyId = qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
+    else if (qualtrics && jsPsychPage) console.warn(MESSAGES.qualtricsJsPsych());
+    var surveyId = HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
     var pidKey = surveyId ? PID_KEY + ':' + surveyId : PID_KEY;
 
     var pid = resolveParticipantId({
@@ -233,7 +242,7 @@ export function boot(opts) {
       // new layout. With data-debug the badge shows each write.
       // The cap's two overrides are for tests.
       ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: surveyId });
-      if (ctx.qualtricsLayout) {
+      if (HAS_QUALTRICS && ctx.qualtricsLayout) {
         ctx.qualtrics = installQualtricsAdapter({
           win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars || config.qualtricsMaxChars,   // the writer clamps it to MAX_CHARS
           onWrite: ctx.debug ? function () { ctx.debug.refresh(); } : null
@@ -294,10 +303,12 @@ export function boot(opts) {
       },
       writable: false, enumerable: false, configurable: true
     });
-    // Only Qualtrics re-runs its header, so only a page where ch.js started
-    // the Qualtrics host takes a second run of this version for a re-run
+    // Only Qualtrics re-runs its header, so only a page where this file found
+    // a Qualtrics survey takes a second run of this version for a re-run
     // (rerun.js markRerun); elsewhere a second tag stays the loud double load.
-    if (ctx.qualtricsLayout) {
+    // That includes a file without the Qualtrics adapter, which said so once
+    // (wrongBuild) and must not repeat it on every page.
+    if (qualtricsSeen) {
       Object.defineProperty(win, '__cyborgHunterRerunHost', {
         value: 'qualtrics', writable: false, enumerable: false, configurable: true
       });

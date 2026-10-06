@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <title>one-liner fixture: Qualtrics survey harness</title>
   <!-- Fixture for tests/e2e/oneliner/qualtrics.spec.js. A stand-in for a
-       Qualtrics survey under the New Survey Taking Experience, as ch.js sees
-       it from the Look & Feel header:
+       Qualtrics survey under the New Survey Taking Experience, as
+       ch-qualtrics.js sees it from the Look & Feel header:
          - one window for the whole survey; each page is a textarea #q<N> and
            a Next button #next;
          - window.Qualtrics.SurveyEngine with the semantics of
@@ -13,7 +13,7 @@
            undeclared field is dropped without an error; getJSEmbeddedData
            returns the value the page last set, declared or not, and
            undefined before any, as on a live survey);
-         - the header (#qx-header) holds the researcher's ch.js tag and is
+         - the header (#qx-header) holds the researcher's one-line tag and is
            re-rendered, its script executed again, on every page change;
          - Next runs the addOnPageSubmit callbacks in one task, then posts the
            page and the embedded data to /jfe/next (the spec answers it, as
@@ -51,7 +51,9 @@
          finalLine=1           the final page runs the documented final-page
                                question script (docs/qualtrics.md, guarded:
                                it never throws, with or without ch.js)
-         chjs=missing          the header's ch.js tag points at a file that
+         file=ch.js            the header loads another one-line file than
+                               ch-qualtrics.js (the wrong file for a survey)
+         chjs=missing          the header's tag points at a file that
                                does not exist (404), as when a network or a
                                blocker stops the script: the survey still
                                runs, each page ready without a header run
@@ -143,9 +145,10 @@ Qualtrics.SurveyEngine.addOnload(function () {
     var RESUME_KEY = 'qx:page:' + survey;
     var LEGACY_KEY = 'qx:ed';
 
-    // The researcher's header: the ch.js tag, as pasted into Look & Feel.
+    // The researcher's header: the one-line tag, as pasted into Look & Feel.
+    var file = params.get('file') || 'ch-qualtrics.js';
     var missing = params.get('chjs') === 'missing';
-    var tag = '<script src="' + (missing ? '/dist/missing/ch.js' : '/dist/ch.js') + '" data-participant-id="E2E-QX-1"' +
+    var tag = '<script src="' + (missing ? '/dist/missing/' : '/dist/') + file + '" data-participant-id="E2E-QX-1"' +
       (params.get('debug') === '0' ? '' : ' data-debug') +
       (params.get('replay') === '1' ? ' data-replay' : '') +
       (params.get('guards') === 'none' ? ' data-guards="none"' : '') +

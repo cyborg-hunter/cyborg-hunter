@@ -381,6 +381,17 @@ page, and that submit writes the last Cyborg Hunter payload.
 final page loads; put the script on a closing page with little to do. It can
 share the question's JavaScript with the [final-page line](#the-final-page).
 
+## jsPsych inside a survey
+
+`ch-qualtrics.js` looks for the survey before it looks for jsPsych, so a
+survey whose page also runs a jsPsych experiment is recorded as a Qualtrics
+page: one row per page in embedded data, and no row per jsPsych trial. The
+console says so once ("The jsPsych trials on this survey are not recorded one
+by one"). Rows per trial need `ch.js`, which carries the jsPsych adapter and
+writes them into jsPsych's own data, and writes nothing into embedded data;
+in a Qualtrics header it also logs the double-load error each time the header
+runs again ([known issues](known-issues.md#one-line-setup)).
+
 ## Legacy layout
 
 With the New Survey Taking Experience switched off, every survey page is a

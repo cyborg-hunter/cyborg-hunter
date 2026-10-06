@@ -40,7 +40,8 @@ function oneLineBlock() {
 // host, and in no other. (A field name the debug summary imports, such as
 // Qualtrics' __js_cyborg_hunter, is in every file and cannot serve.)
 const MARKERS = {
-  jspsych: 'extensions is not an array'
+  jspsych: 'extensions is not an array',
+  qualtrics: 'page-submit hook was in place'
 };
 
 describe('build.js: the one-line targets', () => {
@@ -75,6 +76,18 @@ describe('build.js: the one-line targets', () => {
       bundle: true, minify: true, format: 'iife', platform: 'browser', write: false, logLevel: 'error'
     });
     assert.ok(!r.outputFiles[0].text.includes(MARKERS.jspsych));
+  });
+
+  // The payload builder makes its field specs with top-level calls
+  // (listOf, fields). Marked /* @__PURE__ */, they are dropped from a bundle
+  // that never calls the builder, as every file but ch-qualtrics.js is.
+  it('the Qualtrics payload builder leaves nothing in a bundle that does not call it', async () => {
+    const r = await esbuild.build({
+      stdin: { contents: "import './src/oneliner/qualtrics-payload.js';", resolveDir: ROOT },
+      bundle: true, minify: true, format: 'iife', platform: 'browser', write: false, logLevel: 'error'
+    });
+    const out = r.outputFiles[0].text;
+    assert.ok(out.length < 50, out.length + ' bytes left: ' + out.slice(0, 120));
   });
 
   it('docs/quickstart.md#which-file lists every target and nothing else', () => {

@@ -6,7 +6,8 @@
 // tests/oneliner/build.test.js builds and checks every file here, and the
 // "Which file" table in docs/quickstart.md lists the same files.
 export const ONE_LINE_TARGETS = [
-  { file: 'ch.js', hosts: ['jspsych'] }
+  { file: 'ch.js', hosts: ['jspsych'] },
+  { file: 'ch-qualtrics.js', hosts: ['qualtrics'] }
 ];
 
 // esbuild's `define` for one target (src/oneliner/build-flags.js): each

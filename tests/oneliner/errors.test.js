@@ -172,6 +172,11 @@ const CASES = {
     fix: 'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
     link: DOCS + 'qualtrics.md#legacy-layout'
   },
+  qualtricsJsPsych: {
+    args: [],
+    fix: 'nothing to change for the page rows; rows per trial need ch.js, which writes them into jsPsych\'s data and writes nothing into embedded data',
+    link: DOCS + 'qualtrics.md#jspsych-inside-a-survey'
+  },
   qualtricsFieldUndeclared: {
     args: ['__js_cyborg_hunter'],
     fix: 'add an Embedded Data element named __js_cyborg_hunter at the top of Survey Flow',
