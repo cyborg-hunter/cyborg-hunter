@@ -227,13 +227,16 @@
   // have injected markup, and a foreign v2 file is not bound by CH's capture
   // rules at all). sandbox="allow-same-origin" without allow-scripts already
   // blocks scripts; the CSP meta additionally kills frames, form posts,
-  // fetch/XHR-carrying elements, and plugin content, while still allowing
-  // images/media/styles and fonts — the carriers of visual fidelity. Residual
+  // fetch/XHR-carrying elements, plugin content and media, while still
+  // allowing images, styles and fonts — the carriers of visual fidelity.
+  // Replays never play media (design §7 draws it as a placeholder), so
+  // media-src 'none' costs nothing and keeps the analyst's address from the
+  // experiment's media server, as the analyze page's own policy does. Residual
   // (documented): a participant-injected <img src> can still fire a GET to its
   // host when the analyst loads the replay. no-referrer strips the analyst
   // context.
   function srcdocCsp(allowExternalCss) {
-    return "default-src 'none'; img-src * data: blob:; media-src * data: blob:; " +
+    return "default-src 'none'; img-src * data: blob:; media-src 'none'; " +
       (allowExternalCss ? "style-src 'unsafe-inline' https: http:; " : "style-src 'unsafe-inline'; ") +
       "font-src * data:; " +
       "form-action 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none';";

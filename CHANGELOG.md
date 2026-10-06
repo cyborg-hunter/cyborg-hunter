@@ -107,6 +107,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   images that never match: it says how many video/audio elements are shown as
   placeholders and that replays never play media. A video's poster is still
   an image.
+- CLI report: a session replay no longer requests the recording's video and
+  audio files. The replay frame's policy now blocks media
+  (`media-src 'none'`), as the analyze page's does, so opening a replay no
+  longer sends the analyst's address to the server that held the
+  experiment's media. Replays never played media; the elements are still
+  drawn as placeholders.
 - Experiment assets now also cover `srcset` candidates (on `<img>` and on a
   `<picture>`'s `<source>`), an SVG `<image>`'s `href`/`xlink:href`, and an
   `<input type="image">`'s `src` (also when the input becomes an image button
