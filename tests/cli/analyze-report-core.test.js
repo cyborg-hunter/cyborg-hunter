@@ -1,7 +1,10 @@
 // buildReport writes every CLI output through a sink, in the CLI's order, and
 // renderInPageHtml turns the same PNG bytes into data URIs for the browser.
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ingest } from '../../src/cli/ingest.js';
 import { buildReport, renderInPageHtml, REPORT_FILES } from '../../src/cli/report-core.js';
 import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
@@ -75,6 +78,40 @@ describe('buildReport', () => {
     assert.ok(m.files.has('replay/DEMO-FIXT.replay.js'));
     assert.ok(m.files.get('index.html').includes('data-replay-src="replay/DEMO-FIXT.replay.js"'));
     assert.ok(m.order.indexOf('replay/DEMO-FIXT.replay.js') < m.order.indexOf('index.html'));
+  });
+});
+
+// A participant id that is a number (a CSV's dynamic typing, a study that
+// stores one) reached the plot file names as a number and stopped the whole
+// report at the image step. Every input shape keys it by its string.
+describe('numeric participant ids', () => {
+  let d;
+  const integrity = (pid) => ({
+    trialId: 't1', participantId: pid, libraryVersion: '0.6.0', startTime: 1000, duration_ms: 5000, trialStart_perfNow: 1000,
+    pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {}
+  });
+  const config = (over) => ({ dataDir: d, filePattern: '*.json', participantIdField: 'participantId', integrityField: 'integrity', ...over });
+  before(() => {
+    d = mkdtempSync(join(tmpdir(), 'ch-numeric-ids-'));
+    writeFileSync(join(d, 'shape1.json'), JSON.stringify({ participantId: 41, trials: [{ trialId: 't1', integrity: integrity(41) }] }));
+    writeFileSync(join(d, 'zero.json'), JSON.stringify({ participantId: 0, trials: [{ trialId: 't1', integrity: integrity(0) }] }));
+    writeFileSync(join(d, 'rows.csv'), 'participantId,integrity\n42,"' + JSON.stringify(integrity(42)).replace(/"/g, '""') + '"\n');
+  });
+  after(() => rmSync(d, { recursive: true, force: true }));
+
+  it('every shape is keyed by the id\'s string, and the report draws every plot', async () => {
+    const { participants } = await ingest(config());
+    assert.deepStrictEqual(participants.map((p) => p.participantId).sort(), ['0', '41', '42']);
+    const m = memorySink();
+    await buildReport(participants, cfg(config()),
+      { sink: m.sink, createCanvas: makeRecordingCanvasFactory([]), encodePng: pngStub, replayClientSrc: '', fontFaceCss: '' });
+    assert.ok(m.files.has('images/trajectories_42.png'), [...m.files.keys()].join(', '));
+    assert.ok(m.files.has('images/session_timeline_0.png'), [...m.files.keys()].join(', '));
+  });
+
+  it('--participant 42 finds the participant whose CSV holds the number 42', async () => {
+    const { participants } = await ingest(config({ singleParticipant: '42' }));
+    assert.deepStrictEqual(participants.map((p) => p.participantId), ['42']);
   });
 });
 

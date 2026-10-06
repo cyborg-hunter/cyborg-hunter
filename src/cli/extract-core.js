@@ -17,6 +17,11 @@ import { TRIAL_REPORT_FIELDS } from '../shared/schema.js';
 import { getByPath } from '../shared/paths.js';
 import { collectSegments, reassembleSegments, rebaseTrialReport } from './segment-reassembly.js';
 
+// A value that names a participant. 0 and false do (a CSV's dynamic typing
+// turns a numeric subject id into a number); undefined, null and an empty
+// string do not, as the `||` chain this replaced treated them.
+const present = v => v !== undefined && v !== null && v !== '';
+
 // Extracts integrity trial data from a single participant's raw JSON.
 // Returns { participantId, trials, warnings, metadata }.
 export function extractIntegrityData(raw, config) {
@@ -26,9 +31,13 @@ export function extractIntegrityData(raw, config) {
 
   // Determine participant ID — check top level, then metadata sub-object.
   // Since 0.6.1 the field supports dot-paths ("metadata.sessionId"); plain
-  // names keep the historical top-level → metadata fallback. `||` (not `??`)
-  // preserves the pre-0.6.1 treatment of empty-string IDs as missing.
-  const participantId = getByPath(raw, pidField) || getByPath(raw.metadata, pidField) || 'unknown';
+  // names keep the historical top-level → metadata fallback. An empty string
+  // (or null) is missing, as the pre-0.6.1 `||` chain treated it; 0 and false
+  // are ids. From here on the id is a string: the report names its files
+  // after it and --participant compares strings, and a number stopped the
+  // whole report at its first plot.
+  const resolved = [getByPath(raw, pidField), getByPath(raw.metadata, pidField)].find(present);
+  const participantId = resolved === undefined ? 'unknown' : String(resolved);
   // An id field that resolves to nothing yields 'unknown'. Silently, that both
   // loses the real id AND collides every such file under one 'unknown' bucket
   // downstream (see the duplicate-id check in ingest()). Warn so a mistyped
