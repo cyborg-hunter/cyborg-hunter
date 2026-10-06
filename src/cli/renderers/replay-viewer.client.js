@@ -329,8 +329,9 @@
   // back here, before anything reads the model, so the reconstruction, the
   // span walk and the debug surface see the value the attribute had before
   // the file was deduplicated; every element then shares one string. A
-  // reference with no entry is left as written. MUST match asset-match.js's
-  // ASSET_REF.
+  // reference with no entry is left as written. A value the page itself
+  // recorded as the literal text `ch-asset:<a supplied URL>` is expanded too
+  // (a contrived case). MUST match asset-match.js's ASSET_REF.
   var ASSET_REF = 'ch-asset:';
   function expandAssetRefs(model) {
     var assets = model.assets;

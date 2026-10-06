@@ -185,9 +185,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   page's window, and its **Fullscreen** control works there, the offline
   single file included.
 - Experiment assets: an image a replay shows on many elements (a card game's
-  card art on every card) is now stored once in the replay file, however
-  many elements show it, and the viewer puts it back on each element when
-  the replay loads. A `srcset` keeps its images inline.
+  card art on every card) is now stored once in the report's replay file
+  (`replay/<id>.replay.js`), however many elements show it, and the viewer
+  puts it back on each element when the replay loads; the recordings
+  themselves are unchanged. A `srcset` keeps its images inline.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the

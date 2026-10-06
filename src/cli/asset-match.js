@@ -4,8 +4,9 @@
 // URLs against files the researcher supplies (a dropped folder on the analyze
 // page, or `assetsDir` in the CLI config) and inlines what matched into the
 // viewer model: stylesheet text as `css`, images as data: URIs, each image
-// once (`model.assets`, see applyAssetMap). One matcher, one mapping, both
-// paths — and never a fetch, which the page's policy forbids.
+// an element attribute shows, once (`model.assets`, see applyAssetMap). One
+// matcher, one mapping, both paths — and never a fetch, which the page's
+// policy forbids.
 //
 // An image is an <img>'s src or srcset candidate, a <picture> <source>'s
 // srcset candidate, an SVG <image>'s href or xlink:href, an
