@@ -284,7 +284,7 @@ export function boot(opts) {
         }
       }
     });
-    else noticeLateJsPsych(win, ctx);
+    else if (!jsPsychPage) noticeLateJsPsych(win, ctx);
     try {
       Object.defineProperty(win, '__cyborgHunterFile', {
         value: CH_FILE, writable: false, enumerable: false, configurable: true
@@ -334,12 +334,14 @@ export function boot(opts) {
 // A file without the jsPsych adapter whose tag sits above jspsych.js: the
 // check at step 5 ran before initJsPsych existed, so the file looks once more
 // when the DOM is parsed (the jsPsych adapter's placement check does the same
-// for ch.js). A document already parsed at boot was fully seen by step 5. It
-// only reports: initJsPsych is left alone and the page stays as boot found it.
-// On a Qualtrics survey (ch-qualtrics.js; ctx.qualtricsLayout is set only
-// with HAS_QUALTRICS) that is a Qualtrics page, with the qualtricsJsPsych
-// warning step 5 gives a survey whose jsPsych is already there; elsewhere a
-// page without a framework, with one wrongBuild error naming ch.js.
+// for ch.js). It is registered only when jsPsych was absent at boot: a page
+// whose jsPsych was already there got its one message at step 5. A document
+// already parsed at boot was fully seen by step 5. It only reports:
+// initJsPsych is left alone and the page stays as boot found it. On a
+// Qualtrics survey (ch-qualtrics.js; ctx.qualtricsLayout is set only with
+// HAS_QUALTRICS) that is a Qualtrics page, with the same qualtricsJsPsych
+// warning; elsewhere a page without a framework, with one wrongBuild error
+// naming ch.js.
 function noticeLateJsPsych(win, ctx) {
   var doc = win.document;
   if (doc.readyState !== 'loading') return;

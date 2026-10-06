@@ -281,6 +281,24 @@ describe('ch-qualtrics.js', () => {
     assert.ok(ctx.qualtrics, 'the Qualtrics writer is installed');
     assert.strictEqual(win.initJsPsych, original);
   });
+
+  // jsPsych already there at boot, the document still parsing: boot gives the
+  // warning, and DOMContentLoaded does not give it again.
+  it('a survey whose jsPsych is already there while the document loads: the one warning at boot, nothing more at DOMContentLoaded', async () => {
+    loading();
+    const qx = fakeSurveyEngine();
+    win.Qualtrics = { SurveyEngine: qx.SE };
+    const original = jsPsychStub();
+    win.initJsPsych = original;
+    ctx = qx.runHeader(() => boot({ script: script({ participantId: 'P1', guards: 'none' }), win }));
+    assert.deepStrictEqual(warns, [MESSAGES.qualtricsJsPsych()]);
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await tick();
+    assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(warns, [MESSAGES.qualtricsJsPsych()]);
+    assert.strictEqual(ctx.wrongBuild, null);
+    assert.strictEqual(win.initJsPsych, original);
+  });
 });
 
 // ch.js on a survey: one error naming ch-qualtrics.js, the page recorded as
