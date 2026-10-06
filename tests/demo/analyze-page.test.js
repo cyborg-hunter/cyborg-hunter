@@ -1211,6 +1211,26 @@ describe('annotations', () => {
     assert.deepEqual(Object.keys(stored()).sort(), ['A', 'B']);
   });
 
+  // The file is read after the change event returns, outside the page's busy
+  // states, so Start over can come in between: the import has no report left.
+  test('an import whose file is read after Start over is dropped, with a status line', async () => {
+    const r = await toAnnotatedResults();
+    let release;
+    const file = { text: () => new Promise((resolve) => { release = resolve; }) };
+    const input = role('annotations-input');
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new win.Event('change'));
+    document.querySelectorAll('[data-action="reset"]')[1].click();
+    assert.deepEqual(r.t.sent.at(-1), { type: 'reset' }, 'the page was reset');
+    const before = posted.length;
+    release(JSON.stringify({ format: 'cyborg-hunter-annotations', runId: RUN, annotations: {
+      B: { label: 'flag', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } }));
+    await until(() => role('annotations-status').textContent !== '');
+    assert.equal(role('annotations-status').textContent, 'Import dropped: Start over was pressed before the file was read.');
+    assert.deepEqual(stored(), {}, 'nothing stored under the old run id');
+    assert.equal(posted.length, before, 'nothing posted');
+  });
+
   // Two tabs of the page on the same cohort share the key: a change is
   // written over what storage holds at that moment, and the storage event
   // brings another tab's change into this tab's report.

@@ -586,7 +586,14 @@ export function createPage(root, worker, opts) {
     e.target.value = '';
     if (!file || !state.result || !state.runId) return;
     var status = q(root, 'annotations-status');
+    var runId = state.runId;
     file.text().then(function (text) {
+      // The file is read outside busy(): Start over may have come in between,
+      // and the report the import was for is gone (another may be up since).
+      if (!state.result || state.runId !== runId) {
+        status.textContent = 'Import dropped: Start over was pressed before the file was read.';
+        return;
+      }
       var result = readAnnotationsImport(text, cohortIds(), state.runId);
       changeAnnotations(function (map) {
         Object.keys(result.annotations).forEach(function (id) { map[id] = result.annotations[id]; });
