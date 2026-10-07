@@ -36,6 +36,15 @@ async function openInAnalyzer(page, rows = 5 + HANDOFF_ASSETS.length) {
   return participantId;
 }
 
+// After the build, the visitor's replay chosen in the replay card's
+// dropdown, which then shows its experiment-assets note. The report selects
+// its first row on load and moves the dropdown there (that row may be an
+// example without a recording); wait for that before choosing.
+async function selectVisitorReplay(page, participantId) {
+  await reportSelected(page);
+  await page.selectOption('[data-role="replay-select"]', participantId);
+}
+
 // From a fresh tour to the visitor's replay mounted in the analyzer's replay
 // card: the files step, the hand-off, the build, the visitor's replay loaded.
 // Returns the replay host's frame.
@@ -43,10 +52,7 @@ async function visitorReplay(page, answer) {
   await fastForwardToFiles(page, answer);
   const participantId = await openInAnalyzer(page);
   await buildReport(page);
-  // The report selects its first row on load and moves the replay dropdown
-  // there; wait for that before choosing the visitor's replay.
-  await reportSelected(page);
-  await page.selectOption('[data-role="replay-select"]', participantId);
+  await selectVisitorReplay(page, participantId);
   await page.click('[data-action="load-replay"]');
   const host = page.frameLocator('iframe.replay-host-frame[data-participant-id="' + participantId + '"]');
   await host.locator('#ch-replay-mount .replay-stage').waitFor({ timeout: 30000 });
@@ -79,42 +85,40 @@ test('"Open in the analyzer" hands over the five files and the fonts: listed as 
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   await buildReport(page);
   expect((await railOrder(page)).sort()).toEqual([participantId, 'example-1', 'example-2'].sort());
-  // The report moves the replay dropdown to its first row on load, which may
-  // be an example without a recording: choose the visitor's replay, whose
-  // note says what the experiment-assets match found.
-  await reportSelected(page);
-  await page.selectOption('[data-role="replay-select"]', participantId);
-  const note = page.locator('[data-role="asset-note"]');
-  await expect(note).toHaveText(/6 of 6 fonts matched/);
-  await expect(note).not.toHaveText(/missing/);
+  await selectVisitorReplay(page, participantId);
+  await expect(page.locator('[data-role="asset-note"]')).toHaveText('Experiment assets: 6 of 6 fonts matched.');
   await assertOnlyAllowed(page, seen, allow);
 });
 
 // ---------------------------------------------------------------------------
-// A font the site does not serve (here one answered with a 404) is left out
-// of the hand-off with a warning in the console; the files and the other
-// fonts still go, and the replay's note names the font as missing.
+// A font the hand-off cannot fetch (answered with a 404, or a request that
+// fails outright) is left out with a warning in the console; the files and
+// the other fonts still go, and the replay's note names the font as missing.
 // ---------------------------------------------------------------------------
-test('a font the hand-off cannot fetch is left out: the files still go, and the note names the font as missing', async ({ page, baseURL }) => {
-  test.setTimeout(120000);
-  await fastForwardToFiles(page);
-  const lost = 'assets/fonts/tomorrow/tomorrow-400.woff2';
-  expect(HANDOFF_ASSETS).toContain(lost);
-  await page.route(baseURL + '/' + lost, (route) => route.fulfill({ status: 404, body: 'not found' }));
-  const warnings = [];
-  page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
-  const participantId = await openInAnalyzer(page, 5 + HANDOFF_ASSETS.length - 1);
-  const assets = await page.locator('[data-role="file-rows"] tr').evaluateAll((trs) => trs
-    .filter((tr) => tr.querySelectorAll('td')[1].textContent === 'experiment asset')
-    .map((tr) => tr.querySelector('td').textContent));
-  expect(assets.sort()).toEqual(HANDOFF_ASSETS.filter((p) => p !== lost).sort());
-  expect(warnings.filter((w) => w.includes('cyborg-hunter demo: a font was not handed over') && w.includes(lost))).toHaveLength(1);
-  await buildReport(page);
-  await reportSelected(page);
-  await page.selectOption('[data-role="replay-select"]', participantId);
-  await expect(page.locator('[data-role="asset-note"]'))
-    .toHaveText('Experiment assets: 5 of 6 fonts matched (missing: tomorrow-400.woff2).');
-});
+for (const [how, answer] of [
+  ['answered with a 404', (route) => route.fulfill({ status: 404, body: 'not found' })],
+  ['whose request fails', (route) => route.abort('failed')],
+]) {
+  test('a font ' + how + ' is left out of the hand-off: the files still go, and the note names the font as missing', async ({ page, baseURL }) => {
+    test.setTimeout(120000);
+    await fastForwardToFiles(page);
+    const lost = 'assets/fonts/tomorrow/tomorrow-400.woff2';
+    expect(HANDOFF_ASSETS).toContain(lost);
+    await page.route(baseURL + '/' + lost, answer);
+    const warnings = [];
+    page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
+    const participantId = await openInAnalyzer(page, 5 + HANDOFF_ASSETS.length - 1);
+    const assets = await page.locator('[data-role="file-rows"] tr').evaluateAll((trs) => trs
+      .filter((tr) => tr.querySelectorAll('td')[1].textContent === 'experiment asset')
+      .map((tr) => tr.querySelector('td').textContent));
+    expect(assets.sort()).toEqual(HANDOFF_ASSETS.filter((p) => p !== lost).sort());
+    expect(warnings.filter((w) => w.includes('cyborg-hunter demo: a font was not handed over') && w.includes(lost))).toHaveLength(1);
+    await buildReport(page);
+    await selectVisitorReplay(page, participantId);
+    await expect(page.locator('[data-role="asset-note"]'))
+      .toHaveText('Experiment assets: 5 of 6 fonts matched (missing: tomorrow-400.woff2).');
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Replay viewer: keycast overlay (walkthrough item 8) + DOM-tier
@@ -325,6 +329,26 @@ test('a refused hand-off keeps the visitor on the files step, says why, and enab
   await expect(note.locator('a[href="analyze/"]')).toHaveCount(1);
   await expect(button).toBeEnabled();
   await expect(page.locator('#card h2')).toHaveText('Your files');
+});
+
+// ---------------------------------------------------------------------------
+// The data files go all together or not at all: an example file the site
+// does not serve fails the whole hand-off, as a refused store does. The
+// visitor stays on the tour, is told, can try again, and nothing waits in
+// the store.
+// ---------------------------------------------------------------------------
+test('a data file the hand-off cannot fetch fails the whole hand-off: the visitor stays, is told, and nothing is stored', async ({ page, baseURL }) => {
+  await fastForwardToFiles(page);
+  await page.route(baseURL + '/assets/example-1.json', (route) => route.fulfill({ status: 404, body: 'not found' }));
+  const button = page.locator('[data-action="open-analyzer"]');
+  await button.click();
+  const note = page.locator('[data-role="handoff-note"]');
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('would not keep the files');
+  await expect(button).toBeEnabled();
+  await expect(page).toHaveURL(baseURL + '/');
+  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect.poll(() => recordStored(page)).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
