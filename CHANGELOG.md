@@ -187,8 +187,8 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   fixed 640 px, so a tall replay scrolled inside it), the viewer fits the
   page's window, and its **Fullscreen** control works there, the offline
   single file included.
-- Experiment assets: an image a replay shows on many elements (a card game's
-  card art on every card) is now stored once in the report's replay file
+- Experiment assets: an image a replay shows on many elements (a stimulus
+  image shown on every trial) is now stored once in the report's replay file
   (`replay/<id>.replay.js`), however many elements show it, and the viewer
   puts it back on each element when the replay loads; the recordings
   themselves are unchanged. A `srcset` keeps its images inline.

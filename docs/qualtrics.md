@@ -28,8 +28,12 @@ matters.
    the editor to its source view, paste, and save:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter/dist/ch-qualtrics.js" data-participant-id="${e://Field/ResponseID}" data-debug></script>
+   <script src="https://unpkg.com/cyborg-hunter/dist/ch-qualtrics.js" data-participant-id="${e://Field/ResponseID}" data-qualtrics-survey-id="${e://Field/SurveyID}" data-debug></script>
    ```
+
+   The second pipe gives the tag the survey's ID, so each survey opened in
+   the tab keeps a session of its own even when the page address does not
+   show the ID ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)).
 
    Open the header source again after saving: if the tag is gone, the
    licence strips scripts (see [Requirements](#requirements)). For a launched
