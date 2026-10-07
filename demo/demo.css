@@ -364,8 +364,9 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .lp-body[data-view="json"]{grid-template-columns:minmax(0,1fr);}
 .lp-body[data-view="json"] .lp-trials{display:none;}
 
+/* Same 560px cap as the signal stream: both views scroll at one height. */
 .lp-json{background:none;color:var(--ink);margin:0;padding:0;border-radius:0;
-  max-height:290px;overflow:auto;font:11.8px/1.6 var(--mono);}
+  max-height:560px;overflow:auto;font:11.8px/1.6 var(--mono);}
 
 .lp-caption{font-family:var(--ff-recursive);margin:10px 0 0;font-size:11.5px;color:var(--dim);line-height:1.5;}
 .lp-caption code{font-family:var(--mono);font-size:11px;}
