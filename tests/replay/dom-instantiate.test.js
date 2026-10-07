@@ -390,7 +390,7 @@ describe('spec §12 player filters', () => {
     // Design §7 renders media as a state badge and a lane marker, with no
     // playback, and honours `media_src` only so the element has its shape.
     // `autoplay` is the one recorded attribute that starts playback without
-    // the analyst asking, and the shell CSP allows `media-src *`.
+    // the analyst asking, whatever media the embedding page's policy allows.
     const { root } = instantiateTree({
       id: 1, kind: 'element', tag: 'video',
       attrs: { autoplay: '', controls: '', loop: '', width: '320' },
