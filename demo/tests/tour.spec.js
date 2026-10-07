@@ -391,7 +391,8 @@ test('XSS paste: a hostile <script> string is escaped in the live pane, never ex
 
 // ---------------------------------------------------------------------------
 // 4. Step 10's live score: the library's own soft score for the visitor's
-// session so far, under the standard weights; re-weighting is the analyzer's.
+// session so far, under the standard weights, and a note on the analyzer's
+// settings panel.
 // ---------------------------------------------------------------------------
 test('step 10 shows the library\'s own soft score from the session so far', async ({ page }) => {
   test.setTimeout(60000);

@@ -96,17 +96,19 @@ const payload = CyborgHunter.getSessionReport();
 };
 
 /**
- * Step-10 scoring panel (demo.js's renderScoringPanel/wireScoringPanel):
+ * Step-10 scoring panel (demo.js's renderScoringPanel/fillLiveScore):
  * the visitor's soft score so far, as the library itself computes it under
- * the standard weights, a pointer to the analyzer's settings panel for
- * re-weighting, and two config-as-source snippets. The copy lives here; the
+ * the standard weights, a note on what the analyzer's settings panel changes
+ * afterwards, and two config-as-source snippets. The copy lives here; the
  * numbers come from the monitor and signal-manifest.json (never hand-typed)
  * so a preset change can't silently drift from what's shown.
  */
 export const SCORING_PANEL = {
-  intro: 'Your session so far, scored with the standard weights, the same arithmetic the command-line tool runs.',
-  analyzerNote: 'Changing the weights after the fact is the analyzer’s job: its settings panel ' +
-    're-scores the report as you move them, and exports the config that reproduces it on the command line.',
+  intro: 'Your session so far, scored with the standard weights: the number the command-line tool reads.',
+  analyzerNote: 'Changing the analysis after the fact is the analyzer’s job: its settings panel moves the ' +
+    'soft-score threshold, which re-tiers participants against the scores their sessions saved, and the ' +
+    'ranking weights that order them within a tier, and it exports the config that reproduces the report ' +
+    'on the command line.',
   configIntro: 'As it reads in the library’s scoring config:',
   cliConfigIntro: 'As it reads in the CLI’s config file:',
 };

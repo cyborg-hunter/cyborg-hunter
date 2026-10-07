@@ -47,11 +47,11 @@ describe('buildManifest', () => {
   });
 });
 
-// Presets block: presets.{standard,strict} carry each preset's thresholds
-// and its verbatim soft-scoring map, so step 10's snippet and the docs can
-// show either preset. Pinned against constants.js so the demo's numbers can
-// never drift from the library's real presets (there is no hand-mirrored
-// table in demo JS).
+// Presets block: both presets, presets.{standard,strict}, are emitted with
+// each preset's thresholds and its verbatim soft-scoring map, and pinned
+// here against constants.js so the demo's numbers can never drift from the
+// library's real presets (there is no hand-mirrored table in demo JS).
+// Step 10's snippet reads presets.standard.scoring.soft.
 describe('buildManifest presets block (the demo\'s scoring source)', () => {
   const m = buildManifest();
 

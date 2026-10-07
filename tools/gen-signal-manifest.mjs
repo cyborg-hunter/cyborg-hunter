@@ -84,8 +84,9 @@ export function buildManifest(presetName = 'standard') {
         gracePeriodTrials: preset.screenout?.gracePeriodTrials
       }
     },
-    // Both presets, always emitted regardless of the top-level `preset`, so
-    // the snippets and the docs can show either.
+    // Both presets, always emitted regardless of the top-level `preset`, and
+    // pinned to constants.js by the manifest test. Step 10's snippet reads
+    // presets.standard.scoring.soft.
     presets: {
       standard: buildPresetEntry('standard'),
       strict: buildPresetEntry('strict')

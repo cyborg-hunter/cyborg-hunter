@@ -1011,8 +1011,7 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // Config-as-source snippets (step 10, walkthrough item 7a): both built
-  // from the manifest's real values, never hand-typed, so a preset change
+  // Config-as-source snippets: both built from the manifest's real values, never hand-typed, so a preset change
   // can't silently drift from what's displayed (same principle as
   // tools/gen-signal-manifest.mjs's own docblock). Shows the 'standard'
   // preset specifically — what this session actually collected under.
@@ -1050,10 +1049,10 @@ function startTour(participantId, capabilities, manifest) {
   }
 
   // Step 10's scoring panel: the visitor's soft score so far (filled in by
-  // wireScoringPanel(), which reads the monitor), the pointer to the
-  // analyzer's settings panel for re-weighting, and the two config-as-source
-  // snippets above. This function only builds the static HTML shell, same
-  // split every other step-specific panel here uses.
+  // fillLiveScore(), which reads the monitor), the note on what the
+  // analyzer's settings panel changes afterwards, and the two
+  // config-as-source snippets above. This function only builds the static
+  // HTML shell, same split every other step-specific panel here uses.
   function renderScoringPanel(manifest) {
     return (
       '<div class="task" data-role="scoring-panel">' +
@@ -1068,12 +1067,13 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // Step 10: fills in the soft score so far, the library's own number from
+  // Step 10: fills the panel's one text node, [data-role="live-score"],
+  // with the soft score so far: the library's own number from
   // monitor.getSessionReport() (the standard preset this session runs
   // under), checked against the manifest's threshold for that preset.
   // Called fresh from goTo() every time step 10 renders, so a return visit
   // shows the score as it stands then.
-  function wireScoringPanel(manifest) {
+  function fillLiveScore(manifest) {
     var scoreEl = cardEl.querySelector('[data-role="live-score"]');
     if (!scoreEl) return;
     var session = monitor.getSessionReport() || {};
@@ -1272,7 +1272,7 @@ function startTour(participantId, capabilities, manifest) {
     if (step.task && step.task.kind === 'guard-cheat') renderViolationChips();
     // The scoring step: fill in the soft score so far against the new panel
     // markup renderStep() just wrote.
-    if (step.id === 'signals-to-scores') wireScoringPanel(manifest);
+    if (step.id === 'signals-to-scores') fillLiveScore(manifest);
     if (step.id === 'your-files') {
       // Snapshotted here (not earlier): the files step comes after every
       // interactive step, so this reflects the complete session. The
