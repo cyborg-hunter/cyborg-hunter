@@ -360,6 +360,17 @@ describe('html-index replay section', () => {
       'one unloadable artifact must not cost the cohort its report');
   });
 
+  // ── State 2c: found, but not attached (two sessions under one id) ─────────
+  it('says why a replay is not shown when two sessions share an id and their replays cannot be told apart', async () => {
+    const html = await render({
+      participantId: 'P1', trials: [{ integrityReplayMeta: { saved_to: 'server', tier: 'dom' } }],
+      replay: { error: 'ambiguous', file: null,
+        reason: '2 records share the participant id "P1" and 2 replays claim it (P1-replay-1.json, P1-replay-2.json), so which replay belongs to which session cannot be told and none is shown. Give each session its own participant id, or put the sessions in separate data folders.' },
+    });
+    assert.match(html, /Replay not shown: 2 records share the participant id &quot;P1&quot; and 2 replays claim it \(P1-replay-1\.json, P1-replay-2\.json\)/);
+    assert.doesNotMatch(html, /corrupted|could not be loaded|recording was not enabled|No replay artifact on disk|file: unknown/i);
+  });
+
   // ── State 3: absent, with the saved_to reason ─────────────────────────────
   it('renders a placeholder with the saved_to reason when absent', async () => {
     const html = await render({
@@ -495,7 +506,7 @@ describe('viewer client file', () => {
       'payload still decodes to the original content');
   });
 
-  it('viewer frame is non-interactive and CSP blocks forms/frames/connect', () => {
+  it('viewer frame is non-interactive and CSP blocks forms/frames/connect/media', () => {
     const src = readFileSync(
       new URL('../../src/cli/renderers/replay-viewer.client.js', import.meta.url), 'utf8');
     assert.match(src, /pointer-events\s*:?\s*none|pointerEvents\s*=\s*'none'/i,
@@ -504,6 +515,12 @@ describe('viewer client file', () => {
     assert.match(src, /frame-src 'none'/);
     assert.match(src, /connect-src 'none'/);
     assert.match(src, /base-uri 'none'/);
+    // Replays never play media, so the frame never fetches it either (the
+    // analyze page's policy blocks it too; tests/e2e/report/media.spec.js).
+    // Matched with its neighbouring directive, so only the policy string in
+    // srcdocCsp passes, not the comment above it that names the directive.
+    assert.match(src, /img-src \* data: blob:; media-src 'none'; /);
+    assert.doesNotMatch(src, /media-src \*/);
     // External stylesheets load only when the analyst allowed it: the <link>
     // emission must be gated by allowExternalCss, and that flag must come from
     // the report's up-front decision (opts.externalCss, 2026-09-03) — absent

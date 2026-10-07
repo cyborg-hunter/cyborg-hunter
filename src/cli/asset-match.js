@@ -3,8 +3,11 @@
 // the URL of every external stylesheet and image; this module matches those
 // URLs against files the researcher supplies (a dropped folder on the analyze
 // page, or `assetsDir` in the CLI config) and inlines what matched into the
-// viewer model: stylesheet text as `css`, images as data: URIs. One matcher,
-// one mapping, both paths — and never a fetch, which the page's policy forbids.
+// viewer model: stylesheet text as `css`, images as data: URIs, an image that
+// elements show through `src` once (`model.assets`, see applyAssetMap; srcset
+// candidates and CSS url() images stay inline per occurrence). One
+// matcher, one mapping, both paths — and never a fetch, which the page's
+// policy forbids.
 //
 // An image is an <img>'s src or srcset candidate, a <picture> <source>'s
 // srcset candidate, an SVG <image>'s href or xlink:href, an
@@ -62,6 +65,11 @@ const CSS_REF = /\/\*[\s\S]*?(?:\*\/|$)|@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\
 const CONDITIONAL_IMPORT = /\b(layer|supports)\b/i;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const isComment = (m) => m[0].startsWith('/*');
+// An image attribute that applyAssetMap points into model.assets holds this
+// prefix followed by the URL it was recorded with. The viewer swaps it for
+// the stored data: URI when it receives the model; its copy of the prefix is
+// ASSET_REF in src/cli/renderers/replay-viewer.client.js.
+export const ASSET_REF = 'ch-asset:';
 
 // The default decoder drops a leading byte-order mark, which in a <style>
 // would otherwise become part of the first selector.
@@ -217,8 +225,9 @@ function srcsetUrls(text) {
 // Calls visit(kind, value, replace, at) for every image or media reference
 // in the segments' keyframe trees, dom.add subtrees and dom.attr values, in
 // order; replace(v) writes a new value back where the old one was found.
-// Each srcset candidate is visited as an image of its own, and a replaced
-// candidate is spliced back in with the rest of the srcset as written.
+// Each srcset candidate is visited as an image of its own, with `at` set to
+// 'srcset', and a replaced candidate is spliced back in with the rest of the
+// srcset as written.
 // `media_src` (the resolved URL a video or audio loaded) is always media.
 // A media reference's `at` names the element it belongs to and where on it
 // the URL sits: { owner, slot: 'media_src' | 'src' | 'source' }, the owner of
@@ -242,7 +251,7 @@ function eachRef(segments, visit) {
     let out = '', at = 0, changed = false;
     for (const [start, end] of srcsetUrls(text)) {
       let url = text.slice(start, end);
-      visit('image', url, (x) => { url = x; changed = true; });
+      visit('image', url, (x) => { url = x; changed = true; }, 'srcset');
       out += text.slice(at, start) + url;
       at = end;
     }
@@ -451,6 +460,22 @@ export async function buildAssetMap(recordings, droppedFiles) {
   return { assetMap, report };
 }
 
+// The sheets and stylesheet updates whose text an applyAssetMap call changed
+// (a link sheet filled from a supplied file counts). A viewer model aliases
+// its recording's (viewer-model.js), so a second model over the same
+// recording (the analyze page re-rendering a report, or serving one replay)
+// hands back text this module already rewrote, and rewriting it again is not
+// a no-op: a spliced sheet keeps its own supplied imports as URLs, which a
+// second pass finds at the top level and splices as well. A marked one is
+// skipped from then on; one whose text an apply left as it was is not marked,
+// so a later map that supplies it (or what it references) still applies, and
+// the same map applied again leaves it unchanged a second time. This assumes
+// one map per set of objects: a marked sheet is never rewritten by another
+// map (the CLI and the analyze page build one map per ingest, and a new run
+// ingests new objects). The set lives outside the objects, so the model's JSON
+// does not change. Images need no mark: a data: URI is never looked up again.
+const cssApplied = new WeakSet();
+
 export function applyAssetMap(model, assetMap) {
   if (!assetMap || assetMap.size === 0) return model;
   const uris = new Map();
@@ -504,21 +529,41 @@ export function applyAssetMap(model, assetMap) {
     return hoisted.length ? hoisted.join('\n') + '\n' + out : out;
   };
   const sheet = (s) => {
-    if (!s) return;
+    if (!s || typeof s !== 'object' || cssApplied.has(s)) return;
+    const before = s.css;
     const e = s.kind === 'link' && s.css == null ? supplied(assetMap, s.href) : null;
     if (e) s.css = decodeUtf8(e.bytes);
     if (s.css) s.css = rewriteCss(s.css, s.href, false);
+    if (s.css !== before) cssApplied.add(s);
   };
   for (const s of list(model.stylesheets)) sheet(s);
   for (const ev of list(model.stylesheetEvents)) {
-    if (!ev) continue;
+    if (!ev || typeof ev !== 'object') continue;
     if (ev.type === 'stylesheet.add') sheet(ev.sheet);
-    else if (ev.type === 'stylesheet.update' && ev.css) ev.css = rewriteCss(ev.css, null, false);
+    else if (ev.type === 'stylesheet.update' && ev.css && !cssApplied.has(ev)) {
+      const before = ev.css;
+      ev.css = rewriteCss(ev.css, null, false);
+      if (ev.css !== before) cssApplied.add(ev);
+    }
   }
-  // Media is never matched, so only image references are rewritten.
-  eachRef(segmentsOf(model), (kind, url, replace) => {
-    if (kind === 'image' && supplied(assetMap, url)) replace(dataUri(url));
+  // Media is never matched, so only image references are rewritten. Each
+  // image is written ONCE, into model.assets (URL → data: URI), and an
+  // attribute that shows it holds ASSET_REF + the URL: a card game shows the
+  // same card art on every card, and written into each attribute the picture
+  // was embedded once per element. A srcset candidate stays an inline data:
+  // URI, as one srcset value holds several URLs. A reference already in place
+  // (a second pass over a recording the model aliases) stands for its URL, so
+  // the table comes out the same and the attribute is left as it is.
+  const assets = {};
+  eachRef(segmentsOf(model), (kind, url, replace, at) => {
+    if (kind !== 'image') return;
+    if (at === 'srcset') { if (supplied(assetMap, url)) replace(dataUri(url)); return; }
+    const raw = typeof url === 'string' && url.startsWith(ASSET_REF) ? url.slice(ASSET_REF.length) : url;
+    if (!supplied(assetMap, raw)) return;
+    assets[raw] = dataUri(raw);
+    if (raw === url) replace(ASSET_REF + raw);
   });
+  if (Object.keys(assets).length > 0) model.assets = assets;
   return model;
 }
 

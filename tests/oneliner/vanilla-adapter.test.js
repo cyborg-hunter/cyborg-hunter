@@ -1641,11 +1641,15 @@ describe('vanilla host: data-replay', () => {
     assert.deepStrictEqual(validateStrict(rec).errors, []);
     assert.deepStrictEqual(rec.segments.map((s) => s.label), ['span-0', 'q1', 'span-2', 'span-2']);
     const restored = rec.segments[3];
-    assert.deepStrictEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
+    assert.deepStrictEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache', root_attrs: {} } });
     assert.strictEqual(restored.initial_dom.id, 1, 'a keyframe, ids from 1');
     assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'));
     assert.ok(restored.events.some((e) => e.type === 'mouse.click'), 'the click after Back is recorded');
-    assert.deepStrictEqual(rec.segments.slice(0, 3).map((s) => s.extensions), [null, null, null]);
+    // Each keyframe states <html>'s attributes (root_attrs; none on this
+    // page), and a continuation states nothing: span-0 and span-2 open with a
+    // keyframe, q1 continues span-0.
+    const html = { 'cyborg-hunter': { root_attrs: {} } };
+    assert.deepStrictEqual(rec.segments.slice(0, 3).map((s) => s.extensions), [html, null, html]);
     assert.strictEqual(rec.end_reason, 'finished');
     assert.strictEqual(win.CyborgHunter.replay(), rec, 'later calls return the same recording');
     assert.deepStrictEqual(errors, []);

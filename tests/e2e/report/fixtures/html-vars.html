@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layout published on html</title>
+<style>
+  :root { --k: 1; --u: calc(1px * var(--k)); }
+  body { margin: 0; font: 16px sans-serif; }
+  #board { padding: calc(10 * var(--u)); }
+  .card { width: var(--card-w); height: calc(30 * var(--u)); background: #36c; margin: 8px 0; }
+</style>
+</head>
+<body>
+<div id="board"><div class="card" id="card"></div><button id="next" type="button">Next</button></div>
+<script src="../../../../dist/cyborg-hunter-replay.js"></script>
+<script>
+  // A layout kept on <html>: the page publishes it as custom properties on
+  // document.documentElement.style, above the <body> the recorder observes. tests/e2e/report/root-attrs.spec.js records this page, builds
+  // the CLI report and checks the replayed card against the live one.
+  var root = document.documentElement.style;
+  root.setProperty('--k', '1.5');
+  root.setProperty('--card-w', 'calc(80 * var(--u))');   // 120 px at k = 1.5
+  var rec = CyborgHunterReplay.attach({ participantId: 'HTMLVARS-1', tier: 'dom', autoSave: { mode: 'none' } });
+  rec.startSession();
+  rec.startTrial({ trialId: 'wide' });
+  document.getElementById('next').addEventListener('click', function () {
+    rec.endTrial();
+    root.setProperty('--card-w', 'calc(40 * var(--u))'); // 60 px
+    rec.startTrial({ trialId: 'narrow' });
+  });
+  window.__finish = function () {
+    rec.endTrial();
+    rec.stopSession('finished');
+    return JSON.stringify(rec.getRecording());
+  };
+</script>
+</body>
+</html>

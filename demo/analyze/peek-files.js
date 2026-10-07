@@ -5,6 +5,7 @@
 // Runs in the worker.
 import Papa from 'papaparse';
 import { webGunzip } from './web-deps.js';
+import { artifactKind } from '../../src/cli/ingest-core.js';
 
 var decode = function (bytes) { return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes); };
 
@@ -41,6 +42,10 @@ async function gunzipIfGzip(bytes) {
   return webGunzip(bytes);
 }
 
+// { keys, values } for a data file; { recording: true } for a session
+// recording, which is no participant's data and is sampled for nothing
+// (ingest-core keeps it out of the participant pass by the same content
+// sniff, artifactKind); null for a file that cannot be read or parsed.
 export async function peekParticipantFile(reader, opts) {
   var maxRows = (opts && opts.maxRows) || 50;
   var text;
@@ -54,6 +59,7 @@ export async function peekParticipantFile(reader, opts) {
   }
   var json;
   try { json = JSON.parse(text); } catch (e) { return null; }
+  if (artifactKind(json) !== null) return { recording: true };
   if (Array.isArray(json)) return json.length && json[0] && typeof json[0] === 'object' ? scalarKeys(json[0], '') : null;
   if (!json || typeof json !== 'object') return null;
   var top = scalarKeys(json, '');

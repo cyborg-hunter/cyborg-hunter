@@ -86,7 +86,20 @@ export const REPLAY_DEFAULTS = {
   // both dimensions — a friction bug looping cheap violations grows it just as
   // surely as the trees do — and the ceiling sits far past any honest count.
   // Set null to disable.
-  maxGuardViolations: 40
+  maxGuardViolations: 40,
+  // <html>'s attribute changes (root-attrs.js) ride a session-level vendor
+  // array no per-trial cap can see, like the two streams above. A page that
+  // republishes its layout on every resize writes one entry per batch; 2000 is
+  // ~30x the busiest pilot session measured (70 rewrites).
+  //
+  // The cap counts entries, not characters, and an entry is about as long as
+  // its value: a 600-character style rewritten 2000 times is ~1.3 MB, the same
+  // order as the guard-violation ceiling above. Forward-only like the others,
+  // with the same single note through captureFailure, but the loss is
+  // smaller: every keyframe restates <html> in full (`root_attrs`), so past
+  // the cap the stream is stale only until the next keyframe. Set null to
+  // disable.
+  maxRootAttrEvents: 2000
 };
 
 // States: created → session ⇄ trial → stopped; destroyed is terminal.
@@ -169,6 +182,7 @@ export function createRecorder(userConfig) {
     stylesheets: [],           // filled by capture-dom at startSession (tier dom)
     trials: [],
     guardViolations: [],       // filled via GuardFriction.onViolation subscription
+    rootAttrEvents: [],        // <html>'s attribute changes, filled by capture-dom (root-attrs.js)
     // Session-level viewport stream (spec §2 `viewport_changes`). Resize and
     // visualViewport changes are NOT segment events in v2 — the format keeps
     // them in one session-wide array, merged with the event streams by `t`
@@ -229,6 +243,9 @@ export function createRecorder(userConfig) {
       // that no DOM was ever observed.
       initialDom: null,
       initialState: null,
+      // <html>'s attributes at this segment's keyframe (root-attrs.js); null
+      // on a continuation, on trace tier, and when <html> is the root.
+      rootAttrs: null,
       events: []
     };
   }
@@ -320,6 +337,8 @@ export function createRecorder(userConfig) {
   var viewportCapped = false;
   // The same, for the guard-violation array.
   var guardViolationsCapped = false;
+  // The same, for <html>'s attribute changes.
+  var rootAttrsCapped = false;
 
   // Two viewport entries describe the same geometry when every field but `t`
   // agrees. Written generically rather than against the six §2 field names: the
@@ -599,6 +618,31 @@ export function createRecorder(userConfig) {
       session.guardViolations.push(Object.assign({}, entry, {
         t: tOverride != null ? tOverride : performance.now()
       }));
+    },
+
+    // One change to <html>'s attributes ({name, value}; root-attrs.js). Vendor
+    // data like the guard violations above, with the same lifecycle gate, cap
+    // and single note.
+    pushRootAttr: function (entry, tOverride) {
+      if (state === 'destroyed') {
+        throw new Error('[cyborg-hunter-replay] root attribute pushed to a destroyed recorder');
+      }
+      if (state === 'created' || state === 'stopped') return;
+      var rcap = config.maxRootAttrEvents;
+      if (rcap != null && session.rootAttrEvents.length >= rcap) {
+        if (!rootAttrsCapped) {
+          rootAttrsCapped = true;
+          recorder.captureFailure('root_attr_events', new Error(
+            'root_attr_events cap reached (' + rcap + '); later changes to <html> attributes ' +
+            'are not recorded'));
+        }
+        return;
+      }
+      session.rootAttrEvents.push({
+        t: tOverride != null ? tOverride : performance.now(),
+        name: entry.name,
+        value: entry.value
+      });
     },
 
     // How many characters the keyframe payload of this trial takes.

@@ -21,11 +21,14 @@
 
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';
+import { listSidebarOpenings } from '../analyzers/summary.js';
 import { resolveScoreWeights, customWeightsText, formatScore } from '../analyzers/score-weights.js';
 import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
 import { inlineSafeJson, inlineSafeSrc } from '../../shared/inline-safe.js';
+import { annotationBlock } from './annotation-client.js';
+import { sanitize } from './report-id.js';
 
 /**
  * Renders the report's index.html as a string. `opts.replayClientSrc` is the
@@ -90,6 +93,18 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   const selectionPostLine = opts.selectionPostMessage
     ? "\n        try { window.parent.postMessage({ type: 'cyborg-hunter:select', participantId: pid }, '*'); } catch (e) { /* no parent */ }"
     : '';
+
+  // The run line in the top bar (report-core.js passes both when it can hash
+  // the cohort): the run id the annotations are stored under, and the time
+  // the report was built. Absent => the top bar is unchanged.
+  const runLine = opts.runId
+    ? ` &middot; run <code class="mono run-id">${esc(opts.runId)}</code>` +
+      (opts.generatedAt ? ` &middot; <time class="run-time" datetime="${esc(opts.generatedAt)}">${esc(formatRunTime(opts.generatedAt))}</time>` : '')
+    : '';
+  // The annotation controls (annotation-client.js), stored under the run id:
+  // emitted only when the report has one. opts.annotationPostMessage: the
+  // report runs in the analyze page's sandboxed frame, and the page keeps them.
+  const annotationHtml = opts.runId ? annotationBlock({ runId: opts.runId, parent: !!opts.annotationPostMessage }) : '';
 
   // Cohort counts for filter chips and totals footer. The triage array is
   // already sorted tier-first (hard → soft → clean, score-desc within tier) by
@@ -262,8 +277,12 @@ ${fontFaceCss}    :root {
       border: 1px solid var(--line); font-weight: 400;
     }
 
-    /* Detail pane base */
-    .detail .participant { max-width: 800px; }
+    /* Detail pane base. The replay viewer is the exception to the 800px
+       reading column: it scales the recording to the room it has, and a
+       recorded desktop page is wider than the column. The replay section's
+       own heading and notes keep the column. */
+    .detail .participant > :not(.replay-block),
+    .detail .replay-block > :not(.replay-mount) { max-width: 800px; }
 
     /* Empty-state hint when filter+search combine to hide every row.
        Shown by reconcileSelection() via [data-empty="true"] on .detail. */
@@ -394,6 +413,7 @@ ${fontFaceCss}    :root {
     }
     .sig-cell ul { list-style: none; margin-top: 4px; font-size: 12px; padding: 0; }
     .sig-cell li { font-family: var(--ff-recursive); padding: 2px 0; word-break: break-word; }
+    .sig-more > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; cursor: pointer; }
     .muted { color: var(--dim); }
 
     /* Paste evidence — list of expandable entries */
@@ -442,17 +462,32 @@ ${fontFaceCss}    :root {
     }
     .zoomable:hover img { opacity: 0.92; }
 
-    /* Lightbox overlay — hidden by default; the client script adds .open to show it. */
+    /* Lightbox overlay — hidden by default; the client script adds .open to show it.
+       It opens fitted to the window; .actual shows the figure at its own pixel
+       size (figures are drawn once, at 1x) and the overlay scrolls. The top
+       padding keeps the figure clear of the controls. */
     .lightbox-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       z-index: 1000; display: none;
       align-items: center; justify-content: center;
-      cursor: zoom-out; padding: 20px;
+      cursor: zoom-out; padding: 64px 20px 20px;
     }
     .lightbox-overlay.open { display: flex; }
     .lightbox-overlay img {
-      max-width: 100%; max-height: 100%; border-radius: 4px;
+      max-width: 100%; max-height: 100%; border-radius: 4px; cursor: zoom-in;
     }
+    /* Start-aligned with auto margins: a figure smaller than the window stays
+       centred, a larger one scrolls to its own top-left corner (centring alone
+       would put that corner out of reach). */
+    .lightbox-overlay.actual { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+    .lightbox-overlay.actual img { max-width: none; max-height: none; margin: auto; cursor: zoom-out; }
+    .lightbox-tools { position: fixed; top: 16px; right: 76px; display: flex; gap: 8px; }
+    .lightbox-tools button {
+      padding: 6px 12px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 4px;
+      background: rgba(0, 0, 0, 0.4); color: white; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 15px;
+    }
+    .lightbox-tools button[aria-pressed="true"] { background: white; color: var(--ink); }
     .lightbox-close {
       position: fixed; top: 16px; right: 24px;
       color: white; font-size: 32px; cursor: pointer;
@@ -514,7 +549,7 @@ ${fontFaceCss}    :root {
 <body data-filter="all">
   <header class="topbar">
     <h1>Cyborg Hunter Report</h1>
-    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}</span>
+    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${runLine}</span>
     <button class="legend-btn" type="button" aria-haspopup="dialog" aria-controls="legend-modal">Legend &#9432;</button>
   </header>
   <div class="layout">
@@ -552,6 +587,10 @@ ${fontFaceCss}    :root {
     </div>
   </div>
   <div id="lightbox" class="lightbox-overlay" role="dialog" aria-label="Enlarged image">
+    <div class="lightbox-tools">
+      <button type="button" class="lightbox-zoom" aria-pressed="false" title="Show the figure at its own pixel size">1:1</button>
+      <button type="button" class="lightbox-fullscreen" hidden>Fullscreen</button>
+    </div>
     <span class="lightbox-close" aria-label="Close">&times;</span>
     <img id="lightbox-img" alt="">
   </div>
@@ -573,6 +612,8 @@ ${fontFaceCss}    :root {
       const legendBack  = legend.querySelector('.modal-backdrop');
       const overlay     = document.getElementById('lightbox');
       const overlayImg  = document.getElementById('lightbox-img');
+      const zoomBtn     = overlay.querySelector('.lightbox-zoom');
+      const fullBtn     = overlay.querySelector('.lightbox-fullscreen');
 
       // Module-scoped current selection, indexed by participantId. The handlers below read it.
       let currentId = null;
@@ -630,7 +671,19 @@ ${fontFaceCss}    :root {
       // --- Overlay open/close helpers ---
       function openLegend()    { legend.removeAttribute('hidden'); }
       function closeLegend()   { legend.setAttribute('hidden', ''); }
-      function closeLightbox() { overlay.classList.remove('open'); overlayImg.src = ''; }
+      // The enlarged figure: fitted to the window (false) or at its own pixel size (true).
+      // The control keeps its name, "1:1"; aria-pressed and its pressed styling show the state.
+      function setActual(on) {
+        overlay.classList.toggle('actual', on);
+        zoomBtn.setAttribute('aria-pressed', String(on));
+      }
+      function closeLightbox() {
+        overlay.classList.remove('open');
+        overlayImg.src = '';
+        setActual(false);
+        // Closing the figure leaves its fullscreen too.
+        if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+      }
 
       // --- Legend modal wiring ---
       legendBtn.addEventListener('click', openLegend);
@@ -644,10 +697,29 @@ ${fontFaceCss}    :root {
         a.addEventListener('click', e => {
           e.preventDefault();
           overlayImg.src = a.getAttribute('href');
+          setActual(false);
           overlay.classList.add('open');
         });
       });
-      overlay.addEventListener('click', closeLightbox);
+      // A click on the figure switches between fitted and 1:1; the controls do
+      // what they say; a click anywhere else closes.
+      overlay.addEventListener('click', e => {
+        if (e.target.closest('.lightbox-tools')) return;
+        if (e.target === overlayImg) { setActual(!overlay.classList.contains('actual')); return; }
+        closeLightbox();
+      });
+      zoomBtn.addEventListener('click', () => setActual(!overlay.classList.contains('actual')));
+      // Offered only where this document may go fullscreen: a report opened as
+      // a page may, and so may the analyze page's report frame, which allows it
+      // (demo/report-frame.js).
+      if (document.fullscreenEnabled) fullBtn.hidden = false;
+      fullBtn.addEventListener('click', () => {
+        if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+        else overlay.requestFullscreen().catch(() => {});
+      });
+      document.addEventListener('fullscreenchange', () => {
+        fullBtn.textContent = document.fullscreenElement === overlay ? 'Exit fullscreen' : 'Fullscreen';
+      });
 
       // --- Paste-toggle wiring ---
       // Delegated handler for paste-toggle buttons. Only "long" pastes have a
@@ -743,6 +815,10 @@ ${fontFaceCss}    :root {
           if (overlay.classList.contains('open')) { closeLightbox(); return; }
           if (!legend.hasAttribute('hidden'))     { closeLegend();   return; }
         }
+        // The enlarged figure covers the report, and so does anything in
+        // fullscreen (a replay viewer): the keys below act on the report
+        // behind it, so they wait until it closes.
+        if (overlay.classList.contains('open') || document.fullscreenElement) return;
 
         const inInput = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
 
@@ -802,7 +878,12 @@ ${replayClientSrc}
         const mount = block.querySelector('.replay-mount');
         // Read the fetch decision before the mount is cleared.
         const fetchBox = block.querySelector('.replay-fetch-css');
-        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked) };
+        // The replay takes the pane's whole width (no 960px cap, and the
+        // section is not held to the reading column) and fits the pane's
+        // height, less its padding.
+        const pane = document.querySelector('.detail');
+        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked), maxStageWidth: null,
+          fitHeight: function () { return (pane ? pane.clientHeight : window.innerHeight) - 40; } };
         btn.disabled = true;
         btn.textContent = 'Loading…';
         mount.setAttribute('aria-busy', 'true');
@@ -839,7 +920,7 @@ ${replayClientSrc}
         document.body.appendChild(s);
       });
     })();
-  </script>
+  </script>${annotationHtml}
 </body>
 </html>`;
 
@@ -990,10 +1071,6 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
-function sanitize(name) {
-  return String(name || '').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
-}
-
 // Renders a single participant detail pane. The pane holds the header strip and
 // score breakdown, then the reason pull-quote, session signals, paste evidence,
 // and images. The `hidden` attribute is omitted on the
@@ -1126,6 +1203,15 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
       </div>
     </div>`;
   }
+  // Replays that were found but attached to nobody (ingest-core.js: several
+  // records share the id and several replays claim it). Not a file problem,
+  // so the note gives ingest's reason and no file name.
+  if (replay && replay.error === 'ambiguous') {
+    return `<div class="image-block replay-block">
+      <h4 class="section-heading">Session replay</h4>
+      <p class="replay-note replay-warn">Replay not shown: ${esc(replay.reason)}</p>
+    </div>`;
+  }
   if (replay && replay.error) {
     // Two ways an attached artifact fails to reach the viewer, and the
     // analyst needs to tell them apart: 'parse_failed' (ingest could not read
@@ -1173,7 +1259,9 @@ function renderReasonQuote(t) {
 // an empty "Session-level signals" heading.
 function renderSessionBlock(s, participant) {
   const aiExt   = s.aiExtensionsFound || [];
-  const sidebar = participant?.session?.sidebarEvents || [];
+  // Openings, not raw log entries: the same walk the Sidebar tile counts with,
+  // so the cell and the tile agree.
+  const sidebar = listSidebarOpenings(participant?.session?.sidebarEvents);
   const kb      = participant?.session?.keyboardShortcuts || [];
 
   if (!aiExt.length && !sidebar.length && !kb.length) {
@@ -1183,15 +1271,13 @@ function renderSessionBlock(s, participant) {
   const cells = [];
   if (aiExt.length) {
     // AI extensions can be strings or {name: '...'} objects (legacy convention).
-    const lines = aiExt.slice(0, 3).map(e => esc(typeof e === 'string' ? e : (e?.name || 'unknown')));
-    cells.push(cellHtml('AI extensions', aiExt.length, lines));
+    cells.push(cellHtml('AI extensions', aiExt.map(e => esc(typeof e === 'string' ? e : (e?.name || 'unknown')))));
   }
   if (sidebar.length) {
-    cells.push(cellHtml('Sidebar events', sidebar.length, sidebar.slice(0, 3).map(formatSidebar)));
+    cells.push(cellHtml('Sidebar events', sidebar.map(formatSidebarOpening)));
   }
   if (kb.length) {
-    cells.push(cellHtml('Kb shortcuts', kb.length, kb.slice(0, 3).map(ev =>
-      esc(String(ev?.combo || ev?.key || 'unknown')))));
+    cells.push(cellHtml('Kb shortcuts', kb.map(ev => esc(String(ev?.combo || ev?.key || 'unknown')))));
   }
 
   return `
@@ -1200,33 +1286,37 @@ function renderSessionBlock(s, participant) {
   `;
 }
 
-// One signal cell: uppercase title + up to 3 preview lines + an overflow line
-// when the underlying count exceeds previewLines.length. Caller is responsible
-// for esc'ing entries in previewLines (we trust the caller here so callers can
-// embed safe markup like the muted span in formatSidebar).
-function cellHtml(title, count, previewLines) {
-  const overflow = count > previewLines.length
-    ? `<li class="muted">… +${count - previewLines.length} more</li>`
+// One signal cell: uppercase title, the first CELL_PREVIEW lines, and the rest
+// inside a <details> whose summary says how many there are. The browser opens
+// it with no script, so it works wherever the report is opened. Caller is
+// responsible for esc'ing every entry in `lines` (we trust the caller here so
+// callers can embed safe markup like the muted span in formatSidebarOpening).
+const CELL_PREVIEW = 3;
+function cellHtml(title, lines) {
+  const rest = lines.slice(CELL_PREVIEW);
+  const more = rest.length
+    ? `<details class="sig-more"><summary class="muted">… +${rest.length} more</summary><ul>${rest.map(l => `<li>${l}</li>`).join('')}</ul></details>`
     : '';
   return `<div class="sig-cell">
     <div class="sig-cell-title">${title}</div>
-    <ul>${previewLines.map(l => `<li>${l}</li>`).join('')}${overflow}</ul>
+    <ul>${lines.slice(0, CELL_PREVIEW).map(l => `<li>${l}</li>`).join('')}</ul>${more}
   </div>`;
 }
 
-// Format one sidebar event row, e.g. "+312px · 00:12" or "−308px · 00:45 (33.0s open)".
-// `deltaIW` is the signed innerWidth change at the event boundary — positive on
-// open (viewport shrank), negative on close. Falls back to `gap` / `gapPx` for
-// older fixtures. Timestamp is rendered as MM:SS from start-of-trial.
-function formatSidebar(ev) {
-  const gap = ev?.deltaIW ?? ev?.gap ?? ev?.gapPx ?? '?';
+// Format one sidebar opening (listSidebarOpenings), e.g. "+312px · 00:12 (33.0s open)".
+// The gap and the time are the opening entry's: `deltaIW` is the signed
+// innerWidth change at the boundary (positive on open: the viewport shrank),
+// with `gap` / `gapPx` for older fixtures, and the time is MM:SS from
+// start-of-trial. The duration is the closing entry's `duration_ms`; an
+// opening with no closing entry (still open at the end) shows none.
+function formatSidebarOpening({ opened, closed }) {
+  const gap = opened?.deltaIW ?? opened?.gap ?? opened?.gapPx ?? '?';
   const gapStr = typeof gap === 'number' ? (gap > 0 ? `+${gap}` : String(gap)) : String(gap);
-  const ts = ev?.t ?? ev?.timestamp ?? 0;
+  const ts = opened?.t ?? opened?.timestamp ?? 0;
   const mm = Math.floor(ts / 60000).toString().padStart(2, '0');
   const ss = Math.floor((ts % 60000) / 1000).toString().padStart(2, '0');
-  // Only "closed" events carry duration_ms; render it as the trailing parenthetical.
-  const dur = (ev?.type === 'closed' && ev?.duration_ms != null)
-    ? ` <span class="muted">(${(ev.duration_ms / 1000).toFixed(1)}s open)</span>`
+  const dur = closed?.duration_ms != null
+    ? ` <span class="muted">(${(closed.duration_ms / 1000).toFixed(1)}s open)</span>`
     : '';
   return `${esc(gapStr)}px · ${mm}:${ss}${dur}`;
 }
@@ -1298,6 +1388,11 @@ function scoreWeightsNote(config) {
   return isDefault ? '' : ` &middot; custom score weights: ${esc(customWeightsText(weights))}`;
 }
 
+// The run time in the top bar: "2026-10-05T14:03:12.345Z" → "2026-10-05 14:03 UTC".
+function formatRunTime(iso) {
+  return String(iso).slice(0, 16).replace('T', ' ') + ' UTC';
+}
+
 // Format milliseconds as "Xs" / "Xm Ys".
 function formatDuration(ms) {
   if (!ms || ms < 1000) return '0s';
@@ -1336,11 +1431,15 @@ function renderPasteEvidence(participant) {
     // For short pastes we render a static · marker — nothing to expand.
     const toggleGlyph = isLong ? '▸' : '·';
     const toggleAttr = isLong ? '' : ' disabled aria-label="No expansion needed"';
+    // The full text has no `hidden` attribute: the stylesheet hides it until
+    // the entry is expanded (.paste-entry:not(.expanded) .paste-full), and
+    // `[hidden]` is `display: none !important` there, which the click handler's
+    // .expanded class could never override.
     return `<div class="paste-entry">
       <button class="paste-toggle" type="button" aria-expanded="false"${toggleAttr}>${toggleGlyph}</button>
       <span class="mono paste-trial">[${esc(p.trialId)}]</span>
       <span class="paste-preview mono">${esc(preview)}</span>
-      ${isLong ? `<span class="paste-full mono" hidden>${esc(p.text)}</span>` : ''}
+      ${isLong ? `<span class="paste-full mono">${esc(p.text)}</span>` : ''}
     </div>`;
   }).join('');
 

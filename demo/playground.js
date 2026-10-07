@@ -1,10 +1,9 @@
 // demo/playground.js
-// Step 12's config playground (spec §7.4): curated scoring controls next to
-// the report — move a threshold, the FULL pipeline re-runs (plots included)
-// via the rerun hook results.js's buildResults() hands mountPlayground
-// through hooks.onReady, and both tier boundaries can visibly move: the
-// paste control flips HARD, the tab-away/typing controls (with the preset's
-// weights) move the SOFT/CLEAN line, and the triage order follows.
+// The scoring step's live soft score (demo.js wireScoringPanel): the
+// visitor's own session so far, rescored under the step's weight edits.
+// Changing analysis settings after the fact is the analyzer's job
+// (demo/analyze/settings-panel.js); this file only re-scores collection-time
+// data, which no analysis setting can do.
 //
 // Why a data pre-pass and not just config overrides (a config override alone
 // cannot flip the tier): the analyzers trust DATA-CARRIED
@@ -16,14 +15,12 @@
 //         re-derived by the CLI — and the participant's SAVED runtime
 //         thresholds (session.config.thresholds.*) shadow CLI-side ones.
 // So recomputeSignals() rewrites the records themselves, as if the
-// participant had been screened under the playground's settings from the
-// start, and the standard pipeline runs unchanged on the rewritten copy.
+// participant had been screened under the given settings from the start,
+// and the standard pipeline runs unchanged on the rewritten copy.
 // The scoring weights are NOT hand-mirrored here: they arrive via the
 // manifest's `presets` block, generated from src/shared/constants.js by
 // tools/gen-signal-manifest.mjs and pinned to it by
 // tests/tools/signal-manifest.test.js — single source, zero drift.
-import { escHtml } from './util.js';
-
 // JSON round-trip: every payload here is plain JSON (the exact shape saved
 // to <pid>.json), so this is a safe, dependency-free deep clone.
 // src/core/state-machine.js has its own deepCopy, but demo/*.js can only
@@ -59,7 +56,7 @@ export function makeDebounced(fn, ms) {
 //      session.anyHardTriggered = "any hard signal's triggered flag"
 //      (monitor.js:428-433) — recomputed from that same running total vs.
 //      controls.pasteHardCount. Other hard signals (drop; copy under
-//      strict) have no playground control, so their collection-time
+//      strict) have no control here, so their collection-time
 //      triggered flag carries through unchanged and still contributes to
 //      anyHardTriggered.
 //
@@ -99,9 +96,9 @@ export function makeDebounced(fn, ms) {
 //    throughout.
 //
 // Known non-emulated knob, disclosed: the strict preset's hard.copy
-// countThreshold has no playground control, so the preset select re-scores
-// with strict weights/thresholds but never flags copy as HARD — the
-// curated controls expose paste as the single hard knob.
+// countThreshold has no control here, so a strict re-score uses strict
+// weights/thresholds but never flags copy as HARD — paste is the single
+// hard knob.
 export function recomputeSignals(payloads, controls, scoring) {
   var soft = (scoring && scoring.soft) || {};
   return (payloads || []).map(function (payload) {
@@ -241,11 +238,10 @@ export function recomputeSignals(payloads, controls, scoring) {
 // Resolves ONE canonical { preset, controls, scoring } view from the
 // manifest's presets block + a state.scoringOverrides object (CODEX
 // override contract: { weights, controls, preset }) — the merge every
-// caller that needs "what should the pipeline run under right now" shares:
-// step 11's live soft-score readout, results.js's initial-render
-// persistence seam (demo.js), and this file's own mountPlayground()/
-// rebuild(). `weights` only ever overrides a signal's WEIGHT — maxPerTrial
-// always comes from the preset (step 11 has no maxPerTrial editor); a
+// caller that needs "what should the pipeline run under right now" shares,
+// today the scoring step's live soft-score readout. `weights` only ever
+// overrides a signal's WEIGHT — maxPerTrial always comes from the preset
+// (the scoring step has no maxPerTrial editor); a
 // weight key the selected preset doesn't score (e.g. copy under strict) is
 // silently ignored, same "no editor for a term that isn't scored" rule
 // renderScoringPanel (demo.js) already follows. Returns null when the
@@ -272,161 +268,4 @@ export function mergePlaygroundConfig(manifest, scoringOverrides) {
     controls: controls,
     scoring: { soft: soft, softScoreThreshold: presetEntry.scoring.softScoreThreshold },
   };
-}
-
-function readControls(mount) {
-  var controls = {};
-  mount.querySelectorAll('[data-k]').forEach(function (el) {
-    controls[el.dataset.k] = el.type === 'number' ? Number(el.value) : el.value;
-  });
-  return controls;
-}
-
-export function mountPlayground(ctx) {
-  var mount = ctx.container.querySelector('[data-role="playground"]');
-  if (!mount) return;
-  // Both selectable presets' control prefills + scoring maps, generated
-  // into the manifest from src/shared/constants.js — the single source of
-  // weights (no hand-mirrored table here).
-  var presets = ctx.manifest.presets || {};
-  // CODEX override contract (walkthrough item 7): step 11 may already have
-  // set weights, and a Back-then-forward visit may already have settled
-  // controls/preset here — initialize from the SHARED state via
-  // mergePlaygroundConfig, not fresh manifest defaults, so the two UIs
-  // agree instead of quietly resetting each other.
-  var overrides = ctx.scoringOverrides || { weights: {}, controls: null, preset: null };
-  var merged = mergePlaygroundConfig(ctx.manifest, overrides) || {
-    preset: ctx.manifest.preset || 'standard',
-    controls: {
-      pasteHardCount: ctx.manifest.signals.paste.hardCountThreshold,
-      tabAwayCutoffMs: Math.round(ctx.manifest.signals.tabAway.durationMs),
-      typingSpeedCps: ctx.manifest.signals.typingSpeed.cps,
-    },
-    scoring: null,
-  };
-  var defaults = {
-    preset: merged.preset,
-    pasteHardCount: merged.controls.pasteHardCount,
-    tabAwayCutoffMs: Math.round(merged.controls.tabAwayCutoffMs),
-    typingSpeedCps: merged.controls.typingSpeedCps,
-  };
-
-  mount.innerHTML =
-    '<div class="task playground"><h3>Play with the scoring</h3>' +
-    '<p class="hint">These are the choices your report is built from. Move one and watch your ' +
-    'tier and the triage order change. Per-signal weights are set on the previous step; the ' +
-    'config file you download next carries the analysis-side settings this report ran with, ' +
-    'your changes included.</p>' +
-    '<label>preset <select data-k="preset">' +
-    '<option value="standard"' + (defaults.preset === 'standard' ? ' selected' : '') + '>standard</option>' +
-    '<option value="strict"' + (defaults.preset === 'strict' ? ' selected' : '') + '>strict</option>' +
-    '</select></label> ' +
-    '<label>paste flags a trial at <input type="number" min="1" max="10" data-k="pasteHardCount" ' +
-    'value="' + escHtml(defaults.pasteHardCount) + '"> pastes</label> ' +
-    '<label>tab-away counts past <input type="number" min="500" step="500" data-k="tabAwayCutoffMs" ' +
-    'value="' + escHtml(defaults.tabAwayCutoffMs) + '"> ms</label> ' +
-    '<label>fast typing above <input type="number" min="1" max="40" data-k="typingSpeedCps" ' +
-    'value="' + escHtml(defaults.typingSpeedCps) + '"> cps</label>' +
-    '<p class="hint" data-role="pg-weights-summary"></p>' +
-    '<p class="hint" data-role="pg-status"></p></div>';
-
-  var status = mount.querySelector('[data-role="pg-status"]');
-  var weightsSummaryEl = mount.querySelector('[data-role="pg-weights-summary"]');
-
-  // Read-only summary of the weights actively driving the score (per-signal
-  // editors live on step 11 only — CODEX amendment: "both UIs visibly agree
-  // without duplicating weight editors").
-  function renderWeightsSummary(scoring) {
-    if (!weightsSummaryEl) return;
-    if (!scoring) { weightsSummaryEl.textContent = ''; return; }
-    var parts = Object.keys(scoring.soft).map(function (key) {
-      return key + ' ' + scoring.soft[key].weight;
-    });
-    weightsSummaryEl.textContent = 'Per-signal weights (set on the previous step): ' + parts.join(', ') + '.';
-  }
-  renderWeightsSummary(merged.scoring);
-
-  var rebuild = makeDebounced(function () {
-    var controls = readControls(mount);
-    // Layer this rebuild's DOM controls + selected preset on top of step
-    // 11's weight overrides — the inputs stay the source of truth for
-    // controls/preset (comment below), while weights only ever come from
-    // the previous step.
-    var liveMerged = mergePlaygroundConfig(ctx.manifest, Object.assign({}, overrides, {
-      preset: controls.preset,
-      controls: controls,
-    }));
-    if (!liveMerged) { // manifest without a presets block: can't recompute honestly
-      status.textContent = 'preset data unavailable';
-      return;
-    }
-    var scoring = liveMerged.scoring;
-    status.textContent = 'rebuilding…';
-    var t0 = performance.now();
-    // The two thresholds are ALSO analysis-time config keys (summary.js
-    // reads them as fallbacks behind the saved runtime thresholds), and
-    // scoring.softScoreThreshold is the analyst-side override triage.js
-    // honors — passed through so the pipeline config matches the rewritten
-    // data AND the downloadable config file (demo.js reads the same values
-    // back via ctx.onControls below).
-    var configOverrides = {
-      thresholds: { tabAwayDurationMs: controls.tabAwayCutoffMs },
-      typingSpeedThreshold_cps: controls.typingSpeedCps,
-      scoring: { softScoreThreshold: scoring.softScoreThreshold },
-    };
-    ctx.rerun(configOverrides, function (payloads) { return recomputeSignals(payloads, controls, scoring); })
-      .then(function () {
-        var ms = Math.round(performance.now() - t0);
-        status.textContent = 'rebuilt in ' + ms + ' ms';
-        // Budget note (spec §7.4): a playground rerun should feel instant.
-        // Flagged rather than enforced — the browser's own canvas/paint cost
-        // varies too much across machines to hard-fail on.
-        if (ms > 1000) console.warn('cyborg-hunter demo: playground rebuild took ' + ms + 'ms (budget: 1000ms)');
-        renderWeightsSummary(scoring);
-        // Write the settled controls/preset back into the SHARED state
-        // object (ctx.scoringOverrides === state.scoringOverrides in
-        // demo.js, same reference) so a later visit to step 11's
-        // live-score readout, or a later results rebuild, sees them too.
-        if (ctx.scoringOverrides) {
-          ctx.scoringOverrides.controls = {
-            pasteHardCount: controls.pasteHardCount,
-            tabAwayCutoffMs: controls.tabAwayCutoffMs,
-            typingSpeedCps: controls.typingSpeedCps,
-          };
-          ctx.scoringOverrides.preset = controls.preset;
-        }
-        // Settled settings for the downloads step: demo.js stores these so
-        // the downloaded config carries what the report actually ran with,
-        // including the playground tweaks (only CLI-honored keys are
-        // written into the file — see buildDownloadFile('config')).
-        if (ctx.onControls) {
-          ctx.onControls({
-            preset: controls.preset,
-            pasteHardCount: controls.pasteHardCount,
-            tabAwayCutoffMs: controls.tabAwayCutoffMs,
-            typingSpeedCps: controls.typingSpeedCps,
-            softScoreThreshold: scoring.softScoreThreshold,
-          });
-        }
-      })
-      .catch(function (err) {
-        status.textContent = 'rebuild failed';
-        console.warn('cyborg-hunter demo: playground rebuild failed', err);
-      });
-  }, 250);
-
-  mount.addEventListener('change', function (e) {
-    var el = e.target.closest('[data-k]');
-    if (!el) return;
-    // Preset select: prefill the three inputs with that preset's real
-    // values (manifest presets[*].controls). The inputs stay the source of
-    // truth — whatever they show after the prefill is what runs.
-    if (el.dataset.k === 'preset' && presets[el.value]) {
-      var pc = presets[el.value].controls;
-      mount.querySelector('[data-k="pasteHardCount"]').value = pc.pasteHardCount;
-      mount.querySelector('[data-k="tabAwayCutoffMs"]').value = pc.tabAwayCutoffMs;
-      mount.querySelector('[data-k="typingSpeedCps"]').value = pc.typingSpeedCps;
-    }
-    rebuild();
-  });
 }

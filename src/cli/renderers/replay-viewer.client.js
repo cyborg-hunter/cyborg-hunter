@@ -227,13 +227,16 @@
   // have injected markup, and a foreign v2 file is not bound by CH's capture
   // rules at all). sandbox="allow-same-origin" without allow-scripts already
   // blocks scripts; the CSP meta additionally kills frames, form posts,
-  // fetch/XHR-carrying elements, and plugin content, while still allowing
-  // images/media/styles and fonts — the carriers of visual fidelity. Residual
+  // fetch/XHR-carrying elements, plugin content and media, while still
+  // allowing images, styles and fonts — the carriers of visual fidelity.
+  // Replays never play media (design §7 draws it as a placeholder), so
+  // media-src 'none' costs nothing and keeps the analyst's address from the
+  // experiment's media server, as the analyze page's own policy does. Residual
   // (documented): a participant-injected <img src> can still fire a GET to its
   // host when the analyst loads the replay. no-referrer strips the analyst
   // context.
   function srcdocCsp(allowExternalCss) {
-    return "default-src 'none'; img-src * data: blob:; media-src * data: blob:; " +
+    return "default-src 'none'; img-src * data: blob:; media-src 'none'; " +
       (allowExternalCss ? "style-src 'unsafe-inline' https: http:; " : "style-src 'unsafe-inline'; ") +
       "font-src * data:; " +
       "form-action 'none'; frame-src 'none'; connect-src 'none'; base-uri 'none';";
@@ -257,6 +260,8 @@
   // must not subtract a second gutter on classic-scrollbar platforms. Hiding
   // the ROOT scroller's bar (scrolling still works programmatically) keeps
   // layout width == camera width everywhere; inner containers keep their bars.
+  // `!important`, so a recorded inline style on <html> (root_attrs) cannot
+  // bring the bar back.
   //
   // The placeholder rule is spec §12's player duty made visible: an element the
   // format cannot carry the content of (an iframe today) reads as "something
@@ -268,7 +273,7 @@
   // NOTE also ABSENT: an unconditional `html{height:100%}`. <html>'s height is
   // set per mount by syncRootHeight() below, only for a body that needs it.
   function shellRules() {
-    return 'html{scrollbar-width:none}' +
+    return 'html{scrollbar-width:none!important}' +
       'html::-webkit-scrollbar{width:0;height:0}' +
       '[data-ch-placeholder]{outline:2px dashed #b26a00;outline-offset:-2px;' +
       'background:repeating-linear-gradient(45deg,rgba(178,106,0,.06),' +
@@ -298,6 +303,8 @@
   // and carries any `html{…}` rule it had. Set inline on <html>, as jsPsych
   // does — a node no recorded id can address. Re-run after every mount (the
   // shell, and so this style, survives restores) and every attribute patch.
+  // Since 0.13.0 CH's recorder states <html>'s attributes (root_attrs), and a
+  // file that carries them gets them instead (syncRoot below).
   function syncRootHeight(doc) {
     if (!doc || !doc.body || !doc.documentElement) return;
     var want = /%\s*$/.test(doc.body.style.height || '') ? '100%' : '';
@@ -316,6 +323,45 @@
       '</head><body></body></html>';
   }
 
+  // Experiment images the report stored once (src/cli/asset-match.js
+  // applyAssetMap): an image attribute holds ASSET_REF and the URL it was
+  // recorded with, and model.assets maps that URL to its data: URI. Swapped
+  // back here, before anything reads the model, so the reconstruction, the
+  // span walk and the debug surface see the value the attribute had before
+  // the file was deduplicated; every element then shares one string. A
+  // reference with no entry is left as written. A value the page itself
+  // recorded as the literal text `ch-asset:<a supplied URL>` is expanded too
+  // (a contrived case). MUST match asset-match.js's ASSET_REF.
+  var ASSET_REF = 'ch-asset:';
+  function expandAssetRefs(model) {
+    var assets = model.assets;
+    if (!assets || typeof assets !== 'object') return;
+    var own = Object.prototype.hasOwnProperty;
+    function value(v) {
+      if (typeof v !== 'string' || v.indexOf(ASSET_REF) !== 0) return v;
+      var url = v.slice(ASSET_REF.length);
+      return own.call(assets, url) && typeof assets[url] === 'string' ? assets[url] : v;
+    }
+    function tree(node) {
+      if (!node || typeof node !== 'object') return;
+      var attrs = node.attrs;
+      if (attrs && typeof attrs === 'object') {
+        for (var name in attrs) if (own.call(attrs, name)) attrs[name] = value(attrs[name]);
+      }
+      var kids = Array.isArray(node.children) ? node.children : [];
+      for (var i = 0; i < kids.length; i++) tree(kids[i]);
+    }
+    (Array.isArray(model.segments) ? model.segments : []).forEach(function (s) {
+      if (!s || typeof s !== 'object') return;
+      tree(s.initialDom);
+      (Array.isArray(s.events) ? s.events : []).forEach(function (e) {
+        if (!e || typeof e !== 'object') return;
+        if (e.type === 'dom.add') tree(e.node);
+        else if (e.type === 'dom.attr') e.value = value(e.value);
+      });
+    });
+  }
+
   // `opts.externalCss` (2026-09-03): the report decides UP FRONT, next to the
   // one "Load replay" button, whether href-only sheets may be linked from
   // their origins. Absent → today's strict frame plus the in-place opt-in.
@@ -325,7 +371,17 @@
     mount._chReplayInit = true;
     var initialExternalCss = !!(opts && opts.externalCss);
     var noExternalCss = !!(opts && opts.noExternalCss);
+    // The stage's room. `opts.maxStageWidth` caps its width: 960 px when
+    // absent, no cap when null (a host that gives the replay a wide column).
+    // `opts.fitHeight` is the height in CSS px the whole viewer may take, a
+    // number or a function asked at every sizing; the window's height when
+    // absent. In fullscreen the screen is the room, uncapped.
+    var maxStageWidth = opts && opts.maxStageWidth !== undefined ? opts.maxStageWidth : 960;
+    var fitHeightOpt = opts ? opts.fitHeight : undefined;
     mount.textContent = '';
+    expandAssetRefs(model);
+    // Hook for the fullscreen rule in replay-styles.js.
+    mount.classList.add('replay-viewer');
 
     var segments = model.segments || [];
     if (segments.length === 0) {
@@ -334,6 +390,11 @@
     }
     // Session-level streams: ABSOLUTE wire times, rebased per segment at use.
     var sheetEvents = model.stylesheetEvents || [];
+    // <html>'s attributes, when the recording states them (CH >= 0.13.0:
+    // root_attrs on every keyframe). Such a file gets its own <html> at every
+    // mount and through the walk; any other keeps the height pin above.
+    var rootAttrEvents = model.rootAttrEvents || [];
+    var recordsRoot = segments.some(function (s) { return !!s.rootAttrs; });
     var viewportChanges = model.viewportChanges || [];
     var scrollbar = model.scrollbar || { w: 0, h: 0 };
 
@@ -379,6 +440,7 @@
     var pendingCamSize = false;
     var stageW = 0, stageH = 0;
     var k = 1, ox = 0, oy = 0;  // iframe scale + letterbox origin
+    var oneToOne = false;       // the 1:1 control: recorded pixel size, scrolled
 
     // Scrub coalescing: at most one restore per animation frame, targeting the
     // latest requested time. Without it a drag across a deep span queues one
@@ -427,6 +489,18 @@
     header.appendChild(speedSel);
     header.appendChild(clock);
     header.appendChild(sessionPos);
+    // Size: fitted (the default, the whole recorded viewport on screen) or
+    // 1:1; and fullscreen for the whole viewer, offered only where this
+    // document may go fullscreen.
+    var sizeBtn = el('button', 'replay-size', '1:1');
+    sizeBtn.title = 'Show the recorded page at its own pixel size';
+    sizeBtn.setAttribute('aria-pressed', 'false');
+    header.appendChild(sizeBtn);
+    var fullBtn = null;
+    if (document.fullscreenEnabled) {
+      fullBtn = el('button', 'replay-fullscreen', 'Fullscreen');
+      header.appendChild(fullBtn);
+    }
     if (segments.length > 1) header.appendChild(pauseLabel);
     // Every CH panel is guarded on its OWN field, never on `foreign`: a
     // converted file carries the CH namespace without CH's data, and a CH file
@@ -709,7 +783,12 @@
     var mediaLayer = el('div', 'replay-media');
     mediaLayer.setAttribute('aria-hidden', 'true');
     stage.appendChild(mediaLayer);
-    mount.appendChild(stage);
+    // The stage sits in a box of its own: at 1:1 the box keeps the fitted
+    // room and the full-size stage scrolls inside it, so neither size reflows
+    // the page during playback.
+    var stageWrap = el('div', 'replay-stage-wrap');
+    stageWrap.appendChild(stage);
+    mount.appendChild(stageWrap);
     var ctx = overlay.getContext('2d');
 
     // ── Marker lane + scrub ──
@@ -777,6 +856,14 @@
       shellReady = true;
       restore(segIdx, playhead);
       redraw();
+      // The restore can show header chips (an iframe or shadow placeholder, a
+      // segment defect), and in a browser the shell boots after the segment
+      // load's own sizing: size the stage again against the header as it now
+      // is. Nothing plays at boot. The other shell write, the external-CSS
+      // rewrite, starts from the analyst's "Load external CSS" click, which
+      // may come during play: that refit is analyst-initiated, as a 1:1
+      // toggle's is.
+      refit();
     }
 
     // ── Stylesheet state (spec §2 / design §5 step 2) ──
@@ -901,6 +988,10 @@
           }
         };
         pushStream(sheetEvents, RANK_SHEET, 'stylesheet');
+        // <html>'s attributes are style state too: same rank, pushed after the
+        // sheets so the stable sort keeps a sheet first at an equal `t`. Not a
+        // §7 stream (vendor data), so it takes no rank of its own.
+        if (recordsRoot) pushStream(rootAttrEvents, RANK_SHEET, 'root-attr');
         pushStream(viewportChanges, RANK_VIEWPORT, 'viewport');
         for (var e = 0; e < s.events.length; e++) {
           rows.push({
@@ -979,21 +1070,72 @@
       }
     }
 
+    function fullscreenOn() { return document.fullscreenElement === mount; }
+
+    // The room the viewer is given: the mount's content width (capped by
+    // maxStageWidth) and the fit height. Fullscreen: the screen, uncapped.
+    // clientWidth includes the padding (the fullscreen rule gives the viewer
+    // some), so it comes off the width as it does off the height below.
+    function roomGiven() {
+      var full = fullscreenOn();
+      var cs = window.getComputedStyle ? window.getComputedStyle(mount) : null;
+      var w = (mount.clientWidth || 720) -
+        (cs ? (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) : 0);
+      var cap = full ? null : num(maxStageWidth);
+      if (cap != null) w = Math.min(w, cap);
+      var fh = full ? window.innerHeight
+        : typeof fitHeightOpt === 'function' ? fitHeightOpt()
+        : num(fitHeightOpt) != null ? fitHeightOpt : window.innerHeight;
+      return { w: w, fh: num(fh) || 0, cs: cs };
+    }
+
+    // The stage's room inside it: the given width, and the fit height less
+    // the viewer's own controls, measured where they are laid out (header,
+    // lane, scrubber, ticker and the gaps between them, plus the mount's
+    // padding). Measured only when the stage is sized (a segment loads, the
+    // room changes, 1:1 or fullscreen toggles), never to decide whether to
+    // refit: the controls change height during play (a chip shown, a status
+    // wrapping), and the stage holds its size through playback. Such a row
+    // can take the viewer one row past the room until the next refit.
+    var MIN_STAGE_H = 200;
+    function fitBox(room) {
+      var cs = room.cs;
+      var chrome = (ticker.getBoundingClientRect().bottom - header.getBoundingClientRect().top) -
+        stageWrap.getBoundingClientRect().height +
+        (cs ? (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) : 0);
+      return { w: room.w, h: Math.max(MIN_STAGE_H, room.fh - Math.max(0, chrome)) };
+    }
+
     // The stage BOX is fixed per segment (sized from the seed camera's aspect)
     // so playback never reflows the report page; camera changes re-letterbox
-    // the iframe INSIDE the box.
+    // the iframe INSIDE the box. Fitted, the box is the largest of that shape
+    // in the room; at 1:1 it is the seed camera's own size (scale 1 at the
+    // segment's opening viewport), shown through the wrap at the room's size.
+    var lastRoom = null;
     function sizeStage() {
-      stageW = Math.min(mount.clientWidth || 720, 960);
       var seed = seg().camera || {};
       var scw = num(seed.client_w) || num(seed.w) || 1280;
       var sch = num(seed.client_h) || num(seed.h) || 800;
-      stageH = Math.round(sch * (stageW / scw));
+      var room = lastRoom = roomGiven();
+      var box = fitBox(room);
+      if (oneToOne) {
+        stageW = scw;
+        stageH = sch;
+      } else {
+        stageW = Math.max(1, Math.floor(Math.min(box.w, box.h * scw / sch)));
+        stageH = Math.round(sch * (stageW / scw));
+      }
       stage.style.width = stageW + 'px';
       stage.style.height = stageH + 'px';
       overlay.width = stageW;
       overlay.height = stageH;
-      lane.width = stageW;
-      scrub.style.width = stageW + 'px';
+      // The lane and the scrubber span what is on screen.
+      var shownW = oneToOne ? Math.min(stageW, box.w) : stageW;
+      stageWrap.classList.toggle('replay-actual', oneToOne);
+      stageWrap.style.width = oneToOne ? shownW + 'px' : '';
+      stageWrap.style.height = oneToOne ? Math.min(stageH, box.h) + 'px' : '';
+      lane.width = shownW;
+      scrub.style.width = shownW + 'px';
     }
 
     // Applied lazily: before each anchored self-check and once per applied
@@ -1430,7 +1572,7 @@
       // `applyPatch` returns false for anything that is not one of §5.1's four
       // verbs, so the vocabulary dispatch below needs no list of its own.
       if (span && applyPatch(e, span)) {
-        if (e.type === 'dom.attr') syncRootHeight(frameDoc());
+        if (e.type === 'dom.attr' && !recordsRoot) syncRootHeight(frameDoc());
         return;
       }
       var type = e.type;
@@ -1477,10 +1619,21 @@
       evaluateCheck(e);
     }
 
+    // <html> at a mount: the keyframe's own attributes when the recording
+    // states them (an empty set when this span's keyframe does not), else the
+    // height pin a file without them has always had.
+    function syncRoot(doc, rootAttrs) {
+      if (recordsRoot) applyRootAttrs(doc, rootAttrs || {});
+      else syncRootHeight(doc);
+    }
+
     function applyEntry(w) {
       if (w.stream === 'stylesheet') {
         var doc = frameDoc();
         if (doc) applySheetEvent(doc, w.payload);
+      } else if (w.stream === 'root-attr') {
+        var rdoc = frameDoc();
+        if (rdoc) applyRootAttr(rdoc, w.payload.name, w.payload.value);
       } else if (w.stream === 'viewport') {
         foldViewport(w.payload);
       } else {
@@ -1540,7 +1693,7 @@
         span = null; walk = []; appliedIdx = 0; spanStart = -1; spanEnd = -1;
         resetCanvases(doc);
         mediaState = new Map();
-        if (doc) { mountTree(null, doc.body, doc); syncRootHeight(doc); stats.mounts++; }
+        if (doc) { mountTree(null, doc.body, doc); syncRoot(doc, null); stats.mounts++; }
         seedCamera(targetSeg);
         pendingCamSize = true;
         flushCamSize();
@@ -1575,7 +1728,7 @@
       // 1. mount the span keyframe, fresh id map
       if (doc) {
         span = mountTree(start >= 0 ? segments[start].initialDom : null, doc.body, doc);
-        syncRootHeight(doc);
+        syncRoot(doc, start >= 0 ? segments[start].rootAttrs : null);
         stats.mounts++;
       } else {
         span = null;
@@ -2279,6 +2432,11 @@
       scrub.value = '0';
       redraw();
       updateSessionPos();
+      // The header now says what the segment's opening shows (its view
+      // chips, its position), which can add a row: size the stage again
+      // against it. A segment load and a change of room are the only times
+      // the controls are measured (fitBox).
+      refit();
     }
     function selectSegment(i) {
       playing = false;
@@ -2292,19 +2450,57 @@
 
     // Analyst-side resizes (report sidebar, browser zoom, window resize)
     // re-derive the stage box and transform — the reconstruction must track
-    // its container, not just the recording.
+    // its container, not just the recording. The window's own resize is
+    // watched too: the room's height comes from it (or from fitHeight), and a
+    // taller window changes no width the observer would see.
+    function refit() {
+      sizeStage();
+      if (!cam) return;
+      pendingCamSize = true;
+      flushCamSize();
+      drawOverlay();
+      drawLane();
+    }
+    // Refits when the room given changes (its width or its fit height), not
+    // when the viewer's own controls do: see fitBox.
+    function refitIfChanged() {
+      var room = roomGiven();
+      if (lastRoom && room.w === lastRoom.w && room.fh === lastRoom.fh) return;
+      refit();
+    }
+    // The observer's refit waits a frame: resizing the stage inside the
+    // observer's own callback resizes the element it observes, which WebKit
+    // reports as a page error ("ResizeObserver loop completed with
+    // undelivered notifications").
+    var refitQueued = false;
+    function queueRefit() {
+      if (refitQueued) return;
+      refitQueued = true;
+      requestAnimationFrame(function () { refitQueued = false; refitIfChanged(); });
+    }
     if (typeof ResizeObserver !== 'undefined') {
-      var ro = new ResizeObserver(function () {
-        var newW = Math.min(mount.clientWidth || 720, 960);
-        if (newW === stageW) return;
-        sizeStage();
-        pendingCamSize = true;
-        flushCamSize();
-        drawOverlay();
-        drawLane();
-      });
+      var ro = new ResizeObserver(queueRefit);
       ro.observe(mount);
     }
+    window.addEventListener('resize', refitIfChanged);
+
+    sizeBtn.addEventListener('click', function () {
+      oneToOne = !oneToOne;
+      // The control keeps its name, "1:1"; aria-pressed and its pressed
+      // styling (replay-styles.js) show the state.
+      sizeBtn.setAttribute('aria-pressed', String(oneToOne));
+      refit();
+    });
+    if (fullBtn) {
+      fullBtn.addEventListener('click', function () {
+        var p = fullscreenOn() ? document.exitFullscreen() : mount.requestFullscreen();
+        if (p && p.catch) p.catch(function () { /* refused: the viewer stays as it was */ });
+      });
+    }
+    document.addEventListener('fullscreenchange', function () {
+      if (fullBtn) fullBtn.textContent = fullscreenOn() ? 'Exit fullscreen' : 'Fullscreen';
+      refit();
+    });
 
     // Test/debug surface (used by the alignment battery and the
     // checkpoint executor; not a public API).

@@ -22,8 +22,8 @@
 //
 // FIVE consumers were surveyed and are routed as follows:
 //   report.js                          → this module (the shipped report)
-//   tools/assemble-demo-site.mjs       → this module (writes the ASSEMBLED file,
-//                                        which demo/results.js fetches by name)
+//   tools/build-analyze.mjs            → this module (bakes the assembly into
+//                                        the analyze page's bundle)
 //   cursor-alignment.battery.mjs       → this module (the browser battery's harness)
 //   cyborg-hunter-lab: probes/investigate/probe-support.mjs → NOT a consumer of the assembly: it
 //                                        extracts the literal `srcdocCsp()` out

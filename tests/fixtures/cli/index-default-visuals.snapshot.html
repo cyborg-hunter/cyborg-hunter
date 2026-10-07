@@ -148,8 +148,12 @@
       border: 1px solid var(--line); font-weight: 400;
     }
 
-    /* Detail pane base */
-    .detail .participant { max-width: 800px; }
+    /* Detail pane base. The replay viewer is the exception to the 800px
+       reading column: it scales the recording to the room it has, and a
+       recorded desktop page is wider than the column. The replay section's
+       own heading and notes keep the column. */
+    .detail .participant > :not(.replay-block),
+    .detail .replay-block > :not(.replay-mount) { max-width: 800px; }
 
     /* Empty-state hint when filter+search combine to hide every row.
        Shown by reconcileSelection() via [data-empty="true"] on .detail. */
@@ -280,6 +284,7 @@
     }
     .sig-cell ul { list-style: none; margin-top: 4px; font-size: 12px; padding: 0; }
     .sig-cell li { font-family: var(--ff-recursive); padding: 2px 0; word-break: break-word; }
+    .sig-more > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; cursor: pointer; }
     .muted { color: var(--dim); }
 
     /* Paste evidence — list of expandable entries */
@@ -328,17 +333,32 @@
     }
     .zoomable:hover img { opacity: 0.92; }
 
-    /* Lightbox overlay — hidden by default; the client script adds .open to show it. */
+    /* Lightbox overlay — hidden by default; the client script adds .open to show it.
+       It opens fitted to the window; .actual shows the figure at its own pixel
+       size (figures are drawn once, at 1x) and the overlay scrolls. The top
+       padding keeps the figure clear of the controls. */
     .lightbox-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       z-index: 1000; display: none;
       align-items: center; justify-content: center;
-      cursor: zoom-out; padding: 20px;
+      cursor: zoom-out; padding: 64px 20px 20px;
     }
     .lightbox-overlay.open { display: flex; }
     .lightbox-overlay img {
-      max-width: 100%; max-height: 100%; border-radius: 4px;
+      max-width: 100%; max-height: 100%; border-radius: 4px; cursor: zoom-in;
     }
+    /* Start-aligned with auto margins: a figure smaller than the window stays
+       centred, a larger one scrolls to its own top-left corner (centring alone
+       would put that corner out of reach). */
+    .lightbox-overlay.actual { overflow: auto; align-items: flex-start; justify-content: flex-start; }
+    .lightbox-overlay.actual img { max-width: none; max-height: none; margin: auto; cursor: zoom-out; }
+    .lightbox-tools { position: fixed; top: 16px; right: 76px; display: flex; gap: 8px; }
+    .lightbox-tools button {
+      padding: 6px 12px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 4px;
+      background: rgba(0, 0, 0, 0.4); color: white; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 15px;
+    }
+    .lightbox-tools button[aria-pressed="true"] { background: white; color: var(--ink); }
     .lightbox-close {
       position: fixed; top: 16px; right: 24px;
       color: white; font-size: 32px; cursor: pointer;
@@ -662,6 +682,10 @@
     </div>
   </div>
   <div id="lightbox" class="lightbox-overlay" role="dialog" aria-label="Enlarged image">
+    <div class="lightbox-tools">
+      <button type="button" class="lightbox-zoom" aria-pressed="false" title="Show the figure at its own pixel size">1:1</button>
+      <button type="button" class="lightbox-fullscreen" hidden>Fullscreen</button>
+    </div>
     <span class="lightbox-close" aria-label="Close">&times;</span>
     <img id="lightbox-img" alt="">
   </div>
@@ -683,6 +707,8 @@
       const legendBack  = legend.querySelector('.modal-backdrop');
       const overlay     = document.getElementById('lightbox');
       const overlayImg  = document.getElementById('lightbox-img');
+      const zoomBtn     = overlay.querySelector('.lightbox-zoom');
+      const fullBtn     = overlay.querySelector('.lightbox-fullscreen');
 
       // Module-scoped current selection, indexed by participantId. The handlers below read it.
       let currentId = null;
@@ -740,7 +766,19 @@
       // --- Overlay open/close helpers ---
       function openLegend()    { legend.removeAttribute('hidden'); }
       function closeLegend()   { legend.setAttribute('hidden', ''); }
-      function closeLightbox() { overlay.classList.remove('open'); overlayImg.src = ''; }
+      // The enlarged figure: fitted to the window (false) or at its own pixel size (true).
+      // The control keeps its name, "1:1"; aria-pressed and its pressed styling show the state.
+      function setActual(on) {
+        overlay.classList.toggle('actual', on);
+        zoomBtn.setAttribute('aria-pressed', String(on));
+      }
+      function closeLightbox() {
+        overlay.classList.remove('open');
+        overlayImg.src = '';
+        setActual(false);
+        // Closing the figure leaves its fullscreen too.
+        if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+      }
 
       // --- Legend modal wiring ---
       legendBtn.addEventListener('click', openLegend);
@@ -754,10 +792,29 @@
         a.addEventListener('click', e => {
           e.preventDefault();
           overlayImg.src = a.getAttribute('href');
+          setActual(false);
           overlay.classList.add('open');
         });
       });
-      overlay.addEventListener('click', closeLightbox);
+      // A click on the figure switches between fitted and 1:1; the controls do
+      // what they say; a click anywhere else closes.
+      overlay.addEventListener('click', e => {
+        if (e.target.closest('.lightbox-tools')) return;
+        if (e.target === overlayImg) { setActual(!overlay.classList.contains('actual')); return; }
+        closeLightbox();
+      });
+      zoomBtn.addEventListener('click', () => setActual(!overlay.classList.contains('actual')));
+      // Offered only where this document may go fullscreen: a report opened as
+      // a page may, and so may the analyze page's report frame, which allows it
+      // (demo/report-frame.js).
+      if (document.fullscreenEnabled) fullBtn.hidden = false;
+      fullBtn.addEventListener('click', () => {
+        if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+        else overlay.requestFullscreen().catch(() => {});
+      });
+      document.addEventListener('fullscreenchange', () => {
+        fullBtn.textContent = document.fullscreenElement === overlay ? 'Exit fullscreen' : 'Fullscreen';
+      });
 
       // --- Paste-toggle wiring ---
       // Delegated handler for paste-toggle buttons. Only "long" pastes have a
@@ -853,6 +910,10 @@
           if (overlay.classList.contains('open')) { closeLightbox(); return; }
           if (!legend.hasAttribute('hidden'))     { closeLegend();   return; }
         }
+        // The enlarged figure covers the report, and so does anything in
+        // fullscreen (a replay viewer): the keys below act on the report
+        // behind it, so they wait until it closes.
+        if (overlay.classList.contains('open') || document.fullscreenElement) return;
 
         const inInput = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
 
@@ -945,6 +1006,20 @@
     .replay-media-badge { font: 11px/1.2 var(--ff-tomorrow);
                     background: rgba(0,137,123,0.85); color: #fff; padding: 2px 7px;
                     border-radius: 3px; white-space: nowrap; }
+    /* Size controls: 1:1 keeps the recorded pixel size and the stage scrolls
+       inside its box; fullscreen gives the whole viewer the screen. */
+    .replay-size, .replay-fullscreen {
+      padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
+      color: var(--ink); border-radius: 4px; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 13px; }
+    .replay-size[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+    .replay-stage-wrap.replay-actual { overflow: auto; }
+    .replay-viewer:fullscreen { background: var(--surface); padding: 12px 16px; overflow: auto; scrollbar-gutter: stable both-edges; }
+    /* In fullscreen the stage, its lane and its scrubber stand in the middle
+       of the screen when the height binds; at 1:1 the stage's box does. */
+    .replay-viewer:fullscreen .replay-stage, .replay-viewer:fullscreen .replay-lane,
+    .replay-viewer:fullscreen .replay-scrub, .replay-viewer:fullscreen .replay-stage-wrap.replay-actual {
+      margin-left: auto; margin-right: auto; }
   </style>
   <script>
 
@@ -963,7 +1038,12 @@
         const mount = block.querySelector('.replay-mount');
         // Read the fetch decision before the mount is cleared.
         const fetchBox = block.querySelector('.replay-fetch-css');
-        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked) };
+        // The replay takes the pane's whole width (no 960px cap, and the
+        // section is not held to the reading column) and fits the pane's
+        // height, less its padding.
+        const pane = document.querySelector('.detail');
+        const viewerOpts = { externalCss: !!(fetchBox && fetchBox.checked), maxStageWidth: null,
+          fitHeight: function () { return (pane ? pane.clientHeight : window.innerHeight) - 40; } };
         btn.disabled = true;
         btn.textContent = 'Loading…';
         mount.setAttribute('aria-busy', 'true');

@@ -79,6 +79,18 @@ test('a __proto__ key is an ordinary key, in peek and in suggestion', async () =
   assert.equal(r.suggested, '__proto__');
 });
 
+// A session recording is no participant's data (ingest-core skips it by the
+// same content sniff): the peek reports it as a recording and samples none of
+// its keys, which no data file shares.
+test('peek: a session recording is reported as a recording, plain or gzipped, and nothing of it is sampled', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { gzipSync } = await import('node:zlib');
+  const text = readFileSync(new URL('../fixtures/demo/DEMO-FIXT-replay-1785352263344.json', import.meta.url), 'utf8');
+  assert.deepEqual(await peekParticipantFile(reader('DEMO-FIXT-replay-1785352263344.json', text)), { recording: true });
+  const gz = gzipSync(Buffer.from(text));
+  assert.deepEqual(await peekParticipantFile({ name: 'r.json.gz', read: async () => new Uint8Array(gz) }), { recording: true });
+});
+
 test('peek: a gzipped JSON file is decompressed first', async () => {
   const { gzipSync } = await import('node:zlib');
   const bytes = gzipSync(Buffer.from(JSON.stringify({ subject_ID: 'S1', metadata: { run: 'r' } })));

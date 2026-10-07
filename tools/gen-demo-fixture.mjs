@@ -2,8 +2,8 @@
 //
 // Regenerates the demo fixture's REPLAY ARTIFACT (tests/fixtures/demo/
 // DEMO-FIXT-replay-<epoch>.json) by DRIVING THE REAL demo tour in headless
-// Chromium and capturing the replay file the "Replicate locally" step hands
-// out. Since the recorder/serializer moved to SessionRecording v2 (the v2
+// Chromium and capturing the replay file the "Your files" step hands out.
+// Since the recorder/serializer moved to SessionRecording v2 (the v2
 // recorder), a fresh capture produces a v2 artifact in place of the older
 // (schema_version 1) one, which takes
 // the ingest version-warning demo-fixture.test.js checks back to zero.
@@ -23,7 +23,7 @@
 // It assembles .demo-site/ (the same artifact Pages CI + the Playwright suite
 // use), serves it, walks the full tour (baseline typing + two pastes → advance
 // through the optional tasks → a clean, violation-free pass through the guarded
-// act → replicate-locally), captures the replay download via the browser's own
+// act → your files), captures the replay download via the browser's own
 // download event, rewrites the random per-session pid to the stable DEMO-FIXT,
 // and overwrites the committed replay file.
 //
@@ -122,7 +122,7 @@ function waitForServer(url, timeoutMs = 30000) {
 async function main() {
   const keepSite = process.argv.includes('--keep-site');
 
-  // 1. Assemble the deployable site (build.js if stale + preview-core + copy).
+  // 1. Assemble the deployable site (build.js if stale + analyze bundle + copy).
   console.log('gen-demo-fixture: assembling .demo-site/');
   execFileSync(process.execPath, ['tools/assemble-demo-site.mjs'], { cwd: ROOT, stdio: 'inherit' });
 
@@ -199,10 +199,8 @@ async function main() {
     await waitForStep(9);
     await clickPrimary();                         // → step 10 (signals-to-scores)
     await waitForStep(10);
-    await clickPrimary();                         // → step 11 (results)
+    await clickPrimary();                         // → step 11 (your files)
     await waitForStep(11);
-    await page.locator('.yourreport h3').waitFor({ timeout: 10000 });
-    await clickPrimary();                         // → replicate-locally
     await page.locator('[data-action="download"][data-key="replay"]').waitFor({ timeout: 10000 });
 
     // ── capture the replay download only ────────────────────────────────────

@@ -6,6 +6,23 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ## [Unreleased]
 
 ### Added
+- Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
+  14:03 UTC`). The id is a hash of the participant ids, so a report rebuilt
+  from the same files keeps it, whatever the settings.
+- Reports: annotate each participant with Include, Exclude or Flag and a
+  note (keys `i`, `e`, `f` for the selected one). The rail shows the label
+  and how many participants are reviewed. The report keeps the annotations
+  in the browser under its run id; Export JSON and Import carry them
+  elsewhere, and Export CSV writes one row per participant (`participantId,
+  tier, triageScore, label, note, annotatedAt, runId`), optionally counting
+  the unreviewed as included.
+- `/analyze/`: the same annotations in the in-page report. The page keeps
+  them under the report's run id, so a re-analysis keeps them, and the
+  results step has the CSV and JSON exports and the import.
+- Report (CLI and `/analyze/`): an enlarged figure has a **1:1** control
+  that shows it at the size it was drawn, scrolling inside the overlay (a
+  click on the figure switches too), and a **Fullscreen** control wherever
+  the page may go fullscreen. On `/analyze/` the report frame now allows it.
 - One-line setup: one file per framework. `ch.js` stays the file for jsPsych
   and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
   surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
@@ -77,6 +94,21 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   Transmit body), the participant ID field is suggested from its first row
   and its own top-level fields, never from its `metadata` (where `id` is
   lab.js's upload-session id).
+- Session replay: the recorder records `<html>`'s own attributes (on every
+  keyframe, and each change), and the viewer applies them to the replay.
+  A page that keeps its layout on `<html>`, for example CSS variables set
+  with `document.documentElement.style.setProperty`, replays at the sizes
+  the participant saw; before, everything sized by those variables fell
+  back to its default (a card image at its natural size). The data rides in
+  the recording's `extensions["cyborg-hunter"]` (`root_attrs` on keyframe
+  segments, `root_attr_events` on the recording), so other players ignore
+  it. Recordings made before 0.13.0 replay as before.
+- `/analyze/`: a settings panel with the keys a report can apply after
+  collection (score weights, soft-score threshold, phase scope, the ID,
+  integrity and session-report fields, platform ID and trajectory order).
+  On the results, a change re-analyses in place without dropping the files
+  again; a change to the ID, integrity or session-report field reads the
+  files again from the same list.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
@@ -107,6 +139,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   images that never match: it says how many video/audio elements are shown as
   placeholders and that replays never play media. A video's poster is still
   an image.
+- CLI report: a session replay no longer requests the recording's video and
+  audio files. The replay frame's policy now blocks media
+  (`media-src 'none'`), as the analyze page's does, so opening a replay no
+  longer sends the analyst's address to the server that held the
+  experiment's media. Replays never played media; the elements are still
+  drawn as placeholders.
 - Experiment assets now also cover `srcset` candidates (on `<img>` and on a
   `<picture>`'s `<source>`), an SVG `<image>`'s `href`/`xlink:href`, and an
   `<input type="image">`'s `src` (also when the input becomes an image button
@@ -121,6 +159,36 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trialId/phase now keeps that label on its row; unlabelled steps keep
   `gap-<n>`. Rows recorded by 0.10.x–0.11.x for such steps were labelled
   `gap-<n>`.
+- `/analyze/`: dropping and checking are one "Files & settings" step. Every
+  drop or file choice adds to the list, so data and replays can come from
+  different folders; the same file dropped twice is listed once. A table
+  lists each file with what it was read as (participant data, replay
+  recording, experiment asset, settings, ignored, unreadable) and a Remove
+  button, and a line says whether the settings came from a dropped
+  `cyborg-hunter.config.json` or are the defaults.
+- Live demo: the tour ends with your files. Its last step, "Your files",
+  offers the session data, the replay recording and a config, plus two
+  example participants, as two batches of Save links (no zip), and an
+  "Open in the analyzer" button that hands all five to `/analyze/` in the
+  same browser, where they are listed as if dropped. The report the tour
+  used to build at its end, and its scoring playground, are gone: the
+  analyzer builds the report and holds the settings. The tour has 11 steps.
+- Replay viewer: the stage shows the participant's whole recorded viewport,
+  scaled to fit on both axes. Before, it took the available width only, and a
+  tall recording ran below the window. **1:1** shows the recorded page at
+  its own pixel size, scrolling inside the stage's box; **Fullscreen** gives
+  the viewer the whole screen. In the CLI report the replay takes the detail
+  pane's full width and height, beyond the 800 px column the rest of the pane
+  keeps.
+- `/analyze/`: the replay frame is as tall as the viewer inside it (it was a
+  fixed 640 px, so a tall replay scrolled inside it), the viewer fits the
+  page's window, and its **Fullscreen** control works there, the offline
+  single file included.
+- Experiment assets: an image a replay shows on many elements (a card game's
+  card art on every card) is now stored once in the report's replay file
+  (`replay/<id>.replay.js`), however many elements show it, and the viewer
+  puts it back on each element when the replay loads; the recordings
+  themselves are unchanged. A `srcset` keeps its images inline.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the
@@ -209,6 +277,31 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   `007`, and so does ch-labjs.js's ID on lab.js rows). Before, `007` was
   keyed `7`, so its replay recording did not attach and `--participant 007`
   found nothing.
+- Report (CLI and `/analyze/`): the ▸ toggle beside a long paste now shows
+  its full text. Before, a click hid the preview and showed nothing.
+- Report (CLI and `/analyze/`): "… +N more" under a session-level signal
+  (AI extensions, sidebar events, keyboard shortcuts) now opens the rest of
+  the list. Before, it was plain text, and the rest was nowhere in the report.
+- Report (CLI and `/analyze/`): the "Sidebar events" list shows one line per
+  sidebar opening (its width change, its time and how long it stayed open),
+  as many as the Sidebar count above it. Before, it listed every open and
+  close entry of the log, and a sidebar seen by both detectors twice.
+- `/analyze/`: a replay recording among the dropped files no longer empties
+  the participant ID suggestion. The check step skips recordings when it
+  reads the files' columns; before, one recording left no candidate and the
+  page fell back to `participantId`, which is wrong for jsPsych's
+  `subject_ID`. The line beside the field counts the data files read and
+  the recordings skipped.
+- `/analyze/`: "Export config" writes only the settings that differ from the
+  CLI's defaults, plus the participant-ID field. Before, it wrote every
+  default key and replaced your own `dataDir`, `filePattern` and `outputDir`
+  with fixed values. With experiment files dropped, it sets `assetsDir` to
+  `./assets`, and the page says where to put them.
+- Report and `/analyze/`: when several data records share a participant ID
+  and several replays claim it, no replay is attached, and the replay section
+  said the session was never recorded. It now says why no replay is shown and
+  names the replay files. The analyze page's replay card gives the reason
+  too, and does the same for a replay file that could not be loaded.
 
 ### Removed
 - Internal renderer wrappers removed

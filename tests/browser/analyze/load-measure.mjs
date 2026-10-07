@@ -87,12 +87,12 @@ for (const n of sizes) {
       await page.goto(base + '/analyze/');
       await page.waitForFunction(() => document.querySelector('[data-role="tested-size"]').textContent !== '…', null, { timeout: 60000 });
       await page.setInputFiles('[data-role="file-input"]', files);
-      await page.waitForSelector('section[data-step="check"]:not([hidden])', { timeout: TIMEOUT_MS });
+      await page.waitForSelector('[data-role="files-panel"]:not([hidden])', { timeout: TIMEOUT_MS });
       await page.waitForSelector('[data-action="run"]:not([disabled])', { timeout: TIMEOUT_MS });
       intake = (Date.now() - t0) / 1000;
       const t1 = Date.now();
       await page.click('[data-action="run"]');
-      // A failed run returns to the check step with the page's own error.
+      // A failed run returns to the file list with the page's own error.
       await untilOrError(page, page.locator('section[data-step="results"]'), 'visible');
       build = (Date.now() - t1) / 1000;
       // Completed means every participant is in the report and in the zip,

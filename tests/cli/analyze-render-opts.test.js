@@ -34,10 +34,3 @@ test('the viewer client honours opts.noExternalCss', () => {
   assert.match(src, /opts && opts\.noExternalCss/);
   assert.match(src, /cannot be fetched under this page/);
 });
-
-test('preview-entry re-exports the page-facing cores', async () => {
-  const entry = await import('../../src/cli/preview-entry.js');
-  for (const name of ['ingestFiles', 'buildReport', 'renderInPageHtml', 'mergeConfig', 'buildAssetMap', 'applyAssetMap', 'assetMatchSummary', 'assetNoteText']) {
-    assert.equal(typeof entry[name], 'function', name);
-  }
-});

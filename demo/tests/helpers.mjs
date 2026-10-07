@@ -1,9 +1,7 @@
 // demo/tests/helpers.mjs
-// Shared Playwright fixtures + DOM-automation helpers for tour.spec.js
-// (13-step remodel). Rewritten for D1 — keeps the v1 helper PATTERNS proven
-// against headless Chromium (see each section below for why), drops the
-// teaser/finale/Alt+S helpers the remodel deleted, and rewrites the
-// fast-forward helper for the new step map.
+// Shared Playwright fixtures + DOM-automation helpers for tour.spec.js and
+// handoff.spec.js (the 11-step tour), in the patterns proven against
+// headless Chromium (see each section below for why).
 //
 // Three auto-fixtures apply to every test that imports `test` from this
 // module:
@@ -31,7 +29,7 @@
 // GuardFriction's fullscreenElementOf()/check() read the patched APIs from
 // the very first paint, same as a real implementation would.
 //
-// One thing driving the live page during D1 disproved: dispatching a
+// One thing driving the live page disproved: dispatching a
 // synthetic 'blur' Event on window does NOT make GuardFriction log a
 // violation. Its check() reads document.hasFocus() — real browser focus
 // state, unaffected by a synthetic event — so a bare blur dispatch is a
@@ -184,23 +182,6 @@ export async function installFailingFullscreenMock(page) {
   });
 }
 
-// Wraps URL.createObjectURL/revokeObjectURL to count calls on
-// window.__chBlobCounts — the live-URL invariant tour.spec.js checks
-// (swapIframe revokes the PREVIOUS blob url only after the new one loads, so
-// created - revoked should equal the number of "no-previous-url-yet" swaps
-// still outstanding: 1 after the first report build + any playground
-// reruns). Must be called BEFORE page.goto() (like the fullscreen override
-// above) so the wrapper is in place before demo.js's first report build.
-export async function installBlobCounter(page) {
-  await page.addInitScript(() => {
-    window.__chBlobCounts = { created: 0, revoked: 0 };
-    const origCreate = URL.createObjectURL.bind(URL);
-    const origRevoke = URL.revokeObjectURL.bind(URL);
-    URL.createObjectURL = function (b) { window.__chBlobCounts.created++; return origCreate(b); };
-    URL.revokeObjectURL = function (u) { window.__chBlobCounts.revoked++; return origRevoke(u); };
-  });
-}
-
 export async function startTour(page) {
   await page.goto('/');
   await page.locator('#card h2').waitFor();
@@ -221,22 +202,23 @@ export async function waitForLamp(page, key, { hard = false, timeout = 7000 } = 
   }, [key, hard], { timeout });
 }
 
-// Fast path from a fresh welcome screen to the replicate-locally step (12):
-// baseline -> skip to the guarded act -> enter fullscreen (default succeeding
-// mock) -> end the guard immediately (no violation needed for this path) ->
-// debrief -> signals-to-scores -> results (waits for the report to actually
-// build) -> replicate-locally. Used by tests that need SOME session data and
-// the downloads step without walking every act-1 step.
-export async function fastForwardToReplicate(page) {
+// Fast path from a fresh welcome screen to the last step, "Your files":
+// baseline (`answer` typed with real keystrokes, so the replay has a typed
+// segment) -> clipboard-cheat -> skip to the guarded act -> enter fullscreen
+// (default succeeding mock) -> end the guard at once (no violation) ->
+// debrief -> signals-to-scores -> your files. For tests that need SOME
+// session data and the files step without walking every act-1 step.
+export async function fastForwardToFiles(page, answer = 'a city in Australia') {
   await startTour(page); // -> baseline (step 2)
+  await typeRealistically(page.locator('#card textarea'), answer);
+  await primaryButton(page).click(); // -> clipboard-cheat (step 3)
   await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry (step 7)
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('.eyebrow')).toContainText('Step 8 of 12', { timeout: 5000 }); // guard-cheat
+  await expect(page.locator('.eyebrow')).toContainText('Step 8 of 11', { timeout: 5000 }); // guard-cheat
   await page.locator('.endguard').click(); // -> guard-debrief (step 9)
   await primaryButton(page).click(); // -> signals-to-scores (step 10)
-  await primaryButton(page).click(); // -> results (step 11)
-  await page.locator('.yourreport h3').waitFor({ timeout: 8000 });
-  await primaryButton(page).click(); // -> replicate-locally (step 12)
+  await primaryButton(page).click(); // -> your files (step 11)
+  await expect(page.locator('.eyebrow')).toContainText('Step 11 of 11');
 }
 
 export function primaryButton(page) {
@@ -253,21 +235,4 @@ export function railRow(page, key) {
 
 export function pid(page) {
   return page.locator('#pid').textContent();
-}
-
-// The report's own frameLocator — Playwright pierces the iframe's opaque
-// (sandbox="allow-scripts", no allow-same-origin) origin fine; only real
-// browser same-origin policy would block script-level access, not
-// Playwright's out-of-process automation.
-export function resultsFrame(page) {
-  return page.frameLocator('.results-frame');
-}
-
-// The viewer-host iframe's own frameLocator (walkthrough item 12) — a
-// SIBLING of .results-frame, not nested inside it. sandbox="allow-scripts
-// allow-same-origin", same-origin, so Playwright and (unlike the report
-// iframe's inner reconstruction frame, one level deeper still) the browser
-// itself both get real contentDocument access here.
-export function replayHostFrame(page) {
-  return page.frameLocator('.replay-host-frame');
 }

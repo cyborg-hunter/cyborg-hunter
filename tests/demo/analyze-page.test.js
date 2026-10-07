@@ -46,7 +46,12 @@ const outcome = (p) => Promise.race([p.then(() => 'resolved', () => 'rejected'),
 const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 0, ignored: 0 }, configFound: true,
   config: { participantIdField: 'participantId' }, configWarnings: ['unknown key "dataDri"'],
   idSuggestion: { suggested: 'subject_ID', candidates: [{ field: 'subject_ID', reason: 'from cyborg-hunter.config.json' }, { field: 'subject_ID', reason: 'known name' }, { field: 'run_id', reason: 'constant within each file, unique across files' }] },
-  sampled: 3 };
+  sampled: 3,
+  files: [{ path: 'a.csv', kind: 'data' }, { path: 'b.csv', kind: 'data' }, { path: 'c.json', kind: 'data' }, { path: 'cyborg-hunter.config.json', kind: 'config' }],
+  configPath: 'cyborg-hunter.config.json' };
+// CHECKED.config with the settings panel's keys at their defaults: what a run sends.
+const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null, phaseScope: null,
+  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false, trajectoryDisplayOrder: 'rule' };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
@@ -84,13 +89,25 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
   const t = boot();
   await toCheck(t);
   assert.deepEqual(t.sent, [{ type: 'check', files: [], sample: true }]);
-  assert.deepEqual(visibleStep(), ['check']);
-  // JSON files sit in both of the classifier's lists; the page counts each file once.
-  assert.match(role('counts').textContent, /^3 data files \(2 CSV, 1 JSON: participant data or recordings, told apart when the report is built\)0 experiment assets1 config file$/);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, false);
+  // Counted by what the check read each file as.
+  assert.equal(role('counts').textContent, '3 data files0 replay recordings0 experiment assets1 config file');
+  assert.equal(role('config-source').textContent, 'Settings from cyborg-hunter.config.json, over the defaults.');
   assert.deepEqual([...role('id-field').options].map((o) => o.value), ['subject_ID', 'run_id']);
   assert.equal(role('id-field').value, 'subject_ID');
   assert.equal(role('check-warnings').textContent, 'unknown key "dataDri"');
+  assert.equal(role('id-files').textContent, '3 data files inspected');
   assert.equal(action('run').disabled, false);
+});
+
+test('check: the files the id field was looked for in are data files; the replay recordings it skipped are counted apart', async () => {
+  const t = boot();
+  action('sample').click();
+  await tick();
+  t.emit({ ...CHECKED, sampled: 1, recordings: 2 });
+  await tick();
+  assert.equal(role('id-files').textContent, '1 data file inspected; 2 replay recordings skipped');
 });
 
 const dropped = () => [{ path: 'study/a.csv', file: new File(['subject_ID,x\n1,2\n'], 'a.csv') },
@@ -101,7 +118,7 @@ async function until(cond) { for (let i = 0; i < 50 && !cond(); i++) await tick(
 test('over http the page hands the worker File handles, not bytes', async () => {
   const t = boot();
   const entries = dropped();
-  t.page.setFiles(entries);
+  t.page.addFiles(entries);
   await until(() => t.sent.length === 1);
   assert.deepEqual(t.sent[0], { type: 'check', sample: false, files: entries.map((e) => ({ path: e.path, file: e.file })) });
   assert.deepEqual(t.transfers[0], []);
@@ -109,7 +126,7 @@ test('over http the page hands the worker File handles, not bytes', async () => 
 
 test('from file:, the page reads each dropped file and transfers its bytes, for the check and again for the run', async () => {
   const t = boot({ transferBytes: true });
-  t.page.setFiles(dropped());
+  t.page.addFiles(dropped());
   await until(() => t.sent.length === 1);
   const check = t.sent[0];
   assert.equal(check.type, 'check');
@@ -130,9 +147,11 @@ test('from file:, the page reads each dropped file and transfers its bytes, for 
 test('from file:, a file that cannot be read fails the check like any check error', async () => {
   const t = boot({ transferBytes: true });
   const bad = { path: 'gone.csv', file: { size: 1, arrayBuffer: () => Promise.reject(new Error('NotFoundError: the file is gone')) } };
-  await t.page.setFiles([bad]).catch(() => {});
+  await t.page.addFiles([bad]).catch(() => {});
   await tick();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
+  assert.deepEqual(t.page.state.entries, [], 'the list is emptied, so the next drop starts clean');
   assert.match(role('error').textContent, /the file is gone/);
   assert.equal(t.sent.length, 0);
 });
@@ -146,7 +165,8 @@ test('one run at a time: the run control is disabled while a run is in flight', 
   t.page.run();
   await tick();
   assert.equal(t.sent.filter((m) => m.type === 'run').length, 1);
-  assert.deepEqual(t.sent[1], { type: 'run', files: [], sample: true, config: CHECKED.config, participantIdField: 'subject_ID' });
+  // The check's config with the settings panel's keys on top, here at their defaults.
+  assert.deepEqual(t.sent[1], { type: 'run', files: [], sample: true, participantIdField: 'subject_ID', config: PANEL_DEFAULTS });
 });
 
 test('a run error discards the zip chunks already received and offers a retry', async () => {
@@ -159,7 +179,8 @@ test('a run error discards the zip chunks already received and offers a retry', 
   await tick();
   assert.deepEqual(t.page.state.zipParts, []);
   assert.equal(t.page.state.zipUrl, null);
-  assert.deepEqual(visibleStep(), ['check']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, false, 'back on the file list, ready for a retry');
   assert.equal(role('error').hidden, false);
   assert.match(role('error').textContent, /No participant data/);
   // The run's file warnings go under the check's config warnings.
@@ -171,13 +192,14 @@ test('a run error discards the zip chunks already received and offers a retry', 
   assert.equal(role('error').hidden, true, 'a retry clears the old error');
 });
 
-test('a check error returns to the drop step', async () => {
+test('a check error returns to the files step with no list', async () => {
   const t = boot();
   action('sample').click();
   await tick();
   t.emit({ type: 'error', phase: 'check', message: 'boom' });
   await tick();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
   assert.equal(role('error').textContent, 'boom');
 });
 
@@ -257,11 +279,12 @@ test('a run without recordings says so in the replay card', async () => {
   assert.equal(action('load-replay').disabled, true);
 });
 
-test('start over returns to the drop step and clears the run', async () => {
+test('start over returns to the files step and clears the run', async () => {
   const t = boot();
   await toResults(t);
   document.querySelectorAll('[data-action="reset"]')[1].click();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
   assert.equal(t.page.state.result, null);
   assert.deepEqual(t.page.state.zipParts, []);
   assert.equal(t.page.state.zipUrl, null);
@@ -284,7 +307,7 @@ test('a worker failure mid-run recovers like a run error: chunks discarded, cont
     t.worker[kind]({ message: 'out of memory' });
     await tick();
     assert.deepEqual(t.page.state.zipParts, [], kind);
-    assert.deepEqual(visibleStep(), ['check'], kind);
+    assert.deepEqual(visibleStep(), ['files'], kind);
     assert.equal(action('run').disabled, false, kind);
     assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled), kind);
     assert.equal(role('error').hidden, false, kind);
@@ -292,13 +315,14 @@ test('a worker failure mid-run recovers like a run error: chunks discarded, cont
   }
 });
 
-test('a worker failure mid-check returns to the drop step with Start over usable', async () => {
+test('a worker failure mid-check returns to the files step with Start over usable', async () => {
   const t = boot();
   action('sample').click();
   await tick();
   t.worker.onerror({ message: 'SyntaxError' });
   await tick();
-  assert.deepEqual(visibleStep(), ['drop']);
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('files-panel').hidden, true);
   assert.match(role('error').textContent, /SyntaxError/);
   assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled));
   action('sample').click();   // a retry is accepted
@@ -486,7 +510,7 @@ test('after a worker failure the page retries on a fresh worker from the factory
   // A late message from the dead worker is ignored.
   workers[0].onmessage({ data: DONE });
   await tick();
-  assert.deepEqual(visibleStep(), ['check']);
+  assert.deepEqual(visibleStep(), ['files']);
   workers[1].onmessage({ data: ready });
   assert.equal([...document.head.querySelectorAll('style')].length, 1, 'fonts installed once');
   action('run').click(); await tick();
@@ -536,7 +560,8 @@ test('a worker failure with several replay requests outstanding settles them all
 });
 
 // A cohort above the size the page was tested with is allowed, with a warning.
-const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, assets: 0, ignored: 0 } });
+const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, assets: 0, ignored: 0 },
+  files: Array.from({ length: n }, (_, i) => ({ path: 'p' + i + '.csv', kind: 'data' })) });
 
 test('a cohort above the tested size shows a warning with its size; the run stays allowed', async () => {
   const t = boot();
@@ -667,7 +692,7 @@ describe('the report render watchdog', () => {
     await toLoadedReport(t);
     assert.equal(clock.count(), 1);
     // A new run started while the old one is armed: reset is the only way back
-    // to the check step, so drive run() directly.
+    // to the file list, so drive run() directly.
     t.page.run();                                        // waits on the worker, which this test never answers
     assert.deepEqual(clock.delays(), [60000], 'a new run: the watchdog is gone, only the run\'s stall hint timer is live');
   });
@@ -834,4 +859,554 @@ describe('the still-working hint', () => {
     action('run').click(); await tick();
     assert.deepEqual(clock.delays(), [5]);
   });
+});
+
+// One "Files & settings" step: every drop or file choice adds to the list
+// (demo/analyze/files-panel.js) and checks the whole list again.
+test('each addition adds to the list and checks it again; the same file is sent once, a colliding path moves to its own folder', async () => {
+  const t = boot();
+  const a = { path: 'data/a.csv', file: new File(['x'], 'a.csv', { lastModified: 1 }) };
+  t.page.addFiles([a]);
+  await until(() => t.sent.length === 1);
+  t.emit({ ...CHECKED, files: [{ path: 'data/a.csv', kind: 'data' }] });
+  await tick();
+  const other = { path: 'data/a.csv', file: new File(['different'], 'a.csv', { lastModified: 2 }) };
+  const replay = { path: 'r/A-replay-1.json', file: new File(['{}'], 'A-replay-1.json', { lastModified: 3 }) };
+  t.page.addFiles([a, other, replay]);
+  await until(() => t.sent.length === 2);
+  assert.deepEqual(t.sent[1].files.map((f) => f.path), ['data/a.csv', 'drop2/data/a.csv', 'r/A-replay-1.json']);
+});
+
+test('a drop on the files step after a check adds to the list', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  const ev = new win.Event('drop', { bubbles: true, cancelable: true });
+  ev.dataTransfer = { items: [], files: [new File(['y'], 'more.csv', { lastModified: 5 })] };
+  role('dropzone').dispatchEvent(ev);
+  await until(() => t.sent.length === 2);
+  assert.deepEqual(t.sent[1].files.map((f) => f.path), ['study/a.csv', 'study/cyborg-hunter.config.json', 'more.csv']);
+});
+
+test('the table lists what each file was read as, with Remove; removing the last file empties the step', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit({ ...CHECKED, files: [{ path: 'study/a.csv', kind: 'data' }, { path: 'study/cyborg-hunter.config.json', kind: 'config' }], configPath: 'study/cyborg-hunter.config.json' });
+  await tick();
+  const rows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent));
+  assert.deepEqual(rows(), [['study/a.csv', 'participant data'], ['study/cyborg-hunter.config.json', 'settings']]);
+  assert.equal(role('config-source').textContent, 'Settings from study/cyborg-hunter.config.json, over the defaults.');
+  assert.equal(role('file-rows').querySelector('[data-path="study/a.csv"]').getAttribute('aria-label'), 'Remove study/a.csv');
+  role('file-rows').querySelector('[data-path="study/cyborg-hunter.config.json"]').click();
+  await until(() => t.sent.length === 2);
+  assert.deepEqual(t.sent[1].files.map((f) => f.path), ['study/a.csv']);
+  t.emit({ ...CHECKED, configFound: false, configPath: null, files: [{ path: 'study/a.csv', kind: 'data' }] });
+  await tick();
+  assert.equal(role('config-source').textContent, 'Settings: the defaults (no cyborg-hunter.config.json among the files).');
+  role('file-rows').querySelector('[data-path="study/a.csv"]').click();
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reset' }, 'nothing left to check: the page starts over');
+  assert.equal(role('files-panel').hidden, true);
+  assert.deepEqual(t.page.state.entries, []);
+});
+
+test('the sample lists its files without Remove controls', async () => {
+  const t = boot();
+  await toCheck(t);
+  assert.equal(role('file-rows').querySelectorAll('tr').length, 4);
+  assert.equal(role('file-rows').querySelectorAll('[data-action="remove-file"]').length, 0);
+});
+
+// The classifier lists every JSON file as participant data; the check's peek
+// tells a recording apart. Run waits for a file the peek read as data.
+test('a list of replay recordings only shows 0 data files, and Run stays disabled', async () => {
+  const t = boot();
+  action('sample').click();
+  await tick();
+  t.emit({ ...CHECKED, files: [{ path: 'A-replay-1.json', kind: 'recording' }, { path: 'B-replay-1.json', kind: 'recording' }] });
+  await tick();
+  assert.match(role('counts').textContent, /^0 data files2 replay recordings/);
+  assert.equal(action('run').disabled, true);
+});
+
+// The settings panel: post-hoc keys only, applied without dropping the files
+// again (demo/analyze/settings-panel.js).
+const setField = (name, value) => {
+  const form = role('settings-form');
+  const el = form.elements.namedItem(name);
+  if (el.type === 'checkbox') el.checked = value; else el.value = value;
+  form.dispatchEvent(new win.Event('change', { bubbles: true }));
+};
+const downloads = () => [...document.querySelectorAll('[data-action="download"], [data-action="download-zip"]')];
+
+test('the settings show from the first check on, and a run sends their config', async () => {
+  const t = boot();
+  assert.equal(role('settings').hidden, true, 'nothing to set before a check');
+  await toCheck(t);
+  assert.equal(role('settings').hidden, false);
+  assert.equal(role('settings-form').querySelector('fieldset > legend').textContent, 'Settings');
+  assert.ok(role('id-field').closest('label'), 'the id field has its label');
+  setField('softScoreThreshold', '4');
+  setField('phaseInclude', 'game, practice');
+  assert.equal(t.sent.length, 1, 'no run before Build');
+  action('run').click();
+  await tick();
+  assert.deepEqual(t.sent[1].config.scoring, { softScoreThreshold: 4 });
+  assert.deepEqual(t.sent[1].config.phaseScope, { include: ['game', 'practice'] });
+});
+
+test('on the results, a post-hoc setting re-analyses without reading the files, and the report swaps in place', async () => {
+  const t = boot();
+  await toResults(t);
+  const before = document.querySelector('iframe.analyze-report').src;
+  setField('softScoreThreshold', '2');
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID',
+    config: { ...PANEL_DEFAULTS, scoring: { softScoreThreshold: 2 } } });
+  assert.equal(role('rerun-status').hidden, false);
+  // Announced: the live region is always there, its text appears in it.
+  const live = role('rerun-status').parentElement;
+  assert.equal(live.getAttribute('role'), 'status');
+  assert.equal(live.hidden, false);
+  assert.deepEqual(visibleStep(), ['results'], 'the page stays on its results');
+  t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+  t.emit({ ...DONE, html: '<p>re-analysed</p>' });
+  await tick();
+  assert.equal(role('rerun-status').hidden, true);
+  assert.notEqual(document.querySelector('iframe.analyze-report').src, before, 'a new report document');
+  assert.equal(t.page.state.zipParts.length, 1, 'the zip is the new run\'s');
+});
+
+test('on the results, a change to the integrity field reads the files again', async () => {
+  const t = boot();
+  await toResults(t);
+  setField('integrityField', 'chIntegrity');
+  await tick();
+  const last = t.sent.at(-1);
+  assert.equal(last.type, 'run');
+  assert.equal(last.sample, true);
+  assert.equal(last.config.integrityField, 'chIntegrity');
+});
+
+test('Export config writes the keys that differ from the defaults and the id field, never this page\'s run paths', async () => {
+  const t = boot();
+  await toCheck(t);
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    setField('softScoreThreshold', '4');
+    action('export-config').click();
+    const text = await made.at(-1).text();
+    assert.deepEqual(JSON.parse(text), { scoring: { softScoreThreshold: 4 }, participantIdField: 'subject_ID' });
+    assert.equal(text.includes('dropped files'), false);
+  } finally { URL.createObjectURL = saved; }
+});
+
+// The worker answers one message at a time and its zip chunks carry no run
+// id: a re-analysis holds the settings until its answer, like a run.
+test('one re-analysis at a time: the settings are disabled and a change sends nothing until the first answers', async () => {
+  const t = boot();
+  await toResults(t);
+  setField('softScoreThreshold', '2');
+  await tick();
+  const sent = t.sent.length;
+  assert.equal(t.page.state.zipUrl, null, 'the last run\'s zip is let go before the re-analysis streams its own');
+  assert.equal(role('settings-form').querySelector('fieldset').disabled, true);
+  assert.ok(downloads().every((b) => b.disabled), 'the downloads wait: they would hand out the last run\'s files');
+  setField('softScoreThreshold', '3');
+  await tick();
+  assert.equal(t.sent.length, sent, 'nothing sent while the first is in flight');
+  t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+  t.emit(DONE);
+  await tick();
+  assert.equal(role('settings-form').querySelector('fieldset').disabled, false);
+  assert.ok(downloads().every((b) => !b.disabled), 'the re-analysis\'s downloads');
+  assert.ok(t.page.state.zipUrl, 'the new zip is offered');
+});
+
+test('on the results, another Participant ID field reads the files again under it', async () => {
+  const t = boot();
+  await toResults(t);
+  const sel = role('id-field');
+  sel.value = 'run_id';
+  sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'run', sample: true, files: [], participantIdField: 'run_id', config: PANEL_DEFAULTS });
+  assert.equal(role('rerun-status').hidden, false);
+  assert.deepEqual(visibleStep(), ['results']);
+});
+
+test('a failed re-analysis goes back to the file list with its error, its partial zip discarded', async () => {
+  const t = boot();
+  await toResults(t);
+  setField('softScoreThreshold', '2');
+  await tick();
+  t.emit({ type: 'zip', chunk: new Uint8Array([9]) });
+  t.emit({ type: 'error', phase: 'reanalyze', message: 'The report could not be built.' });
+  await tick();
+  assert.deepEqual(visibleStep(), ['files']);
+  assert.equal(role('error').textContent, 'The report could not be built.');
+  assert.equal(role('rerun-status').hidden, true);
+  assert.deepEqual(t.page.state.zipParts, []);
+  assert.equal(role('settings').hidden, false, 'the settings stay beside the list');
+  assert.equal(role('settings-form').querySelector('fieldset').disabled, false);
+  assert.equal(action('run').disabled, false, 'Build is offered again');
+});
+
+// A settings change keeps the analyst's place: the new report opens on the
+// participant the last one had selected (the report reads #p-<id> on load,
+// the id as the renderer writes it: anything but A-Z a-z 0-9 _ - becomes _),
+// and the replay of theirs that was on screen loads again once it has.
+// Frames here keep the src they are given and load nothing (happy-dom, page
+// loading disabled, would settle every swap as a failure), as in the render
+// watchdog's block; the hooks put createElement back.
+describe('a re-analysis keeps the analyst\'s place', () => {
+  let createElement;
+  before(() => {
+    createElement = document.createElement;
+    const bound = createElement.bind(document);
+    document.createElement = (tag, o) => {
+      const el = bound(tag, o);
+      if (String(tag).toLowerCase() === 'iframe') {
+        let src = '';
+        Object.defineProperty(el, 'src', { set(v) { src = v; }, get() { return src; }, configurable: true });
+      }
+      return el;
+    };
+  });
+  after(() => { document.createElement = createElement; });
+
+  test('a re-analysis reopens the report on the selected participant and loads their replay again', async () => {
+    const t = boot({ timers: fakeTimers() });   // the render watchdog stays on a hand-driven clock
+    const done = { ...DONE, triageOrder: ['A', 'p.2/b'],
+      participants: [{ participantId: 'A', hasReplay: true, assetNote: null }, { participantId: 'p.2/b', hasReplay: true, assetNote: null }] };
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit(done);
+    await tick();
+    const frame = document.querySelector('iframe.analyze-report');
+    frame.dispatchEvent(new win.Event('load'));
+    assert.match(frame.src, /^blob:[^#]*$/, 'nothing selected yet: the report opens on its first row');
+    window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'p.2/b' }, source: frame.contentWindow }));
+    const loading = t.page.loadReplay();
+    await tick();
+    t.emit({ type: 'replay-model', participantId: 'p.2/b', model: { segments: [] } });
+    await loading;
+    assert.equal(document.querySelector('iframe.replay-host-frame').dataset.participantId, 'p.2/b');
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.equal(t.sent.at(-1).type, 'reanalyze');
+    t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    t.emit(done);
+    await tick();
+    assert.match(frame.src, /^blob:[^#]*#p-p_2_b$/, 'the new report opens on the selected participant');
+    assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0, 'the old viewer went with the old report');
+    frame.dispatchEvent(new win.Event('load'));
+    await tick();
+    assert.deepEqual(t.sent.filter((m) => m.type === 'replay').map((m) => m.participantId), ['p.2/b', 'p.2/b'], 'the replay is asked for again');
+    t.emit({ type: 'replay-model', participantId: 'p.2/b', model: { segments: [] } });
+    await tick();
+    const host = document.querySelectorAll('iframe.replay-host-frame');
+    assert.equal(host.length, 1);
+    assert.equal(host[0].dataset.participantId, 'p.2/b');
+    assert.equal(replaySelect().value, 'p.2/b');
+    assert.equal(role('error').hidden, true, 'every swap loaded');
+  });
+});
+
+// Phase scope reads a trial without a phase as "default" (the worker lists
+// it among the phases): the hint says so.
+test('the phase hint lists the phases the run found, and what "default" stands for', async () => {
+  const t = boot();
+  await toCheck(t);
+  assert.equal(role('phase-hint').textContent, '');
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, phases: ['main', 'warmup'] });
+  await tick();
+  assert.equal(role('phase-hint').textContent, 'Phases in the data: main, warmup');
+  setField('softScoreThreshold', '2');
+  await tick();
+  t.emit({ ...DONE, phases: ['default', 'main'] });
+  await tick();
+  assert.equal(role('phase-hint').textContent, 'Phases in the data: default, main (default: the trials with no phase)');
+});
+
+test('Export config on the results writes the settings, not the config the run sent the worker', async () => {
+  const t = boot();
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, configUsed: { participantIdField: 'subject_ID', dataDir: '(dropped files)', replayDir: null, outputDir: 'cyborg-hunter-report' } });
+  await tick();
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    action('export-config').click();
+    assert.deepEqual(JSON.parse(await made.at(-1).text()), { participantIdField: 'subject_ID' });
+  } finally { URL.createObjectURL = saved; }
+});
+
+test('with experiment files among the drop, the panel says where they go and the export sets assetsDir', async () => {
+  const t = boot();
+  action('sample').click();
+  await tick();
+  t.emit({ ...CHECKED, files: [...CHECKED.files, { path: 'css/style.css', kind: 'asset' }] });
+  await tick();
+  assert.equal(role('assets-hint').hidden, false);
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    action('export-config').click();
+    assert.deepEqual(JSON.parse(await made.at(-1).text()), { participantIdField: 'subject_ID', assetsDir: './assets' });
+  } finally { URL.createObjectURL = saved; }
+});
+
+// Annotations: the report frame posts each change (its annotation script in
+// parent mode); the page keeps the state under the run id in its own
+// storage, posts it into the frame after each load and each change, and has
+// the exports and the import (demo/analyze/annotations.js). As in the
+// watchdog block, frames here ignore src (happy-dom would fail every swap at
+// once) and each test fires `load`; each frame gets a stand-in window that
+// records what the page posts into it.
+describe('annotations', () => {
+  const RUN = '0123456789abcdef';
+  const DONE_ANNOTATED = { ...DONE, runId: RUN,
+    triageRows: [{ participantId: 'A', tier: 'hard', triageScore: 10 }, { participantId: 'B', tier: 'clean', triageScore: 0 }] };
+  let createElement;
+  let posted = [];
+  before(() => {
+    createElement = document.createElement;
+    const bound = createElement.bind(document);
+    document.createElement = (tag, o) => {
+      const el = bound(tag, o);
+      if (String(tag).toLowerCase() === 'iframe') {
+        Object.defineProperty(el, 'src', { set() {}, get() { return ''; }, configurable: true });
+        Object.defineProperty(el, 'contentWindow', { configurable: true, value: { postMessage: (m) => posted.push(structuredClone(m)) } });
+      }
+      return el;
+    };
+  });
+  after(() => { document.createElement = createElement; });
+
+  async function loaded() {
+    for (let i = 0; i < 20 && !document.querySelector('iframe.analyze-report'); i++) await Promise.resolve();
+    await tick();
+    document.querySelector('iframe.analyze-report').dispatchEvent(new win.Event('load'));
+  }
+  async function toAnnotatedResults() {
+    posted = [];
+    window.localStorage.clear();
+    const t = boot({ timers: fakeTimers() });   // the render watchdog stays on a hand-driven clock
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit({ type: 'zip', chunk: new Uint8Array([1, 2]) });
+    t.emit(DONE_ANNOTATED);
+    await loaded();
+    const frame = document.querySelector('iframe.analyze-report');
+    const annotate = (over, source) => window.dispatchEvent(new win.MessageEvent('message', { source: source || frame.contentWindow,
+      data: { type: 'cyborg-hunter:annotate', runId: RUN, participantId: 'A', label: 'exclude', note: 'pasted', ...over } }));
+    return { t, annotate };
+  }
+  const stored = () => JSON.parse(window.localStorage.getItem('ch-annot:' + RUN) || '{}');
+
+  test('the page stores what the report frame posts, under the run id, and posts the state back', async () => {
+    const r = await toAnnotatedResults();
+    assert.deepEqual(posted, [{ type: 'cyborg-hunter:annotations', runId: RUN, annotations: {} }], 'the state goes in on load');
+    r.annotate();
+    assert.deepEqual([stored().A.label, stored().A.note], ['exclude', 'pasted']);
+    assert.equal(posted.at(-1).annotations.A.label, 'exclude');
+    // Not applied: another run, an id this report does not have, another
+    // label, or a message from another window.
+    r.annotate({ runId: 'ffffffffffffffff', participantId: 'B' });
+    r.annotate({ participantId: 'Z' });
+    r.annotate({ participantId: 'B', label: 'reject' });
+    r.annotate({ participantId: 'B', label: 'flag' }, {});
+    assert.deepEqual(Object.keys(stored()), ['A']);
+    assert.equal(posted.length, 2);
+  });
+
+  test('a re-analysis of the same cohort keeps them, and the new report gets them on load', async () => {
+    const r = await toAnnotatedResults();
+    r.annotate();
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.equal(r.t.sent.at(-1).type, 'reanalyze');
+    const before = posted.length;
+    r.t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    r.t.emit({ ...DONE_ANNOTATED, html: '<p>re-analysed</p>' });
+    await loaded();
+    assert.equal(posted.length, before + 1, 'posted on the new load');
+    assert.equal(posted.at(-1).annotations.A.label, 'exclude');
+  });
+
+  test('the exports and the import are the page\'s', async () => {
+    const r = await toAnnotatedResults();
+    r.annotate();
+    const made = [];
+    const saved = URL.createObjectURL;
+    URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+    try {
+      role('unreviewed-included').checked = true;
+      action('annotations-csv').click();
+      assert.match(await made.at(-1).text(), new RegExp('^participantId,tier,triageScore,label,note,annotatedAt,runId\\n' +
+        'A,hard,10,exclude,pasted,[^,]+,' + RUN + '\\nB,clean,0,include,,,' + RUN + '\\n$'));
+      action('annotations-json').click();
+      assert.deepEqual(Object.keys(JSON.parse(await made.at(-1).text()).annotations), ['A']);
+    } finally { URL.createObjectURL = saved; }
+    const input = role('annotations-input');
+    const file = new File([JSON.stringify({ format: 'cyborg-hunter-annotations', runId: RUN, annotations: {
+      B: { label: 'flag', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' }, Q: { label: 'include', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } })], 'a.json');
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new win.Event('change'));
+    await until(() => role('annotations-status').textContent !== '');
+    assert.equal(role('annotations-status').textContent, 'Imported 1 annotation. Not in this report: Q.');
+    assert.equal(posted.at(-1).annotations.B.label, 'flag');
+    assert.deepEqual(Object.keys(stored()).sort(), ['A', 'B']);
+  });
+
+  // The file is read after the change event returns, outside the page's busy
+  // states, so Start over can come in between: the import has no report left.
+  test('an import whose file is read after Start over is dropped, with a status line', async () => {
+    const r = await toAnnotatedResults();
+    let release;
+    const file = { text: () => new Promise((resolve) => { release = resolve; }) };
+    const input = role('annotations-input');
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new win.Event('change'));
+    document.querySelectorAll('[data-action="reset"]')[1].click();
+    assert.deepEqual(r.t.sent.at(-1), { type: 'reset' }, 'the page was reset');
+    const before = posted.length;
+    release(JSON.stringify({ format: 'cyborg-hunter-annotations', runId: RUN, annotations: {
+      B: { label: 'flag', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } }));
+    await until(() => role('annotations-status').textContent !== '');
+    assert.equal(role('annotations-status').textContent, 'Import dropped: Start over was pressed before the file was read.');
+    assert.deepEqual(stored(), {}, 'nothing stored under the old run id');
+    assert.equal(posted.length, before, 'nothing posted');
+  });
+
+  // Two tabs of the page on the same cohort share the key: a change is
+  // written over what storage holds at that moment, and the storage event
+  // brings another tab's change into this tab's report.
+  test('a change keeps what another tab of the page stored, and another tab\'s change reaches the report', async () => {
+    const r = await toAnnotatedResults();
+    const entry = (label) => ({ label, note: '', annotatedAt: '2026-10-05T09:00:00.000Z' });
+    window.localStorage.setItem('ch-annot:' + RUN, JSON.stringify({ B: entry('flag') }));
+    r.annotate();
+    assert.deepEqual(Object.keys(stored()).sort(), ['A', 'B']);
+    assert.deepEqual(Object.keys(posted.at(-1).annotations).sort(), ['A', 'B']);
+    window.localStorage.setItem('ch-annot:' + RUN, JSON.stringify({ B: entry('include'), Z: entry('exclude') }));
+    window.dispatchEvent(new win.StorageEvent('storage', { key: 'ch-annot:' + RUN }));
+    assert.deepEqual(posted.at(-1).annotations, { B: entry('include') }, 'read as an import is: Z is not in this report');
+  });
+
+  // Storage that reads but will not take a write (setItem throws, as it does
+  // when storage is full): a change made over storage's copy would drop the
+  // change before it, which storage never took. The page's own copy is the
+  // base from then on, and the status line says so once.
+  test('a refused write keeps every change in the page, the report and the export, and the status line says so once', async () => {
+    const r = await toAnnotatedResults();
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); }, removeItem() {}, clear() {}, key: () => null, length: 0 };
+    Object.defineProperty(window, 'localStorage', { configurable: true, get: () => full });
+    const made = [];
+    const saved = URL.createObjectURL;
+    URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+    try {
+      r.annotate();
+      r.annotate({ participantId: 'B', label: 'flag', note: '' });
+      assert.deepEqual(Object.keys(r.t.page.state.annotations).sort(), ['A', 'B'], 'the page holds both changes');
+      assert.deepEqual(Object.keys(posted.at(-1).annotations).sort(), ['A', 'B'], 'the report shows both');
+      action('annotations-json').click();
+      assert.deepEqual(Object.keys(JSON.parse(await made.at(-1).text()).annotations).sort(), ['A', 'B'], 'the export keeps both');
+      const note = 'This browser does not let the page store annotations: they last until Start over or until the page is closed. Export JSON keeps them.';
+      assert.equal(role('annotations-status').textContent, note);
+      // An import's message takes the status line and keeps the note.
+      const input = role('annotations-input');
+      Object.defineProperty(input, 'files', { configurable: true, value: [new File([JSON.stringify({ format: 'cyborg-hunter-annotations', runId: RUN,
+        annotations: { B: { label: 'include', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } })], 'a.json')] });
+      input.dispatchEvent(new win.Event('change'));
+      await until(() => role('annotations-status').textContent !== note);
+      assert.equal(role('annotations-status').textContent, 'Imported 1 annotation. ' + note);
+      assert.deepEqual(Object.keys(r.t.page.state.annotations).sort(), ['A', 'B'], 'the import is made over the page\'s copy too');
+    } finally {
+      URL.createObjectURL = saved;
+      Object.defineProperty(window, 'localStorage', original);
+    }
+  });
+
+  test('the annotation exports and the import wait for a re-analysis, as the other downloads do', async () => {
+    const r = await toAnnotatedResults();
+    const controls = () => [action('annotations-csv'), action('annotations-json'), role('annotations-input')];
+    assert.ok(controls().every((c) => !c.disabled));
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.ok(controls().every((c) => c.disabled), 'the CSV would carry the last run\'s tiers and scores');
+    r.t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    r.t.emit(DONE_ANNOTATED);
+    await loaded();
+    assert.ok(controls().every((c) => !c.disabled));
+  });
+});
+
+// The replay frame (demo/analyze/replay-card.js): it may go fullscreen, it
+// asks the viewer to fit the page's window, and it takes the height its own
+// document posts (demo/replay-host.js), from that frame only, kept between
+// 200 and 10000 px.
+test('the replay frame may go fullscreen, fits the window, and takes the height its document posts, within bounds', async () => {
+  const t = boot();
+  await toResults(t);
+  const made = [];
+  const saved = URL.createObjectURL;
+  // Recorded, to read back the host document the blob holds. The frame never
+  // loads in this realm (disableIframePageLoading), so host.contentWindow
+  // stays null, and the posts below that name it as their source carry null,
+  // which is what the card compares e.source with.
+  URL.createObjectURL = (blob) => { made.push(blob); return saved.call(URL, blob); };
+  let host;
+  try {
+    const loading = t.page.loadReplay();
+    await tick();
+    t.emit({ type: 'replay-model', participantId: 'B', model: { segments: [] } });
+    await loading;
+    host = document.querySelector('iframe.replay-host-frame');
+  } finally { URL.createObjectURL = saved; }
+  assert.equal(host.getAttribute('allow'), 'fullscreen *');
+  assert.match(await made.at(-1).text(), /, \{"noExternalCss":true,"maxStageWidth":null,"fitHeight":\d+\}\);/);
+  const post = (data, source) => window.dispatchEvent(new win.MessageEvent('message', { data, source }));
+  post({ type: 'cyborg-hunter:replay-height', height: 700 }, host.contentWindow);
+  assert.equal(host.style.height, '702px', 'the document\'s height and the frame\'s border');
+  post({ type: 'cyborg-hunter:replay-height', height: 900 }, {});                  // another window
+  post({ type: 'cyborg-hunter:replay-height', height: 'tall' }, host.contentWindow);
+  assert.equal(host.style.height, '702px');
+  post({ type: 'cyborg-hunter:replay-height', height: 50 }, host.contentWindow);
+  assert.equal(host.style.height, '200px', 'never shorter than 200 px');
+  post({ type: 'cyborg-hunter:replay-height', height: 20000 }, host.contentWindow);
+  assert.equal(host.style.height, '10000px', 'never taller than 10000 px');
+});
+
+// A participant whose replays were found but not attached (two sessions under
+// one id) says why, in the replay card's list and in its note.
+test('the replay card says why a participant\'s replay is not shown', async () => {
+  const t = boot();
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  const why = '2 records share the participant id "A" and 2 replays claim it (A-replay-1.json, A-replay-2.json), so which replay belongs to which session cannot be told and none is shown.';
+  t.emit({ ...DONE, participants: [{ participantId: 'A', hasReplay: false, assetNote: null, replayError: why }, { participantId: 'B', hasReplay: true, assetNote: null }] });
+  await tick();
+  const frame = document.querySelector('iframe.analyze-report');
+  frame.dispatchEvent(new win.Event('load'));
+  assert.deepEqual([...replaySelect().options].map((o) => o.textContent), ['A (replay not shown)', 'B']);
+  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+  assert.equal(role('asset-note').textContent, 'Participant A: ' + why);
+  assert.equal(action('load-replay').disabled, true);
 });

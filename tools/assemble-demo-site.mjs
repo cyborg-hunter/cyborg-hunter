@@ -9,16 +9,11 @@
 // Steps:
 //   1. `node build.js` -> dist/ (skipped if dist/ is newer than every file
 //      under src/ — "if stale").
-//   2. `node tools/build-preview-core.mjs` -> demo/preview-core.js.
-//   2b. `node tools/build-analyze.mjs` -> demo/analyze/analyze.bundle.js.
+//   2. `node tools/build-analyze.mjs` -> demo/analyze/analyze.bundle.js.
 //   3. Copy demo/* (excluding demo/tests/ — Playwright specs must not ship
 //      in the public artifact — and, under demo/analyze/, everything but
 //      index.html and the built bundle) and dist/ into .demo-site/.
-//   4. Write the ASSEMBLED replay viewer script to the site root —
-//      demo/results.js fetches it as text to embed in the in-browser
-//      report, and it must be the same assembly report.js inlines into
-//      the CLI report: the client alone is missing the §4 instantiation
-//      module it calls into (the build's concatenation decision).
+//   4. Copy the report's typefaces, which demo.css loads for the tour.
 //   5. Write the analyze page as one offline file,
 //      .demo-site/analyze/cyborg-hunter-analyze.html (bundle inlined, policy
 //      without 'self'; see tools/offline-analyze.mjs).
@@ -30,7 +25,6 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, readdirS
 import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { readReplayClientSrc } from '../src/cli/renderers/replay-client-source.js';
 import { buildOfflineHtml, OFFLINE_NAME } from './offline-analyze.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -85,24 +79,17 @@ function main() {
     console.log('assemble-demo-site: dist/ is up to date, skipping build.js');
   }
 
-  run('building demo/preview-core.js', process.execPath, ['tools/build-preview-core.mjs']);
   run('building demo/analyze/analyze.bundle.js', process.execPath, ['tools/build-analyze.mjs']);
 
   rmSync(SITE_DIR, { recursive: true, force: true });
   mkdirSync(SITE_DIR, { recursive: true });
   cpSync(DEMO_DIR, SITE_DIR, { recursive: true, filter: isRuntimeFile });
   cpSync(join(ROOT, 'dist'), join(SITE_DIR, 'dist'), { recursive: true });
-  // demo/assets/ (example-participants.json) is copied above as part of
-  // demo/* — it isn't excluded by isRuntimeFile. The replay viewer lives
-  // outside demo/ (it's the CLI's own renderer asset) and is an ASSEMBLY of
-  // two source files, so the site gets the assembled text under the name
-  // demo/results.js fetches — never a copy of the client alone, which would
-  // load into the demo with `mountTree` undefined.
-  writeFileSync(join(SITE_DIR, 'replay-viewer.client.js'), readReplayClientSrc());
+  // demo/assets/ (the two example participants) is copied above as part of
+  // demo/* — it isn't excluded by isRuntimeFile.
   // The report's typefaces (WOFF2 + each family's OFL.txt + the manifest),
   // copied from their one committed home rather than duplicated under demo/.
-  // demo.css loads them by URL for the tour itself; demo/results.js fetches
-  // them and inlines them into the in-browser report and the replay host.
+  // demo.css loads them by URL for the tour itself.
   cpSync(join(ROOT, 'src', 'cli', 'renderers', 'fonts'), join(SITE_DIR, 'assets', 'fonts'), { recursive: true });
   // The analyze page as a single offline file, next to the page it mirrors
   // (the page's download link points at this name).

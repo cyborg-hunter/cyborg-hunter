@@ -36,7 +36,6 @@ jobs:
       - name: Build + assemble (same steps as pages.yml)
         run: |
           node build.js
-          node tools/build-preview-core.mjs
           node tools/build-analyze.mjs
           node tools/assemble-demo-site.mjs
 

@@ -2,11 +2,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { collectAssetUrls, matchAssets, buildAssetMap, applyAssetMap, assetMatchSummary, assetNoteText, contentTypeFor } from '../../src/cli/asset-match.js';
+import { collectAssetUrls, matchAssets, buildAssetMap, applyAssetMap, assetMatchSummary, assetNoteText, contentTypeFor, ASSET_REF } from '../../src/cli/asset-match.js';
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
+import { buildReplayAssets } from '../../src/cli/renderers/replay-assets-core.js';
 
 const bytes = (s) => new TextEncoder().encode(s);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+// What the viewer shows for an attribute value: an image the replay pass
+// stored once is a reference into model.assets, which the viewer swaps back
+// when it receives the model (replay-viewer.client.js expandAssetRefs).
+const shown = (model, v) => {
+  if (typeof v !== 'string' || !v.startsWith(ASSET_REF)) return v;
+  const url = v.slice(ASSET_REF.length);
+  return model.assets && Object.prototype.hasOwnProperty.call(model.assets, url) ? model.assets[url] : v;
+};
 
 function recording() {
   return {
@@ -92,7 +101,7 @@ describe('buildAssetMap + applyAssetMap', () => {
     assert.strictEqual(model.stylesheets[1].css, null, 'unmatched stays href-only');
     assert.match(model.stylesheets[3].css, /url\("data:image\/png;base64,iVBORw=="\)/);
     const body = model.segments[0].initialDom;
-    assert.strictEqual(body.children[0].attrs.src, 'data:image/png;base64,iVBORw==');
+    assert.strictEqual(shown(model, body.children[0].attrs.src), 'data:image/png;base64,iVBORw==');
     assert.strictEqual(body.children[0].attrs.alt, 'a');
     assert.strictEqual(body.children[2].text, 'https://exp.example.org/study/img/not-an-asset.png', 'text nodes are never rewritten');
     assert.strictEqual(model.segments[0].events[2].value, 'https://exp.example.org/study/img/stim-1.png', 'only src/poster attrs are rewritten');
@@ -183,6 +192,41 @@ describe('references inside a supplied stylesheet', () => {
     assert.strictEqual(model.stylesheets[0].css, 'p{background:url("https://exp.example.org/study/img/p.png")}\nh1{color:red}');
     const once = JSON.stringify(model);
     assert.strictEqual(JSON.stringify(applyAssetMap(model, assetMap)), once, 'a second apply changes nothing');
+  });
+  // The model aliases the recording's sheets and events, so a second model
+  // over the same recording (the analyze page re-rendering, or serving one
+  // replay) starts from the text the first apply wrote. A spliced sheet keeps
+  // its own supplied imports as URLs, which a second apply would find at the
+  // top level and splice as well.
+  it('a second apply over the same recording leaves a diamond of supplied @imports as the first wrote it', async () => {
+    const files = [
+      { path: 'css/style.css', read: async () => bytes('@import "theme.css";\n@import "vars.css";\nh1{color:red}') },
+      { path: 'css/theme.css', read: async () => bytes('@import "vars.css";\n.t{}') },
+      { path: 'css/vars.css', read: async () => bytes(':root{--v:1}') },
+    ];
+    const rec = hrefOnly();
+    rec.stylesheet_events = [{ type: 'stylesheet.update', t: 5, id: 1, css: '@import url(https://exp.example.org/study/css/theme.css);\n.u{}' }];
+    const { assetMap } = await buildAssetMap([rec], files);
+    const first = applyAssetMap(buildViewerModel(rec), assetMap);
+    assert.strictEqual(first.stylesheets[0].css, '@import url("https://exp.example.org/study/css/vars.css");\n.t{}\n:root{--v:1}\nh1{color:red}');
+    assert.strictEqual(first.stylesheetEvents[0].css, '@import url("https://exp.example.org/study/css/vars.css");\n.t{}\n.u{}');
+    const once = JSON.stringify(first);
+    assert.strictEqual(JSON.stringify(applyAssetMap(buildViewerModel(rec), assetMap)), once, 'a second model, a second apply');
+    assert.strictEqual(JSON.stringify(applyAssetMap(first, assetMap)), once, 'the same model applied again');
+  });
+  // Only a sheet whose text an apply changed is marked: one a map did not
+  // supply stays open to a later map that does.
+  it('a sheet a first map left href-only is filled by a later map that supplies it', async () => {
+    const img = { id: 2, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/study/img/stim-1.png' }, children: [] };
+    const rec = hrefOnly([img]);
+    const mapA = (await buildAssetMap([rec], [{ path: 'study/img/stim-1.png', read: async () => PNG }])).assetMap;
+    assert.strictEqual(mapA.size, 1, 'the image only');
+    assert.strictEqual(applyAssetMap(buildViewerModel(rec), mapA).stylesheets[0].css, null);
+    const mapB = (await buildAssetMap([rec], [{ path: 'study/css/style.css', read: async () => bytes('p{margin:0}') }])).assetMap;
+    const filled = applyAssetMap(buildViewerModel(rec), mapB);
+    assert.strictEqual(filled.stylesheets[0].css, 'p{margin:0}');
+    const once = JSON.stringify(filled);
+    assert.strictEqual(JSON.stringify(applyAssetMap(buildViewerModel(rec), mapB)), once, 'filled once, then left as it is');
   });
   it('an @import in recorded CSS counts as a stylesheet, not an image, and is spliced in, never turned into a data: URI', async () => {
     const r = hrefOnly();
@@ -321,8 +365,9 @@ describe('video and audio', () => {
     assert.deepStrictEqual(s.media, { total: 2 });
     assert.strictEqual(assetNoteText(s),
       'Experiment assets: 2 of 2 images matched; 2 video/audio elements shown as placeholders; replays never play media.');
-    const body = applyAssetMap(buildViewerModel(domOnly(nodes())), assetMap).segments[0].initialDom;
-    assert.strictEqual(body.children[1].attrs.poster, 'data:image/png;base64,iVBORw==');
+    const model = applyAssetMap(buildViewerModel(domOnly(nodes())), assetMap);
+    const body = model.segments[0].initialDom;
+    assert.strictEqual(shown(model, body.children[1].attrs.poster), 'data:image/png;base64,iVBORw==');
     assert.strictEqual(body.children[1].attrs.src, X + 'media/clip.mp4', 'a video\'s own source is never rewritten');
   });
   it('media alone gives a note of its own, singular for one', () => {
@@ -451,11 +496,12 @@ describe('srcset, SVG <image> and <input type="image">', () => {
     assert.deepStrictEqual(u.images, ['img/a.png', 'img/c.png', X + 'img/a.png'], 'a link\'s href and a text input\'s src are not images');
     const { assetMap } = await buildAssetMap([domOnly(nodes())], files);
     assert.strictEqual(assetNoteText(assetMatchSummary(domOnly(nodes()), assetMap)), 'Experiment assets: 3 of 3 images matched.');
-    const body = applyAssetMap(buildViewerModel(domOnly(nodes())), assetMap).segments[0].initialDom;
-    assert.strictEqual(body.children[0].children[0].attrs.href, D);
-    assert.strictEqual(body.children[0].children[1].attrs['xlink:href'], D);
+    const model = applyAssetMap(buildViewerModel(domOnly(nodes())), assetMap);
+    const body = model.segments[0].initialDom;
+    assert.strictEqual(shown(model, body.children[0].children[0].attrs.href), D);
+    assert.strictEqual(shown(model, body.children[0].children[1].attrs['xlink:href']), D);
     assert.strictEqual(body.children[1].attrs.href, 'img/a.png');
-    assert.strictEqual(body.children[2].attrs.src, D);
+    assert.strictEqual(shown(model, body.children[2].attrs.src), D);
   });
   it('an input that becomes an image button shows the src it already has: collected and inlined there', async () => {
     const kf = () => domOnly([el(5, 'input', { type: 'text', src: 'img/a.png' })],
@@ -463,13 +509,14 @@ describe('srcset, SVG <image> and <input type="image">', () => {
     assert.deepStrictEqual(collectAssetUrls(kf()).images, ['img/a.png']);
     const { assetMap } = await buildAssetMap([kf()], files);
     assert.strictEqual(assetNoteText(assetMatchSummary(kf(), assetMap)), 'Experiment assets: 1 of 1 images matched.');
-    assert.strictEqual(applyAssetMap(buildViewerModel(kf()), assetMap).segments[0].initialDom.children[0].attrs.src, D);
+    const kfModel = applyAssetMap(buildViewerModel(kf()), assetMap);
+    assert.strictEqual(shown(kfModel, kfModel.segments[0].initialDom.children[0].attrs.src), D);
     // The src a dom.attr set while it was a text field is rewritten in that event.
     const ev = () => domOnly([el(5, 'input', { type: 'text' })],
       [{ type: 'dom.attr', t: 1, node: 5, name: 'src', value: 'img/c.png' },
         { type: 'dom.attr', t: 2, node: 5, name: 'type', value: 'image' }]);
     const m = applyAssetMap(buildViewerModel(ev()), (await buildAssetMap([ev()], files)).assetMap);
-    assert.deepStrictEqual(m.segments[0].events.map((e) => e.value), [D, 'image']);
+    assert.deepStrictEqual(m.segments[0].events.map((e) => shown(m, e.value)), [D, 'image']);
   });
 
   it('follows a dom.attr that sets a srcset, an href or an image input\'s src later in the session', async () => {
@@ -484,19 +531,63 @@ describe('srcset, SVG <image> and <input type="image">', () => {
     assert.deepStrictEqual(collectAssetUrls(rec()).images, [X + 'img/x.png', 'img/a.png', 'img/b.png', 'img/c.png', 'img/n.png'],
       'a src set while the input was a text field becomes an image when the type does');
     const { assetMap } = await buildAssetMap([rec()], files);
-    const events = applyAssetMap(buildViewerModel(rec()), assetMap).segments[0].events;
-    assert.deepStrictEqual(events.map((e) => (e.type === 'dom.attr' ? e.value : e.node.children[0].attrs.srcset)),
+    const model = applyAssetMap(buildViewerModel(rec()), assetMap);
+    const events = model.segments[0].events;
+    assert.deepStrictEqual(events.map((e) => shown(model, e.type === 'dom.attr' ? e.value : e.node.children[0].attrs.srcset)),
       [D + ' 1x, img/b.png 2x', D, 'img/n.png', 'image', D, D + ' 2x']);
   });
 });
 
+// A page that shows one picture on many elements (a card game's card art)
+// gets the picture once in the replay file, however many elements show it.
+describe('an image shown on many elements is stored once', () => {
+  const CARD = X + 'img/card-back.png';
+  const ART = new Uint8Array(3000).fill(7);
+  const URI = 'data:image/png;base64,' + Buffer.from(ART).toString('base64');
+  const files = [{ path: 'img/card-back.png', read: async () => ART }];
+  const cards = (from, n) => Array.from({ length: n }, (_, i) => el(from + i, 'img', { src: CARD, alt: 'card' }));
+  const rec = () => domOnly([...cards(2, 40), el(50, 'img', { src: X + 'img/other.png' }), el(51, 'img', { srcset: 'img/card-back.png 2x' })], [
+    { type: 'dom.add', t: 1, parent: 1, before: null, node: el(60, 'div', {}, cards(61, 10)) },
+    { type: 'dom.attr', t: 2, node: 50, name: 'src', value: CARD },
+  ]);
+
+  it('every element showing a matched image points at one entry; a srcset and an unmatched URL stay as written', async () => {
+    const { assetMap } = await buildAssetMap([rec()], files);
+    const model = applyAssetMap(buildViewerModel(rec()), assetMap);
+    assert.deepStrictEqual(model.assets, { [CARD]: URI });
+    const body = model.segments[0].initialDom;
+    assert.ok(body.children.slice(0, 40).every((c) => c.attrs.src === ASSET_REF + CARD), 'the keyframe\'s cards');
+    assert.strictEqual(body.children[40].attrs.src, X + 'img/other.png', 'an image no file matched stays a URL');
+    assert.strictEqual(body.children[41].attrs.srcset, URI + ' 2x', 'a srcset holds several URLs: its data: URI stays inline');
+    const [add, attr] = model.segments[0].events;
+    assert.ok(add.node.children.every((c) => c.attrs.src === ASSET_REF + CARD), 'the cards a dom.add brings');
+    assert.strictEqual(attr.value, ASSET_REF + CARD, 'a dom.attr that shows the card later');
+    // 52 elements show the card (51 by src, one by srcset); its bytes are in the model twice: the table and the srcset.
+    assert.strictEqual(JSON.stringify(model).split(URI).length - 1, 2);
+  });
+
+  it('a second replay pass over the recording the first one rewrote writes the same file', async () => {
+    // The model aliases the recording's keyframes and dom.add nodes, so the
+    // first pass leaves references in the recording itself; the analyze page
+    // re-renders over the same participants (worker-entry.js renderRun).
+    const { assetMap } = await buildAssetMap([rec()], files);
+    const participants = [{ participantId: 'P1', replay: { recording: rec(), file: 'P1-replay-1.json' } }];
+    const written = [];
+    const sink = (path, data) => written.push(new TextDecoder().decode(data));
+    buildReplayAssets(participants, { sink, assetMap });
+    buildReplayAssets(participants, { sink, assetMap });
+    assert.strictEqual(written.length, 2);
+    assert.strictEqual(written[1], written[0]);
+    assert.ok(written[0].includes('"assets":{'), 'the table is in the file');
+  });
+});
+
 // The analyze page words its replay card's note in the worker
-// (demo/analyze/worker-entry.js: assetNoteText(assetMatchSummary(...)) through
-// the page bundle's entry, before the report pass); the CLI words the
+// (demo/analyze/worker-entry.js: assetNoteText(assetMatchSummary(...)), from
+// src/cli/asset-match.js, before the report pass); the CLI words the
 // report's replay section inside buildReplayAssets. The two must agree.
 describe('the analyze page and the CLI word the note the same', () => {
   it('for a recording with stylesheets, images in every form, and media', async () => {
-    const entry = await import('../../src/cli/preview-entry.js');
     const { buildReplayAssets } = await import('../../src/cli/renderers/replay-assets-core.js');
     const files = [
       { path: 'study/css/style.css', read: async () => bytes('p{margin:0}') },
@@ -511,8 +602,8 @@ describe('the analyze page and the CLI word the note the same', () => {
         el(23, 'input', { type: 'image', src: X + 'img/go.png' }));
       return r;
     };
-    const { assetMap } = await entry.buildAssetMap([rec()], files);
-    const page = entry.assetNoteText(entry.assetMatchSummary(rec(), assetMap));
+    const { assetMap } = await buildAssetMap([rec()], files);
+    const page = assetNoteText(assetMatchSummary(rec(), assetMap));
     const p = { participantId: 'P1', replay: { recording: rec(), file: 'P1-replay.json' } };
     buildReplayAssets([p], { sink: () => {}, assetMap });
     assert.strictEqual(p.replay.assetNote, page);
@@ -643,7 +734,7 @@ describe('recordings with malformed fields', () => {
       let model;
       try { model = buildViewerModel(JSON.parse(JSON.stringify(r))); } catch { return; }   // the viewer refuses it: nothing to apply
       applyAssetMap(model, assetMap);
-      assert.strictEqual(model.segments.find((s) => s && s.initialDom).initialDom.children[0].attrs.src, 'data:image/png;base64,iVBORw==');
+      assert.strictEqual(shown(model, model.segments.find((s) => s && s.initialDom).initialDom.children[0].attrs.src), 'data:image/png;base64,iVBORw==');
     });
   }
 

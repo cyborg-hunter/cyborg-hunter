@@ -39,7 +39,8 @@
 //                     CLI's report tree for it.
 //   startSentinel / makeReplayCohort   a counting local server, and a
 //                     two-participant dom-tier cohort (a stylesheet to drop,
-//                     a recorded image from the sentinel; recordings plain or
+//                     a recorded image, and with opts.media recorded video
+//                     and audio, from the sentinel; recordings plain or
 //                     gzipped) in a temp dir.
 import { test as base, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -149,10 +150,10 @@ export async function waitReady(page) {
 }
 export async function loadSample(page) {
   await page.click('[data-action="sample"]');
-  await expect(page.locator('section[data-step="check"]')).toBeVisible();
+  await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
 }
-// A failed run sends the page back to the check step with its error shown:
+// A failed run sends the page back to the files step with its error shown:
 // fail at once with the page's own message instead of at the timeout.
 export async function buildReport(page) {
   await expect(page.locator('[data-action="run"]')).toBeEnabled();
@@ -182,6 +183,10 @@ export async function downloadZip(page) {
 export const pilotFiles = () => readdirSync(join(PILOT_DIR, 'data')).filter((f) => f.endsWith('.csv')).sort().map((f) => join(PILOT_DIR, 'data', f))
   .concat([join(PILOT_DIR, 'cyborg-hunter.config.json')]);
 
+// The time a report was built is the one part of index.html that differs
+// between two runs over the same files (the run id is the cohort's own).
+export const withoutRunTime = (html) => html.replace(/<time class="run-time" datetime="[^"]*">[^<]*<\/time>/, '<time class="run-time"></time>');
+
 // The CLI's tree for the synthetic pilot (images when node-canvas is
 // installed), for the zip-tree comparison.
 export function cliPilotTree() {
@@ -208,6 +213,9 @@ export async function startSentinel() {
 // injected from imageOrigin (so the viewer's policy has something to block;
 // a sentinel's url, or an unreachable origin by default; null injects none),
 // and a second participant is a renamed copy. Written to a temp dir.
+// opts.media also injects, from the same origin, a <video src>, an <audio>
+// known only by its media_src (a recorder that saw currentSrc writes it) and
+// a <video> with a <source>, at /recorded.mp4, .mp3 and .webm.
 // opts.gzip writes each recording as a .json.gz of two gzip members (what
 // appending to a gzip log gives; browsers' own gunzip rejects that, the
 // page must not), and a config that does not name the id field, so the
@@ -219,6 +227,14 @@ export function makeReplayCohort(imageOrigin, opts) {
   rec.stylesheets[0].css = null;
   const keyframe = rec.segments.find((s) => s.initial_dom);
   if (imageOrigin !== null) keyframe.initial_dom.children.unshift({ id: 900001, kind: 'element', tag: 'img', attrs: { src: (imageOrigin || 'http://127.0.0.1:1') + '/blocked.png', alt: '' }, children: [] });
+  if (opts && opts.media) {
+    const origin = imageOrigin || 'http://127.0.0.1:1';
+    keyframe.initial_dom.children.unshift(
+      { id: 900002, kind: 'element', tag: 'video', attrs: { src: origin + '/recorded.mp4', controls: '' }, children: [] },
+      { id: 900003, kind: 'element', tag: 'audio', attrs: { controls: '' }, media_src: origin + '/recorded.mp3', children: [] },
+      { id: 900004, kind: 'element', tag: 'video', attrs: { controls: '' }, children: [
+        { id: 900005, kind: 'element', tag: 'source', attrs: { src: origin + '/recorded.webm' }, children: [] }] });
+  }
   const write = (pid) => {
     writeFileSync(join(dir, pid + '.json'), raw.split('DEMO-FIXT').join(pid));
     const recording = JSON.stringify({ ...rec, participant_id: pid });

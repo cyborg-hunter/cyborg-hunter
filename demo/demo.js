@@ -1,5 +1,5 @@
 // demo/demo.js
-// Tour engine: 13-step navigation, {{path}} template substitution, capability
+// Tour engine: step navigation, {{path}} template substitution, capability
 // snapshot, participant-id boot stamp. Renders STEPS from steps.js through
 // the idempotent lifecycle helper (lifecycle.js) so every advance/Back
 // closes any open trial before optionally opening the next.
@@ -14,12 +14,13 @@
 // session poll also feed live-pane.js's append-only stream + raw-JSON view
 // (paneRow()) — the rail is the demo-only curated subset, the pane is the
 // full record. Frozen (+ replay/guard finalized, rail hidden) on entering
-// the results step.
+// the last step (your files).
 
 import {
   STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS, RAIL_INTRO,
-  CODE_TABS, DOWNLOAD_FILES, REPLICATE, SCORING_PANEL
+  CODE_TABS, DOWNLOAD_BATCHES, HANDOFF, REPLICATE, SCORING_PANEL
 } from './steps.js';
+import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
 import { renderRail, light, acknowledge } from './rail.js';
 import { buildPayload } from './payload.js';
@@ -165,6 +166,9 @@ function showSmallMode() {
 }
 
 function boot() {
+  // A hand-off record still stored now was written by a hand-off whose
+  // analyzer page never opened: it must not reach a later visit there.
+  clearHandoff().catch(function () {});
   var participantId = randomParticipantId();
   document.getElementById('pid').textContent = participantId;
 
@@ -209,17 +213,12 @@ function startTour(participantId, capabilities, manifest) {
 
   var state = {
     stepIndex: 0,
-    // Results: results.js only receives (container, state, manifest) —
-    // not the monitor/participantId closures below — so it needs its own
-    // copy to build the SAME payload buildDownloadFile('sessionData') does.
-    participantId: participantId,
-    // Snapshotted once, in goTo(), the moment the results step is entered
-    // (see below) — later than that and the tour's own interactive steps
-    // are over anyway, so a live reference isn't needed.
+    // Snapshotted once, in goTo(), the moment the last step is entered (see
+    // below) — later than that and the tour's own interactive steps are over
+    // anyway, so a live reference isn't needed.
     sessionReport: null,
     capabilities: capabilities,
     lampCounts: {},
-    act2Skipped: false,
     violations: [],
     trialReports: [],
     // Guard act: the token GuardFriction.start() returns — needed by
@@ -229,10 +228,10 @@ function startTour(participantId, capabilities, manifest) {
     chipCounts: {},
     // Replay (always-on): the attached CyborgHunterReplay instance
     // (startReplay() attempts it unconditionally at "Start"), its finalized
-    // recording — cached so the download button and the "show as text"
-    // fallback always agree — and whether attaching ever failed, so the
-    // downloads step and results copy can say so honestly instead of just
-    // silently omitting the file.
+    // recording — cached so the download button, the "show as text"
+    // fallback and the hand-off to the analyzer always agree — and whether
+    // attaching ever failed, so the files step can say so honestly instead
+    // of just silently omitting the file.
     recorder: null,
     replayRecording: null,
     replayUnavailable: false,
@@ -240,18 +239,10 @@ function startTour(participantId, capabilities, manifest) {
     // after creation below.
     pane: null,
     t0: 0,
-    // Playground: the last settled control values (set via ctx.onControls
-    // after each successful rebuild; null until the visitor touches a
-    // control). buildDownloadFile('config') reads these so the downloaded
-    // config reflects the report as last built, tweaks included.
-    playgroundControls: null,
-    // Walkthrough item 7: shared scoring overrides — CODEX override
-    // contract — written by step 11's per-signal weight edits (weights)
-    // and step 12's playground threshold controls (controls/preset). Read
-    // by playground.js's mergePlaygroundConfig() to build one canonical
-    // {controls, scoring} view every caller shares (step 11's live-score
-    // readout, results.js's initial-render persistence seam below, step
-    // 12's own rebuild) — so the two UIs can never quietly disagree.
+    // The scoring step's per-signal weight edits (weights), read by
+    // playground.js's mergePlaygroundConfig() for that step's live
+    // soft-score readout. controls and preset stay null: nothing on the
+    // tour sets them, so the manifest's own preset applies.
     scoringOverrides: { weights: {}, controls: null, preset: null }
   };
 
@@ -284,10 +275,10 @@ function startTour(participantId, capabilities, manifest) {
   state.t0 = performance.now();
 
   // opts.final is the download seam's flag ONLY (buildDownloadFile passes
-  // it for 'sessionData') — with it set, and once the results step has
+  // it for 'sessionData') — with it set, and once the last step has
   // snapshotted state.sessionReport, this reads that frozen snapshot instead
   // of a fresh live one. Without it (paneRow()'s live-pane feed, and step
-  // 11's "your soft score … from the session so far" readout), this keeps
+  // 10's "your soft score … from the session so far" readout), this keeps
   // reading monitor.getSessionReport() live, same as before — freezing
   // either of those inputs would quietly make "so far" false.
   function buildCurrentPayload(opts) {
@@ -344,17 +335,17 @@ function startTour(participantId, capabilities, manifest) {
   }
 
   // Lamp wiring is lifecycle-bound (spec: "starts and stops with the tour"),
-  // but retires PERMANENTLY once the results step is reached — Back-nav can
+  // but retires PERMANENTLY once the last step is reached — Back-nav can
   // no longer restart it, unlike a plain stop/start pair. startLampWiring/
   // stopLampWiring stay idempotent; lampWiringRetired is the one-way latch
   // startLampWiring() checks before ever flipping lampWiringActive back on.
-  // Without it, Back-then-forward through results would restart the 5s poll
-  // (pollSessionSignals -> syncCountLamp -> acknowledge()), which would see
-  // the sidebar/viewport artifact our OWN post-results fullscreen exit
-  // produces (exitFullscreenIfActive(), goTo()'s results block below) and
+  // Without it, Back-then-forward through the last step would restart the
+  // 5s poll (pollSessionSignals -> syncCountLamp -> acknowledge()), which
+  // would see the sidebar/viewport artifact our OWN fullscreen exit there
+  // produces (exitFullscreenIfActive(), goTo()'s last-step block below) and
   // announce a false "✓ detected" strip for a detection the visitor never
   // produced. Safe to retire for good: the rail is already hidden
-  // permanently from results onward, and the monitor itself keeps recording
+  // permanently from that step onward, and the monitor itself keeps recording
   // regardless (finalization belongs to the payload task, not this wiring).
   var lampWiringActive = false;
   var lampWiringRetired = false;
@@ -386,8 +377,8 @@ function startTour(participantId, capabilities, manifest) {
     sessionPollId = null;
   }
 
-  // One-way: called only from goTo()'s results block, below. Sets the latch
-  // startLampWiring() checks, so a later Back-nav out of results can never
+  // One-way: called only from goTo()'s last-step block, below. Sets the latch
+  // startLampWiring() checks, so a later Back-nav out of that step can never
   // restart the poll (see the docblock above lampWiringActive's declaration).
   function retireLampWiring() {
     lampWiringRetired = true;
@@ -536,8 +527,8 @@ function startTour(participantId, capabilities, manifest) {
     preset: 'standard',
     onSignal: handleSignal,
     // Raw per-event mouse track, opt-in and off by default in the
-    // library — the demo turns it on so the results report's trajectory
-    // plots have real data to draw from a live session.
+    // library — the demo turns it on so the report's trajectory plots
+    // have real data to draw from a live session.
     collectForPostHoc: { rawMouseTrack: true }
   });
   monitor.startSession();
@@ -605,7 +596,7 @@ function startTour(participantId, capabilities, manifest) {
 
   // Idempotent: state.guardStopToken is cleared after the first successful
   // stop() call, so the end-guard button (the only path that calls this
-  // during the tour) and the defensive call at the results step never
+  // during the tour) and the defensive call at the last step never
   // double-stop.
   function finalizeGuard() {
     if (!state.guardStopToken) return;
@@ -688,12 +679,11 @@ function startTour(participantId, capabilities, manifest) {
 
   // Renders the fallback note (steps.js copy if the task defines one, else
   // a minimal inline string) and, if not already offered, a skip link
-  // straight to "From signals to scores" (index 10) — reusing the same
+  // straight to "From signals to scores" (index 9) — reusing the same
   // data-key the card's click delegation already handles. The primary
   // "Enter fullscreen" button stays enabled for a retry either way (advance
   // is never fully blocked).
   function showFullscreenFallback() {
-    state.act2Skipped = true;
     var step = STEPS[state.stepIndex];
     var note = cardEl.querySelector('.fallback-note');
     if (note) {
@@ -724,9 +714,6 @@ function startTour(participantId, capabilities, manifest) {
         showFullscreenFallback();
         return;
       }
-      // Clears a flag a PRIOR failed attempt may have set — this retry
-      // actually got into Act 2, so it's no longer accurate to call it skipped.
-      state.act2Skipped = false;
       startGuardFriction();
       goTo(state.stepIndex + 1);
     }).catch(function () {
@@ -744,8 +731,8 @@ function startTour(participantId, capabilities, manifest) {
   // trial gets bracketed too. The REC pill shows immediately regardless of
   // whether attach actually succeeds (spec: replay is on by default); a
   // failure keeps the tour degrading gracefully and marks
-  // state.replayUnavailable so the downloads step and results copy can say
-  // so honestly instead of just silently dropping the file.
+  // state.replayUnavailable so the files step can say so honestly instead
+  // of just silently dropping the file.
   function startReplay() {
     var recEl = document.getElementById('rec');
     if (recEl) recEl.hidden = false;
@@ -808,70 +795,74 @@ function startTour(participantId, capabilities, manifest) {
     return '<span class="act2">' + prefix + '</span> ' + rest;
   }
 
+  // The name a session file is saved under: buildDownloadFile writes it and
+  // the file's card shows it. null for a recording this browser could not
+  // make. Naming the recording finalizes it (finalizeReplay() is idempotent);
+  // the card renders in the same goTo() call that finalizes it anyway, a few
+  // statements later (its last-step block).
+  function sessionFileName(key) {
+    if (key === 'sessionData') return participantId + '.json';
+    if (key === 'config') return 'cyborg-hunter.config.json';
+    if (key !== 'replay') return null;
+    var recording = finalizeReplay();
+    if (!recording) return null;
+    // Epoch from the recording's own start field (mirrors persistence.js's
+    // replayFilename(), which isn't exposed on the standalone
+    // window.CyborgHunterReplay global) else Date.now(). SessionRecording v2
+    // carries the start as a top-level `recording_started_at` ISO string
+    // (serializer.js); the pre-v2 `metadata.start_time` reading landed here
+    // as Date.now() on every v2 recording, so the downloaded replay filename
+    // no longer matched what the CLI derives — hence the fix.
+    var epoch = Date.now();
+    var startedAt = recording.recording_started_at ||
+      (recording.metadata && recording.metadata.start_time);
+    if (startedAt) {
+      var parsedEpoch = Date.parse(startedAt);
+      if (!isNaN(parsedEpoch)) epoch = parsedEpoch;
+    }
+    return participantId + '-replay-' + epoch + '.json';
+  }
+
   // Builds the { filename, data } pair for one downloads-step file button.
   // Called both by the download click handler and the "show as text"
   // fallback, so both always agree on exactly what would have been saved.
   function buildDownloadFile(key) {
     if (key === 'sessionData') {
-      // final:true — the download must match EXACTLY what the on-screen
-      // report read (state.sessionReport, snapshotted once at results), not
+      // final:true — the file must be the session as it stood when the last
+      // step was entered (state.sessionReport, snapshotted once there), not
       // a fresh live read that could pick up a sidebar/viewport event our
-      // OWN post-results fullscreen exit produced (exitFullscreenIfActive()
-      // in goTo()'s results block) — a demo whose whole claim is "this file
-      // produces that report" can't let the file disagree with the report.
-      return { filename: participantId + '.json', data: buildCurrentPayload({ final: true }) };
+      // OWN fullscreen exit produced (exitFullscreenIfActive() in goTo()'s
+      // last-step block) — the visitor did not produce that event.
+      return { filename: sessionFileName('sessionData'), data: buildCurrentPayload({ final: true }) };
     }
     if (key === 'replay') {
-      // renderDownloadsPanel() disables this button when
-      // state.replayUnavailable, so this is only reachable after a real
-      // attach attempt — guard anyway in case finalizeReplay() has nothing
-      // to return.
+      // renderFileCard() disables this button when
+      // state.replayUnavailable; Save all (saveBatch) and the hand-off
+      // (handoffFiles) call this anyway and leave out the null it returns
+      // then, or when finalizeReplay() has nothing to return.
       var recording = finalizeReplay();
       if (!recording) return null;
-      // Epoch from the recording's own start field (mirrors persistence.js's
-      // replayFilename(), which isn't exposed on the standalone
-      // window.CyborgHunterReplay global) else Date.now(). SessionRecording v2
-      // carries the start as a top-level `recording_started_at` ISO string
-      // (serializer.js); the pre-v2 `metadata.start_time` reading landed here
-      // as Date.now() on every v2 recording, so the downloaded replay filename
-      // no longer matched what the CLI derives — hence the fix.
-      var epoch = Date.now();
-      var startedAt = recording.recording_started_at ||
-        (recording.metadata && recording.metadata.start_time);
-      if (startedAt) {
-        var parsedEpoch = Date.parse(startedAt);
-        if (!isNaN(parsedEpoch)) epoch = parsedEpoch;
-      }
-      return {
-        filename: participantId + '-replay-' + epoch + '.json',
-        data: recording
-      };
+      return { filename: sessionFileName('replay'), data: recording };
     }
     if (key === 'config') {
-      // "The scoring config the report used" — honestly. Beyond the ingest
-      // keys, the file carries the scoring settings the in-browser report
-      // last ran with (playground tweaks included; manifest defaults when
-      // the controls were never touched), limited to keys the CLI actually
-      // honors (src/cli/config.js merges the file wholesale; summary.js
-      // reads thresholds.tabAwayDurationMs / typingSpeedThreshold_cps as
-      // fallbacks behind each participant's saved runtime thresholds, and
-      // triage.js honors scoring.softScoreThreshold as an analyst-side
-      // override). The paste control has no CLI config key — the hard tier
-      // is data-carried — so it is deliberately absent here.
-      var pc = state.playgroundControls || {
-        tabAwayCutoffMs: manifest.signals.tabAway.durationMs,
-        typingSpeedCps: manifest.signals.typingSpeed.cps,
-        softScoreThreshold: manifest.signals.softScoreThreshold
-      };
+      // The analysis settings for the five files the step offers: the
+      // session file and the two examples match the pattern (one brace
+      // group, which the CLI expands: src/cli/ingest-core.js
+      // expandPatternToMatchers), and the scoring keys carry the manifest's
+      // defaults, limited to keys the CLI honors (summary.js reads
+      // thresholds.tabAwayDurationMs / typingSpeedThreshold_cps as fallbacks
+      // behind each participant's saved runtime thresholds; triage.js honors
+      // scoring.softScoreThreshold as an analyst-side override). Changing
+      // them is the analyzer's job now: its settings panel exports a config.
       return {
-        filename: 'cyborg-hunter.config.json',
+        filename: sessionFileName('config'),
         data: {
           dataDir: '.',
-          filePattern: 'DEMO-*.json',
+          filePattern: '{DEMO-*,example-*}.json',
           participantIdField: 'participantId',
-          thresholds: { tabAwayDurationMs: pc.tabAwayCutoffMs },
-          typingSpeedThreshold_cps: pc.typingSpeedCps,
-          scoring: { softScoreThreshold: pc.softScoreThreshold }
+          thresholds: { tabAwayDurationMs: manifest.signals.tabAway.durationMs },
+          typingSpeedThreshold_cps: manifest.signals.typingSpeed.cps,
+          scoring: { softScoreThreshold: manifest.signals.softScoreThreshold }
         }
       };
     }
@@ -883,16 +874,39 @@ function startTour(participantId, capabilities, manifest) {
   // handler (its own user gesture) so the browser never treats it as a
   // popup/auto-download.
   function triggerDownload(filename, data) {
-    var json = JSON.stringify(data, null, 2);
-    var blob = new Blob([json], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
+    var url = URL.createObjectURL(jsonBlob(data));
+    clickDownload(url, filename);
+    URL.revokeObjectURL(url);
+  }
+
+  // Clicks a throwaway <a download> for `href`, inside the caller's click
+  // handler (the browser's user gesture).
+  function clickDownload(href, filename) {
     var a = document.createElement('a');
-    a.href = url;
+    a.href = href;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  }
+
+  // "Save all": every file of one batch from this one click, in order — a
+  // session file built and written as its Save button does (a missing
+  // recording is skipped), an example from the site. A browser may ask
+  // before the second download of one click; the walkthrough (REPLICATE)
+  // says to allow it or to use the per-file Save buttons.
+  function saveBatch(batch) {
+    batch.files.forEach(function (f) {
+      if (f.href) { clickDownload(f.href, f.filename); return; }
+      var toSave = buildDownloadFile(f.key);
+      if (toSave) triggerDownload(toSave.filename, toSave.data);
+    });
+  }
+
+  // A built file's bytes, as the Save button writes them and the hand-off
+  // stores them: pretty-printed JSON.
+  function jsonBlob(data) {
+    return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   }
 
   // Download-failure fallback: opens the shared per-step <dialog> with the
@@ -905,8 +919,8 @@ function startTour(participantId, capabilities, manifest) {
     dlg.showModal();
   }
 
-  // Step 13's documentation-style walkthrough (REPLICATE.sections), numbered
-  // headings with copyable code blocks. code may carry {{version}} — tpl()
+  // The last step's documentation-style walkthrough (REPLICATE.sections),
+  // numbered headings with copyable code blocks. code may carry {{version}} — tpl()
   // substitutes before escaping, same order as everywhere else code renders.
   function renderReplicateSection() {
     var html = '<div class="replicate">';
@@ -920,6 +934,44 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
+  // "Open in the analyzer": the files the batches offer, stored for the
+  // analyze page (handoff.js), which this tab then opens. The navigation
+  // waits for the write, so no popup blocker is involved, and Back returns
+  // to the tour. If the browser refuses the store, the step says so; the
+  // Save buttons still work.
+  function openInAnalyzer(button) {
+    if (button.disabled) return;
+    button.disabled = true;
+    handoffFiles().then(writeHandoff).then(function () {
+      location.assign('analyze/#from-demo');
+    }).catch(function (err) {
+      console.warn('cyborg-hunter demo: the hand-off to the analyzer failed', err);
+      // Nothing of this attempt may wait in the store for a later visit.
+      clearHandoff().catch(function () {});
+      button.disabled = false;
+      var note = cardEl.querySelector('[data-role="handoff-note"]');
+      if (note) { note.innerHTML = HANDOFF.failed; note.hidden = false; }
+    });
+  }
+
+  // The batches' files as { path, blob }: the session files built the way
+  // their Save buttons build them (a missing recording is left out), the
+  // examples fetched from this site.
+  function handoffFiles() {
+    var all = [];
+    DOWNLOAD_BATCHES.forEach(function (b) { all = all.concat(b.files); });
+    return Promise.all(all.map(function (f) {
+      if (f.href) {
+        return fetch(f.href).then(function (r) {
+          if (!r.ok) throw new Error(f.href + ': HTTP ' + r.status);
+          return r.blob();
+        }).then(function (blob) { return { path: f.filename, blob: blob }; });
+      }
+      var built = buildDownloadFile(f.key);
+      return built ? { path: built.filename, blob: jsonBlob(built.data) } : null;
+    })).then(function (files) { return files.filter(Boolean); });
+  }
+
   function renderClosingCta() {
     return (
       '<p class="secondary">' + escHtml(CLOSING_CTA.installInvitation) + ' ' +
@@ -928,6 +980,40 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
+  // One file card. A session file (f.key) is built in this tab, saved by
+  // its button under the name its card shows, and has a "show as text"
+  // fallback; an example (f.href) is a plain link to the file the site
+  // serves.
+  function renderFileCard(f) {
+    var info = function (name, description) {
+      return '<div class="file-info">' + escHtml(f.label) + '<small>' + escHtml(name) + '</small>' +
+        '<span class="file-desc">' + escHtml(description) + '</span></div>';
+    };
+    if (f.href) {
+      return '<div class="file">' + info(f.filename, f.description) +
+        '<div class="file-actions"><a class="btn" href="' + f.href + '" download="' + f.filename + '">Save</a></div></div>';
+    }
+    var disabled = f.key === 'replay' && state.replayUnavailable;
+    // Config caveat (spec :182/:288): first-party copy, so innerHTML is
+    // safe here the same as every other steps.js string this panel
+    // renders (f.label, f.description, etc.) — rendered directly under
+    // the config file's Save/show-as-text row, not restructuring the panel.
+    var caveat = f.key === 'config'
+      ? '<p class="file-caveat" data-role="config-caveat">' + tpl(CONFIG_CAVEAT) + '</p>'
+      : '';
+    return (
+      '<div class="file">' +
+      info(sessionFileName(f.key) || f.filename, disabled ? 'recording unavailable in this browser' : f.description) +
+      '<div class="file-actions">' +
+      '<button class="btn" data-action="download" data-key="' + f.key +
+      '" data-saved-label="' + f.savedLabel + '"' + (disabled ? ' disabled' : '') + '>Save</button>' +
+      (disabled ? '' : '<a href="#" data-action="showtext" data-key="' + f.key + '">show as text</a>') +
+      '</div>' + caveat + '</div>'
+    );
+  }
+
+  // The last step's panel: the hand-off to the analyzer first, then the
+  // two download batches, then the command-line walkthrough.
   function renderDownloadsPanel(task) {
     // scramble coupling: same .jspsych-content convention as renderTaskPanel
     // below — GuardFriction's obfuscateContent() only touches
@@ -935,27 +1021,16 @@ function startTour(participantId, capabilities, manifest) {
     // valid scramble target too (moot in practice: guard is long stopped by
     // this step, but the class is applied uniformly regardless of step).
     var parts = ['<div class="task jspsych-content">', '<p class="label">' + task.kind + '</p>'];
-    parts.push('<div class="files">' + DOWNLOAD_FILES.map(function (f) {
-      var disabled = f.key === 'replay' && state.replayUnavailable;
-      var description = disabled ? 'recording unavailable in this browser' : f.description;
-      // Config caveat (spec :182/:288): first-party copy, so innerHTML is
-      // safe here the same as every other steps.js string this panel
-      // renders (f.label, f.description, etc.) — rendered directly under
-      // the config file's Save/show-as-text row, not restructuring the panel.
-      var caveat = f.key === 'config'
-        ? '<p class="file-caveat" data-role="config-caveat">' + tpl(CONFIG_CAVEAT) + '</p>'
-        : '';
-      return (
-        '<div class="file">' +
-        '<div class="file-info">' + f.label + '<small>' + f.filename + '</small>' +
-        '<span class="file-desc">' + description + '</span></div>' +
-        '<div class="file-actions">' +
-        '<button class="btn" data-action="download" data-key="' + f.key +
-        '" data-saved-label="' + f.savedLabel + '"' + (disabled ? ' disabled' : '') + '>Save</button>' +
-        (disabled ? '' : '<a href="#" data-action="showtext" data-key="' + f.key + '">show as text</a>') +
-        '</div>' + caveat + '</div>'
-      );
-    }).join('') + '</div>');
+    parts.push(
+      '<div class="handoff"><button class="btn" data-action="open-analyzer">' + escHtml(HANDOFF.buttonLabel) + '</button>' +
+      '<span class="hint">' + escHtml(HANDOFF.buttonHint) + '</span></div>' +
+      '<p class="rule" data-role="handoff-note" role="status" hidden></p>'
+    );
+    DOWNLOAD_BATCHES.forEach(function (batch, b) {
+      parts.push('<div class="batch-head"><h3 class="batch-heading">' + escHtml(batch.heading) + '</h3>' +
+        '<button class="btn" data-action="save-all" data-batch="' + b + '">Save all</button></div>');
+      parts.push('<div class="files">' + batch.files.map(renderFileCard).join('') + '</div>');
+    });
     parts.push(
       '<dialog class="filetext-dialog"><h3></h3><pre></pre>' +
       '<button class="btn" data-action="close-dialog">Close</button></dialog>'
@@ -982,32 +1057,22 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // Cached module import: step 11's live-score readout and the results
-  // step's playground both need playground.js — a repeated dynamic import
+  // Cached module import: the scoring step's live-score readout needs
+  // playground.js each time the step renders — a repeated dynamic import
   // of the same specifier resolves from the module cache (no second
   // network fetch), so this local promise just avoids a redundant await
-  // chain when the visitor reaches step 11 before the results step.
+  // chain on a return visit.
   var playgroundModPromise = null;
   function loadPlayground() {
     if (!playgroundModPromise) playgroundModPromise = import('./playground.js');
     return playgroundModPromise;
   }
 
-  // The RESOLVED results.js module (not just its promise), set the first
-  // time the results step loads it (below). goTo()'s viewer-host teardown
-  // (item 12) reads this synchronously, so it can revoke the host's Blob
-  // URL and drop its iframe on the way OUT of the results step without
-  // waiting on a dynamic-import microtask — and without ever importing
-  // results.js itself before the visitor has actually reached results.
-  var resultsModCache = null;
-
-  // Config-as-source snippets (step 11, walkthrough item 7a): both built
+  // Config-as-source snippets (step 10, walkthrough item 7a): both built
   // from the manifest's real values, never hand-typed, so a preset change
   // can't silently drift from what's displayed (same principle as
   // tools/gen-signal-manifest.mjs's own docblock). Shows the 'standard'
-  // preset specifically — what this session actually collected under —
-  // regardless of any preset the visitor later selects in step 12's
-  // playground.
+  // preset specifically — what this session actually collected under.
   function buildInitSnippet(manifest) {
     var soft = (manifest.presets && manifest.presets.standard &&
       manifest.presets.standard.scoring.soft) || {};
@@ -1041,7 +1106,7 @@ function startTour(participantId, capabilities, manifest) {
     }, null, 2);
   }
 
-  // Step 11's scoring panel (walkthrough item 7): per-signal weight editors
+  // Step 10's scoring panel (walkthrough item 7): per-signal weight editors
   // seeded from state.scoringOverrides.weights (falling back to the active
   // preset's own defaults) plus the two config-as-source snippets above.
   // Interactivity (weight-input listener, live soft-score readout) is
@@ -1078,11 +1143,11 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // Step 11: wires the weight-input listener + the live current-soft-score
+  // Step 10: wires the weight-input listener + the live current-soft-score
   // readout (buildCurrentPayload() -> recomputeSignals(), against the
   // visitor's own session so far). Debounced (reuses playground.js's
   // makeDebounced) so dragging an input's spinner doesn't recompute on
-  // every intermediate value. Called fresh from goTo() every time step 11
+  // every intermediate value. Called fresh from goTo() every time step 10
   // renders — the previous render's panel/listeners are gone with the old
   // innerHTML, same discipline as every other step-specific wiring here.
   function wireScoringPanel(manifest) {
@@ -1115,31 +1180,6 @@ function startTour(participantId, capabilities, manifest) {
     }).catch(function (err) {
       console.warn('cyborg-hunter demo: scoring panel failed to load playground', err);
     });
-  }
-
-  // Persistence seam (walkthrough item 7, ENG-REVIEW amendment): when step
-  // 11's weight edits (or a prior visit to step 12's controls) left
-  // state.scoringOverrides non-empty, the FIRST results build must reflect
-  // them too — not just later playground reruns (results.js's buildResults
-  // 5th `initial` param exists for exactly this). Returns null (the exact
-  // baseline every build before this item produced) when nothing was ever
-  // touched.
-  function buildInitialScoringTransform(playgroundMod, manifest) {
-    var overrides = state.scoringOverrides;
-    var touched = Object.keys(overrides.weights).length > 0 || !!overrides.controls || !!overrides.preset;
-    if (!touched) return null;
-    var merged = playgroundMod.mergePlaygroundConfig(manifest, overrides);
-    if (!merged) return null;
-    return {
-      configOverrides: {
-        thresholds: { tabAwayDurationMs: merged.controls.tabAwayCutoffMs },
-        typingSpeedThreshold_cps: merged.controls.typingSpeedCps,
-        scoring: { softScoreThreshold: merged.scoring.softScoreThreshold },
-      },
-      transformPayloads: function (payloads) {
-        return playgroundMod.recomputeSignals(payloads, merged.controls, merged.scoring);
-      },
-    };
   }
 
   // Step 8's guard entry: the library's own entry message rendered VERBATIM
@@ -1275,19 +1315,10 @@ function startTour(participantId, capabilities, manifest) {
     }
     html += renderTaskPanel(step.task);
     if (step.showCodeTabs) html += renderCodeTabs();
-    // Step 11 (walkthrough item 7): config-as-source snippets + per-signal
-    // weight editors. task: null for this step, so this is a sibling of
-    // the (empty) task panel, same placement pattern as results-mount below.
+    // The scoring step (walkthrough item 7): config-as-source snippets +
+    // per-signal weight editors. task: null for this step, so this is a
+    // sibling of the (empty) task panel.
     if (step.id === 'signals-to-scores') html += renderScoringPanel(manifest);
-    // Results screen (step 12): renderTaskPanel(null) is '' (task: null in
-    // steps.js) — this mount point is what goTo() hands to results.js's
-    // buildResults(), which owns everything inside it (loading state,
-    // walkthrough, iframe report). The surrounding eyebrow/title/body/
-    // buttons stay the normal generic layout; .results-mode (toggled by
-    // goTo()) makes the WHOLE card full-width, not just this mount.
-    if (step.id === 'results') {
-      html += '<div class="results-mount" data-role="results-mount"></div>';
-    }
     html += '<div class="btnrow">';
     if (i > 0) html += '<a href="#" class="skip" data-action="back">Back</a>';
     // guard-cheat's primary lives on the end-guard button rendered above
@@ -1303,7 +1334,7 @@ function startTour(participantId, capabilities, manifest) {
     cardEl.innerHTML = html;
   }
 
-  var resultsIndex = STEPS.findIndex(function (s) { return s.id === 'results'; });
+  var filesIndex = STEPS.findIndex(function (s) { return s.id === 'your-files'; });
 
   function goTo(i) {
     stopAutotype();
@@ -1315,19 +1346,6 @@ function startTour(participantId, capabilities, manifest) {
     // in any direction (Back to 9 included) restores the pane to the
     // instrument column before the new step even renders.
     demotePane();
-    // Defensive viewer-host teardown on EVERY navigation, same reasoning
-    // (item 12): the replay viewer client runs a RAF loop + ResizeObserver
-    // with no destroy() — leaving results (Back-nav included) must revoke
-    // its host iframe's Blob URL, not just let renderStep's innerHTML
-    // replacement below silently discard the node. cardEl still holds the
-    // OLD step's markup here (renderStep(i) hasn't run yet this call), so
-    // this only finds anything when the step we're LEAVING was results;
-    // resultsModCache is null until results.js has loaded at least once, so
-    // this never forces that (lazy) load early.
-    if (resultsModCache) {
-      var oldResultsMount = cardEl.querySelector('[data-role="results-mount"]');
-      if (oldResultsMount) resultsModCache.teardownReplayHost(oldResultsMount);
-    }
     var prevStep = STEPS[state.stepIndex];
     var prevTrialId = prevStep.task ? prevStep.task.trialId : null;
     state.stepIndex = i;
@@ -1347,16 +1365,12 @@ function startTour(participantId, capabilities, manifest) {
     }
     if (trialId != null) paneRow(trialId, 'trial_start', null);
 
-    // Lamp wiring stops at the results step (interactive tasks are over).
-    // startLampWiring() no-ops once lampWiringRetired is set (results block
-    // below), so Back-nav out of the tour can no longer restart it past
-    // that point — see the docblock at lampWiringActive's declaration.
-    if (i >= resultsIndex) stopLampWiring(); else startLampWiring();
+    // Lamp wiring stops at the last step (interactive tasks are over).
+    // startLampWiring() no-ops once lampWiringRetired is set (last-step
+    // block below), so Back-nav out of the tour can no longer restart it
+    // past that point — see the docblock at lampWiringActive's declaration.
+    if (i >= filesIndex) stopLampWiring(); else startLampWiring();
     document.body.dataset.view = step.act;
-    // Full-width payoff — toggled here (not by results.js) so every OTHER
-    // step deterministically clears it, the same single-chokepoint pattern
-    // as dataset.view above.
-    document.body.classList.toggle('results-mode', step.id === 'results');
     // Step-10 pane promotion (item 5): the main column is near-empty for
     // guard-debrief (task: null) while its copy points at the session
     // record — promote the pane into the space above the fold.
@@ -1365,23 +1379,23 @@ function startTour(participantId, capabilities, manifest) {
     // Repaints from state.chipCounts (not a reset) so Back-then-forward into
     // guard-cheat shows the tally already accumulated this session.
     if (step.task && step.task.kind === 'guard-cheat') renderViolationChips();
-    // Step 11 (walkthrough item 7): wire the weight-input listener + live
-    // soft-score readout fresh against the new panel markup renderStep()
-    // just wrote.
+    // The scoring step (walkthrough item 7): wire the weight-input listener
+    // + live soft-score readout fresh against the new panel markup
+    // renderStep() just wrote.
     if (step.id === 'signals-to-scores') wireScoringPanel(manifest);
-    if (step.id === 'results') {
-      // Snapshotted here (not earlier): results is the last interactive
-      // step, so this reflects the complete session. The pane/replay/guard
-      // are all one-way finalizations from here on — the tour proper is
-      // done — and the rail (a demo-only "current session" instrument)
-      // retires with them; the live pane stays visible, frozen, as the
-      // historical record.
-      // Snapshotted ONCE: re-reading on every results entry (e.g. a visitor
-      // who goes Back then forward) would let the exit's own sidebar/
-      // viewport artifact (exitFullscreenIfActive(), below) slip into a
-      // LATER read even though the first read already froze it — the report
-      // is supposed to be the complete session as of the moment results was
-      // first reached, not a moving target on re-entry.
+    if (step.id === 'your-files') {
+      // Snapshotted here (not earlier): the files step comes after every
+      // interactive step, so this reflects the complete session. The
+      // pane/replay/guard are all one-way finalizations from here on — the
+      // tour proper is done — and the rail (a demo-only "current session"
+      // instrument) retires with them; the live pane stays visible, frozen,
+      // as the historical record.
+      // Snapshotted ONCE: re-reading on every entry (e.g. a visitor who goes
+      // Back then forward) would let the exit's own sidebar/viewport
+      // artifact (exitFullscreenIfActive(), below) slip into a LATER read
+      // even though the first read already froze it — the files are the
+      // complete session as of the moment this step was first reached, not
+      // a moving target on re-entry.
       if (!state.sessionReport) state.sessionReport = monitor.getSessionReport();
       state.pane.freeze();
       finalizeReplay();
@@ -1391,54 +1405,13 @@ function startTour(participantId, capabilities, manifest) {
       // refuses that outright — exitFullscreen()'s own guard — but this
       // ordering is the real guarantee, not the refusal). Step 8's copy
       // already promises fullscreen is no longer required once the guarded
-      // act ends; this makes that literal on the way into the report.
+      // act ends; this makes that literal on the way to the files.
       exitFullscreenIfActive();
       // One-way latch (see the docblock at lampWiringActive's declaration):
       // must retire AFTER the sessionReport snapshot above, not before —
       // retiring only stops the POLL, it doesn't touch the snapshot logic.
       retireLampWiring();
       railEl.hidden = true;
-      var mount = cardEl.querySelector('[data-role="results-mount"]');
-      // Dynamic import: results.js (and its plot-adapter.js dependency) are
-      // only needed once, at this last step — lazy-loading them keeps every
-      // earlier step's page weight down. playground.js is loaded the
-      // same lazy way, alongside it (loadPlayground() reuses step 11's
-      // cached import when the visitor already saw it there), and wired
-      // through buildResults()'s optional 4th `hooks` arg — hooks.onReady is
-      // what results.js calls once the first report build succeeds (see
-      // results.js's buildResults docblock). The 5th `initial` arg is the
-      // walkthrough-item-7 persistence seam: when state.scoringOverrides was
-      // ever touched (step 11 weights, or a previous visit to step 12's
-      // controls), the FIRST build reflects it too — see
-      // buildInitialScoringTransform above. The playground load is its own
-      // try: if it fails, the report itself still builds and shows, just
-      // without the controls (and without the seam, since it needs
-      // playground.js's recomputeSignals too) — same "degrade, don't block"
-      // posture as replay/guard elsewhere here.
-      import('./results.js').then(function (resultsMod) {
-        resultsModCache = resultsMod; // goTo()'s viewer-host teardown, above
-        loadPlayground().then(function (playgroundMod) {
-          resultsMod.buildResults(mount, state, manifest, {
-            onReady: function (ctx) {
-              // Settled playground settings, reported after each successful
-              // rebuild — buildDownloadFile('config') reads these so the
-              // downloaded config matches what the report actually ran with.
-              ctx.onControls = function (controls) { state.playgroundControls = controls; };
-              // Shared state (CODEX override contract) so step 12's
-              // playground initializes from, and writes back to, the same
-              // object step 11's weight editors and live-score readout use.
-              ctx.scoringOverrides = state.scoringOverrides;
-              playgroundMod.mountPlayground(ctx);
-            }
-          }, buildInitialScoringTransform(playgroundMod, manifest));
-        }).catch(function (err) {
-          console.warn('cyborg-hunter demo: playground failed to load, showing the report without it', err);
-          resultsMod.buildResults(mount, state, manifest);
-        });
-      }).catch(function (err) {
-        console.warn('cyborg-hunter demo: results build failed to load', err);
-        if (mount) mount.innerHTML = '<p class="hint">Couldn’t load the report builder in this browser.</p>';
-      });
     }
     progressEl.textContent = 'Step ' + (i + 1) + ' of ' + STEPS.length;
   }
@@ -1468,6 +1441,10 @@ function startTour(participantId, capabilities, manifest) {
       if (state.stepIndex < STEPS.length - 1) goTo(state.stepIndex + 1);
       return;
     }
+    var analyzerBtn = e.target.closest('[data-action="open-analyzer"]');
+    if (analyzerBtn) { openInAnalyzer(analyzerBtn); return; }
+    var saveAllBtn = e.target.closest('[data-action="save-all"]');
+    if (saveAllBtn) { saveBatch(DOWNLOAD_BATCHES[Number(saveAllBtn.dataset.batch)]); return; }
     var downloadBtn = e.target.closest('[data-action="download"]');
     if (downloadBtn) {
       var toSave = buildDownloadFile(downloadBtn.dataset.key);
@@ -1500,6 +1477,15 @@ function startTour(participantId, capabilities, manifest) {
       if (link.dataset.key === 'skipToGuardedAct') goTo(guardedActIndex());
       else if (link.dataset.key === 'skipToScores') goTo(scoresIndex());
     }
+  });
+
+  // Back from the analyzer can restore this page from the back/forward cache
+  // as it was left, with "Open in the analyzer" still disabled by the click
+  // that left it. Enable it again.
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    var analyzerBtn = cardEl.querySelector('[data-action="open-analyzer"]');
+    if (analyzerBtn) analyzerBtn.disabled = false;
   });
 
   goTo(0);

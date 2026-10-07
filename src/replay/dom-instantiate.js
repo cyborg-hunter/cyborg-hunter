@@ -292,6 +292,35 @@ function applyAttrs(el, attrs, skip, ctx) {
   }
 }
 
+// <html>'s attributes (CH vendor data, src/replay/root-attrs.js): the
+// reconstruction's <html> carries what the recording says the page's carried,
+// through the same §12 filter as any element. `xmlns` belongs to the shell
+// document and is never set from a recording.
+var ROOT_SKIP = { xmlns: true };
+
+// The whole set, as a keyframe states it: every attribute the shell's <html>
+// has that the set lacks is removed, so a backward seek takes back what a
+// later change added. ROOT_SKIP names are left alone on this path too.
+function applyRootAttrs(doc, attrs) {
+  var root = doc && doc.documentElement;
+  if (!root) return;
+  var want = attrs || {};
+  for (var i = root.attributes.length - 1; i >= 0; i--) {
+    var name = root.attributes[i].name;
+    if (ROOT_SKIP[name.toLowerCase()] === true) continue;
+    if (!Object.prototype.hasOwnProperty.call(want, name)) root.removeAttribute(name);
+  }
+  applyAttrs(root, want, ROOT_SKIP, null);
+}
+
+// One change: a value sets the attribute, null removes it.
+function applyRootAttr(doc, name, value) {
+  var root = doc && doc.documentElement;
+  if (!root || typeof name !== 'string' || ROOT_SKIP[name.toLowerCase()] === true) return;
+  if (value === null || value === undefined) { root.removeAttribute(name); return; }
+  setFilteredAttr(root, name, value, null);
+}
+
 // Frames are recorded as the element only (spec §13) and must stay that way in
 // the reconstruction: no `src` to fetch, no `srcdoc` to parse. §12's network
 // policy is then satisfied structurally — there is nothing to request — with
@@ -300,8 +329,9 @@ var IFRAME_SKIP = { src: true, srcdoc: true };
 
 // Design §7 renders media as a state badge and a lane marker, with no playback,
 // and honours `media_src` only so the element has its shape. `autoplay` is the
-// one recorded attribute that would start playback with nobody asking, and the
-// shell CSP allows `media-src *`, so it is dropped where it lands.
+// one recorded attribute that would start playback with nobody asking, so it
+// is dropped where it lands, whatever media the embedding page's policy allows
+// (the CLI report's shell allows none: `media-src 'none'`).
 var MEDIA_TAGS = { video: true, audio: true };
 var MEDIA_SKIP = { autoplay: true };
 
@@ -725,8 +755,8 @@ function applyAttr(patch, mount) {
   if (el.getAttribute(PLACEHOLDER_ATTR) === 'iframe'
       && IFRAME_SKIP[name.toLowerCase()] === true) return;
   // Media likewise never receives the MEDIA_SKIP names after mount: a patch
-  // setting `autoplay` would start the playback instantiation refused, and the
-  // shell CSP allows `media-src *`. The tag is the one instantiation keyed the
+  // setting `autoplay` would start the playback instantiation refused, whatever
+  // media the embedding page's policy allows. The tag is the one instantiation keyed the
   // skip set on, and no patch can change an element's tag. Silent and
   // uncounted, as above. SET verb only — removing `autoplay` can only stop
   // playback, never start it.
@@ -793,4 +823,4 @@ function applyPatches(patches, mount) {
 // ONE line of ESM syntax, last, so the build can strip it with a single
 // replace and concatenate the rest into the report's viewer script. Keep it
 // that way — the header explains why, and the test suite fails if it drifts.
-export { instantiateTree, mountTree, applyPatch, applyPatches };
+export { instantiateTree, mountTree, applyPatch, applyPatches, applyRootAttrs, applyRootAttr };

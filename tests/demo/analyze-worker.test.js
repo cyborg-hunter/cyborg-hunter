@@ -84,6 +84,56 @@ test('check on the sample finds three participant files and the id field its con
   assert.equal(checked.sampled, 3);
 });
 
+// A recording in the drop used to leave no candidate at all: its keys
+// (schema_version, segments, …) share nothing with a data file, and a field
+// must be in every peeked file. Measured before the fix: [] for both drops,
+// so the page fell back to participantId, which is wrong for jsPsych's subject_ID.
+test('check skips replay recordings when it suggests the id field: a DEMO session and its replay, no config', async () => {
+  const dir = 'tests/fixtures/demo';
+  const w = startWorker();
+  w.send({ type: 'check', files: [fileEntry(dir, 'DEMO-FIXT.json'), fileEntry(dir, 'DEMO-FIXT-replay-1785352263344.json')] });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.deepEqual(checked.idSuggestion, { suggested: 'participantId', candidates: [{ field: 'participantId', reason: 'known name' }] });
+  assert.equal(checked.sampled, 1);
+  assert.equal(checked.recordings, 1);
+});
+
+test('check skips replay recordings when it suggests the id field: jsPsych CSVs and one replay, no config', async () => {
+  const pilot = 'examples/synthetic-pilot/data';
+  const files = readdirSync(pilot).filter((f) => f.endsWith('.csv')).map((f) => fileEntry(pilot, f, 'data/' + f))
+    .concat([fileEntry('tests/fixtures/demo', 'DEMO-FIXT-replay-1785352263344.json', 'replays/DEMO-FIXT-replay-1785352263344.json')]);
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.equal(checked.idSuggestion.suggested, 'subject_ID');
+  assert.deepEqual(checked.idSuggestion.candidates[0], { field: 'subject_ID', reason: 'known name' });
+  assert.equal(checked.sampled, 3);
+  assert.equal(checked.recordings, 1);
+});
+
+// The page's file table lists every file with what the check read it as.
+test('check tells what it read each file as: data, recording, asset, config, ignored, unreadable', async () => {
+  const dir = 'tests/fixtures/demo';
+  const files = [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/DEMO-FIXT.json'),
+    fileEntry(dir, 'DEMO-FIXT-replay-1785352263344.json', 'study/DEMO-FIXT-replay-1785352263344.json'),
+    fileEntry(dir, 'cyborg-hunter.config.json', 'study/cyborg-hunter.config.json'),
+    { path: 'study/css/style.css', file: new File(['p{}'], 'style.css') },
+    { path: 'study/.DS_Store', file: new File(['x'], '.DS_Store') },
+    { path: 'study/broken.json', file: new File(['{nope'], 'broken.json') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.deepEqual(checked.files.map((f) => [f.path.replace('study/', ''), f.kind]), [
+    ['DEMO-FIXT.json', 'data'], ['DEMO-FIXT-replay-1785352263344.json', 'recording'], ['cyborg-hunter.config.json', 'config'],
+    ['css/style.css', 'asset'], ['.DS_Store', 'ignored'], ['broken.json', 'unreadable']]);
+  assert.equal(checked.configPath, 'study/cyborg-hunter.config.json');
+});
+
 test('run on the sample streams a zip of the full report and returns the in-page report', async () => {
   const w = startWorker();
   w.send({ type: 'check', sample: true });
@@ -146,6 +196,172 @@ test('a run with a recording serves the same styled replay model the zip carries
   // Asked twice, built twice: the same model again.
   w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
   assert.deepEqual((await w.next('replay-model')).model, fromZip);
+});
+
+// The settings panel's post-hoc keys re-run the report from the participants
+// the last run read. The replay pass inside it rewrites the recordings it
+// styles, so the check that matters is that a second pass writes the same
+// replay files and keeps the first asset note (a re-count after the rewrite
+// says nothing matched).
+test('reanalyze re-renders the last run under another config: the same replay files and notes, new scores', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets.push({ id: 999, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const files = [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/data/DEMO-FIXT.json'),
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/css/style.css', file: new File(['.stim{background:url("../img/bg.png")}'], 'style.css') },
+    { path: 'study/img/bg.png', file: new File([png], 'bg.png') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  const zip1 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  w.send({ type: 'reanalyze', config: { ...checked.config, scoreWeights: { paste: 1 } }, participantIdField: 'participantId' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  assert.equal(strFromU8(zip2['replay/DEMO-FIXT.replay.js']), strFromU8(zip1['replay/DEMO-FIXT.replay.js']), 'the same replay file');
+  assert.equal(second.participants[0].assetNote, first.participants[0].assetNote);
+  assert.match(second.participants[0].assetNote, /1 of 1 stylesheets matched/);
+  // The zip's own report words the note in its replay section, from the pass.
+  assert.match(strFromU8(zip2['index.html']), /Experiment assets: 1 of 1 stylesheets matched/);
+  assert.notEqual(strFromU8(zip2['score-weights.json']), strFromU8(zip1['score-weights.json']), 'the new weights');
+  assert.equal(second.configUsed.scoreWeights.paste, 1);
+  assert.ok(w.messages.every((m) => m.type !== 'progress' || m.phase !== 'ingest'), 'nothing was read again');
+});
+
+test('reanalyze before any run is an error, not a silent no-op', async () => {
+  const w = startWorker();
+  w.send({ type: 'reanalyze', config: {}, participantIdField: 'participantId' });
+  const err = await w.next('error', 'done');
+  assert.deepEqual([err.type, err.phase], ['error', 'reanalyze']);
+  assert.match(err.message, /Build the report first/);
+});
+
+// Only ingest reads the id field, the Qualtrics column and the one-participant
+// filter. The participants a re-analysis reports were read under the run's,
+// so its configUsed keeps those, whatever the page sends.
+test('reanalyze keeps the keys ingest read under the run, whatever the page sends', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  w.send({ type: 'reanalyze', config: { ...checked.config, qualtricsField: 'other_column', singleParticipant: 'SYN-HARD-03' }, participantIdField: 'trial_index' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  assert.equal(second.configUsed.participantIdField, 'subject_ID');
+  assert.equal(second.configUsed.qualtricsField, first.configUsed.qualtricsField);
+  assert.equal('singleParticipant' in second.configUsed, 'singleParticipant' in first.configUsed);
+  assert.deepEqual(second.participants.map((p) => p.participantId), first.participants.map((p) => p.participantId));
+});
+
+// A reset while a report renders lets go of the run; the render already under
+// way finishes over the state it started with instead of failing half-way.
+test('a reset while the report renders does not turn the render into an error', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  assert.equal((await w.next('done', 'error')).type, 'done');
+  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'subject_ID' });
+  await w.next('zip');
+  w.send({ type: 'reset' });
+  const end = await w.next('done', 'error');
+  assert.equal(end.type, 'done', end.message);
+  w.send({ type: 'replay', participantId: 'SYN-HARD-03' });
+  assert.equal((await w.next('replay-model', 'error')).type, 'error', 'the reset still let go of the run');
+});
+
+// Under the config the run used, a re-analysis is the run again: every file
+// in the zip, the in-page report and what the page lists beside it. The
+// stylesheet imports two sheets, one of which imports the other: a spliced
+// sheet keeps its own imports as URLs, which a second pass over the same
+// recording must leave as the first wrote them. The data's trial phases come
+// back once each, sorted; a trial without one is listed as 'default', the
+// name phase scope gives it (src/cli/analyzers/phase-scope.js). The time a
+// report was built is the one part of index.html that differs between the two
+// passes (the run id is the cohort's own), so the reports compare without it.
+const withoutRunTime = (html) => html.replace(/<time class="run-time" datetime="[^"]*">[^<]*<\/time>/, '<time class="run-time"></time>');
+test('reanalyze under the same config gives the first report again, file for file', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets.push({ id: 999, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null });
+  const data = JSON.parse(readFileSync(dir + '/DEMO-FIXT.json', 'utf8'));
+  data.trials.forEach((t, i) => { if (i === 0) delete t.integrity.phase; else t.integrity.phase = i % 2 ? 'warmup' : 'main'; });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const style = '@import "theme.css";\n@import "vars.css";\n.stim{background:url("../img/bg.png")}';
+  const files = [
+    { path: 'study/data/DEMO-FIXT.json', file: new File([JSON.stringify(data)], 'DEMO-FIXT.json') },
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/css/style.css', file: new File([style], 'style.css') },
+    { path: 'study/css/theme.css', file: new File(['@import "vars.css";\n.t{}'], 'theme.css') },
+    { path: 'study/css/vars.css', file: new File([':root{--v:1}'], 'vars.css') },
+    { path: 'study/img/bg.png', file: new File([png], 'bg.png') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  const zip1 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'participantId' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  assert.deepEqual(Object.keys(zip2).sort(), Object.keys(zip1).sort());
+  assert.ok(zip1['replay/DEMO-FIXT.replay.js'], 'the replay pass ran');
+  for (const name of Object.keys(zip1)) {
+    if (name === 'index.html') assert.equal(withoutRunTime(strFromU8(zip2[name])), withoutRunTime(strFromU8(zip1[name])), name);
+    else assert.ok(Buffer.from(zip2[name]).equals(Buffer.from(zip1[name])), name);
+  }
+  assert.equal(second.runId, first.runId);
+  assert.equal(withoutRunTime(second.html), withoutRunTime(first.html));
+  assert.deepEqual(second.participants, first.participants);
+  assert.deepEqual(second.triageOrder, first.triageOrder);
+  assert.deepEqual(second.files, first.files);
+  assert.deepEqual([first.phases, second.phases], [['default', 'main', 'warmup'], ['default', 'main', 'warmup']]);
+});
+
+// The run id names the cohort (report-core.js runIdOf): a re-analysis of the
+// same participants keeps it, so annotations stored under it stay with the
+// report.
+test('done carries the run id, and a re-analysis keeps it', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  const first = await w.next('done', 'error');
+  assert.equal(first.type, 'done', first.message);
+  assert.match(first.runId, /^[0-9a-f]{16}$/);
+  assert.ok(first.html.includes('<code class="mono run-id">' + first.runId + '</code>'), 'the in-page report shows it');
+  w.send({ type: 'reanalyze', config: { ...checked.config, scoreWeights: { paste: 1 } }, participantIdField: 'subject_ID' });
+  const second = await w.next('done', 'error');
+  assert.equal(second.type, 'done', second.message);
+  assert.equal(second.runId, first.runId);
+});
+
+// The page's annotation export writes each participant's tier and triage
+// score, in triage order: the same score summary.csv carries.
+test('done lists each participant\'s tier and triage score, in triage order', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', sample: true });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.triageRows.map((r) => [r.participantId, r.tier]), [['SYN-HARD-03', 'hard'], ['SYN-SOFT-02', 'soft'], ['SYN-CLEAN-01', 'clean']]);
+  const scores = Object.fromEntries(done.files['summary.csv'].trim().split('\n').slice(1).map((l) => l.split(',')).map((c) => [c[0], Number(c[2])]));
+  for (const r of done.triageRows) assert.equal(r.triageScore, scores[r.participantId], r.participantId);
 });
 
 test('a dropped file whose name differs from the recorded URL only in case still styles the replay', async () => {

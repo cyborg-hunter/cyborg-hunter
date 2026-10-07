@@ -1,21 +1,33 @@
 // demo/analyze/page.js
-// The page's steps over one worker: drop (or the sample) → check → run →
-// results. All participant data stays in the worker (File handles go over,
+// The page's steps over one worker: files (each drop or file choice adds to
+// the list and checks it again; or the sample) → run → results. All
+// participant data stays in the worker (File handles go over,
 // the worker reads the bytes one file at a time); this module only holds
-// what the page shows: counts, warnings, the report HTML, the zip chunks.
+// what the page shows: counts, warnings, the report HTML, the zip chunks,
+// and the report's annotations, which the page keeps (annotations.js).
 // One exception, opts.transferBytes (main.js sets it for a page opened from
 // file:): WebKit's worker cannot read a File there, so the page reads each
 // dropped file itself and transfers the bytes, for every check and run.
 //
 // The worker's messages carry no run id (worker-entry.js), so the page runs
-// ONE operation at a time: while a check or a run is in flight the controls
-// that would start another are disabled, and a run that fails throws away
-// the zip chunks it had already streamed before a retry is offered.
+// ONE operation at a time: while a check, a run or a re-analysis is in
+// flight the controls (the settings too) that would start another are
+// disabled, and a run that fails throws away the zip chunks it had already
+// streamed before a retry is offered.
 import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
+import { mergeEntries, removeEntry } from './files-panel.js';
+import { createSettingsPanel, settingsFromConfig, configFromSettings, REINGEST_KEYS } from './settings-panel.js';
+import { exportConfig } from './export-config.js';
+import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
+import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
+import { sanitize } from '../../src/cli/renderers/report-id.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
+// The annotations status line once storage has not taken a write
+// (changeAnnotations); the CLI report says the same of its own storage.
+var UNSTORED_TEXT = 'This browser does not let the page store annotations: they last until Start over or until the page is closed. Export JSON keeps them.';
 
 function q(root, role) { return root.querySelector('[data-role="' + role + '"]'); }
 function download(name, blobOrText, type) {
@@ -27,6 +39,19 @@ function download(name, blobOrText, type) {
   // Revoked later, not now: the browser may still be reading the blob.
   setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
 }
+// What the check read each file as (worker-entry.js's `files[].kind`), in
+// the file table.
+var KIND_LABELS = { data: 'participant data', recording: 'replay recording', asset: 'experiment asset',
+  config: 'settings', ignored: 'ignored', unreadable: 'unreadable' };
+function countSpan(n, one, many) { return '<span><b>' + n + '</b> ' + (n === 1 ? one : many) + '</span>'; }
+
+// What the id suggestion was read from: the data files peeked, and the
+// replay recordings among the dropped JSON files, which the peek leaves out.
+function filesInspectedText(sampled, recordings) {
+  var text = sampled + ' data file' + (sampled === 1 ? '' : 's') + ' inspected';
+  if (recordings) text += '; ' + recordings + ' replay recording' + (recordings === 1 ? '' : 's') + ' skipped';
+  return text;
+}
 function listWarnings(ul, items) {
   ul.innerHTML = '';
   (items || []).forEach(function (w) {
@@ -37,12 +62,15 @@ function listWarnings(ul, items) {
 }
 
 export function createPage(root, worker, opts) {
-  var state = { step: 'drop', entries: [], sample: false, checked: null, idField: null, result: null,
-    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null };
+  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, result: null,
+    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
   var reportUrl = null;
+  // True once storage has not taken this cohort's annotations
+  // (changeAnnotations); cleared with the status line for each new cohort.
+  var annotationsUnstored = false;
   // True from a run's results until the new report's first selection message:
   // that one is the report's own load-time pick of its first row.
   var reportFirstSelection = false;
@@ -68,6 +96,10 @@ export function createPage(root, worker, opts) {
   // report is tens of MB. "Loaded but never rendered" is the render
   // watchdog's job, not this one's.
   var REPORT_LOAD_TIMEOUT_MS = 60000;
+  // The settings panel (settings-panel.js), shown from the first check on,
+  // beside the file list and above the results. Created first: it holds the
+  // id field the page wires below.
+  var settingsPanel = createSettingsPanel(q(root, 'settings'), onSettingsChange);
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
 
@@ -77,10 +109,25 @@ export function createPage(root, worker, opts) {
   function goTo(name) {
     state.step = name;
     root.querySelectorAll('section.step').forEach(function (s) { s.hidden = s.dataset.step !== name; });
+    q(root, 'settings').hidden = !state.checked || (name !== 'files' && name !== 'results');
   }
   function updateControls() {
-    runButton.disabled = busy() || !state.checked || state.checked.counts.participant === 0;
+    // A file the check read as data, as the counts line says: the classifier's
+    // participant list also holds every JSON recording.
+    runButton.disabled = busy() || !state.checked || kindCount(state.checked, 'data') === 0;
     resetButtons.forEach(function (b) { b.disabled = busy(); });
+    settingsPanel.setDisabled(busy());
+    // The downloads are the last answer's: while a run or a re-analysis is on
+    // its way they would hand out files the settings on screen no longer
+    // stand for, so they wait for its answer.
+    var files = state.result ? state.result.files : {};
+    root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = busy() || typeof files[b.dataset.file] !== 'string'; });
+    root.querySelector('[data-action="download-zip"]').disabled = busy() || !state.zipUrl;
+    // The annotation exports and import likewise: the CSV carries the last
+    // answer's tiers and scores.
+    var noAnnotations = busy() || !state.runId;
+    [root.querySelector('[data-action="annotations-csv"]'), root.querySelector('[data-action="annotations-json"]'), q(root, 'annotations-input')]
+      .forEach(function (c) { c.disabled = noAnnotations; });
   }
   function showError(message) { var el = q(root, 'error'); el.textContent = message; el.hidden = false; watchdogErrorShown = false; }
   function clearError() { var el = q(root, 'error'); el.textContent = ''; el.hidden = true; watchdogErrorShown = false; }
@@ -112,10 +159,12 @@ export function createPage(root, worker, opts) {
 
   // Every failure lands here, from the worker ({ type: 'error', phase }) or
   // from the page's own code. A replay failure leaves the results alone; a
-  // check failure goes back to the drop; a run failure goes back to the check
-  // with its partial zip discarded and the run control enabled for a retry.
+  // check failure goes back to an empty files step; a run or re-analysis
+  // failure goes back to the file list with its partial zip discarded and
+  // the run control enabled for a retry.
   function recover(phase, message, warnings) {
     showError(message);
+    q(root, 'rerun-status').hidden = true;
     if (phase === 'replay') {
       var w = replayWaiters.shift();
       if (w) w.reject(handled(message));
@@ -123,11 +172,17 @@ export function createPage(root, worker, opts) {
     }
     hideStallHint();
     for (var k in pending) { pending[k].reject(handled(message)); delete pending[k]; }
-    // A failed run goes back to the check step, whose list already holds the
+    // A failed run goes back to the files step, whose list already holds the
     // config warnings: the run's own go under them.
     if (warnings) listWarnings(q(root, 'check-warnings'), (state.checked && phase !== 'check' ? state.checked.configWarnings || [] : []).concat(warnings));
-    if (phase === 'check' || !state.checked) { state.checked = null; goTo('drop'); }
-    else { discardZip(); goTo('check'); }
+    // A check that fails empties the list: drops add to it now, and a file
+    // that cannot be read would fail every later check while the table that
+    // offers Remove is not shown.
+    if (phase === 'check' || !state.checked) {
+      state.checked = null; state.entries = []; state.dropCount = 0;
+      q(root, 'files-panel').hidden = true; goTo('files');
+    }
+    else { discardZip(); goTo('files'); }
     updateControls();
   }
   // A rejection recover() already reported: the caller's catch must not
@@ -221,7 +276,10 @@ export function createPage(root, worker, opts) {
     if (busy()) return;
     clearError();
     state.checked = null;
-    goTo('check');
+    goTo('files');
+    q(root, 'files-panel').hidden = false;
+    q(root, 'file-rows').innerHTML = '';
+    q(root, 'config-source').textContent = '';
     q(root, 'counts').innerHTML = '<span class="hint">Reading the files…</span>';
     listWarnings(q(root, 'check-warnings'), []);
     q(root, 'size-warning').hidden = true;
@@ -231,15 +289,10 @@ export function createPage(root, worker, opts) {
     sendWithFiles({ type: 'check', sample: state.sample });
     var checked = await reply;
     state.checked = checked;
-    var c = checked.counts;
-    // classify-files.js puts every JSON file in BOTH the participant and the
-    // replay list (ingest tells a recording from data by content), so the
-    // replay list is the JSON count and each file is counted once here.
-    var json = c.replay, csv = c.participant - c.replay;
-    q(root, 'counts').innerHTML =
-      '<span><b>' + c.participant + '</b> data files (' + csv + ' CSV, ' + json + ' JSON: participant data or recordings, told apart when the report is built)</span>' +
-      '<span><b>' + c.assets + '</b> experiment assets</span><span><b>' + (checked.configFound ? '1' : '0') + '</b> config file</span>' +
-      (c.ignored ? '<span><b>' + c.ignored + '</b> ignored</span>' : '');
+    renderFiles(checked);
+    settingsPanel.write(settingsFromConfig(checked.config));
+    settingsPanel.setAssetsHint(kindCount(checked, 'asset') > 0);
+    q(root, 'settings').hidden = false;
     var sel = q(root, 'id-field'); sel.innerHTML = '';
     var offered = {};
     checked.idSuggestion.candidates.forEach(function (cand) {
@@ -253,16 +306,65 @@ export function createPage(root, worker, opts) {
     }
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
     state.idField = sel.value;
-    q(root, 'id-reason').textContent = checked.sampled + ' file(s) inspected';
+    q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
     listWarnings(q(root, 'check-warnings'), checked.configWarnings);
     var tested = state.limits && state.limits.testedParticipants;
-    if (tested && c.participant > tested) {
-      q(root, 'size-warning-text').textContent = 'This cohort has ' + c.participant + ' data files, more than the ' + tested +
+    var dataFiles = kindCount(checked, 'data');
+    if (tested && dataFiles > tested) {
+      q(root, 'size-warning-text').textContent = 'This cohort has ' + dataFiles + ' data files, more than the ' + tested +
         ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here, or use the CLI, which is not limited by browser memory.';
       q(root, 'size-warning').hidden = false;
     }
     updateControls();
   }
+
+  function kindCount(checked, kind) {
+    return (checked.files || []).filter(function (f) { return f.kind === kind; }).length;
+  }
+
+  // The recognised-files table (one row per file, what it was read as, and
+  // a Remove control; the sample has no file list of its own to edit), the
+  // counts by kind, and where the settings came from.
+  function renderFiles(checked) {
+    var rows = q(root, 'file-rows');
+    rows.innerHTML = '';
+    (checked.files || []).forEach(function (f) {
+      var tr = document.createElement('tr');
+      var name = document.createElement('td');
+      var code = document.createElement('code');
+      code.textContent = f.path;
+      name.appendChild(code);
+      var kind = document.createElement('td');
+      kind.textContent = KIND_LABELS[f.kind] || f.kind;
+      var act = document.createElement('td');
+      if (!state.sample) {
+        var b = document.createElement('button');
+        b.className = 'secondary';
+        b.dataset.action = 'remove-file';
+        b.dataset.path = f.path;
+        b.textContent = 'Remove';
+        b.setAttribute('aria-label', 'Remove ' + f.path);
+        act.appendChild(b);
+      }
+      tr.appendChild(name); tr.appendChild(kind); tr.appendChild(act);
+      rows.appendChild(tr);
+    });
+    var ignored = kindCount(checked, 'ignored'), unreadable = kindCount(checked, 'unreadable');
+    q(root, 'counts').innerHTML =
+      countSpan(kindCount(checked, 'data'), 'data file', 'data files') +
+      countSpan(kindCount(checked, 'recording'), 'replay recording', 'replay recordings') +
+      countSpan(kindCount(checked, 'asset'), 'experiment asset', 'experiment assets') +
+      countSpan(checked.configFound ? 1 : 0, 'config file', 'config files') +
+      (ignored ? countSpan(ignored, 'ignored', 'ignored') : '') +
+      (unreadable ? countSpan(unreadable, 'unreadable', 'unreadable') : '');
+    q(root, 'config-source').textContent = checked.configPath
+      ? 'Settings from ' + checked.configPath + ', over the defaults.'
+      : 'Settings: the defaults (no cyborg-hunter.config.json among the files).';
+  }
+
+  // The config this page's settings stand for (the check's merged config,
+  // with the panel's values on top).
+  function effectiveConfig() { return configFromSettings(state.checked.config, settingsPanel.read()); }
 
   async function run() {
     if (busy() || !state.checked) return;
@@ -275,20 +377,84 @@ export function createPage(root, worker, opts) {
     var reply = waitFor('done');
     updateControls();
     armStallHint();
-    sendWithFiles({ type: 'run', sample: state.sample, config: state.checked.config, participantIdField: state.idField });
+    var config = effectiveConfig();
+    sendWithFiles({ type: 'run', sample: state.sample, config: config, participantIdField: state.idField });
     var done = await reply;
+    state.ranWith = { config: config, idField: state.idField };
+    showResults(done);
+  }
+
+  // A settings change once a report is on screen: the panel's post-hoc keys
+  // re-analyse the participants already read (`reanalyze`); a change to the
+  // id, integrity or session-report field reads the files again (`run`,
+  // with the same files). Either way the page stays on its results and
+  // swaps the report and the downloads in place.
+  function onSettingsChange() {
+    if (!state.result || busy() || state.step !== 'results') return;
+    var config = effectiveConfig();
+    var reread = state.idField !== state.ranWith.idField || REINGEST_KEYS.some(function (k) {
+      return k !== 'participantIdField' && config[k] !== state.ranWith.config[k];
+    });
+    rerun(reread ? 'run' : 'reanalyze', config).catch(onFailure(reread ? 'run' : 'reanalyze'));
+  }
+
+  // One at a time, like a run: the awaited 'done' keeps the page busy, which
+  // disables the settings until the answer (the worker's zip chunks carry no
+  // run id), and the last run's zip is let go before this one streams in. A
+  // failure goes back to the file list, as a failed run does (recover).
+  async function rerun(type, config) {
+    clearError();
+    stopWatchdog();
+    discardZip();
+    var status = q(root, 'rerun-status');
+    status.hidden = false;
+    var reply = waitFor('done');
     updateControls();
+    armStallHint();
+    var msg = { type: type, config: config, participantIdField: state.idField };
+    if (type === 'run') { msg.sample = state.sample; sendWithFiles(msg); } else send(msg);
+    var done = await reply;
+    status.hidden = true;
+    state.ranWith = { config: config, idField: state.idField };
+    showResults(done);
+  }
+
+  // A run's or a re-analysis's answer on screen: the summary, the downloads,
+  // the report frame swapped in place, the replay card's list.
+  function showResults(done) {
     state.result = done;
+    // The annotations of this cohort, stored under its run id: a re-run of
+    // the same files keeps the id, and with it what was annotated.
+    if (done.runId !== state.runId) {
+      state.runId = done.runId || null;
+      state.annotations = state.runId ? loadAnnotations(pageStorage(), state.runId, cohortIds()) : null;
+      q(root, 'annotations-status').textContent = '';
+      annotationsUnstored = false;
+    }
     state.zipUrl = URL.createObjectURL(new Blob(state.zipParts, { type: 'application/zip' }));
+    updateControls();
     goTo('results');
     q(root, 'summary').textContent = done.triageOrder.length + ' participants: ' + done.counts.flaggedHard + ' hard, ' +
       done.counts.flaggedSoft + ' soft, ' + done.counts.clean + ' clean. Zip: ' + Math.round(done.zipBytes / 1024) + ' KB.';
     listWarnings(q(root, 'run-warnings'), done.warnings.concat(done.reportWarnings));
-    root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = typeof done.files[b.dataset.file] !== 'string'; });
+    // The participant the last report had selected, if this one lists them:
+    // the new report opens on them (its script selects the row #p-<id> names
+    // on load, the id as the renderer writes it). A replay of theirs that was
+    // on screen loads again once the report has, unless the analyst picked
+    // another in the meantime. Read before setParticipants tears it down.
+    var reopen = state.selected && done.triageOrder.indexOf(state.selected) >= 0 ? state.selected : null;
+    var mounted = root.querySelector('iframe.replay-host-frame');
+    var reloadReplay = !!(reopen && mounted && mounted.dataset.participantId === reopen &&
+      done.participants.some(function (p) { return p.participantId === reopen && p.hasReplay; }));
     // reportUrl moves to the new document only once it has loaded: a failed
     // swap has already revoked its own url, and the old one is still showing.
-    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; armWatchdog(); },
-      function () { showError('The report frame did not load.'); }, { className: 'analyze-report', title: 'Report', loadTimeoutMs: REPORT_LOAD_TIMEOUT_MS });
+    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () {
+      reportUrl = fresh; armWatchdog(); postAnnotations();
+      // A replay that fails to load is reported by the page (recover), as
+      // after a click on Load replay.
+      if (reloadReplay && !replayCard.userChose()) { replayCard.select(reopen); replayCard.load().catch(function () {}); }
+    }, function () { showError('The report frame did not load.'); },
+    { className: 'analyze-report', title: 'Report', loadTimeoutMs: REPORT_LOAD_TIMEOUT_MS, hash: reopen ? '#p-' + sanitize(reopen) : '' });
     if (!replayCard) {
       replayCard = createReplayCard(q(root, 'replay'), state.assets, function (pid) {
         clearError();
@@ -298,13 +464,56 @@ export function createPage(root, worker, opts) {
       });
     }
     replayCard.setParticipants(done.participants);
+    settingsPanel.setPhases(done.phases);
     reportFirstSelection = true;
     reportPosted = false;
+  }
+
+  // The ids of this report's participants: a change or an import names one
+  // of them, or it does not apply.
+  function cohortIds() { return state.result.participants.map(function (p) { return p.participantId; }); }
+  // The annotations into the report frame, whose script shows them: after
+  // each report load and each change. '*': the frame's origin is opaque.
+  function postAnnotations() {
+    var frame = root.querySelector('iframe.analyze-report');
+    if (!frame || !frame.contentWindow || !state.runId) return;
+    frame.contentWindow.postMessage({ type: 'cyborg-hunter:annotations', runId: state.runId, annotations: state.annotations }, '*');
+  }
+  // One change (a function that applies it to a state and says whether it
+  // applied), made to what storage holds now rather than to this page's
+  // copy: another tab of the page on the same cohort may have written since.
+  // Once storage has not taken a write (refused, or full), the page's own
+  // copy is the base for the rest of this cohort: storage's copy lacks the
+  // changes it did not take, and a change made over it would drop them from
+  // the page, the report and the exports. The status line says so, once.
+  function changeAnnotations(change) {
+    var storage = pageStorage();
+    var stored = null;
+    if (!annotationsUnstored) {
+      try { stored = readAnnotations(storage, state.runId, cohortIds()); } catch (e) { /* refused: see pageStorage */ }
+    }
+    var target = stored || state.annotations;
+    if (!change(target)) return;
+    state.annotations = target;
+    if (!annotationsUnstored && !saveAnnotations(storage, state.runId, target)) {
+      annotationsUnstored = true;
+      q(root, 'annotations-status').textContent = UNSTORED_TEXT;
+    }
+    postAnnotations();
+  }
+  // One change the report posted (annotations.js checks it).
+  function onAnnotate(msg) {
+    if (!state.result || !state.runId) return;
+    var ids = cohortIds(), now = new Date().toISOString();
+    changeAnnotations(function (map) { return applyAnnotate(map, msg, state.runId, ids, now); });
   }
 
   function reset() {
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
+    state.runId = null; state.annotations = null;
+    q(root, 'annotations-status').textContent = '';
+    annotationsUnstored = false;
     stopWatchdog();
     hideStallHint();
     discardZip();
@@ -319,21 +528,38 @@ export function createPage(root, worker, opts) {
     listWarnings(q(root, 'run-warnings'), []);
     // Cleared so choosing the same files again still fires `change`.
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';
-    goTo('drop');
+    q(root, 'files-panel').hidden = true;
+    state.dropCount = 0;
+    goTo('files');
     clearError();
     updateControls();
   }
 
-  function setFiles(entries) { state.entries = entries; state.sample = false; return check(); }
+  // Each drop or file choice ADDS to the list (files-panel.js), and the list
+  // is checked again. Files added after the sample replace it: the sample is
+  // not a file list.
+  function addFiles(entries) {
+    if (busy()) return Promise.resolve();
+    if (state.sample) { state.sample = false; state.entries = []; }
+    state.dropCount++;
+    state.entries = mergeEntries(state.entries, entries, state.dropCount);
+    return check();
+  }
+  function removeFile(path) {
+    if (busy()) return Promise.resolve();
+    state.entries = removeEntry(state.entries, path);
+    if (!state.entries.length) { reset(); return Promise.resolve(); }
+    return check();
+  }
   function loadSample() { if (busy()) return Promise.resolve(); state.sample = true; state.entries = []; return check(); }
 
   // Wiring
   var zone = q(root, 'dropzone');
   function onDrop(e) {
     e.preventDefault(); zone.classList.remove('over');
-    if (state.step !== 'drop' || busy()) return;
+    if (state.step !== 'files' || busy()) return;
     // collectDropped reads every entry synchronously, before its first await.
-    collectDropped(e.dataTransfer).then(setFiles).catch(onFailure('check'));
+    collectDropped(e.dataTransfer).then(addFiles).catch(onFailure('check'));
   }
   zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('over'); });
   zone.addEventListener('dragleave', function () { zone.classList.remove('over'); });
@@ -342,8 +568,18 @@ export function createPage(root, worker, opts) {
   // file in place of this page: take it as a drop on the zone instead.
   window.addEventListener('dragover', function (e) { e.preventDefault(); });
   window.addEventListener('drop', function (e) { if (!zone.contains(e.target)) onDrop(e); else e.preventDefault(); });
-  q(root, 'file-input').addEventListener('change', function (e) { setFiles(filesFromInput(e.target)).catch(onFailure('check')); });
-  q(root, 'dir-input').addEventListener('change', function (e) { setFiles(filesFromInput(e.target)).catch(onFailure('check')); });
+  // Cleared after reading, so choosing the same file again still fires `change`.
+  ['file-input', 'dir-input'].forEach(function (r) {
+    q(root, r).addEventListener('change', function (e) {
+      var entries = filesFromInput(e.target);
+      e.target.value = '';
+      addFiles(entries).catch(onFailure('check'));
+    });
+  });
+  q(root, 'file-rows').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-action="remove-file"]');
+    if (b) removeFile(b.dataset.path).catch(onFailure('check'));
+  });
   root.querySelector('[data-action="sample"]').addEventListener('click', function () { loadSample().catch(onFailure('check')); });
   q(root, 'id-field').addEventListener('change', function (e) { state.idField = e.target.value; });
   runButton.addEventListener('click', function () { run().catch(onFailure('run')); });
@@ -358,17 +594,61 @@ export function createPage(root, worker, opts) {
       download(name, state.result.files[name], name.endsWith('.md') ? 'text/markdown' : 'text/csv');
     });
   });
+  // The settings as a config the CLI reproduces this report from (only the
+  // keys that differ from its defaults; export-config.js).
   root.querySelector('[data-action="export-config"]').addEventListener('click', function () {
-    // CLI-ready: what this run used, with the file-system fields a CLI run needs.
-    var cfg = Object.assign({}, state.result.configUsed, { dataDir: './data', filePattern: '*.{json,csv}', outputDir: './cyborg-hunter-report' });
-    delete cfg.replayDir; delete cfg.noVisuals;
+    if (!state.checked) return;
+    var cfg = exportConfig(effectiveConfig(), { participantIdField: state.idField, assetsDropped: kindCount(state.checked, 'asset') > 0 });
     download('cyborg-hunter.config.json', JSON.stringify(cfg, null, 2) + '\n', 'application/json');
   });
+  // The annotation exports and import (the report's frame can neither
+  // download nor keep them).
+  root.querySelector('[data-action="annotations-csv"]').addEventListener('click', function () {
+    if (!state.result || !state.runId) return;
+    download('annotations-' + state.runId + '.csv',
+      annotationsCsv(state.result.triageRows, state.annotations, state.runId, q(root, 'unreviewed-included').checked), 'text/csv');
+  });
+  root.querySelector('[data-action="annotations-json"]').addEventListener('click', function () {
+    if (!state.result || !state.runId) return;
+    download('annotations-' + state.runId + '.json', annotationsJson(state.runId, state.annotations, new Date().toISOString()), 'application/json');
+  });
+  q(root, 'annotations-input').addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file || !state.result || !state.runId) return;
+    var status = q(root, 'annotations-status');
+    var runId = state.runId;
+    file.text().then(function (text) {
+      // The file is read outside busy(): Start over may have come in between,
+      // and the report the import was for is gone (another may be up since).
+      if (!state.result || state.runId !== runId) {
+        status.textContent = 'Import dropped: Start over was pressed before the file was read.';
+        return;
+      }
+      var result = readAnnotationsImport(text, cohortIds(), state.runId);
+      changeAnnotations(function (map) {
+        Object.keys(result.annotations).forEach(function (id) { map[id] = result.annotations[id]; });
+        return true;
+      });
+      // The import's message replaces the status line, so it repeats the
+      // storage note (changeAnnotations) while that holds.
+      status.textContent = importMessage(result) + (annotationsUnstored ? ' ' + UNSTORED_TEXT : '');
+    }).catch(function (err) { status.textContent = 'Import failed: ' + (err && err.message ? err.message : String(err)); });
+  });
+  // Another tab of the page on the same cohort changed the annotations
+  // (storage tells the other pages of its origin): this tab's report shows it.
+  window.addEventListener('storage', function (e) {
+    if (!state.runId || (e.key !== storageKey(state.runId) && e.key !== null)) return;
+    state.annotations = loadAnnotations(pageStorage(), state.runId, cohortIds());
+    postAnnotations();
+  });
   // The report posts the selected participant (the report renderer's
-  // selectionPostMessage option); only messages from the report frame count.
+  // selectionPostMessage option) and each annotation change
+  // (annotationPostMessage); only messages from the report frame count.
   window.addEventListener('message', function (e) {
     var frame = root.querySelector('iframe.analyze-report');
     if (!frame || e.source !== frame.contentWindow) return;
+    if (e.data && e.data.type === 'cyborg-hunter:annotate') { onAnnotate(e.data); return; }
     if (!e.data || e.data.type !== 'cyborg-hunter:select') return;
     reportPosted = true;       // the report's script ran, whatever the id says
     stopWatchdog();
@@ -387,7 +667,7 @@ export function createPage(root, worker, opts) {
     replayCard.select(pid);
   });
 
-  return { state: state, setFiles: setFiles, loadSample: loadSample, run: run, reset: reset,
+  return { state: state, addFiles: addFiles, removeFile: removeFile, loadSample: loadSample, run: run, reset: reset,
     selectParticipant: function (pid) { if (replayCard) replayCard.select(pid); },
     loadReplay: function () { return replayCard ? replayCard.load() : Promise.resolve(); } };
 }

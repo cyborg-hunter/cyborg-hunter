@@ -1,9 +1,10 @@
 // tests/demo/replay-host.test.js
 // DOM-free unit tests for replay-host.js's pure HTML-building step
-// (walkthrough item 12). mountReplayHost/teardownReplayHost are
-// DOM-dependent and get their coverage as E2E (demo/tests/tour.spec.js) —
-// this file only exercises buildReplayHostHtml's escaping, since a broken
-// escape there is a script-injection bug, not just a cosmetic one.
+// (walkthrough item 12). teardownReplayHost is DOM-dependent and gets its
+// coverage from the analyze page's tests (tests/demo/analyze-page.test.js,
+// tests/e2e/analyze/site.spec.js) — this file only exercises
+// buildReplayHostHtml's escaping, since a broken escape there is a
+// script-injection bug, not just a cosmetic one.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildReplayHostHtml } from '../../demo/replay-host.js';
@@ -70,8 +71,8 @@ test('both inlining rules mirror src/shared/inline-safe.js exactly', () => {
 });
 
 // The .replay-* rules are no longer copied here: they come from the CLI's
-// own src/cli/renderers/replay-styles.js, passed down by results.js (through
-// the preview-core bundle), together with the report's @font-face block.
+// own src/cli/renderers/replay-styles.js, passed down by the analyze page
+// (baked into its bundle), together with the report's @font-face block.
 test('buildReplayHostHtml uses the replay CSS and font faces it is given', () => {
   const html = buildReplayHostHtml({ segments: [] }, '', { replayCss: REPLAY_STYLES_CSS, fontFaceCss: '@font-face { font-family: "Sora"; }' });
   assert.ok(html.includes(REPLAY_STYLES_CSS), 'the shared replay rules, verbatim');
@@ -90,4 +91,56 @@ test('the host :root matches the report palette (high-contrast lines)', () => {
   const html = buildReplayHostHtml({ segments: [] }, '');
   assert.match(html, /--ink:#0f0f0f/);
   assert.match(html, /--line:#b9b2a2/);
+});
+
+// The host tells the page that frames it how tall it is (demo/analyze/
+// replay-card.js sizes the frame from it). The script is taken from the
+// built document and run over stand-ins for the three globals it reads.
+test('the host posts its document height to the framing page, and again whenever it changes', () => {
+  const html = buildReplayHostHtml({ segments: [] }, '');
+  const reporter = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1])
+    .find((s) => s.includes('cyborg-hunter:replay-height'));
+  assert.ok(reporter, 'a script of its own');
+  const sent = [];
+  let height = 300;
+  let observed = null;
+  const document = { body: {}, documentElement: { getBoundingClientRect: () => ({ height }) } };
+  const window = { parent: { postMessage: (msg, target) => sent.push([msg, target]) } };
+  function ResizeObserver(cb) { this.observe = (el) => { observed = { el, cb }; }; }
+  new Function('window', 'document', 'ResizeObserver', reporter)(window, document, ResizeObserver);
+  assert.deepEqual(sent, [[{ type: 'cyborg-hunter:replay-height', height: 300 }, '*']]);
+  assert.equal(observed.el, document.body);
+  observed.cb();                      // the same height: nothing posted
+  height = 512.4;
+  observed.cb();
+  assert.deepEqual(sent, [[{ type: 'cyborg-hunter:replay-height', height: 300 }, '*'],
+    [{ type: 'cyborg-hunter:replay-height', height: 513 }, '*']]);
+});
+
+// While the viewer is fullscreen it sits in the top layer, out of the flow,
+// and the host's document is only its own padding tall. Posting that would
+// shrink the frame under the fullscreen viewer, and the frame would come back
+// short on exit until the next post.
+test('the host posts no height while its viewer is fullscreen', () => {
+  const html = buildReplayHostHtml({ segments: [] }, '');
+  const reporter = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1])
+    .find((s) => s.includes('cyborg-hunter:replay-height'));
+  const sent = [];
+  let height = 680;
+  let observed = null;
+  const document = { body: {}, fullscreenElement: null, documentElement: { getBoundingClientRect: () => ({ height }) } };
+  const window = { parent: { postMessage: (msg, target) => sent.push([msg, target]) } };
+  function ResizeObserver(cb) { this.observe = (el) => { observed = { el, cb }; }; }
+  new Function('window', 'document', 'ResizeObserver', reporter)(window, document, ResizeObserver);
+  document.fullscreenElement = {};
+  height = 32;
+  observed.cb();
+  assert.equal(sent.length, 1, 'nothing posted while fullscreen');
+  document.fullscreenElement = null;
+  height = 680;
+  observed.cb();
+  assert.equal(sent.length, 1, 'back at the height last posted: nothing to post');
+  height = 700;
+  observed.cb();
+  assert.deepEqual(sent.at(-1), [{ type: 'cyborg-hunter:replay-height', height: 700 }, '*']);
 });

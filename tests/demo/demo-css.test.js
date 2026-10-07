@@ -57,9 +57,9 @@ test('tokens follow the report palette; the serif is gone', () => {
 
 test('typefaces mirror the report roles', () => {
   const EXPECT = {
-    body: 'Recursive', '.stepcard h1': 'Space Grotesk', '.topbar .brand': 'Space Grotesk', '.yourreport h3': 'Space Grotesk',
+    body: 'Recursive', '.stepcard h1': 'Space Grotesk', '.topbar .brand': 'Space Grotesk',
     '.eyebrow': 'Sofia Sans', '.card h3': 'Sofia Sans', '.task .label': 'Sofia Sans', '.replicate h3': 'Sofia Sans',
-    '.replay-host-card h3': 'Sofia Sans', '.filetext-dialog h3': 'Sofia Sans', '.lp-cols': 'Sofia Sans',
+    '.batch-heading': 'Sofia Sans', '.filetext-dialog h3': 'Sofia Sans', '.lp-cols': 'Sofia Sans',
     '.hint': 'Tomorrow', '.rule': 'Tomorrow', '.lp-caption': 'Recursive', '.file small': 'Recursive',
     '.check li .n': 'Sora', '.topbar .pid': 'Sora', '.rec': 'Sora', '.chip': 'Sora',
     '.btn': 'Recursive', '.code-tab': 'Recursive', '.lp-tab': 'Recursive',
