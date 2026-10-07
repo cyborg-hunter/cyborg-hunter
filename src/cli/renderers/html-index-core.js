@@ -28,6 +28,7 @@ import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
 import { inlineSafeJson, inlineSafeSrc } from '../../shared/inline-safe.js';
 import { annotationBlock } from './annotation-client.js';
+import { sanitize } from './report-id.js';
 
 /**
  * Renders the report's index.html as a string. `opts.replayClientSrc` is the
@@ -1068,10 +1069,6 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function sanitize(name) {
-  return String(name || '').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
 }
 
 // Renders a single participant detail pane. The pane holds the header strip and

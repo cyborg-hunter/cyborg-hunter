@@ -360,7 +360,7 @@ show up in the row's reason text instead, next to whatever did.</p>`.trim(),
     body: `
 <p>Your session is now three files: the session data, the replay recording
 and a config. Two example participants come with them, so the triage list
-reads as it would in a real study. Open all five in the analyzer, which
+reads as it would in a real study. Open them all in the analyzer, which
 builds the report right here in your browser and lets you change the
 analysis settings and watch the report follow. Or save them and build the
 same report with the command-line tool, the way you would with real study

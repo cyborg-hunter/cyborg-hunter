@@ -22,6 +22,7 @@ import { createSettingsPanel, settingsFromConfig, configFromSettings, REINGEST_K
 import { exportConfig } from './export-config.js';
 import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
 import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
+import { sanitize } from '../../src/cli/renderers/report-id.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
 // The annotations status line once storage has not taken a write
@@ -436,10 +437,24 @@ export function createPage(root, worker, opts) {
     q(root, 'summary').textContent = done.triageOrder.length + ' participants: ' + done.counts.flaggedHard + ' hard, ' +
       done.counts.flaggedSoft + ' soft, ' + done.counts.clean + ' clean. Zip: ' + Math.round(done.zipBytes / 1024) + ' KB.';
     listWarnings(q(root, 'run-warnings'), done.warnings.concat(done.reportWarnings));
+    // The participant the last report had selected, if this one lists them:
+    // the new report opens on them (its script selects the row #p-<id> names
+    // on load, the id as the renderer writes it). A replay of theirs that was
+    // on screen loads again once the report has, unless the analyst picked
+    // another in the meantime. Read before setParticipants tears it down.
+    var reopen = state.selected && done.triageOrder.indexOf(state.selected) >= 0 ? state.selected : null;
+    var mounted = root.querySelector('iframe.replay-host-frame');
+    var reloadReplay = !!(reopen && mounted && mounted.dataset.participantId === reopen &&
+      done.participants.some(function (p) { return p.participantId === reopen && p.hasReplay; }));
     // reportUrl moves to the new document only once it has loaded: a failed
     // swap has already revoked its own url, and the old one is still showing.
-    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () { reportUrl = fresh; armWatchdog(); postAnnotations(); },
-      function () { showError('The report frame did not load.'); }, { className: 'analyze-report', title: 'Report', loadTimeoutMs: REPORT_LOAD_TIMEOUT_MS });
+    var fresh = swapIframe(q(root, 'report'), done.html, reportUrl, function () {
+      reportUrl = fresh; armWatchdog(); postAnnotations();
+      // A replay that fails to load is reported by the page (recover), as
+      // after a click on Load replay.
+      if (reloadReplay && !replayCard.userChose()) { replayCard.select(reopen); replayCard.load().catch(function () {}); }
+    }, function () { showError('The report frame did not load.'); },
+    { className: 'analyze-report', title: 'Report', loadTimeoutMs: REPORT_LOAD_TIMEOUT_MS, hash: reopen ? '#p-' + sanitize(reopen) : '' });
     if (!replayCard) {
       replayCard = createReplayCard(q(root, 'replay'), state.assets, function (pid) {
         clearError();

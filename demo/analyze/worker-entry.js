@@ -19,9 +19,13 @@
 //     { type: 'reset' }  start over: the last run's participants are let go
 //   worker → page
 //     ready         on boot: the baked assets and the tested cohort size
-//     checked       file counts, the merged config and its warnings, the id suggestion
-//                   (sampled: the data files it was read from; recordings: the
-//                   replay recordings among the JSON files, never sampled),
+//     checked       counts: the files in each group ({ participant, replay,
+//                   assets, ignored }); config: the merged config, and
+//                   configWarnings its warnings; configFound, configPath:
+//                   whether a cyborg-hunter.config.json was among the files,
+//                   and its path (null without one); idSuggestion; sampled:
+//                   the data files the suggestion was read from; recordings:
+//                   the replay recordings among the JSON files, never sampled;
 //                   and every file with what it was read as (files: [{path, kind}],
 //                   kind data | recording | asset | config | ignored | unreadable)
 //     progress      { phase: 'check' | 'ingest' | 'report', done, total, label? }
@@ -32,8 +36,10 @@
 //                   participant's tier and triage score in triage order
 //                   (for the annotation export)
 //     replay-model  { participantId, model }
-//     error         { phase, message }, phase 'ingest' or the type of the message
-//                   that failed: 'check' | 'run' | 'reanalyze' | 'replay'
+//     error         { phase, message, warnings? }, phase 'ingest' or the type of
+//                   the message that failed: 'check' | 'run' | 'reanalyze' |
+//                   'replay'; warnings: ingest's own, on an ingest that found
+//                   no participant data (the page lists them under the files)
 import replayClientSrc from 'virtual:replay-client-src';
 import fontFaceCss from 'virtual:font-face-css';
 import sample from 'virtual:sample-data';

@@ -1057,6 +1057,68 @@ test('a failed re-analysis goes back to the file list with its error, its partia
   assert.equal(action('run').disabled, false, 'Build is offered again');
 });
 
+// A settings change keeps the analyst's place: the new report opens on the
+// participant the last one had selected (the report reads #p-<id> on load,
+// the id as the renderer writes it: anything but A-Z a-z 0-9 _ - becomes _),
+// and the replay of theirs that was on screen loads again once it has.
+// Frames here keep the src they are given and load nothing (happy-dom, page
+// loading disabled, would settle every swap as a failure), as in the render
+// watchdog's block; the hooks put createElement back.
+describe('a re-analysis keeps the analyst\'s place', () => {
+  let createElement;
+  before(() => {
+    createElement = document.createElement;
+    const bound = createElement.bind(document);
+    document.createElement = (tag, o) => {
+      const el = bound(tag, o);
+      if (String(tag).toLowerCase() === 'iframe') {
+        let src = '';
+        Object.defineProperty(el, 'src', { set(v) { src = v; }, get() { return src; }, configurable: true });
+      }
+      return el;
+    };
+  });
+  after(() => { document.createElement = createElement; });
+
+  test('a re-analysis reopens the report on the selected participant and loads their replay again', async () => {
+    const t = boot({ timers: fakeTimers() });   // the render watchdog stays on a hand-driven clock
+    const done = { ...DONE, triageOrder: ['A', 'p.2/b'],
+      participants: [{ participantId: 'A', hasReplay: true, assetNote: null }, { participantId: 'p.2/b', hasReplay: true, assetNote: null }] };
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit(done);
+    await tick();
+    const frame = document.querySelector('iframe.analyze-report');
+    frame.dispatchEvent(new win.Event('load'));
+    assert.match(frame.src, /^blob:[^#]*$/, 'nothing selected yet: the report opens on its first row');
+    window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'p.2/b' }, source: frame.contentWindow }));
+    const loading = t.page.loadReplay();
+    await tick();
+    t.emit({ type: 'replay-model', participantId: 'p.2/b', model: { segments: [] } });
+    await loading;
+    assert.equal(document.querySelector('iframe.replay-host-frame').dataset.participantId, 'p.2/b');
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.equal(t.sent.at(-1).type, 'reanalyze');
+    t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    t.emit(done);
+    await tick();
+    assert.match(frame.src, /^blob:[^#]*#p-p_2_b$/, 'the new report opens on the selected participant');
+    assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0, 'the old viewer went with the old report');
+    frame.dispatchEvent(new win.Event('load'));
+    await tick();
+    assert.deepEqual(t.sent.filter((m) => m.type === 'replay').map((m) => m.participantId), ['p.2/b', 'p.2/b'], 'the replay is asked for again');
+    t.emit({ type: 'replay-model', participantId: 'p.2/b', model: { segments: [] } });
+    await tick();
+    const host = document.querySelectorAll('iframe.replay-host-frame');
+    assert.equal(host.length, 1);
+    assert.equal(host[0].dataset.participantId, 'p.2/b');
+    assert.equal(replaySelect().value, 'p.2/b');
+    assert.equal(role('error').hidden, true, 'every swap loaded');
+  });
+});
+
 // Phase scope reads a trial without a phase as "default" (the worker lists
 // it among the phases): the hint says so.
 test('the phase hint lists the phases the run found, and what "default" stands for', async () => {

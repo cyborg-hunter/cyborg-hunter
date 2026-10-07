@@ -18,12 +18,15 @@ var IFRAME_LOAD_TIMEOUT_MS = 5000;
 // `error`, or `load` never firing within the load timeout — revokes the
 // FRESH url instead (the old one, if any, is left alone and still showing)
 // and calls onFail rather than onload.
-// opts (optional): { className, title } of the iframe, and loadTimeoutMs
-// (default IFRAME_LOAD_TIMEOUT_MS); the defaults are the demo's own.
+// opts (optional): { className, title } of the iframe, loadTimeoutMs
+// (default IFRAME_LOAD_TIMEOUT_MS), and hash, a fragment the new document
+// opens at; the defaults are the demo's own. The hash goes on the frame's
+// src only: the url returned (the one to revoke later) stays bare.
 export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
   var className = (opts && opts.className) || 'results-frame';
   var title = (opts && opts.title) || 'Your cyborg-hunter report';
   var loadTimeoutMs = (opts && opts.loadTimeoutMs) || IFRAME_LOAD_TIMEOUT_MS;
+  var hash = (opts && opts.hash) || '';
   var iframe = container.querySelector('iframe.' + className);
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -69,7 +72,7 @@ export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
   var watchdogId = setTimeout(function () { onError(new Error('report iframe: load timed out')); }, loadTimeoutMs);
   iframe.addEventListener('load', onLoad);
   iframe.addEventListener('error', onError);
-  iframe.src = url;
+  iframe.src = url + hash;
   return url;
 }
 
