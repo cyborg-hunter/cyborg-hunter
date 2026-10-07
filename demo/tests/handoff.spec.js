@@ -1,8 +1,9 @@
 // demo/tests/handoff.spec.js
-// The tour's last step hands the visitor's five files to the analyzer
-// (demo/handoff.js, demo/analyze/main.js): one click, the same tab, nothing
-// uploaded. Then the visitor's own replay in the analyzer's replay card: the
-// viewer checks the tour used to run on its embedded report's replay.
+// The tour's last step hands the visitor's five files, with the page's six
+// fonts, to the analyzer (demo/handoff.js, demo/analyze/main.js): one click,
+// the same tab, nothing uploaded. Then the visitor's own replay in the
+// analyzer's replay card: the viewer checks the tour used to run on its
+// embedded report's replay.
 // Chromium only, like tour.spec.js (helpers.mjs's mocks).
 
 import { readFileSync } from 'node:fs';
@@ -12,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect, fastForwardToFiles, pid } from './helpers.mjs';
 import { guardNetwork, assertOnlyAllowed, siteAllowlist, buildReport, railOrder, reportSelected, waitReady } from '../../tests/e2e/analyze/support.mjs';
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
+import { HANDOFF_ASSETS } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -24,13 +26,13 @@ const viewerModelFromFixture = (name) =>
   buildViewerModel(JSON.parse(readFileSync(join(V2_FIXTURES, name + '.json'), 'utf8')));
 
 // From the files step: "Open in the analyzer", until the analyze page lists
-// the five files (the hash dropped once read). Returns the visitor's id,
-// read on the tour before it is left.
+// the five files and the six fonts (the hash dropped once read). Returns the
+// visitor's id, read on the tour before it is left.
 async function openInAnalyzer(page) {
   const participantId = await pid(page);
   await page.locator('[data-action="open-analyzer"]').click();
   await expect(page).toHaveURL(/\/analyze\/$/, { timeout: 30000 });
-  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(5, { timeout: 30000 });
+  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(5 + HANDOFF_ASSETS.length, { timeout: 30000 });
   return participantId;
 }
 
@@ -52,25 +54,39 @@ async function visitorReplay(page, answer) {
 }
 
 // ---------------------------------------------------------------------------
-// The hand-off: the five files arrive as one drop, under the analyze page's
-// own guard: after the tour, the only requests are the two example files the
-// tour fetches for the hand-off and the analyze page's own files.
+// The hand-off: the five files and the page's six fonts arrive as one drop,
+// under the analyze page's own guard: after the tour, the only requests are
+// the two example files and the six fonts the tour fetches for the hand-off,
+// and the analyze page's own files. The fonts match the URLs the recording's
+// stylesheet names them by, so the visitor's replay renders in them.
 // ---------------------------------------------------------------------------
-test('"Open in the analyzer" hands over the five files: listed as dropped, built, nothing requested beyond the site', async ({ page, baseURL }) => {
+test('"Open in the analyzer" hands over the five files and the fonts: listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
   test.setTimeout(120000);
   await fastForwardToFiles(page);
-  const allow = siteAllowlist(baseURL).concat([baseURL + '/assets/example-1.json', baseURL + '/assets/example-2.json']);
+  const allow = siteAllowlist(baseURL).concat([baseURL + '/assets/example-1.json', baseURL + '/assets/example-2.json'],
+    HANDOFF_ASSETS.map((path) => baseURL + '/' + path));
   const seen = await guardNetwork(page, allow);
   const participantId = await openInAnalyzer(page);
-  const listed = await page.locator('[data-role="file-rows"] tr td:first-child').allTextContents();
-  expect(listed.filter((p) => p !== participantId + '.json' && !p.startsWith(participantId + '-replay-')).sort())
-    .toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
+  const rows = await page.locator('[data-role="file-rows"] tr').evaluateAll((trs) =>
+    trs.map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent)));
+  expect(rows.map(([path]) => path).filter((p) => p !== participantId + '.json' && !p.startsWith(participantId + '-replay-')).sort())
+    .toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json'].concat(HANDOFF_ASSETS).sort());
+  expect(rows.filter(([, kind]) => kind === 'experiment asset').map(([path]) => path).sort()).toEqual([...HANDOFF_ASSETS].sort());
   await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 replay recording');
+  await expect(page.locator('[data-role="counts"]')).toContainText('6 experiment assets');
   await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   await buildReport(page);
   expect((await railOrder(page)).sort()).toEqual([participantId, 'example-1', 'example-2'].sort());
+  // The report moves the replay dropdown to its first row on load, which may
+  // be an example without a recording: choose the visitor's replay, whose
+  // note says what the experiment-assets match found.
+  await reportSelected(page);
+  await page.selectOption('[data-role="replay-select"]', participantId);
+  const note = page.locator('[data-role="asset-note"]');
+  await expect(note).toHaveText(/6 of 6 fonts matched/);
+  await expect(note).not.toHaveText(/missing/);
   await assertOnlyAllowed(page, seen, allow);
 });
 

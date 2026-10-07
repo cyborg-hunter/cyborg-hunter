@@ -374,7 +374,7 @@ data.</p>`.trim(),
  * site serves (`href`). A session file's card shows the name it is saved
  * under (demo.js sessionFileName); its `filename` here is the pattern, shown
  * only for a recording this browser could not make. The hand-off to the
- * analyzer passes the same files. */
+ * analyzer passes the same files, and the page's fonts (HANDOFF_ASSETS). */
 export const DOWNLOAD_BATCHES = [
   {
     heading: 'Your session',
@@ -396,6 +396,18 @@ export const DOWNLOAD_BATCHES = [
         description: 'a clean session' },
     ],
   },
+];
+
+/** The tour's own typefaces (demo.css @font-face), handed to the analyzer
+ * with the files so a replay of this page renders in them. Not offered as
+ * downloads: they are not study data. */
+export const HANDOFF_ASSETS = [
+  'assets/fonts/spacegrotesk/spacegrotesk-300-700.woff2',
+  'assets/fonts/tomorrow/tomorrow-400.woff2',
+  'assets/fonts/sofiasans/sofiasans-1-1000.woff2',
+  'assets/fonts/sora/sora-100-800.woff2',
+  'assets/fonts/recursive/recursive-300-1000.woff2',
+  'assets/fonts/majormonodisplay/majormonodisplay-400.woff2',
 ];
 
 /** The last step's one-click hand-off to the analyze page (demo/handoff.js).

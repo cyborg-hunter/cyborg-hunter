@@ -18,8 +18,8 @@
 
 import {
   STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS, RAIL_INTRO,
-  RAIL_INTRO_TITLE, CODE_TABS, DOWNLOAD_BATCHES, HANDOFF, REPLICATE, SCORING_PANEL,
-  SAVE_TO_FOLDER
+  RAIL_INTRO_TITLE, CODE_TABS, DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE,
+  SCORING_PANEL, SAVE_TO_FOLDER
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
@@ -876,15 +876,15 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // "Open in the analyzer": the files the batches offer, stored for the
-  // analyze page (handoff.js), which this tab then opens. The navigation
-  // waits for the write, so no popup blocker is involved, and Back returns
-  // to the tour. If the browser refuses the store, the step says so; the
-  // Save buttons still work.
+  // "Open in the analyzer": the files the batches offer and the page's
+  // fonts, stored for the analyze page (handoff.js), which this tab then
+  // opens. The navigation waits for the write, so no popup blocker is
+  // involved, and Back returns to the tour. If the browser refuses the
+  // store, the step says so; the Save buttons still work.
   function openInAnalyzer(button) {
     if (button.disabled) return;
     button.disabled = true;
-    handoffFiles().then(writeHandoff).then(function () {
+    handoffFiles({ withAssets: true }).then(writeHandoff).then(function () {
       location.assign('analyze/#from-demo');
     }).catch(function (err) {
       console.warn('cyborg-hunter demo: the hand-off to the analyzer failed', err);
@@ -898,20 +898,31 @@ function startTour(participantId, capabilities, manifest) {
 
   // The batches' files as { path, blob }: the session files built the way
   // their Save buttons build them (a missing recording is left out), the
-  // examples fetched from this site.
-  function handoffFiles() {
+  // examples fetched from this site. With opts.withAssets (the hand-off),
+  // the page's fonts (HANDOFF_ASSETS) follow, fetched from this site under
+  // the relative path the recorded stylesheet names them by, so the
+  // analyzer matches them and the visitor's replay renders in them. The
+  // folder save leaves them out: they are not study data.
+  function handoffFiles(opts) {
     var all = [];
     DOWNLOAD_BATCHES.forEach(function (b) { all = all.concat(b.files); });
-    return Promise.all(all.map(function (f) {
-      if (f.href) {
-        return fetch(f.href).then(function (r) {
-          if (!r.ok) throw new Error(f.href + ': HTTP ' + r.status);
-          return r.blob();
-        }).then(function (blob) { return { path: f.filename, blob: blob }; });
-      }
+    var files = all.map(function (f) {
+      if (f.href) return fetchFile(f.href, f.filename);
       var built = buildDownloadFile(f.key);
       return built ? { path: built.filename, blob: jsonBlob(built.data) } : null;
-    })).then(function (files) { return files.filter(Boolean); });
+    });
+    if (opts && opts.withAssets) {
+      HANDOFF_ASSETS.forEach(function (path) { files.push(fetchFile(path, path)); });
+    }
+    return Promise.all(files).then(function (got) { return got.filter(Boolean); });
+  }
+
+  // One file this site serves, as { path, blob }; a failed request rejects.
+  function fetchFile(href, path) {
+    return fetch(href).then(function (r) {
+      if (!r.ok) throw new Error(href + ': HTTP ' + r.status);
+      return r.blob();
+    }).then(function (blob) { return { path: path, blob: blob }; });
   }
 
   // "Save all into a folder": the folder picker first, inside the click

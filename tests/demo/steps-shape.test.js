@@ -1,10 +1,12 @@
 // tests/demo/steps-shape.test.js
 // Structural contract the engine relies on: 11 steps, known ids in order,
 // every step has eyebrow/title/body and counts itself against the total, no
-// tier vocabulary before step 10 (G2 guard), and the last step's files.
+// tier vocabulary before step 10 (G2 guard), and the last step's files and
+// the fonts its hand-off carries.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STEPS, RAIL_GROUPS, RAIL_INTRO, RAIL_INTRO_TITLE, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER } from '../../demo/steps.js';
+import fs from 'node:fs';
+import { STEPS, RAIL_GROUPS, RAIL_INTRO, RAIL_INTRO_TITLE, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
 
 const IDS = ['intro','baseline','clipboard-cheat','tab-away','browser-rearrange',
   'autotype','guard-entry','guard-cheat','guard-debrief',
@@ -45,6 +47,12 @@ test('the last step offers five files in two batches: the session built here, th
   }
   assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed && HANDOFF.leaveHint);
   assert.ok(SAVE_TO_FOLDER.buttonLabel && SAVE_TO_FOLDER.hint && SAVE_TO_FOLDER.failed);
+});
+test('the hand-off assets are exactly the faces demo.css declares', () => {
+  const css = fs.readFileSync(new URL('../../demo/demo.css', import.meta.url), 'utf8');
+  const declared = [...css.matchAll(/src:url\('([^']+\.woff2)'\)/g)].map((m) => m[1]).sort();
+  assert.deepStrictEqual([...HANDOFF_ASSETS].sort(), declared);
+  assert.strictEqual(declared.length, 6);
 });
 test('the walkthrough saves through the folder button or one file per click, not a per-batch "Save all"', () => {
   const text = REPLICATE.sections[0].text;
