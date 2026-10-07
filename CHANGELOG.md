@@ -9,10 +9,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
   14:03 UTC`). The id is a hash of each participant's id, trial count, and
   first and last trial timestamps. A report rebuilt from the same files keeps
-  it, whatever the settings, and the CLI and `/analyze/` give the same files
-  the same id, in whatever order they read them. Two studies that share
-  participant ids get different ids when their trials carry timestamps
-  (0.6.1 and later), so their annotations stay apart.
+  it, whatever the analysis settings (a change to the ID or integrity field
+  reads the files again and can give another id), and the CLI and
+  `/analyze/` give the same files the same id, in whatever order they read
+  them. Two studies that share participant ids get different ids when their
+  trials carry timestamps (0.6.1 and later), so their annotations stay apart.
 - Reports: annotate each participant with Include, Exclude or Flag and a
   note (keys `i`, `e`, `f` for the selected one). The rail shows the label
   and how many participants are reviewed. The report keeps the annotations
@@ -200,8 +201,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written
   with a leading apostrophe (`'`), so a spreadsheet reads it as text instead
   of running it as a formula. Numbers, negative ones included, are written
-  unchanged. `extensions.csv` now quotes a participant ID that holds a comma
-  or a quote, as the other files do.
+  unchanged. `event-log.csv` (participant and trial IDs) and
+  `extensions.csv` (participant IDs) now quote a value that holds a comma, a
+  quote or a line break, as `summary.csv` does.
 - Replay viewer: the stage shows the participant's whole recorded viewport,
   scaled to fit on both axes. Before, it took the available width only, and a
   tall recording ran below the window. **1:1** shows the recorded page at

@@ -420,8 +420,8 @@ export const HANDOFF = {
   buttonHint: 'The files below and this page\'s fonts, kept in this browser: nothing is uploaded.',
   failed: 'The files could not be prepared for the analyzer. Save them below ' +
     'and drop them on <a href="analyze/">the analyzer</a> instead.',
-  leaveHint: 'Leaving this page ends the session: open it in the analyzer or save the files first; ' +
-    'Back from the analyzer starts a new tour.',
+  leaveHint: 'Leaving this page can end the session: open it in the analyzer or save the files first; ' +
+    'Back from the analyzer may start a new tour.',
 };
 
 /** The last step's "Save all into a folder" (demo.js saveToFolder), offered

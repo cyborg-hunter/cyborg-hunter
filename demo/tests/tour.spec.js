@@ -455,7 +455,7 @@ test('files step: without the folder picker only the per-file Save buttons are o
   await expect(page.locator('[data-action="save-folder"]')).toHaveCount(0);
   await expect(page.locator('[data-action="download"]')).toHaveCount(3);
   await expect(page.locator('.file-actions a[download]')).toHaveCount(2);
-  await expect(page.locator('[data-role="leave-hint"]')).toContainText('save the files first');
+  await expect(page.locator('[data-role="leave-hint"]')).toHaveText(HANDOFF.leaveHint);
   // The config caveat, once, right after the first batch's grid.
   await expect(page.locator('[data-role="config-caveat"]')).toHaveCount(1);
   await expect(page.locator('.files + .file-caveat')).toHaveCount(1);

@@ -72,14 +72,17 @@ export function clearHandoff() {
   });
 }
 
-// The page's file entries ({ path, file }) for a record: none when there is
-// no record or it is older than HANDOFF_MAX_AGE_MS at `now`. Every File gets
-// the record's time as its modification time.
+// The page's file entries ({ path, file, handoff: true }) for a record: none
+// when there is no record or it is older than HANDOFF_MAX_AGE_MS at `now`.
+// Every File gets the record's time as its modification time. `handoff`
+// marks them as the tour's: the page does not count the fonts among them as
+// experiment files the analyst has to put beside an exported config
+// (analyze/page.js).
 export function handoffEntries(record, now) {
   if (!record || !Array.isArray(record.files)) return [];
   if (!(now - record.createdAt <= HANDOFF_MAX_AGE_MS)) return [];
   return record.files.map(function (f) {
     var name = f.path.slice(f.path.lastIndexOf('/') + 1);
-    return { path: f.path, file: new File([f.blob], name, { lastModified: record.createdAt }) };
+    return { path: f.path, file: new File([f.blob], name, { lastModified: record.createdAt }), handoff: true };
   });
 }

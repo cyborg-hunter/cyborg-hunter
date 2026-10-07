@@ -503,9 +503,10 @@ Visual renderers depend on `node-canvas` (Cairo bindings). If `npm install canva
 The report's top bar names its run, for example `run 3f9c2a7b1d4e8a60 ·
 2026-10-05 14:03 UTC`. The id is a hash of the participant ids and of each
 one's trial count and first and last trial timestamps, so a report rebuilt
-from the same files keeps it, whatever the settings, and two studies that
-both number their participants 1, 2, 3… get different ids when their trials
-carry timestamps (0.6.1 and later). In each
+from the same files keeps it, whatever the analysis settings (a change to
+the ID or integrity field reads the files again and can give another id),
+and two studies that both number their participants 1, 2, 3… get different
+ids when their trials carry timestamps (0.6.1 and later). In each
 participant's header, **Include**, **Exclude** and **Flag** record your
 decision and the note field (up to 2,000 characters) your reason. Pressing
 the chosen label again clears it; a participant without a label is not

@@ -68,9 +68,11 @@ export function createPage(root, worker, opts) {
   // suggestion put in the select; idPicked: the analyst's own choice of
   // another field, kept through the checks that still offer it. All null
   // until the first check and again once the cohort is replaced
-  // (forgetSettings).
+  // (forgetSettings). handoffPaths: the listed paths of the files the tour
+  // handed over (addFiles), whose fonts are not the analyst's experiment
+  // assets (droppedAssetCount); emptied with the list.
   var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
-    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null };
+    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null, handoffPaths: new Set() };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
@@ -191,7 +193,7 @@ export function createPage(root, worker, opts) {
     // offers Remove is not shown. The settings start over with it: the next
     // check is a first one (forgetSettings).
     if (phase === 'check' || !state.checked) {
-      state.checked = null; state.entries = []; state.dropCount = 0;
+      state.checked = null; state.entries = []; state.dropCount = 0; state.handoffPaths.clear();
       forgetSettings();
       q(root, 'files-panel').hidden = true; goTo('files');
     }
@@ -324,7 +326,7 @@ export function createPage(root, worker, opts) {
       settingsPanel.write(fromFile);
       state.settingsWritten = key;
     }
-    settingsPanel.setAssetsHint(kindCount(checked, 'asset') > 0);
+    settingsPanel.setAssetsHint(droppedAssetCount(checked) > 0);
     q(root, 'settings').hidden = false;
     var sel = q(root, 'id-field'); sel.innerHTML = '';
     var offered = {};
@@ -367,6 +369,12 @@ export function createPage(root, worker, opts) {
 
   function kindCount(checked, kind) {
     return (checked.files || []).filter(function (f) { return f.kind === kind; }).length;
+  }
+  // The experiment assets the analyst dropped: the tour's fonts are matched
+  // like any asset, but the CLI needs only the analyst's own in an assets
+  // folder (the hint and the export's assetsDir).
+  function droppedAssetCount(checked) {
+    return (checked.files || []).filter(function (f) { return f.kind === 'asset' && !state.handoffPaths.has(f.path); }).length;
   }
 
   // The recognised-files table (one row per file, what it was read as, and
@@ -564,7 +572,7 @@ export function createPage(root, worker, opts) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
-    state.runId = null; state.annotations = null;
+    state.runId = null; state.annotations = null; state.handoffPaths.clear();
     forgetSettings();
     q(root, 'annotations-status').textContent = '';
     annotationsUnstored = false;
@@ -598,11 +606,16 @@ export function createPage(root, worker, opts) {
     if (state.sample) { state.sample = false; state.entries = []; forgetSettings(); }
     state.dropCount++;
     state.entries = mergeEntries(state.entries, entries, state.dropCount);
+    // The hand-off's files under the paths they are listed by: mergeEntries
+    // keeps an entry's own object only for a path not yet taken, so one moved
+    // to a drop<n>/ folder, or skipped as a file already listed, is not marked.
+    state.entries.forEach(function (e) { if (e.handoff) state.handoffPaths.add(e.path); });
     return check();
   }
   function removeFile(path) {
     if (busy()) return Promise.resolve();
     state.entries = removeEntry(state.entries, path);
+    state.handoffPaths.delete(path);
     if (!state.entries.length) { reset(); return Promise.resolve(); }
     return check();
   }
@@ -610,7 +623,7 @@ export function createPage(root, worker, opts) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
     forgetSettings();
-    state.sample = true; state.entries = []; return check();
+    state.sample = true; state.entries = []; state.handoffPaths.clear(); return check();
   }
   // Opened from the demo with nothing to hand over (main.js): the files step
   // says so above the drop zone, until a drop, the sample or Start over.
@@ -670,7 +683,7 @@ export function createPage(root, worker, opts) {
   // keys that differ from its defaults; export-config.js).
   root.querySelector('[data-action="export-config"]').addEventListener('click', function () {
     if (!state.checked) return;
-    var cfg = exportConfig(effectiveConfig(), { participantIdField: state.idField, assetsDropped: kindCount(state.checked, 'asset') > 0 });
+    var cfg = exportConfig(effectiveConfig(), { participantIdField: state.idField, assetsDropped: droppedAssetCount(state.checked) > 0 });
     download('cyborg-hunter.config.json', JSON.stringify(cfg, null, 2) + '\n', 'application/json');
   });
   // The annotation exports and import (the report's frame can neither

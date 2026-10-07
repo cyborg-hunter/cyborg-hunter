@@ -1488,6 +1488,45 @@ test('with experiment files among the drop, the panel says where they go and the
   } finally { URL.createObjectURL = saved; }
 });
 
+// The tour's hand-off (demo/handoff.js handoffEntries) brings the replay's
+// fonts, marked `handoff`: they are listed and matched as experiment assets,
+// but they are not files the analyst has to put beside the config.
+test('the fonts the tour hands over are not the analyst\'s assets: no hint, no assetsDir; a dropped stylesheet brings both', async () => {
+  const t = boot();
+  const font = { path: 'assets/fonts/sora/sora-100-800.woff2', file: new File(['f'], 'sora-100-800.woff2', { lastModified: 1 }), handoff: true };
+  const data = { path: 'DEMO-ab12.json', file: new File(['{}'], 'DEMO-ab12.json', { lastModified: 1 }), handoff: true };
+  const fontRow = { path: font.path, kind: 'asset' };
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  const exported = async () => { action('export-config').click(); return JSON.parse(await made.at(-1).text()); };
+  try {
+    t.page.addFiles([data, font]);
+    await until(() => t.sent.length === 1);
+    assert.equal('handoff' in t.sent[0].files[1], false, 'the mark stays on the page');
+    t.emit({ ...CHECKED, files: [{ path: data.path, kind: 'data' }, fontRow] });
+    await tick();
+    assert.equal(role('counts').textContent.includes('1 experiment asset'), true, 'still counted as an asset');
+    assert.equal(role('assets-hint').hidden, true);
+    assert.deepEqual(await exported(), { participantIdField: 'subject_ID' });
+
+    t.page.addFiles([{ path: 'css/style.css', file: new File(['p{}'], 'style.css', { lastModified: 2 }) }]);
+    await until(() => t.sent.length === 2);
+    t.emit({ ...CHECKED, files: [{ path: data.path, kind: 'data' }, fontRow, { path: 'css/style.css', kind: 'asset' }] });
+    await tick();
+    assert.equal(role('assets-hint').hidden, false);
+    assert.deepEqual(await exported(), { participantIdField: 'subject_ID', assetsDir: './assets' });
+
+    // Start over forgets the hand-off: the same path dropped by the analyst counts.
+    t.page.reset();
+    t.page.addFiles([{ path: font.path, file: new File(['g'], 'sora-100-800.woff2', { lastModified: 3 }) }]);
+    await until(() => t.sent.filter((m) => m.type === 'check').length === 3);
+    t.emit({ ...CHECKED, files: [fontRow] });
+    await tick();
+    assert.equal(role('assets-hint').hidden, false);
+  } finally { URL.createObjectURL = saved; }
+});
+
 // Annotations: the report frame posts each change (its annotation script in
 // parent mode); the page keeps the state under the run id in its own
 // storage, posts it into the frame after each load and each change, and has

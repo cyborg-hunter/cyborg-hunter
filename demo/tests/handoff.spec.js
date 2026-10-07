@@ -83,6 +83,11 @@ test('"Open in the analyzer" hands over the five files and the fonts: listed as 
   await expect(page.locator('[data-role="counts"]')).toContainText('6 experiment assets');
   await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
+  // The fonts are the tour's, not experiment files the visitor dropped: no
+  // assets hint, and the exported config names no assets folder.
+  await expect(page.locator('[data-role="assets-hint"]')).toBeHidden();
+  const [config] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="export-config"]')]);
+  expect(JSON.parse(readFileSync(await config.path(), 'utf8'))).not.toHaveProperty('assetsDir');
   await buildReport(page);
   expect((await railOrder(page)).sort()).toEqual([participantId, 'example-1', 'example-2'].sort());
   // The report's load-time pick is an example without a recording: the replay

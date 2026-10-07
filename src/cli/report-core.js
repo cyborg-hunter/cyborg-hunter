@@ -47,14 +47,15 @@ export const REPORT_FILES = ['summary.csv', 'score-weights.json', 'triage.md', '
 // The run id names the cohort and its data: each participant's id with a
 // config-free fingerprint (trial count, first and last trial timestamps), the
 // list sorted by id, then by the rest of the row, as JSON, hashed with the
-// injected sha256; its first 16 hex digits. A rebuild of the same files under
-// another config keeps it, so the annotations stored under it
-// (ch-annot:<runId>) stay with the report; two studies that share ids 1…N do
-// not (when their trials carry stamps). Ingest keeps two records with one id
-// (a repeat upload, a lab.js slice stored next to its final body), and the CLI
-// reads files in path order while the analyze page takes them in drop order,
-// so equal ids are ordered by the rest of their rows: the order is total, and
-// both get the same id.
+// injected sha256; its first 16 hex digits. A rebuild of the same files keeps
+// it whatever the analysis settings (a change to the ID or integrity field
+// reads the files again and can give another id), so the annotations stored
+// under it (ch-annot:<runId>) stay with the report; two studies that share
+// ids 1…N do not (when their trials carry stamps). Ingest keeps two records
+// with one id (a repeat upload, a lab.js slice stored next to its final
+// body), and the CLI reads files in path order while the analyze page takes
+// them in drop order, so equal ids are ordered by the rest of their rows: the
+// order is total, and both get the same id.
 // A trial's stamp is its integrity report's timestamp. Legacy `responses`
 // data and an integrityField other than `integrity` carry no such object;
 // ingest leaves the stamp on the trial itself there, so that is read next.
