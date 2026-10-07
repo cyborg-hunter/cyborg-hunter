@@ -59,3 +59,13 @@ test('the walkthrough saves through the folder button or one file per click, not
   assert.doesNotMatch(text, /"Save all"/);
   assert.ok(text.includes('one download per click'), text);
 });
+// Chrome's folder picker refuses the home folder and folders it treats as
+// system folders ("contains system files"): both texts name a folder it accepts.
+test('the folder hint and the walkthrough name a folder the browser accepts', () => {
+  assert.equal(SAVE_TO_FOLDER.hint, 'Chrome and Edge: pick or create an empty folder (inside Downloads, for example); ' +
+    'the browser refuses your home folder and system folders.');
+  const text = REPLICATE.sections[0].text;
+  assert.ok(text.startsWith('Use "Save all into a folder" above (Chrome and Edge; pick or create an empty folder, ' +
+    'inside Downloads for example, since the browser refuses your home folder and system folders), or the Save button ' +
+    'of each file: browsers allow one download per click, so each file has its own. If a session file is blocked'), text);
+});

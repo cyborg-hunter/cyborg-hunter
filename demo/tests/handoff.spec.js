@@ -26,15 +26,21 @@ const viewerModelFromFixture = (name) =>
   buildViewerModel(JSON.parse(readFileSync(join(V2_FIXTURES, name + '.json'), 'utf8')));
 
 // From the files step: "Open in the analyzer", until the analyze page lists
-// `rows` files, by default the five files and the six fonts (the hash dropped
-// once read). Returns the visitor's id, read on the tour before it is left.
-async function openInAnalyzer(page, rows = 5 + HANDOFF_ASSETS.length) {
+// the five files (the hash dropped once read). The fonts that come with them
+// are in the page's list but not in its table, and a line under the table
+// says they were included. Returns the visitor's id, read on the tour
+// before it is left.
+async function openInAnalyzer(page) {
   const participantId = await pid(page);
   await page.locator('[data-action="open-analyzer"]').click();
   await expect(page).toHaveURL(/\/analyze\/$/, { timeout: 30000 });
-  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(rows, { timeout: 30000 });
+  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(5, { timeout: 30000 });
+  await expect(page.locator('[data-role="handoff-assets"]')).toBeVisible();
   return participantId;
 }
+// The experiment assets the analyze page's last check read, in its table or not.
+const assetsChecked = (page) => page.evaluate(() =>
+  window.__chAnalyze.state.checked.files.filter((f) => f.kind === 'asset').map((f) => f.path).sort());
 
 // After the build, the visitor's replay chosen in the replay card's
 // dropdown, which then shows its experiment-assets note. The report selects
@@ -63,10 +69,12 @@ async function visitorReplay(page, answer) {
 // The hand-off: the five files and the page's six fonts arrive as one drop,
 // under the analyze page's own guard: after the tour, the only requests are
 // the two example files and the six fonts the tour fetches for the hand-off,
-// and the analyze page's own files. The fonts match the URLs the recording's
-// stylesheet names them by, so the visitor's replay renders in them.
+// and the analyze page's own files. The five files are listed as dropped;
+// the fonts are neither listed nor counted, but they match the URLs the
+// recording's stylesheet names them by, so the visitor's replay renders in
+// them.
 // ---------------------------------------------------------------------------
-test('"Open in the analyzer" hands over the five files and the fonts: listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
+test('"Open in the analyzer" hands over the five files and the fonts: the files listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
   test.setTimeout(120000);
   await fastForwardToFiles(page);
   const allow = siteAllowlist(baseURL).concat([baseURL + '/assets/example-1.json', baseURL + '/assets/example-2.json'],
@@ -76,11 +84,13 @@ test('"Open in the analyzer" hands over the five files and the fonts: listed as 
   const rows = await page.locator('[data-role="file-rows"] tr').evaluateAll((trs) =>
     trs.map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent)));
   expect(rows.map(([path]) => path).filter((p) => p !== participantId + '.json' && !p.startsWith(participantId + '-replay-')).sort())
-    .toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json'].concat(HANDOFF_ASSETS).sort());
-  expect(rows.filter(([, kind]) => kind === 'experiment asset').map(([path]) => path).sort()).toEqual([...HANDOFF_ASSETS].sort());
+    .toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
+  expect(rows.filter(([, kind]) => kind === 'experiment asset')).toEqual([]);
+  expect(await assetsChecked(page)).toEqual([...HANDOFF_ASSETS].sort());
+  await expect(page.locator('[data-role="handoff-assets"]')).toHaveText('The demo page\'s fonts were included so the replay renders in them.');
   await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 replay recording');
-  await expect(page.locator('[data-role="counts"]')).toContainText('6 experiment assets');
+  await expect(page.locator('[data-role="counts"]')).toContainText('0 experiment assets');
   await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   // The fonts are the tour's, not experiment files the visitor dropped: no
@@ -117,11 +127,8 @@ for (const [how, answer] of [
     await page.route(baseURL + '/' + lost, answer);
     const warnings = [];
     page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
-    const participantId = await openInAnalyzer(page, 5 + HANDOFF_ASSETS.length - 1);
-    const assets = await page.locator('[data-role="file-rows"] tr').evaluateAll((trs) => trs
-      .filter((tr) => tr.querySelectorAll('td')[1].textContent === 'experiment asset')
-      .map((tr) => tr.querySelector('td').textContent));
-    expect(assets.sort()).toEqual(HANDOFF_ASSETS.filter((p) => p !== lost).sort());
+    const participantId = await openInAnalyzer(page);
+    expect(await assetsChecked(page)).toEqual(HANDOFF_ASSETS.filter((p) => p !== lost).sort());
     expect(warnings.filter((w) => w.includes('cyborg-hunter demo: a font was not handed over') && w.includes(lost))).toHaveLength(1);
     await buildReport(page);
     await selectVisitorReplay(page, participantId);

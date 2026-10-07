@@ -70,7 +70,8 @@ export function createPage(root, worker, opts) {
   // until the first check and again once the cohort is replaced
   // (forgetSettings). handoffPaths: the listed paths of the files the tour
   // handed over (addFiles), whose fonts are not the analyst's experiment
-  // assets (droppedAssetCount); emptied with the list.
+  // assets (droppedAssetCount) and stay out of the table and the counts
+  // (renderFiles); emptied with the list.
   var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
     zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null, handoffPaths: new Set() };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
@@ -301,6 +302,7 @@ export function createPage(root, worker, opts) {
     goTo('files');
     q(root, 'files-panel').hidden = false;
     q(root, 'file-rows').innerHTML = '';
+    q(root, 'handoff-assets').hidden = true;
     q(root, 'config-source').textContent = '';
     q(root, 'counts').innerHTML = '<span class="hint">Reading the files…</span>';
     listWarnings(q(root, 'check-warnings'), []);
@@ -370,20 +372,25 @@ export function createPage(root, worker, opts) {
   function kindCount(checked, kind) {
     return (checked.files || []).filter(function (f) { return f.kind === kind; }).length;
   }
-  // The experiment assets the analyst dropped: the tour's fonts are matched
-  // like any asset, but the CLI needs only the analyst's own in an assets
-  // folder (the hint and the export's assetsDir).
+  // A font the tour handed over: matched like any asset, but not one of the
+  // analyst's files.
+  function handedOverAsset(f) { return f.kind === 'asset' && state.handoffPaths.has(f.path); }
+  // The experiment assets the analyst dropped: the CLI needs only these in an
+  // assets folder (the hint and the export's assetsDir).
   function droppedAssetCount(checked) {
-    return (checked.files || []).filter(function (f) { return f.kind === 'asset' && !state.handoffPaths.has(f.path); }).length;
+    return (checked.files || []).filter(function (f) { return f.kind === 'asset' && !handedOverAsset(f); }).length;
   }
 
   // The recognised-files table (one row per file, what it was read as, and
   // a Remove control; the sample has no file list of its own to edit), the
-  // counts by kind, and where the settings came from.
+  // counts by kind, and where the settings came from. The fonts the tour
+  // handed over stay in the list the worker reads, for the replay, but not
+  // in the table or the counts: one line under the table says they are there.
   function renderFiles(checked) {
     var rows = q(root, 'file-rows');
     rows.innerHTML = '';
-    (checked.files || []).forEach(function (f) {
+    var shown = (checked.files || []).filter(function (f) { return !handedOverAsset(f); });
+    shown.forEach(function (f) {
       var tr = document.createElement('tr');
       var name = document.createElement('td');
       var code = document.createElement('code');
@@ -408,10 +415,11 @@ export function createPage(root, worker, opts) {
     q(root, 'counts').innerHTML =
       countSpan(kindCount(checked, 'data'), 'data file', 'data files') +
       countSpan(kindCount(checked, 'recording'), 'replay recording', 'replay recordings') +
-      countSpan(kindCount(checked, 'asset'), 'experiment asset', 'experiment assets') +
+      countSpan(droppedAssetCount(checked), 'experiment asset', 'experiment assets') +
       countSpan(checked.configFound ? 1 : 0, 'config file', 'config files') +
       (ignored ? countSpan(ignored, 'ignored', 'ignored') : '') +
       (unreadable ? countSpan(unreadable, 'unreadable', 'unreadable') : '');
+    q(root, 'handoff-assets').hidden = shown.length === (checked.files || []).length;
     q(root, 'config-source').textContent = checked.configPath
       ? 'Settings from ' + checked.configPath + ', over the defaults.'
       : 'Settings: the defaults (no cyborg-hunter.config.json among the files).';
@@ -591,6 +599,7 @@ export function createPage(root, worker, opts) {
     // Cleared so choosing the same files again still fires `change`.
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';
     q(root, 'files-panel').hidden = true;
+    q(root, 'handoff-assets').hidden = true;
     state.dropCount = 0;
     goTo('files');
     clearError();

@@ -429,7 +429,8 @@ export const HANDOFF = {
  * plain text: the step shows it when the folder could not be written. */
 export const SAVE_TO_FOLDER = {
   buttonLabel: 'Save all into a folder…',
-  hint: 'Chrome and Edge: pick an empty folder once; the five files are written into it.',
+  hint: 'Chrome and Edge: pick or create an empty folder (inside Downloads, for example); ' +
+    'the browser refuses your home folder and system folders.',
   failed: 'The folder could not be written. Save the files one by one below.',
 };
 
@@ -439,9 +440,11 @@ export const SAVE_TO_FOLDER = {
 export const REPLICATE = {
   sections: [
     { n: 1, heading: 'Save the five files into one empty folder',
-      text: 'Use "Save all into a folder" above (Chrome and Edge), or the Save button of each file: browsers allow ' +
-        'one download per click, so each file has its own. If a session file is blocked, use its "show as text" link ' +
-        'and save the text yourself; for an example file, right-click its Save link and choose "Save link as".',
+      text: 'Use "Save all into a folder" above (Chrome and Edge; pick or create an empty folder, inside Downloads ' +
+        'for example, since the browser refuses your home folder and system folders), or the Save button of each ' +
+        'file: browsers allow one download per click, so each file has its own. If a session file is blocked, use ' +
+        'its "show as text" link and save the text yourself; for an example file, right-click its Save link and ' +
+        'choose "Save link as".',
       code: null },
     { n: 2, heading: 'Install Node.js if you don’t have it',
       text: 'Node 18 or newer. Check with:',

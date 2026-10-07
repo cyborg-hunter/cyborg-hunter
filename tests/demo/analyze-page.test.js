@@ -16,6 +16,7 @@ const win = new Window({ settings: { disableIframePageLoading: true } });
 globalThis.window = win; globalThis.document = win.document;
 globalThis.Blob = win.Blob; globalThis.URL = win.URL;
 const { createPage } = await import('../../demo/analyze/page.js');
+const { HANDOFF_ASSETS } = await import('../../demo/steps.js');
 
 // opts go to createPage. With opts.transferBytes the stand-in puts each
 // message through structuredClone with its transfer list, as the worker
@@ -1489,8 +1490,9 @@ test('with experiment files among the drop, the panel says where they go and the
 });
 
 // The tour's hand-off (demo/handoff.js handoffEntries) brings the replay's
-// fonts, marked `handoff`: they are listed and matched as experiment assets,
-// but they are not files the analyst has to put beside the config.
+// fonts, marked `handoff`: they go to the worker and are matched as
+// experiment assets, but they are not files the analyst has to put beside
+// the config.
 test('the fonts the tour hands over are not the analyst\'s assets: no hint, no assetsDir; a dropped stylesheet brings both', async () => {
   const t = boot();
   const font = { path: 'assets/fonts/sora/sora-100-800.woff2', file: new File(['f'], 'sora-100-800.woff2', { lastModified: 1 }), handoff: true };
@@ -1506,7 +1508,7 @@ test('the fonts the tour hands over are not the analyst\'s assets: no hint, no a
     assert.equal('handoff' in t.sent[0].files[1], false, 'the mark stays on the page');
     t.emit({ ...CHECKED, files: [{ path: data.path, kind: 'data' }, fontRow] });
     await tick();
-    assert.equal(role('counts').textContent.includes('1 experiment asset'), true, 'still counted as an asset');
+    assert.equal(role('counts').textContent.includes('0 experiment assets'), true, 'not counted among the assets');
     assert.equal(role('assets-hint').hidden, true);
     assert.deepEqual(await exported(), { participantIdField: 'subject_ID' });
 
@@ -1525,6 +1527,57 @@ test('the fonts the tour hands over are not the analyst\'s assets: no hint, no a
     await tick();
     assert.equal(role('assets-hint').hidden, false);
   } finally { URL.createObjectURL = saved; }
+});
+
+// The hand-off's fonts stay in the list the worker reads, so the replay
+// renders in them, but the table and the counts line show only the five
+// files the tour handed over and what the analyst drops. One line under
+// the table says why the fonts are there.
+test('the fonts the tour hands over are neither listed nor counted; a line under the table says they were included', async () => {
+  const handed = (path) => ({ path, file: new File(['x'], path.slice(path.lastIndexOf('/') + 1), { lastModified: 1 }), handoff: true });
+  const FILES = [{ path: 'DEMO-ab12.json', kind: 'data' }, { path: 'DEMO-ab12-replay-1.json', kind: 'recording' },
+    { path: 'cyborg-hunter.config.json', kind: 'config' }, { path: 'example-1.json', kind: 'data' }, { path: 'example-2.json', kind: 'data' }];
+  const FONTS = HANDOFF_ASSETS.map((path) => ({ path, kind: 'asset' }));
+  const tableRows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => tr.querySelector('td').textContent);
+  const line = () => role('handoff-assets');
+  async function handOver(t) {
+    t.page.addFiles(FILES.concat(FONTS).map((f) => handed(f.path)));
+    await until(() => t.sent.length === 1);
+    assert.equal(t.sent[0].files.length, 11, 'the fonts still go to the worker');
+    t.emit({ ...CHECKED, files: FILES.concat(FONTS) });
+    await tick();
+  }
+
+  const t = boot();
+  assert.equal(line().hidden, true, 'before any hand-off');
+  await handOver(t);
+  assert.deepEqual(tableRows(), FILES.map((f) => f.path));
+  assert.equal(role('counts').textContent, '3 data files1 replay recording0 experiment assets1 config file');
+  assert.equal(line().hidden, false);
+  assert.equal(line().textContent, 'The demo page\'s fonts were included so the replay renders in them.');
+  assert.ok(role('files-panel').contains(line()));
+
+  // A stylesheet of the analyst's own is listed and counted; the line stays.
+  t.page.addFiles([{ path: 'css/style.css', file: new File(['p{}'], 'style.css', { lastModified: 2 }) }]);
+  await until(() => t.sent.length === 2);
+  t.emit({ ...CHECKED, files: FILES.concat(FONTS, [{ path: 'css/style.css', kind: 'asset' }]) });
+  await tick();
+  assert.deepEqual(tableRows(), FILES.map((f) => f.path).concat(['css/style.css']));
+  assert.equal(role('counts').textContent, '3 data files1 replay recording1 experiment asset1 config file');
+  assert.equal(line().hidden, false);
+
+  t.page.reset();
+  assert.equal(line().hidden, true, 'after Start over');
+
+  const s = boot();
+  await handOver(s);
+  assert.equal(line().hidden, false);
+  action('sample').click();
+  await until(() => s.sent.length === 2);
+  assert.equal(line().hidden, true, 'while the sample is read');
+  s.emit(CHECKED);
+  await tick();
+  assert.equal(line().hidden, true, 'after the sample');
 });
 
 // Annotations: the report frame posts each change (its annotation script in
