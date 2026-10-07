@@ -62,8 +62,10 @@ function listWarnings(ul, items) {
 }
 
 export function createPage(root, worker, opts) {
+  // settingsWritten: the JSON of the panel values last written from a check's
+  // config (check), null until the first check and after Start over.
   var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, result: null,
-    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null };
+    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
@@ -100,8 +102,9 @@ export function createPage(root, worker, opts) {
   // watchdog's job, not this one's.
   var REPORT_LOAD_TIMEOUT_MS = 60000;
   // The settings panel (settings-panel.js), shown from the first check on,
-  // beside the file list and above the results. Created first: it holds the
-  // id field the page wires below.
+  // beside the file list and above the results; a check writes it from the
+  // config only when that config's values changed (check). Created first: it
+  // holds the id field the page wires below.
   var settingsPanel = createSettingsPanel(q(root, 'settings'), onSettingsChange);
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
@@ -293,7 +296,18 @@ export function createPage(root, worker, opts) {
     var checked = await reply;
     state.checked = checked;
     renderFiles(checked);
-    settingsPanel.write(settingsFromConfig(checked.config));
+    // The panel is written from the config only when the config's values
+    // differ from the ones it was last written from: a drop that adds data
+    // files, or a recording, keeps what the analyst set. A replacement after
+    // the first check says so under the list (one sentence, this check's).
+    var fromFile = settingsFromConfig(checked.config);
+    var json = JSON.stringify(fromFile);
+    var replaced = null;
+    if (json !== state.settingsWritten) {
+      if (state.settingsWritten) replaced = settingsReplacedText(checked);
+      settingsPanel.write(fromFile);
+      state.settingsWritten = json;
+    }
     settingsPanel.setAssetsHint(kindCount(checked, 'asset') > 0);
     q(root, 'settings').hidden = false;
     var sel = q(root, 'id-field'); sel.innerHTML = '';
@@ -310,7 +324,7 @@ export function createPage(root, worker, opts) {
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
     state.idField = sel.value;
     q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
-    listWarnings(q(root, 'check-warnings'), checked.configWarnings);
+    listWarnings(q(root, 'check-warnings'), (checked.configWarnings || []).concat(replaced ? [replaced] : []));
     var tested = state.limits && state.limits.testedParticipants;
     var dataFiles = kindCount(checked, 'data');
     if (tested && dataFiles > tested) {
@@ -319,6 +333,12 @@ export function createPage(root, worker, opts) {
       q(root, 'size-warning').hidden = false;
     }
     updateControls();
+  }
+
+  // Where the replacing values came from: the config file the check read, or
+  // the defaults once no config is among the files.
+  function settingsReplacedText(checked) {
+    return checked.configPath ? 'Settings replaced from ' + checked.configPath + '.' : 'Settings replaced with the defaults.';
   }
 
   function kindCount(checked, kind) {
@@ -520,7 +540,7 @@ export function createPage(root, worker, opts) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
-    state.runId = null; state.annotations = null;
+    state.runId = null; state.annotations = null; state.settingsWritten = null;
     q(root, 'annotations-status').textContent = '';
     annotationsUnstored = false;
     stopWatchdog();

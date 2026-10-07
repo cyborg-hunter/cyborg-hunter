@@ -1010,6 +1010,70 @@ test('the settings show from the first check on, and a run sends their config', 
   assert.deepEqual(t.sent[1].config.phaseScope, { include: ['game', 'practice'] });
 });
 
+// Every drop checks the whole list again, and each check returns the merged
+// config: the panel is written from it only when its values differ from the
+// ones it was last written from, so a drop of more data keeps what the
+// analyst set. A replacement after the first check says so under the list.
+const weightInput = (key) => role('settings-form').querySelector('[data-weight="' + key + '"]');
+const thresholdInput = () => role('settings-form').elements.namedItem('softScoreThreshold');
+const checkNotes = () => [...role('check-warnings').children].map((li) => li.textContent);
+
+test('a drop keeps the analyst\'s settings unless its config differs, and a replacement says so', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  assert.equal(weightInput('paste').value, '5');
+  weightInput('paste').value = '9';
+  weightInput('paste').dispatchEvent(new win.Event('input', { bubbles: true }));
+  t.page.addFiles([{ path: 'more.csv', file: new File(['y'], 'more.csv', { lastModified: 5 }) }]);
+  await until(() => t.sent.length === 2);
+  t.emit({ ...CHECKED, files: [...CHECKED.files, { path: 'more.csv', kind: 'data' }] });
+  await tick();
+  assert.equal(weightInput('paste').value, '9', 'a data-only drop keeps the edit');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+  // Another config, with a threshold of its own: its values replace the panel's.
+  t.page.addFiles([{ path: 'cyborg-hunter.config.json', file: new File(['{"scoring":{"softScoreThreshold":7}}'], 'cyborg-hunter.config.json', { lastModified: 6 }) }]);
+  await until(() => t.sent.length === 3);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId', scoring: { softScoreThreshold: 7 } } });
+  await tick();
+  assert.equal(thresholdInput().value, '7');
+  assert.equal(weightInput('paste').value, '5', 'the edit gives way to the file');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"', 'Settings replaced from cyborg-hunter.config.json.']);
+  // One sentence per check: the next data-only drop does not repeat it.
+  t.page.addFiles([{ path: 'later.csv', file: new File(['z'], 'later.csv', { lastModified: 7 }) }]);
+  await until(() => t.sent.length === 4);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId', scoring: { softScoreThreshold: 7 } } });
+  await tick();
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+});
+
+test('removing the config puts the defaults back and says so; after Start over the first check writes the panel without a note', async () => {
+  const t = boot();
+  const withConfig = { ...CHECKED, config: { participantIdField: 'subject_ID', scoring: { softScoreThreshold: 7 } }, configWarnings: [],
+    files: [{ path: 'study/a.csv', kind: 'data' }, { path: 'study/cyborg-hunter.config.json', kind: 'config' }], configPath: 'study/cyborg-hunter.config.json' };
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(withConfig);
+  await tick();
+  assert.equal(thresholdInput().value, '7');
+  role('file-rows').querySelector('[data-path="study/cyborg-hunter.config.json"]').click();
+  await until(() => t.sent.length === 2);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId' }, configWarnings: [], configFound: false, configPath: null,
+    files: [{ path: 'study/a.csv', kind: 'data' }] });
+  await tick();
+  assert.equal(thresholdInput().value, '');
+  assert.deepEqual(checkNotes(), ['Settings replaced with the defaults.']);
+  t.page.reset();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 4);   // the reset, then the check
+  t.emit(withConfig);
+  await tick();
+  assert.equal(thresholdInput().value, '7');
+  assert.deepEqual(checkNotes(), []);
+});
+
 test('on the results, a post-hoc setting re-analyses without reading the files, and the report swaps in place', async () => {
   const t = boot();
   await toResults(t);
