@@ -40,6 +40,7 @@ import {
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
 import { VERSION } from '../../src/shared/constants.js';
+import { HANDOFF, SAVE_TO_FOLDER } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
@@ -57,6 +58,11 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   await startTour(page); // lands on step 2 (baseline)
   const participantId = await pid(page);
   expect(participantId).toMatch(/^DEMO-/);
+  // The lamps' intro is one line with the full text as its tooltip. (The
+  // rail's other .sub is the "awaiting your session" note.)
+  const intro = page.locator('[data-role="rail"] .sub:not(.awaiting-note)');
+  await expect(intro).toHaveText(/^A demo instrument: a curated subset of what the library records\.$/);
+  await expect(intro).toHaveAttribute('title', /Idle gaps, window position/);
 
   // ----- Step 2: baseline typing (real per-char typing lights nothing) -----
   await expect(page.locator('.eyebrow')).toContainText('Step 2 of 11');
@@ -148,18 +154,16 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   // carries both its start AND its end.
   await expect(page.locator('#guard-friction-overlay')).toHaveCSS('display', 'none');
 
-  // ----- Step 9: guard debrief — pane promoted into the main column
-  // (item 5: the main column is otherwise near-empty here, task: null) -----
+  // ----- Step 9: the record is under the card here as on every step
   await expect(page.locator('.eyebrow')).toContainText('Step 9 of 11');
   const paneInSlot = page.locator('[data-role="pane-slot"] [data-role="live-pane"]');
   await expect(paneInSlot).toHaveCount(1);
-  await expect(paneInSlot).toHaveClass(/promoted/);
   await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(0);
-  // Reparenting moved the pane's own node, not its content — state.pane's
-  // element references and listeners survive the move: a signal dispatched
-  // while promoted still appends a live row. A session-scoped signal
-  // (keyboard shortcut), not copy/paste — those are trial-scoped and this
-  // step has task: null, no trial open to catch them.
+  await expect(page.locator('[data-role="live-pane"]')).not.toHaveClass(/promoted/);
+  // A signal dispatched on a step with no trial open still appends a live
+  // row. A session-scoped signal (keyboard shortcut), not copy/paste — those
+  // are trial-scoped and this step has task: null, no trial open to catch
+  // them.
   const rowCountBeforeSignal = await page.locator('.lp-row').count();
   await dispatchDevToolsShortcut(page);
   await expect(page.locator('.lp-row')).toHaveCount(rowCountBeforeSignal + 1);
@@ -167,10 +171,8 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 10: signals to scores (first tier vocabulary appears here) -----
   await expect(page.locator('.eyebrow')).toContainText('Step 10 of 11');
-  // Pane demoted back to the instrument column on leaving step 9.
-  await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(1);
-  await expect(page.locator('.instrument [data-role="live-pane"]')).not.toHaveClass(/promoted/);
-  await expect(page.locator('[data-role="pane-slot"] [data-role="live-pane"]')).toHaveCount(0);
+  // The record stays under the card on leaving step 9.
+  await expect(paneInSlot).toHaveCount(1);
   await expect(page.locator('.stepcopy')).toContainText('HARD');
   await primaryButton(page).click();
 
@@ -240,12 +242,12 @@ test('guard-cheat resume route: button unfloats after resume and advances exactl
 });
 
 // ---------------------------------------------------------------------------
-// Step-9 pane promotion (item 5), the OTHER leave direction: the happy-path
-// test above covers forward (9 -> 10); goTo()'s demotePane() is called
-// unconditionally at the top of EVERY navigation, so Back (9 -> 8) must
-// restore the pane to the instrument column too.
+// The record's place under the card, the OTHER leave direction: the
+// happy-path test above covers forward (9 -> 10); Back (9 -> 8) must leave
+// the record under the card too, in the main column, never in the
+// instrument column.
 // ---------------------------------------------------------------------------
-test('step 9: pane promotion also restores on Back to step 8', async ({ page }) => {
+test('step 9: the record stays under the card on Back to step 8', async ({ page }) => {
   await startTour(page); // -> baseline
   await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
@@ -256,9 +258,10 @@ test('step 9: pane promotion also restores on Back to step 8', async ({ page }) 
 
   await backButton(page).click(); // -> guard-cheat (step 8)
   await expect(page.locator('.eyebrow')).toContainText('Step 8 of 11');
-  await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(1);
-  await expect(page.locator('.instrument [data-role="live-pane"]')).not.toHaveClass(/promoted/);
-  await expect(page.locator('[data-role="pane-slot"] [data-role="live-pane"]')).toHaveCount(0);
+  const paneInSlot = page.locator('[data-role="pane-slot"] [data-role="live-pane"]');
+  await expect(paneInSlot).toHaveCount(1);
+  await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(0);
+  await expect(page.locator('[data-role="live-pane"]')).not.toHaveClass(/promoted/);
 });
 
 // ---------------------------------------------------------------------------
@@ -301,10 +304,36 @@ test('the files step leaves fullscreen via the plugin, with no false violation l
 
 // ---------------------------------------------------------------------------
 // 10b. The files step's cards name each file as it is saved (the session
-// files carry the visitor's id), and each batch's "Save all" saves every file
-// in it from one click, next to the per-file Save buttons.
+// files carry the visitor's id). Where the browser has a folder picker
+// (Chrome, Edge), one "Save all into a folder" writes all five files into
+// the folder the visitor picks; the picker is stubbed here, since a test
+// cannot answer the browser's own dialog. A dismissed picker changes nothing;
+// a folder that cannot be written says so. Without the picker, only the
+// per-file Save buttons are offered (the happy path above saves through each
+// of them).
 // ---------------------------------------------------------------------------
-test('files step: the cards name the files as saved, and Save all saves each batch', async ({ page }) => {
+test('files step: "Save all into a folder" writes the five files through the folder picker', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__written = [];
+    window.showDirectoryPicker = async (opts) => {
+      window.__pickerOpts = opts;
+      return {
+        name: 'demo-files',
+        getFileHandle: async (name, o) => ({
+          createWritable: async () => {
+            let entry = null;
+            return {
+              write: async (blob) => {
+                entry = { name, size: blob.size, create: !!(o && o.create), closed: false };
+                window.__written.push(entry);
+              },
+              close: async () => { entry.closed = true; },
+            };
+          },
+        }),
+      };
+    };
+  });
   await fastForwardToFiles(page);
   const participantId = await pid(page);
   const cardNames = await page.locator('.file small').allTextContents();
@@ -312,18 +341,126 @@ test('files step: the cards name the files as saved, and Save all saves each bat
   expect(cardNames[1]).toMatch(new RegExp('^' + participantId + '-replay-\\d+\\.json$'));
   expect(cardNames.slice(2)).toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
 
-  // One click per batch; the browser's downloads, as Playwright sees them.
-  const saveAll = async (batch, count) => {
-    const names = [];
-    const onDownload = (download) => names.push(download.suggestedFilename());
-    page.on('download', onDownload);
-    await page.locator(`[data-action="save-all"][data-batch="${batch}"]`).click();
-    await expect.poll(() => names.length).toBe(count);
-    page.off('download', onDownload);
-    return names.sort();
-  };
-  expect(await saveAll(0, 3)).toEqual(cardNames.slice(0, 3).sort());
-  expect(await saveAll(1, 2)).toEqual(['example-1.json', 'example-2.json']);
+  await expect(page.locator('[data-action="save-all"]')).toHaveCount(0);
+  const btn = page.locator('[data-action="save-folder"]');
+  await btn.click();
+  await expect(btn).toHaveText(/Saved 5 files to demo-files/);
+  await expect(btn).toBeDisabled();
+  // Written in the order the cards list them (batch order), each one closed.
+  const written = await page.evaluate(() => window.__written);
+  expect(written.map((w) => w.name)).toEqual(cardNames);
+  expect(written.every((w) => w.size > 0 && w.create)).toBe(true);
+  expect(written.filter((w) => w.closed)).toHaveLength(5);
+  expect(await page.evaluate(() => window.__pickerOpts))
+    .toEqual({ mode: 'readwrite', id: 'cyborg-hunter-demo', startIn: 'downloads' });
+});
+
+test('files step: a dismissed folder picker changes nothing', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__pickerCalls = 0;
+    window.showDirectoryPicker = async () => {
+      window.__pickerCalls++;
+      throw new DOMException('', 'AbortError');
+    };
+  });
+  await fastForwardToFiles(page);
+  const btn = page.locator('[data-action="save-folder"]');
+  const label = await btn.textContent();
+  await btn.click();
+  await expect.poll(() => page.evaluate(() => window.__pickerCalls)).toBe(1);
+  await expect(btn).toBeEnabled();
+  await expect(btn).toHaveText(label);
+  await expect(page.locator('[data-role="handoff-note"]')).toBeHidden();
+});
+
+test('files step: a folder that cannot be written says so and leaves the button usable', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.showDirectoryPicker = async () => ({
+      name: 'demo-files',
+      getFileHandle: async () => { throw new Error('mock: the folder refuses new files'); },
+    });
+  });
+  await fastForwardToFiles(page);
+  const btn = page.locator('[data-action="save-folder"]');
+  const label = await btn.textContent();
+  await btn.click();
+  const note = page.locator('[data-role="handoff-note"]');
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(SAVE_TO_FOLDER.failed);
+  await expect(btn).toBeEnabled();
+  await expect(btn).toHaveText(label);
+});
+
+// A write that fails part-way aborts its file (the browser then discards
+// its temporary copy instead of leaving it in the folder), and a later save
+// that succeeds takes the failure line away again.
+test('files step: a failed write aborts its file; a later save clears the failure line', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__aborted = [];
+    let failNextWrite = true;
+    window.showDirectoryPicker = async () => ({
+      name: 'demo-files',
+      getFileHandle: async (name) => ({
+        createWritable: async () => ({
+          write: async () => {
+            if (failNextWrite) { failNextWrite = false; throw new Error('mock: the disk is full'); }
+          },
+          close: async () => {},
+          abort: async () => { window.__aborted.push(name); },
+        }),
+      }),
+    });
+  });
+  await fastForwardToFiles(page);
+  const firstCard = await page.locator('.file small').first().textContent();
+  const btn = page.locator('[data-action="save-folder"]');
+  const note = page.locator('[data-role="handoff-note"]');
+  await btn.click();
+  await expect(note).toHaveText(SAVE_TO_FOLDER.failed);
+  expect(await page.evaluate(() => window.__aborted)).toEqual([firstCard]);
+
+  await btn.click();
+  await expect(btn).toHaveText(/Saved 5 files to demo-files/);
+  await expect(note).toBeHidden();
+});
+
+// The note line is shared with the hand-off: a folder save that succeeds
+// takes away only its own failure line, never the hand-off's.
+test('files step: a folder save that succeeds leaves the hand-off\'s failure line on screen', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.showDirectoryPicker = async () => ({
+      name: 'demo-files',
+      getFileHandle: async () => ({
+        createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+      }),
+    });
+  });
+  await fastForwardToFiles(page);
+  await page.evaluate(() => { indexedDB.open = () => { throw new Error('refused by the test'); }; });
+  await page.locator('[data-action="open-analyzer"]').click();
+  const note = page.locator('[data-role="handoff-note"]');
+  const handoffFailed = HANDOFF.failed.replace(/<[^>]+>/g, '');   // the note's text, without its link
+  await expect(note).toHaveText(handoffFailed);
+
+  const btn = page.locator('[data-action="save-folder"]');
+  await btn.click();
+  await expect(btn).toHaveText(/Saved 5 files to demo-files/);
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(handoffFailed);
+});
+
+test('files step: without the folder picker only the per-file Save buttons are offered', async ({ page }) => {
+  await page.addInitScript(() => { delete window.showDirectoryPicker; });
+  await fastForwardToFiles(page);
+  await expect(page.locator('[data-action="save-folder"]')).toHaveCount(0);
+  await expect(page.locator('[data-action="download"]')).toHaveCount(3);
+  await expect(page.locator('.file-actions a[download]')).toHaveCount(2);
+  await expect(page.locator('[data-role="leave-hint"]')).toHaveText(HANDOFF.leaveHint);
+  // The config caveat, once, right after the first batch's grid.
+  await expect(page.locator('[data-role="config-caveat"]')).toHaveCount(1);
+  await expect(page.locator('.files + .file-caveat')).toHaveCount(1);
+  expect(await page.evaluate(() => document.querySelector('.files').nextElementSibling.getAttribute('data-role')))
+    .toBe('config-caveat');
 });
 
 // ---------------------------------------------------------------------------
@@ -359,6 +496,11 @@ test('live pane: row count strictly grows across acts; raw-JSON tab shows partic
 
   // Raw-JSON tab: the literal payload the pid.json download carries.
   await page.locator('.lp-tab[data-tab="json"]').click();
+  // The rail is hidden on this view and the grid collapses to one column,
+  // so the JSON takes the record's full width, not the rail's 156px track.
+  const bodyBox = await page.locator('.lp-body').boundingBox();
+  const jsonBox = await page.locator('[data-role="lp-json"]').boundingBox();
+  expect(jsonBox.width).toBeGreaterThanOrEqual(bodyBox.width * 0.9);
   const jsonText = await page.locator('[data-role="lp-json"]').textContent();
   expect(jsonText).toContain('"participantId"');
   expect(() => JSON.parse(jsonText)).not.toThrow();
@@ -383,10 +525,11 @@ test('XSS paste: a hostile <script> string is escaped in the live pane, never ex
 });
 
 // ---------------------------------------------------------------------------
-// 4. Step 10's weight editors (walkthrough item 7): a per-signal weight edit
-// rescores the visitor's own session so far, live.
+// 4. Step 10's live score: the library's own soft score for the visitor's
+// session so far, under the standard weights, and a note on the analyzer's
+// settings panel.
 // ---------------------------------------------------------------------------
-test('step 10 weight edit recomputes the live soft score from the session so far', async ({ page }) => {
+test('step 10 shows the library\'s own soft score from the session so far', async ({ page }) => {
   test.setTimeout(60000);
   await startTour(page); // -> baseline
   await typeRealistically(page.locator('#card textarea'), 'a city in Australia');
@@ -398,19 +541,12 @@ test('step 10 weight edit recomputes the live soft score from the session so far
   await expect(page.locator('.eyebrow')).toContainText('Step 8 of 11', { timeout: 5000 });
   await page.locator('.endguard').click(); // -> guard-debrief
   await primaryButton(page).click(); // -> signals-to-scores (step 10)
-
-  // Baseline: the standard preset's copy weight (2) x 1 hit = a soft score
-  // of 2, well under the flag threshold (6) — CLEAN going in.
-  const copyWeightInput = page.locator('[data-weight-key="copy"]');
-  await copyWeightInput.waitFor({ timeout: 5000 });
-  await expect(copyWeightInput).toHaveValue('2');
+  // No inputs: the score is the library's own, with the standard weights
+  // (one copy hit × weight 2 = 2, under the threshold of 6).
+  await expect(page.locator('[data-weight-key]')).toHaveCount(0);
   const liveScore = page.locator('[data-role="live-score"]');
-  await expect(liveScore).toContainText(/so far: 2 \(/, { timeout: 5000 });
-
-  // Raise the copy weight past the flag threshold: 1 hit x 20 = 20 >= 6.
-  await copyWeightInput.fill('20');
-  await copyWeightInput.dispatchEvent('input');
-  await expect(liveScore).toContainText(/so far: 20 \(/, { timeout: 5000 });
+  await expect(liveScore).toHaveText(/^Your soft score so far, with the standard weights: 2 \(flags at 6 or above\)\.$/, { timeout: 5000 });
+  await expect(page.locator('[data-role="scoring-panel"]')).toContainText('settings panel');
 });
 
 // ---------------------------------------------------------------------------
@@ -452,9 +588,20 @@ test('act2-skip path: fullscreen failure falls back, skip lands on "From signals
   await page.locator('a[data-key="skipToScores"]').click();
   await expect(page.locator('.eyebrow')).toContainText('Step 10 of 11');
   await expect(page.locator('#card h2')).toHaveText('From signals to scores');
+  await expect(page.locator('.cols')).not.toHaveClass(/\bfull\b/);
 
   await primaryButton(page).click(); // -> your files
   await expect(page.locator('.eyebrow')).toContainText('Step 11 of 11');
+  // The rail retires here, so the step takes the full width.
+  await expect(page.locator('.cols')).toHaveClass(/\bfull\b/);
+  await expect(page.locator('.instrument')).not.toBeVisible();
+
+  // The rail's retirement is one-way (demo.js, lampWiringRetired): it stays
+  // hidden on Back, and the full width follows it.
+  await backButton(page).click(); // -> signals-to-scores
+  await expect(page.locator('.eyebrow')).toContainText('Step 10 of 11');
+  await expect(page.locator('#rail')).toBeHidden();
+  await expect(page.locator('.cols')).toHaveClass(/\bfull\b/);
 });
 
 // ---------------------------------------------------------------------------

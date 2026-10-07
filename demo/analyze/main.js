@@ -22,13 +22,16 @@ if (typeof document !== 'undefined') {
     { createWorker: createAnalyzeWorker, transferBytes: location.protocol === 'file:' });   // exposed for the end-to-end tests
   // Opened by the demo's "Open in the analyzer": its files wait in this
   // browser's IndexedDB (../handoff.js) and join the list as a drop would.
-  // The hash goes first, so a reload starts with an empty list; a failure
-  // leaves the page as if opened directly.
+  // The hash goes first, so a reload starts with an empty list. Nothing
+  // stored, or a record older than the hand-off's ten minutes: the files
+  // step says nothing was handed off. A failure leaves the page as if opened
+  // directly.
   if (location.hash === '#from-demo') {
     history.replaceState(null, '', location.pathname + location.search);
     takeHandoff().then(function (record) {
       var entries = handoffEntries(record, Date.now());
-      if (entries.length) return window.__chAnalyze.addFiles(entries);
+      if (!entries.length) { window.__chAnalyze.handoffEmpty(); return; }
+      return window.__chAnalyze.addFiles(entries);
     }).catch(function (e) {
       if (e && e.handled) return;   // recover() (page.js) has shown it on the page already
       console.warn('cyborg-hunter analyze: the files from the demo could not be read', e);

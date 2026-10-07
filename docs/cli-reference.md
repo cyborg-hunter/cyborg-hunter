@@ -141,6 +141,11 @@ One row per participant:
 > while the session-derived columns are snake_case (`sidebar_event_count`, …).
 > The header names above match the emitted CSV exactly.
 
+A text cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage return
+is written with a leading apostrophe (`'`), so a spreadsheet reads it as text
+rather than running it as a formula; numbers, negative ones included, are
+written unchanged.
+
 For a Qualtrics response written at a reduced level ([Payload size](qualtrics.md#payload-size)),
 the counts, `trialCount` and `totalSoftScore` cover the whole session, while `meanTypingSpeed`,
 `meanMouseEvents` and `meanPathEfficiency` average only the pages the payload kept; the CLI's
@@ -194,6 +199,11 @@ Every clipboard, drop, synthetic-insertion, and tab-away event in chronological 
 | `timestamp` | When (session-absolute `performance.now()` ms — same scale across all rows) |
 | `duration_ms` | Populated for `tabAway` (the duration); empty for instantaneous events |
 | `text` | Pasted/dropped text if available; for `tabAway` carries the trigger type (`windowBlur`, `visibilityChange`, etc.) |
+
+A text cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage return
+is written with a leading apostrophe (`'`), so a spreadsheet reads it as text
+rather than running it as a formula; numbers, negative ones included, are
+written unchanged.
 
 ### `images/trajectories_*.png`, `session_timeline_*.png`, `typing_profile_*.png`
 

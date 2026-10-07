@@ -1,10 +1,10 @@
 // demo/steps.js
 // ALL tutorial copy as data. Numbers are {{path}} placeholders substituted
 // from signal-manifest.json at runtime — never hardcode thresholds here.
-// Register (spec 2026-07-31 G1): plain, dry, direct. Signals only until the
-// signals-to-scores step (G2).
+// Register: plain, dry, direct. Signals only until the signals-to-scores
+// step.
 
-/** Intro positioning copy. De-slopped 2026-08-01 (verbatim lock lifted). */
+/** Intro positioning copy. */
 export const POSITIONING =
   "Prolific's built-in Authenticity Checks give you a verdict inside one " +
   "platform. cyborg-hunter gives you the evidence: full behavioral traces, " +
@@ -12,12 +12,13 @@ export const POSITIONING =
   "classroom, or standalone), free and inspectable. Use them together: " +
   "platform-level screening plus study-level evidence you can defend in review.";
 
-/** Sidebar rail intro. Demo-instrument framing per G4. */
-export const RAIL_INTRO =
-  "A demo instrument, not part of the product UI. These lamps show a curated " +
-  "subset of what the library records; the full record is in the live session " +
-  "pane. Idle gaps, window position, zoom, DOM mutations, and the extension " +
-  "scan also run in the background, but nothing on this page can trigger them on cue.";
+/** Sidebar rail intro: one line, with the full framing as its tooltip. */
+export const RAIL_INTRO = 'A demo instrument: a curated subset of what the library records.';
+export const RAIL_INTRO_TITLE =
+  'Not part of the product UI. These lamps show a curated subset of what the ' +
+  'library records; the full record is in the live session record under the ' +
+  'card. Idle gaps, window position, zoom, DOM mutations, and the extension ' +
+  'scan also run in the background, but nothing on this page can trigger them on cue.';
 
 export const RAIL_GROUPS = {
   detectors: [
@@ -85,7 +86,7 @@ jsPsych.run([trial]);`,
 showQuestion('What is the capital of Australia?');   // your code
 
 CyborgHunter.init({ participantId: subject.id, preset: 'standard' });
-CyborgHunter.startTrial('q1');   // 'q1' is just your label for this trial
+CyborgHunter.startTrial('q1');   // 'q1' is your label for this trial
 // participant answers
 CyborgHunter.endTrial();         // seal q1's integrity record
 
@@ -95,25 +96,21 @@ const payload = CyborgHunter.getSessionReport();
 };
 
 /**
- * Step-10 scoring panel (demo.js's renderScoringPanel/wireScoringPanel):
- * per-signal weight editors + two config-as-source snippets. Field order/
- * labels here; the live numbers come from signal-manifest.json (never
- * hand-typed) so a preset change can't silently drift from what's shown.
+ * Step-10 scoring panel (demo.js's renderScoringPanel/fillLiveScore):
+ * the visitor's soft score so far, as the library itself computes it under
+ * the standard weights, a note on what the analyzer's settings panel changes
+ * afterwards, and two config-as-source snippets. The copy lives here; the
+ * numbers come from the monitor and signal-manifest.json (never hand-typed)
+ * so a preset change can't silently drift from what's shown.
  */
 export const SCORING_PANEL = {
-  weightsIntro:
-    'Move a weight and the score below recomputes against your own ' +
-    'session, using the same arithmetic the CLI runs.',
-  weightFields: [
-    { key: 'copy', label: 'copy' },
-    { key: 'tabAway', label: 'tab-away past the cutoff' },
-    { key: 'typingSpeed', label: 'fast typing' },
-    { key: 'sidebarEvent', label: 'sidebar open' },
-    { key: 'devTools', label: 'DevTools shortcut' },
-    { key: 'foreignInput', label: 'foreign input' },
-  ],
-  configIntro: "As it actually reads in the library's scoring config:",
-  cliConfigIntro: "As it actually reads in the CLI's config file:",
+  intro: 'Your session so far, scored with the standard weights: the number the command-line tool reads.',
+  analyzerNote: 'Changing the analysis after the fact is the analyzer’s job: its settings panel moves the ' +
+    'soft-score threshold, which re-tiers participants against the scores their sessions saved, and the ' +
+    'ranking weights that order them within a tier, and it exports the config that reproduces the report ' +
+    'on the command line.',
+  configIntro: 'As it reads in the library’s scoring config:',
+  cliConfigIntro: 'As it reads in the CLI’s config file:',
 };
 
 /**
@@ -138,7 +135,7 @@ watch them being recorded, run into the enforcement mode, and end with your
 session's files, one click away from a real report built from them in the
 analyzer. Two instruments on this page are demo-only: the signal lamps on
 the right and the live session record below
-them. The lamps show a curated handful of what cyborg-hunter records; the
+this card. The lamps show a curated handful of what cyborg-hunter records; the
 full list is in docs/signals-reference.md. The recording itself is the
 actual product, behaving exactly as it does in a study.</p>
 <p>The tour runs in four parts: Act 1 (steps 2 through 6) lets you try every
@@ -166,8 +163,8 @@ the analyzer, a page of this same site.</p>`.trim(),
     body: `
 <p>Type your answer to the question below the way you normally would. This
 is the baseline: an honest answer produces keystrokes at a human rhythm and
-not much else. Watch the session record while you type: each event lands
-as a row the moment it happens.</p>
+not much else. Watch the lamps on the right as you type; the session record
+under this card lists each event the moment it happens.</p>
 <p>Below the task: what this exact question looks like in an experiment's
 source code, with the cyborg-hunter wiring around it.</p>`.trim(),
     task: {
@@ -231,7 +228,7 @@ of each absence either way.</p>`.trim(),
 sidebars (Gemini, Copilot, the Edge panel) that dock next to the page,
 reading it while the participant works. Docking one changes the window's
 geometry, and geometry is recorded: open a sidebar, split the window, or
-just resize it, and watch the record.</p>
+resize it, and watch the record.</p>
 <p>Resizing never ends the session. The layout adapts and recording
 continues, whatever shape the window takes.</p>`.trim(),
     task: { kind: 'sidebar-resize', trialId: 'act1-sidebar' },
@@ -338,11 +335,10 @@ two presets they belong to (standard, strict), are set once, in the
 library's scoring config, when a study is initialized. The soft-score
 threshold, and two threshold fallbacks (tab-away cutoff, typing speed), are
 set separately, in the CLI's config file, on the analysis side. Below is
-both, as they actually read in code: move a weight and your own soft score
-recomputes against it, live.</p>
+both, as they actually read in code.</p>
 <p>Ordering the participant list is a separate step, done afterward by the
 CLI, once every session already has a tier. Tier comes first, always: hard
-rows before soft before clean. Inside a tier, a fixed ranking score orders
+rows before soft before clean. Inside a tier, a default ranking score orders
 the rest, one the weights above never touch: 5 points per paste event, 5
 per copy event, 3 per sidebar-open, 1 per tab-away past the participant's
 cutoff (a flicker under that cutoff scores nothing). A hard trigger, a
@@ -371,13 +367,14 @@ data.</p>`.trim(),
   },
 ];
 
-/** The last step's files, in two download batches (a Save link per file and
- * a "Save all" per batch, no zip): the session built in this tab (`key`,
+/** The last step's files, in two download batches (a Save button per file,
+ * and one "Save all into a folder" for all five where the browser has a
+ * folder picker; no zip): the session built in this tab (`key`,
  * built by demo.js's buildDownloadFile) and the two example participants the
  * site serves (`href`). A session file's card shows the name it is saved
  * under (demo.js sessionFileName); its `filename` here is the pattern, shown
  * only for a recording this browser could not make. The hand-off to the
- * analyzer passes the same files. */
+ * analyzer passes the same files, and the page's fonts (HANDOFF_ASSETS). */
 export const DOWNLOAD_BATCHES = [
   {
     heading: 'Your session',
@@ -401,14 +398,40 @@ export const DOWNLOAD_BATCHES = [
   },
 ];
 
+/** The tour's own typefaces (demo.css @font-face), handed to the analyzer
+ * with the files so a replay of this page renders in them. Not offered as
+ * downloads: they are not study data. */
+export const HANDOFF_ASSETS = [
+  'assets/fonts/spacegrotesk/spacegrotesk-300-700.woff2',
+  'assets/fonts/tomorrow/tomorrow-400.woff2',
+  'assets/fonts/sofiasans/sofiasans-1-1000.woff2',
+  'assets/fonts/sora/sora-100-800.woff2',
+  'assets/fonts/recursive/recursive-300-1000.woff2',
+  'assets/fonts/majormonodisplay/majormonodisplay-400.woff2',
+];
+
 /** The last step's one-click hand-off to the analyze page (demo/handoff.js).
- * `failed` is first-party HTML: the step shows it when the browser refuses to
- * store the files. */
+ * `failed` is first-party HTML: the step shows it when the files could not be
+ * handed over (an example file failed to download, or the browser refused to
+ * store them). `leaveHint` sits under the button: the session lives in this
+ * page only. */
 export const HANDOFF = {
   buttonLabel: 'Open in the analyzer →',
-  buttonHint: 'The files below, kept in this browser: nothing is uploaded.',
-  failed: 'This browser would not keep the files for the analyzer. Save them ' +
-    'below and drop them on <a href="analyze/">the analyzer</a> instead.',
+  buttonHint: 'The files below and this page\'s fonts, kept in this browser: nothing is uploaded.',
+  failed: 'The files could not be prepared for the analyzer. Save them below ' +
+    'and drop them on <a href="analyze/">the analyzer</a> instead.',
+  leaveHint: 'Leaving this page can end the session: open it in the analyzer or save the files first; ' +
+    'Back from the analyzer may start a new tour.',
+};
+
+/** The last step's "Save all into a folder" (demo.js saveToFolder), offered
+ * only where the browser has a folder picker (Chrome, Edge). `failed` is
+ * plain text: the step shows it when the folder could not be written. */
+export const SAVE_TO_FOLDER = {
+  buttonLabel: 'Save all into a folder…',
+  hint: 'Chrome and Edge: pick or create an empty folder (inside Downloads, for example); ' +
+    'the browser refuses your home folder and system folders.',
+  failed: 'The folder could not be written. Save the files one by one below.',
 };
 
 /** The last step's documentation-style walkthrough. Rendered as numbered
@@ -417,10 +440,11 @@ export const HANDOFF = {
 export const REPLICATE = {
   sections: [
     { n: 1, heading: 'Save the five files into one empty folder',
-      text: 'Use "Save all" on each batch above, or the Save button of each file. After the first file of a "Save all", ' +
-        'your browser may ask whether this site may download several files: allow it, or save the rest with their own ' +
-        'Save buttons. If a session file is still blocked, use its "show as text" link and save the text yourself; for an ' +
-        'example file, right-click its Save link and choose "Save link as".',
+      text: 'Use "Save all into a folder" above (Chrome and Edge; pick or create an empty folder, inside Downloads ' +
+        'for example, since the browser refuses your home folder and system folders), or the Save button of each ' +
+        'file: browsers allow one download per click, so each file has its own. If a session file is blocked, use ' +
+        'its "show as text" link and save the text yourself; for an example file, right-click its Save link and ' +
+        'choose "Save link as".',
       code: null },
     { n: 2, heading: 'Install Node.js if you don’t have it',
       text: 'Node 18 or newer. Check with:',
@@ -441,7 +465,8 @@ export const REPLICATE = {
   installNote: '',
 };
 
-/** Config caveat shown next to the downloadable cyborg-hunter.config.json. */
+/** Config caveat, shown once on the last step, under the grid of the batch
+ * that holds cyborg-hunter.config.json (the first batch). */
 export const CONFIG_CAVEAT =
   "This config matches the demo's data shape. A real study likely needs " +
   "participantIdField 'subject_ID' and filePattern '*.csv' (see quickstart §6).";

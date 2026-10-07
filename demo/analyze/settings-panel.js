@@ -25,7 +25,8 @@ var numberOrNull = function (text) {
 
 /**
  * The panel's values from a config (the dropped config merged over the CLI's
- * defaults, as the check returns it).
+ * defaults, as the check returns it). A value added here must join
+ * settingsKey, or a config that differs only in it never counts as changed.
  */
 export function settingsFromConfig(config) {
   var scope = config.phaseScope || {};
@@ -40,6 +41,29 @@ export function settingsFromConfig(config) {
     showPlatformId: !!config.showPlatformId,
     trajectoryDisplayOrder: config.trajectoryDisplayOrder || 'rule',
   };
+}
+
+// One signal's weight and cap as the panel shows them, from a config's
+// scoreWeights entry: a bare number is the weight, an object may give the
+// weight and a cap, and no entry is the signal's default weight, uncapped.
+function resolveWeight(user, sig) {
+  var u = user[sig.key];
+  var weight = u == null ? sig.weight : (typeof u === 'object' ? (u.weight != null ? u.weight : sig.weight) : u);
+  var max = u != null && typeof u === 'object' && u.max != null ? u.max : null;
+  return [weight, max];
+}
+
+/**
+ * The settings as the panel shows them, as a string two configs can be
+ * compared by: the weights resolved per signal in SCORE_SIGNALS order, so
+ * key order, a bare number against { weight }, and an explicit default
+ * against no entry all compare equal.
+ */
+export function settingsKey(s) {
+  var user = s.scoreWeights || {};
+  return JSON.stringify([SCORE_SIGNALS.map(function (sig) { return resolveWeight(user, sig); }),
+    s.softScoreThreshold, s.phaseInclude, s.phaseExclude, s.integrityField, s.sessionIntegrityPath,
+    s.platformIdField, s.showPlatformId, s.trajectoryDisplayOrder]);
 }
 
 /**
@@ -117,9 +141,7 @@ export function createSettingsPanel(container, onChange) {
       field('trajectoryDisplayOrder').value = s.trajectoryDisplayOrder || 'rule';
       var user = s.scoreWeights || {};
       SCORE_SIGNALS.forEach(function (sig) {
-        var u = user[sig.key];
-        var weight = u == null ? sig.weight : (typeof u === 'object' ? (u.weight != null ? u.weight : sig.weight) : u);
-        var max = u != null && typeof u === 'object' && u.max != null ? u.max : null;
+        var resolved = resolveWeight(user, sig), weight = resolved[0], max = resolved[1];
         form.querySelector('[data-weight="' + sig.key + '"]').value = String(weight);
         form.querySelector('[data-max="' + sig.key + '"]').value = max == null ? '' : String(max);
       });

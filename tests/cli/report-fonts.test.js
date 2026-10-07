@@ -71,10 +71,10 @@ describe('report fonts: the shared pure formatter', () => {
     assert.equal(fontFaceCss(manifest.files, p => b64[p]), buildFontFaceCss());
   });
 
-  it('takes a font-display override (swap for pages that fetch their fonts)', async () => {
+  it('formats a face with font-display: block and its weight range', async () => {
     const { fontFaceCss } = await import('../../src/cli/renderers/font-face-css.js');
-    const css = fontFaceCss([{ family: 'Sora', weight: '100 800', path: 'x' }], () => 'AAAA', 'swap');
-    assert.match(css, /font-display: swap/);
+    const css = fontFaceCss([{ family: 'Sora', weight: '100 800', path: 'x' }], () => 'AAAA');
+    assert.match(css, /font-display: block/);
     assert.match(css, /font-weight: 100 800/);
   });
 });
@@ -105,7 +105,7 @@ describe('report fonts: plumbing into index.html', () => {
     assert.ok(firstStyle.includes(fontCss), 'inside the report <style>');
   });
 
-  it('renderIndexHtml without opts.fontFaceCss emits no @font-face (demo and snapshot path)', async () => {
+  it('renderIndexHtml without opts.fontFaceCss emits no @font-face (the snapshot path)', async () => {
     const { renderIndexHtml } = await import('../../src/cli/renderers/html-index-core.js');
     const { summaries, triage, participants } = tiny();
     const html = await renderIndexHtml(summaries, triage, participants, { outputDir: '.' }, false);

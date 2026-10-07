@@ -548,8 +548,8 @@ export function applyAssetMap(model, assetMap) {
   }
   // Media is never matched, so only image references are rewritten. Each
   // image is written ONCE, into model.assets (URL → data: URI), and an
-  // attribute that shows it holds ASSET_REF + the URL: a card game shows the
-  // same card art on every card, and written into each attribute the picture
+  // attribute that shows it holds ASSET_REF + the URL: a stimulus image is
+  // often shown on every trial, and written into each attribute the picture
   // was embedded once per element. A srcset candidate stays an inline data:
   // URI, as one srcset value holds several URLs. A reference already in place
   // (a second pass over a recording the model aliases) stands for its URL, so

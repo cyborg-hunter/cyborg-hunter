@@ -4,6 +4,7 @@
 // a separate row. No fs access: report-core.js sinks it, extensions.js writes it.
 
 import { countSidebarOpenings } from '../analyzers/summary.js';
+import { csvCell } from '../../shared/csv-cell.js';
 
 // The file's text and its row count (for the console line).
 export function buildExtensionsCsv(participants) {
@@ -17,7 +18,7 @@ export function buildExtensionsCsv(participants) {
     const extensions = p.session?.aiExtensionsFound || p.trials[0]?.extensionsDetected || [];
     for (const ext of extensions) {
       const name = typeof ext === 'string' ? ext : ext.name || 'unknown';
-      rows.push(`${pid},extension,${escapeCSV(name)},`);
+      rows.push(row(pid, 'extension', name, ''));
     }
 
     // Sidebar detection. Prefer the current library's session-level
@@ -29,20 +30,16 @@ export function buildExtensionsCsv(participants) {
     // summary/triage count.
     const sidebarOpens = countSidebarOpenings(p.session?.sidebarEvents);
     if (sidebarOpens > 0) {
-      rows.push(`${pid},sidebar,browser_sidebar,${sidebarOpens} open event${sidebarOpens === 1 ? '' : 's'}`);
+      rows.push(row(pid, 'sidebar', 'browser_sidebar', `${sidebarOpens} open event${sidebarOpens === 1 ? '' : 's'}`));
     } else if (p.trials.some(t => (t.sidebarGapPx || 0) > 0)) {
       const maxGap = Math.max(...p.trials.map(t => t.sidebarGapPx || 0));
-      rows.push(`${pid},sidebar,browser_sidebar,${maxGap}px gap`);
+      rows.push(row(pid, 'sidebar', 'browser_sidebar', `${maxGap}px gap`));
     }
   }
 
   return { csv: [header, ...rows].join('\n') + '\n', rows: rows.length };
 }
 
-function escapeCSV(val) {
-  const str = String(val);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
+function row(...cells) {
+  return cells.map(csvCell).join(',');
 }

@@ -3,6 +3,8 @@
 // signal aggregate and the triage score/reason. No fs access: report-core.js
 // sinks it, summary-csv.js writes it.
 
+import { csvCell } from '../../shared/csv-cell.js';
+
 // CSV columns in output order. Each entry: [header, accessor function].
 const COLUMNS = [
   ['participantId', (s, t) => s.participantId],
@@ -56,17 +58,8 @@ export function buildSummaryCsv(summaries, triage) {
   const header = COLUMNS.map(c => c[0]).join(',');
   const rows = summaries.map(s => {
     const t = triageMap.get(s.participantId) || {};
-    return COLUMNS.map(c => escapeCSV(c[1](s, t))).join(',');
+    return COLUMNS.map(c => csvCell(c[1](s, t))).join(',');
   });
 
   return [header, ...rows].join('\n') + '\n';
-}
-
-// Escapes a CSV value: wraps in quotes if it contains commas, quotes, or newlines
-function escapeCSV(val) {
-  const str = String(val ?? '');
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
 }

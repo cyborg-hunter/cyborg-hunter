@@ -16,6 +16,7 @@ const win = new Window({ settings: { disableIframePageLoading: true } });
 globalThis.window = win; globalThis.document = win.document;
 globalThis.Blob = win.Blob; globalThis.URL = win.URL;
 const { createPage } = await import('../../demo/analyze/page.js');
+const { HANDOFF_ASSETS } = await import('../../demo/steps.js');
 
 // opts go to createPage. With opts.transferBytes the stand-in puts each
 // message through structuredClone with its transfer list, as the worker
@@ -122,6 +123,43 @@ test('over http the page hands the worker File handles, not bytes', async () => 
   await until(() => t.sent.length === 1);
   assert.deepEqual(t.sent[0], { type: 'check', sample: false, files: entries.map((e) => ({ path: e.path, file: e.file })) });
   assert.deepEqual(t.transfers[0], []);
+});
+
+// Opened from the demo with nothing left to hand over (main.js): the files
+// step says so, until a drop, the sample or Start over.
+test('an empty hand-off shows its line in the files step; a drop, the sample or Start over hides it', async () => {
+  const t = boot();
+  assert.equal(role('handoff-empty').hidden, true);
+  t.page.handoffEmpty();
+  assert.equal(role('handoff-empty').hidden, false);
+  assert.equal(role('handoff-empty').textContent, 'Nothing was handed off from the demo: its files are kept for ten minutes. Drop files here instead.');
+  assert.ok(document.querySelector('section[data-step="files"]').contains(role('handoff-empty')));
+  assert.deepEqual(visibleStep(), ['files']);
+  t.page.addFiles(dropped());
+  assert.equal(role('handoff-empty').hidden, true);
+
+  const s = boot();
+  s.page.handoffEmpty();
+  action('sample').click();
+  assert.equal(role('handoff-empty').hidden, true, 'the sample');
+
+  const r = boot();
+  r.page.handoffEmpty();
+  r.page.reset();
+  assert.equal(role('handoff-empty').hidden, true, 'Start over');
+});
+
+// A drop or the sample can land before the hand-off has been read: the line
+// would then sit beside a list.
+test('an empty hand-off read after a drop or the sample shows no line', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  t.page.handoffEmpty();
+  assert.equal(role('handoff-empty').hidden, true, 'after a drop');
+  const s = boot();
+  action('sample').click();
+  s.page.handoffEmpty();
+  assert.equal(role('handoff-empty').hidden, true, 'after the sample');
 });
 
 test('from file:, the page reads each dropped file and transfers its bytes, for the check and again for the run', async () => {
@@ -414,6 +452,21 @@ test('the report\'s load-time selection moves the replay dropdown when the analy
   assert.equal(replaySelect().value, 'A');
   post('B');
   assert.equal(replaySelect().value, 'B');
+});
+
+test('the report\'s load-time selection of a participant without a replay leaves the card on the first one with a replay; a later click moves it', async () => {
+  const t = boot();
+  await toResults(t);          // triage order A, B: A has no recording, B has one
+  const frame = document.querySelector('iframe.analyze-report');
+  const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+  assert.equal(replaySelect().value, 'B');
+  post('A');                   // the report's first message: its own pick of row 1
+  assert.equal(t.page.state.selected, 'A', 'the page still knows what the report shows');
+  assert.equal(replaySelect().value, 'B', 'the card keeps the first participant with a replay');
+  assert.equal(action('load-replay').disabled, false);
+  post('A');                   // a row click afterwards moves the card
+  assert.equal(replaySelect().value, 'A');
+  assert.equal(role('asset-note').textContent, 'Participant A has no replay recording.');
 });
 
 test('a Load click counts as a choice the load-time selection leaves alone', async () => {
@@ -958,6 +1011,216 @@ test('the settings show from the first check on, and a run sends their config', 
   assert.deepEqual(t.sent[1].config.phaseScope, { include: ['game', 'practice'] });
 });
 
+// Every drop checks the whole list again, and each check returns the merged
+// config: the panel is written from it only when its values differ from the
+// ones it was last written from, so a drop of more data keeps what the
+// analyst set. A replacement after the first check says so under the list.
+const weightInput = (key) => role('settings-form').querySelector('[data-weight="' + key + '"]');
+const thresholdInput = () => role('settings-form').elements.namedItem('softScoreThreshold');
+const checkNotes = () => [...role('check-warnings').children].map((li) => li.textContent);
+
+test('a drop keeps the analyst\'s settings unless its config differs, and a replacement says so', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  assert.equal(weightInput('paste').value, '5');
+  weightInput('paste').value = '9';
+  weightInput('paste').dispatchEvent(new win.Event('input', { bubbles: true }));
+  t.page.addFiles([{ path: 'more.csv', file: new File(['y'], 'more.csv', { lastModified: 5 }) }]);
+  await until(() => t.sent.length === 2);
+  t.emit({ ...CHECKED, files: [...CHECKED.files, { path: 'more.csv', kind: 'data' }] });
+  await tick();
+  assert.equal(weightInput('paste').value, '9', 'a data-only drop keeps the edit');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+  // Another config, with a threshold of its own: its values replace the panel's.
+  t.page.addFiles([{ path: 'cyborg-hunter.config.json', file: new File(['{"scoring":{"softScoreThreshold":7}}'], 'cyborg-hunter.config.json', { lastModified: 6 }) }]);
+  await until(() => t.sent.length === 3);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId', scoring: { softScoreThreshold: 7 } } });
+  await tick();
+  assert.equal(thresholdInput().value, '7');
+  assert.equal(weightInput('paste').value, '5', 'the edit gives way to the file');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"', 'Settings replaced from cyborg-hunter.config.json.']);
+  // One sentence per check: the next data-only drop does not repeat it.
+  t.page.addFiles([{ path: 'later.csv', file: new File(['z'], 'later.csv', { lastModified: 7 }) }]);
+  await until(() => t.sent.length === 4);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId', scoring: { softScoreThreshold: 7 } } });
+  await tick();
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+});
+
+test('removing the config puts the defaults back and says so; after Start over the first check writes the panel without a note', async () => {
+  const t = boot();
+  const withConfig = { ...CHECKED, config: { participantIdField: 'subject_ID', scoring: { softScoreThreshold: 7 } }, configWarnings: [],
+    files: [{ path: 'study/a.csv', kind: 'data' }, { path: 'study/cyborg-hunter.config.json', kind: 'config' }], configPath: 'study/cyborg-hunter.config.json' };
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(withConfig);
+  await tick();
+  assert.equal(thresholdInput().value, '7');
+  role('file-rows').querySelector('[data-path="study/cyborg-hunter.config.json"]').click();
+  await until(() => t.sent.length === 2);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId' }, configWarnings: [], configFound: false, configPath: null,
+    files: [{ path: 'study/a.csv', kind: 'data' }] });
+  await tick();
+  assert.equal(thresholdInput().value, '');
+  assert.deepEqual(checkNotes(), ['Settings replaced with the defaults.']);
+  t.page.reset();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 4);   // the reset, then the check
+  t.emit(withConfig);
+  await tick();
+  assert.equal(thresholdInput().value, '7');
+  assert.deepEqual(checkNotes(), []);
+});
+
+// The Participant ID field is listed again from each check's candidates. The
+// analyst's own pick (another field than the one the check suggested) stays
+// while the new list still offers it and the config is unchanged; a field the
+// page itself suggested follows the new suggestion, and so does any field
+// once the config changed (as the rest of the settings do).
+const pickIdField = (field) => {
+  role('id-field').value = field;
+  role('id-field').dispatchEvent(new win.Event('change', { bubbles: true }));
+};
+const dropMore = async (t, name, reply) => {
+  const n = t.sent.length;
+  t.page.addFiles([{ path: name, file: new File([name], name, { lastModified: n + 10 }) }]);
+  await until(() => t.sent.length === n + 1);
+  t.emit(reply);
+  await tick();
+};
+
+test('a drop keeps the analyst\'s participant-id field while the check still offers it, and the suggestion otherwise', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  assert.equal(role('id-field').value, 'subject_ID');
+  pickIdField('run_id');
+  await dropMore(t, 'more.csv', CHECKED);
+  assert.equal(role('id-field').value, 'run_id', 'a data-only drop keeps the pick');
+  // run_id is no longer constant within each file: the check stops offering it.
+  const withoutRunId = { ...CHECKED, idSuggestion: { suggested: 'subject_ID', candidates: [{ field: 'subject_ID', reason: 'known name' }, { field: 'pid', reason: 'constant within each file, unique across files' }] } };
+  await dropMore(t, 'odd.csv', withoutRunId);
+  assert.equal(role('id-field').value, 'subject_ID', 'the pick is gone from the list: the suggestion');
+  // The pick gave way: a later list that offers run_id again keeps the suggestion.
+  await dropMore(t, 'later.csv', CHECKED);
+  assert.equal(role('id-field').value, 'subject_ID');
+  action('run').click();
+  await tick();
+  assert.equal(t.sent.at(-1).participantIdField, 'subject_ID');
+});
+
+test('a participant-id field the page suggested follows the next check\'s suggestion; after Start over the first check takes the suggestion', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  // More data, the same config: the check now suggests run_id, subject_ID still listed.
+  await dropMore(t, 'more.csv', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'known name' }, { field: 'subject_ID', reason: 'known name' }] } });
+  assert.equal(role('id-field').value, 'run_id');
+  // Start over begins another cohort: its first check takes the suggestion,
+  // whatever was picked before.
+  pickIdField('subject_ID');
+  t.page.reset();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.at(-1).type === 'check');
+  t.emit({ ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'from cyborg-hunter.config.json' }, { field: 'subject_ID', reason: 'known name' }] } });
+  await tick();
+  assert.equal(role('id-field').value, 'run_id', 'after Start over the first check takes the suggestion');
+});
+
+test('a config that names another participant-id field replaces the analyst\'s pick, even one still offered', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  pickIdField('run_id');
+  // Only the id field differs from the config before.
+  await dropMore(t, 'cyborg-hunter.config.json', { ...CHECKED, config: { participantIdField: 'subject_ID' },
+    idSuggestion: { suggested: 'subject_ID', candidates: [{ field: 'subject_ID', reason: 'from cyborg-hunter.config.json' }, { field: 'run_id', reason: 'constant within each file, unique across files' }] } });
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"', 'Settings replaced from cyborg-hunter.config.json.']);
+});
+
+test('the analyst\'s pick is remembered through a check that happens to suggest it', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  pickIdField('run_id');
+  await dropMore(t, 'more.csv', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'known name' }, { field: 'subject_ID', reason: 'known name' }] } });
+  assert.equal(role('id-field').value, 'run_id');
+  // The suggestion moves back to subject_ID; run_id is still offered.
+  await dropMore(t, 'later.csv', CHECKED);
+  assert.equal(role('id-field').value, 'run_id');
+});
+
+test('choosing the suggestion again lets the field follow the suggestions once more', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  pickIdField('run_id');
+  pickIdField('subject_ID');   // the suggestion: no longer a pick of the analyst's own
+  await dropMore(t, 'more.csv', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'known name' }, { field: 'subject_ID', reason: 'known name' }] } });
+  assert.equal(role('id-field').value, 'run_id', 'the new suggestion stands');
+});
+
+// The sample, and files dropped after it, replace the cohort: the settings
+// start over as at the first check, and nothing says they were replaced.
+test('the sample, and a drop after it, start the settings over: the new cohort\'s values and no note', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  weightInput('paste').value = '9';
+  pickIdField('run_id');
+  action('sample').click();
+  await until(() => t.sent.length === 2);
+  t.emit(CHECKED);   // the same config as the drop before
+  await tick();
+  assert.equal(weightInput('paste').value, '5');
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+  weightInput('paste').value = '9';
+  pickIdField('run_id');
+  await dropMore(t, 'a.csv', CHECKED);
+  assert.equal(weightInput('paste').value, '5', 'files after the sample');
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+});
+
+test('a failed check starts the settings over: the next check writes them without a note', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  weightInput('paste').value = '9';
+  pickIdField('run_id');
+  t.page.addFiles([{ path: 'bad.csv', file: new File(['x'], 'bad.csv') }]).catch(() => {});
+  await until(() => t.sent.length === 2);
+  t.emit({ type: 'error', phase: 'check', message: 'boom' });
+  await tick();
+  assert.equal(role('files-panel').hidden, true);
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 3);
+  t.emit(CHECKED);
+  await tick();
+  assert.equal(weightInput('paste').value, '5');
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+});
+
 test('on the results, a post-hoc setting re-analyses without reading the files, and the report swaps in place', async () => {
   const t = boot();
   await toResults(t);
@@ -1117,6 +1380,63 @@ describe('a re-analysis keeps the analyst\'s place', () => {
     assert.equal(replaySelect().value, 'p.2/b');
     assert.equal(role('error').hidden, true, 'every swap loaded');
   });
+
+  // A fresh report's load-time pick of a row without a replay leaves the card
+  // on the first participant with one; a report reopened on a participant the
+  // card already showed (the analyst's own pick) follows it there, replay or not.
+  test('a re-analysis reopened on a participant without a replay shows that participant\'s entry in the card', async () => {
+    const t = boot({ timers: fakeTimers() });
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit(DONE);                // triage order A, B: A has no recording, B has one
+    await tick();
+    const frame = document.querySelector('iframe.analyze-report');
+    frame.dispatchEvent(new win.Event('load'));
+    const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+    post('A');                   // the fresh report's load-time pick
+    assert.equal(replaySelect().value, 'B');
+    post('A');                   // the analyst clicks row A
+    assert.equal(replaySelect().value, 'A');
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.equal(t.sent.at(-1).type, 'reanalyze');
+    t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    t.emit(DONE);
+    await tick();
+    assert.match(frame.src, /^blob:[^#]*#p-A$/, 'the new report opens on A');
+    frame.dispatchEvent(new win.Event('load'));
+    post('A');                   // the reopened report's load-time pick
+    assert.equal(replaySelect().value, 'A', 'the card follows the analyst\'s pick');
+    assert.equal(role('asset-note').textContent, 'Participant A has no replay recording.');
+    assert.equal(action('load-replay').disabled, true);
+  });
+
+  // The report's own load-time pick also becomes the selection a re-analysis
+  // reopens on; the card never showed it, so it is not the analyst's pick.
+  test('a re-analysis reopened on the report\'s own pick without a replay leaves the card on the first participant with one', async () => {
+    const t = boot({ timers: fakeTimers() });
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit(DONE);                // triage order A, B: A has no recording, B has one
+    await tick();
+    const frame = document.querySelector('iframe.analyze-report');
+    frame.dispatchEvent(new win.Event('load'));
+    const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+    post('A');                   // the fresh report's load-time pick: the card stays on B
+    assert.equal(replaySelect().value, 'B');
+    setField('softScoreThreshold', '2');
+    await tick();
+    t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    t.emit(DONE);
+    await tick();
+    assert.match(frame.src, /^blob:[^#]*#p-A$/, 'the new report still opens on A');
+    frame.dispatchEvent(new win.Event('load'));
+    post('A');                   // the new report's load-time pick
+    assert.equal(replaySelect().value, 'B');
+    assert.equal(action('load-replay').disabled, false);
+  });
 });
 
 // Phase scope reads a trial without a phase as "default" (the worker lists
@@ -1167,6 +1487,127 @@ test('with experiment files among the drop, the panel says where they go and the
     action('export-config').click();
     assert.deepEqual(JSON.parse(await made.at(-1).text()), { participantIdField: 'subject_ID', assetsDir: './assets' });
   } finally { URL.createObjectURL = saved; }
+});
+
+// The tour's hand-off (demo/handoff.js handoffEntries) brings the replay's
+// fonts, marked `handoff`: they go to the worker and are matched as
+// experiment assets, but they are not files the analyst has to put beside
+// the config.
+test('the fonts the tour hands over are not the analyst\'s assets: no hint, no assetsDir; a dropped stylesheet brings both', async () => {
+  const t = boot();
+  const font = { path: 'assets/fonts/sora/sora-100-800.woff2', file: new File(['f'], 'sora-100-800.woff2', { lastModified: 1 }), handoff: true };
+  const data = { path: 'DEMO-ab12.json', file: new File(['{}'], 'DEMO-ab12.json', { lastModified: 1 }), handoff: true };
+  const fontRow = { path: font.path, kind: 'asset' };
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  const exported = async () => { action('export-config').click(); return JSON.parse(await made.at(-1).text()); };
+  try {
+    t.page.addFiles([data, font]);
+    await until(() => t.sent.length === 1);
+    assert.equal('handoff' in t.sent[0].files[1], false, 'the mark stays on the page');
+    t.emit({ ...CHECKED, files: [{ path: data.path, kind: 'data' }, fontRow] });
+    await tick();
+    assert.equal(role('counts').textContent.includes('0 experiment assets'), true, 'not counted among the assets');
+    assert.equal(role('assets-hint').hidden, true);
+    assert.deepEqual(await exported(), { participantIdField: 'subject_ID' });
+
+    t.page.addFiles([{ path: 'css/style.css', file: new File(['p{}'], 'style.css', { lastModified: 2 }) }]);
+    await until(() => t.sent.length === 2);
+    t.emit({ ...CHECKED, files: [{ path: data.path, kind: 'data' }, fontRow, { path: 'css/style.css', kind: 'asset' }] });
+    await tick();
+    assert.equal(role('assets-hint').hidden, false);
+    assert.deepEqual(await exported(), { participantIdField: 'subject_ID', assetsDir: './assets' });
+
+    // Start over forgets the hand-off: the same path dropped by the analyst counts.
+    t.page.reset();
+    t.page.addFiles([{ path: font.path, file: new File(['g'], 'sora-100-800.woff2', { lastModified: 3 }) }]);
+    await until(() => t.sent.filter((m) => m.type === 'check').length === 3);
+    t.emit({ ...CHECKED, files: [fontRow] });
+    await tick();
+    assert.equal(role('assets-hint').hidden, false);
+  } finally { URL.createObjectURL = saved; }
+});
+
+// The tour's whole hand-off: its five files and the page's six fonts, each
+// marked `handoff` (demo/handoff.js handoffEntries), and what the check reads
+// them as.
+const FILES = [{ path: 'DEMO-ab12.json', kind: 'data' }, { path: 'DEMO-ab12-replay-1.json', kind: 'recording' },
+  { path: 'cyborg-hunter.config.json', kind: 'config' }, { path: 'example-1.json', kind: 'data' }, { path: 'example-2.json', kind: 'data' }];
+const FONTS = HANDOFF_ASSETS.map((path) => ({ path, kind: 'asset' }));
+const handed = (path) => ({ path, file: new File(['x'], path.slice(path.lastIndexOf('/') + 1), { lastModified: 1 }), handoff: true });
+async function handOver(t) {
+  t.page.addFiles(FILES.concat(FONTS).map((f) => handed(f.path)));
+  await until(() => t.sent.length === 1);
+  assert.equal(t.sent[0].files.length, 11, 'the fonts still go to the worker');
+  t.emit({ ...CHECKED, files: FILES.concat(FONTS) });
+  await tick();
+}
+const tableRows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => tr.querySelector('td').textContent);
+const line = () => role('handoff-assets');
+
+// The hand-off's fonts stay in the list the worker reads, so the replay
+// renders in them, but the table and the counts line show only the five
+// files the tour handed over and what the analyst drops. One line under
+// the table says why the fonts are there.
+test('the fonts the tour hands over are neither listed nor counted; a line under the table says they were included', async () => {
+  const t = boot();
+  assert.equal(line().hidden, true, 'before any hand-off');
+  await handOver(t);
+  assert.deepEqual(tableRows(), FILES.map((f) => f.path));
+  assert.equal(role('counts').textContent, '3 data files1 replay recording0 experiment assets1 config file');
+  assert.equal(line().hidden, false);
+  assert.equal(line().textContent, 'The demo page\'s fonts were included so the replay renders in them.');
+  assert.ok(role('files-panel').contains(line()));
+
+  // A stylesheet of the analyst's own is listed and counted; the line stays.
+  t.page.addFiles([{ path: 'css/style.css', file: new File(['p{}'], 'style.css', { lastModified: 2 }) }]);
+  await until(() => t.sent.length === 2);
+  t.emit({ ...CHECKED, files: FILES.concat(FONTS, [{ path: 'css/style.css', kind: 'asset' }]) });
+  await tick();
+  assert.deepEqual(tableRows(), FILES.map((f) => f.path).concat(['css/style.css']));
+  assert.equal(role('counts').textContent, '3 data files1 replay recording1 experiment asset1 config file');
+  assert.equal(line().hidden, false);
+
+  t.page.reset();
+  assert.equal(line().hidden, true, 'after Start over');
+
+  const s = boot();
+  await handOver(s);
+  assert.equal(line().hidden, false);
+  action('sample').click();
+  await until(() => s.sent.length === 2);
+  assert.equal(line().hidden, true, 'while the sample is read');
+  s.emit(CHECKED);
+  await tick();
+  assert.equal(line().hidden, true, 'after the sample');
+});
+
+// With the last listed file removed, only the hand-off's fonts would be
+// left, and they are there for the replay of the files that are gone: the
+// list is empty then, as when the last file of a drop is removed.
+test('removing the five handed-over files one by one empties the list, the fonts with them', async () => {
+  const t = boot();
+  await handOver(t);
+  let left = FILES.slice();
+  for (const f of FILES.slice(0, -1)) {
+    role('file-rows').querySelector('[data-path="' + f.path + '"]').click();
+    left = left.filter((g) => g !== f);
+    await until(() => t.sent.length === 1 + FILES.length - left.length);
+    assert.equal(t.sent.at(-1).files.length, left.length + FONTS.length, 'the fonts go with the files still listed');
+    t.emit({ ...CHECKED, files: left.concat(FONTS) });
+    await tick();
+    assert.deepEqual(tableRows(), left.map((g) => g.path));
+    assert.equal(line().hidden, false);
+  }
+  role('file-rows').querySelector('[data-path="' + left[0].path + '"]').click();
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reset' }, 'nothing listed is left: the page starts over');
+  assert.deepEqual(t.page.state.entries, []);
+  assert.equal(t.page.state.handoffPaths.size, 0);
+  assert.equal(line().hidden, true);
+  assert.equal(role('files-panel').hidden, true);
+  assert.equal(action('run').disabled, true);
 });
 
 // Annotations: the report frame posts each change (its annotation script in
@@ -1406,7 +1847,10 @@ test('the replay card says why a participant\'s replay is not shown', async () =
   const frame = document.querySelector('iframe.analyze-report');
   frame.dispatchEvent(new win.Event('load'));
   assert.deepEqual([...replaySelect().options].map((o) => o.textContent), ['A (replay not shown)', 'B']);
-  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+  const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+  post('A');                   // the report's load-time pick: the card stays on B
+  assert.equal(replaySelect().value, 'B');
+  post('A');                   // a row click on A
   assert.equal(role('asset-note').textContent, 'Participant A: ' + why);
   assert.equal(action('load-replay').disabled, true);
 });

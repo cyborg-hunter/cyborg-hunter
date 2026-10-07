@@ -18,6 +18,7 @@ import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import * as core from '../../src/cli/renderers/annotations-core.js';
 import { ANNOTATION_BUILDERS_JS, ANNOTATION_UI_JS } from '../../src/cli/renderers/annotation-client.js';
 import { inlineSrcHazards } from '../../src/shared/inline-safe.js';
+import { csvCell } from '../../src/shared/csv-cell.js';
 
 const ROWS = [
   { participantId: 'P-hard', tier: 'hard', triageScore: 15 },
@@ -43,6 +44,14 @@ describe('annotation exports and imports', () => {
       'P-hard,hard,15,exclude,"pasted the answer,\nthen ""typed"" it",2026-10-05T10:00:00.000Z,abc\n' +
       '"P ""soft"", two",soft,2.5,,,,abc\n' +
       'P-clean,clean,0,,look again,2026-10-05T10:01:00.000Z,abc\n');
+  });
+
+  it('a note a spreadsheet would run as a formula is exported as text, by the module and by the report\'s copy', () => {
+    const copy = runInNewContext(ANNOTATION_BUILDERS_JS + '\n;({ annotationsCsv })');
+    const state = { 'P-hard': { label: 'flag', note: '=HYPERLINK("x")', annotatedAt: 't' } };
+    const row = 'P-hard,hard,15,flag,"\'=HYPERLINK(""x"")",t,abc';
+    assert.equal(core.annotationsCsv(ROWS, state, 'abc', false).split('\n')[1], row);
+    assert.equal(copy.annotationsCsv(ROWS, state, 'abc', false).split('\n')[1], row);
   });
 
   it('the CSV can count the unreviewed as included; a chosen label stays', () => {
@@ -92,7 +101,10 @@ describe('annotation exports and imports', () => {
   });
 
   it('the report\'s own copy gives the same results as the module', () => {
-    const copy = runInNewContext(ANNOTATION_BUILDERS_JS + '\n;({ annotationsCsv, annotationsJson, readAnnotationsImport, importMessage, checkAnnotations, NOTE_MAX_LENGTH })');
+    const copy = runInNewContext(ANNOTATION_BUILDERS_JS + '\n;({ csvCell, annotationsCsv, annotationsJson, readAnnotationsImport, importMessage, checkAnnotations, NOTE_MAX_LENGTH })');
+    // The copy's csvCell is src/shared/csv-cell.js's, word for word.
+    const words = (f) => f.toString().replace(/\s+/g, ' ');
+    assert.equal(words(copy.csvCell), words(csvCell));
     for (const unreviewed of [false, true]) {
       assert.equal(copy.annotationsCsv(ROWS, STATE, 'abc', unreviewed), core.annotationsCsv(ROWS, STATE, 'abc', unreviewed));
     }
