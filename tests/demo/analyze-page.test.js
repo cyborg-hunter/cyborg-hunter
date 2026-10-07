@@ -1113,7 +1113,7 @@ test('a drop keeps the analyst\'s participant-id field while the check still off
   assert.equal(t.sent.at(-1).participantIdField, 'subject_ID');
 });
 
-test('a participant-id field the page suggested follows the next check\'s suggestion; Start over forgets the analyst\'s pick', async () => {
+test('a participant-id field the page suggested follows the next check\'s suggestion; after Start over the first check takes the suggestion', async () => {
   const t = boot();
   t.page.addFiles(dropped());
   await until(() => t.sent.length === 1);
@@ -1122,6 +1122,8 @@ test('a participant-id field the page suggested follows the next check\'s sugges
   // More data, the same config: the check now suggests run_id, subject_ID still listed.
   await dropMore(t, 'more.csv', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'known name' }, { field: 'subject_ID', reason: 'known name' }] } });
   assert.equal(role('id-field').value, 'run_id');
+  // Start over begins another cohort: its first check takes the suggestion,
+  // whatever was picked before.
   pickIdField('subject_ID');
   t.page.reset();
   t.page.addFiles(dropped());
@@ -1143,6 +1145,67 @@ test('a config that names another participant-id field replaces the analyst\'s p
     idSuggestion: { suggested: 'subject_ID', candidates: [{ field: 'subject_ID', reason: 'from cyborg-hunter.config.json' }, { field: 'run_id', reason: 'constant within each file, unique across files' }] } });
   assert.equal(role('id-field').value, 'subject_ID');
   assert.deepEqual(checkNotes(), ['unknown key "dataDri"', 'Settings replaced from cyborg-hunter.config.json.']);
+});
+
+test('the analyst\'s pick is remembered through a check that happens to suggest it', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  pickIdField('run_id');
+  await dropMore(t, 'more.csv', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'known name' }, { field: 'subject_ID', reason: 'known name' }] } });
+  assert.equal(role('id-field').value, 'run_id');
+  // The suggestion moves back to subject_ID; run_id is still offered.
+  await dropMore(t, 'later.csv', CHECKED);
+  assert.equal(role('id-field').value, 'run_id');
+});
+
+// The sample, and files dropped after it, replace the cohort: the settings
+// start over as at the first check, and nothing says they were replaced.
+test('the sample, and a drop after it, start the settings over: the new cohort\'s values and no note', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  weightInput('paste').value = '9';
+  pickIdField('run_id');
+  action('sample').click();
+  await until(() => t.sent.length === 2);
+  t.emit(CHECKED);   // the same config as the drop before
+  await tick();
+  assert.equal(weightInput('paste').value, '5');
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+  weightInput('paste').value = '9';
+  pickIdField('run_id');
+  await dropMore(t, 'a.csv', CHECKED);
+  assert.equal(weightInput('paste').value, '5', 'files after the sample');
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
+});
+
+test('a failed check starts the settings over: the next check writes them without a note', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  weightInput('paste').value = '9';
+  pickIdField('run_id');
+  t.page.addFiles([{ path: 'bad.csv', file: new File(['x'], 'bad.csv') }]).catch(() => {});
+  await until(() => t.sent.length === 2);
+  t.emit({ type: 'error', phase: 'check', message: 'boom' });
+  await tick();
+  assert.equal(role('files-panel').hidden, true);
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 3);
+  t.emit(CHECKED);
+  await tick();
+  assert.equal(weightInput('paste').value, '5');
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
 });
 
 test('on the results, a post-hoc setting re-analyses without reading the files, and the report swaps in place', async () => {

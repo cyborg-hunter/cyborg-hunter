@@ -18,7 +18,7 @@ import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
 import { mergeEntries, removeEntry } from './files-panel.js';
-import { createSettingsPanel, settingsFromConfig, configFromSettings, REINGEST_KEYS } from './settings-panel.js';
+import { createSettingsPanel, settingsFromConfig, configFromSettings, settingsKey, REINGEST_KEYS } from './settings-panel.js';
 import { exportConfig } from './export-config.js';
 import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
 import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
@@ -62,12 +62,14 @@ function listWarnings(ul, items) {
 }
 
 export function createPage(root, worker, opts) {
-  // settingsWritten: the JSON of the settings last taken from a check's
-  // config, the panel's values and the config's participant-id field (check);
-  // null until the first check and after Start over.
-  // idSuggested: the Participant ID field the last check's suggestion put in
-  // the select, so a later check tells the analyst's own pick from it.
-  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, result: null,
+  // settingsWritten: the key of the settings last taken from a check's
+  // config, the panel's values (settingsKey) and the config's participant-id
+  // field (check). idSuggested: the Participant ID field the last check's
+  // suggestion put in the select; idPicked: the analyst's own choice of
+  // another field, kept through the checks that still offer it. All null
+  // until the first check and again once the cohort is replaced
+  // (forgetSettings).
+  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
     zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
@@ -186,9 +188,11 @@ export function createPage(root, worker, opts) {
     if (warnings) listWarnings(q(root, 'check-warnings'), (state.checked && phase !== 'check' ? state.checked.configWarnings || [] : []).concat(warnings));
     // A check that fails empties the list: drops add to it now, and a file
     // that cannot be read would fail every later check while the table that
-    // offers Remove is not shown.
+    // offers Remove is not shown. The settings start over with it: the next
+    // check is a first one (forgetSettings).
     if (phase === 'check' || !state.checked) {
       state.checked = null; state.entries = []; state.dropCount = 0;
+      forgetSettings();
       q(root, 'files-panel').hidden = true; goTo('files');
     }
     else { discardZip(); goTo('files'); }
@@ -281,6 +285,13 @@ export function createPage(root, worker, opts) {
     });
   }
 
+  // A replaced cohort (Start over, the sample, files after the sample, a
+  // failed check): its next check writes the settings as a first one does,
+  // with no note, and takes the suggested Participant ID field.
+  function forgetSettings() {
+    state.settingsWritten = null; state.idField = null; state.idSuggested = null; state.idPicked = null;
+  }
+
   async function check() {
     if (busy()) return;
     clearError();
@@ -305,13 +316,13 @@ export function createPage(root, worker, opts) {
     // field counts too (the id field below follows it). A replacement after
     // the first check says so under the list (one sentence, this check's).
     var fromFile = settingsFromConfig(checked.config);
-    var json = JSON.stringify([fromFile, checked.config.participantIdField]);
-    var configChanged = json !== state.settingsWritten;
+    var key = JSON.stringify([settingsKey(fromFile), checked.config.participantIdField]);
+    var configChanged = key !== state.settingsWritten;
     var replaced = null;
     if (configChanged) {
       if (state.settingsWritten) replaced = settingsReplacedText(checked);
       settingsPanel.write(fromFile);
-      state.settingsWritten = json;
+      state.settingsWritten = key;
     }
     settingsPanel.setAssetsHint(kindCount(checked, 'asset') > 0);
     q(root, 'settings').hidden = false;
@@ -326,14 +337,15 @@ export function createPage(root, worker, opts) {
     if (!checked.idSuggestion.candidates.length) {
       var o2 = document.createElement('option'); o2.value = checked.config.participantIdField; o2.textContent = checked.config.participantIdField + ' — CLI default'; sel.appendChild(o2);
     }
-    // The analyst's own pick (a field other than the one the last check
-    // suggested) stays while this check still offers it and the config is
-    // unchanged; otherwise the check's suggestion, as for the settings above.
-    // `=== true`: only a listed field, never a name the object inherits.
-    var pick = !configChanged && state.idField !== state.idSuggested && offered[state.idField] === true ? state.idField : null;
+    // The analyst's own pick (idPicked, recorded by the select's change
+    // listener) stays while this check still offers it and the config is
+    // unchanged; otherwise it is let go and the check's suggestion stands, as
+    // for the settings above. `=== true`: only a listed field, never a name
+    // the object inherits.
+    if (state.idPicked !== null && (configChanged || offered[state.idPicked] !== true)) state.idPicked = null;
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
     state.idSuggested = sel.value;
-    if (pick) sel.value = pick;
+    if (state.idPicked !== null) sel.value = state.idPicked;
     state.idField = sel.value;
     q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
     listWarnings(q(root, 'check-warnings'), (checked.configWarnings || []).concat(replaced ? [replaced] : []));
@@ -552,7 +564,8 @@ export function createPage(root, worker, opts) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
-    state.runId = null; state.annotations = null; state.settingsWritten = null; state.idField = null; state.idSuggested = null;
+    state.runId = null; state.annotations = null;
+    forgetSettings();
     q(root, 'annotations-status').textContent = '';
     annotationsUnstored = false;
     stopWatchdog();
@@ -578,11 +591,11 @@ export function createPage(root, worker, opts) {
 
   // Each drop or file choice ADDS to the list (files-panel.js), and the list
   // is checked again. Files added after the sample replace it: the sample is
-  // not a file list.
+  // not a file list, and its settings start over (forgetSettings).
   function addFiles(entries) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
-    if (state.sample) { state.sample = false; state.entries = []; }
+    if (state.sample) { state.sample = false; state.entries = []; forgetSettings(); }
     state.dropCount++;
     state.entries = mergeEntries(state.entries, entries, state.dropCount);
     return check();
@@ -596,6 +609,7 @@ export function createPage(root, worker, opts) {
   function loadSample() {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
+    forgetSettings();
     state.sample = true; state.entries = []; return check();
   }
   // Opened from the demo with nothing to hand over (main.js): the files step
@@ -633,7 +647,13 @@ export function createPage(root, worker, opts) {
     if (b) removeFile(b.dataset.path).catch(onFailure('check'));
   });
   root.querySelector('[data-action="sample"]').addEventListener('click', function () { loadSample().catch(onFailure('check')); });
-  q(root, 'id-field').addEventListener('change', function (e) { state.idField = e.target.value; });
+  // A field other than the suggestion is the analyst's pick, which later
+  // checks keep while they offer it (check); choosing the suggestion again
+  // lets the field follow the suggestions.
+  q(root, 'id-field').addEventListener('change', function (e) {
+    state.idField = e.target.value;
+    state.idPicked = e.target.value !== state.idSuggested ? e.target.value : null;
+  });
   runButton.addEventListener('click', function () { run().catch(onFailure('run')); });
   resetButtons.forEach(function (b) { b.addEventListener('click', reset); });
   root.querySelector('[data-action="download-zip"]').addEventListener('click', function () {
