@@ -1,12 +1,13 @@
 // build.js — esbuild configuration for cyborg-hunter.
-// Produces seven build targets:
+// Produces these build targets:
 //   1. IIFE for <script> tag users (dist/cyborg-hunter.min.js)
 //   2. ESM for bundler users (dist/cyborg-hunter.esm.js)
 //   3. cyborg-hunter jsPsych extension (dist/extension-cyborg-hunter.js)
 //   4. guard-friction extension — deterrence (dist/extension-guard-friction.js)
 //   5. guard-honeypot extension — detection  (dist/extension-guard-honeypot.js)
 //   6. replay recorder + jsPsych adapter (dist/cyborg-hunter-replay.js)
-//   7. one-line setup bundle (dist/ch.js)
+//   7. the one-line setup, one file per framework (dist/ch.js and the
+//      others in build-targets.js)
 //
 // The two guard-extension files are SELF-CONTAINED — each bundles its
 // core IIFE plus the jsPsych extension adapter, so a study only loads
@@ -15,15 +16,27 @@
 // cyborg-hunter.min.js AND extension-cyborg-hunter.js (keeps the
 // standalone core useful for non-jsPsych studies).
 //
-// BUILD_OUTDIR (default dist) writes the seven files to another directory;
+// BUILD_OUTDIR (default dist) writes every file to another directory;
 // tests/oneliner/build.test.js uses it to build without touching dist/.
 
 import esbuild from 'esbuild';
 import { readFileSync } from 'fs';
 import { MESSAGES } from './src/oneliner/errors.js';
+import { ONE_LINE_TARGETS, defineFor } from './build-targets.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const OUT = process.env.BUILD_OUTDIR || 'dist';
+
+// The min.js footer's double-load text after a one-line file, as a JS
+// expression: the catalogue's text cut where the first file's name goes,
+// joined at run time with the name that file left in
+// window.__cyborgHunterFile (src/oneliner/boot.js). A one-line file of an
+// earlier release left no mark and is ch.js, so that page gets the text
+// MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js') returns.
+const NAME = '\u0000';   // a placeholder no message contains
+const doubleLoadAfterOneLine = '[' +
+  MESSAGES.doubleLoad(NAME, 'cyborg-hunter.min.js').split(NAME).map((part) => JSON.stringify(part)).join(',') +
+  '].join(typeof window.__cyborgHunterFile==="string"?window.__cyborgHunterFile:"ch.js")';
 
 async function build() {
   // Browser IIFE — self-contained, exposes window.CyborgHunter.
@@ -31,7 +44,8 @@ async function build() {
   // esbuild's globalName handles the global. The footer adds the
   // backward-compat IntegrityMonitor alias and the double-load sentinel
   // shared with dist/ch.js (window.__cyborgHunterLoaded): if ch.js already
-  // ran, it logs the catalogue's double-load error; if another copy of this
+  // ran, it logs the catalogue's double-load error, naming the one-line file
+  // that ran (doubleLoadAfterOneLine above); if another copy of this
   // bundle set it, the neutral loaded-twice error (src/oneliner/errors.js).
   // After ch.js the bundle must not take the namespace either: globalName's
   // top-level `var CyborgHunter = ...` replaces ch.js's window.CyborgHunter
@@ -51,7 +65,7 @@ async function build() {
     banner: { js: `// cyborg-hunter v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter\n` +
       'var __cyborgHunterPrevNS=typeof window!=="undefined"&&window.__cyborgHunterLoaded==="ch.js"?window.CyborgHunter:void 0;' },
     footer: { js: 'if(typeof window!=="undefined"){if(window.__cyborgHunterLoaded==="ch.js"){console.error(' +
-      JSON.stringify(MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')) +
+      doubleLoadAfterOneLine +
       ');if(__cyborgHunterPrevNS)CyborgHunter=__cyborgHunterPrevNS}else if(window.__cyborgHunterLoaded){console.error(' +
       JSON.stringify(MESSAGES.coreLoadedTwice()) +
       ')}else{window.__cyborgHunterLoaded="cyborg-hunter.min.js"}window.IntegrityMonitor=CyborgHunter;__cyborgHunterPrevNS=void 0}' }
@@ -117,15 +131,21 @@ async function build() {
     banner: { js: `// cyborg-hunter-replay v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
   });
 
-  // ch.js — the one-line setup. Bundles the core, the guard cores and the
-  // host adapters; NO globalName: entry.js assigns window.CyborgHunter itself
-  // after the double-load check, so a second load never clobbers the first.
-  await esbuild.build({
-    entryPoints: ['src/oneliner/entry.js'],
-    bundle: true, minify: true, format: 'iife', platform: 'browser',
-    outfile: OUT + '/ch.js',
-    banner: { js: `// cyborg-hunter one-line setup v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
-  });
+  // The one-line setup, one file per framework (build-targets.js). Each
+  // bundles the core, the guard cores and its own host adapters: `define`
+  // turns the host flags into literals (src/oneliner/build-flags.js), so the
+  // other hosts' adapters are dropped. NO globalName: entry.js assigns
+  // window.CyborgHunter itself after the double-load check, so a second load
+  // never clobbers the first.
+  for (const target of ONE_LINE_TARGETS) {
+    await esbuild.build({
+      entryPoints: ['src/oneliner/entry.js'],
+      bundle: true, minify: true, format: 'iife', platform: 'browser',
+      define: defineFor(target),
+      outfile: OUT + '/' + target.file,
+      banner: { js: `// cyborg-hunter one-line setup v${pkg.version} — https://github.com/cyborg-hunter/cyborg-hunter` }
+    });
+  }
 
   console.log('Build complete: ' + OUT + '/');
 }

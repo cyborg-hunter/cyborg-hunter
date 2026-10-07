@@ -1,6 +1,8 @@
-// dist/ch.js, the one-line setup bundle: build.js has the seventh target with
-// no globalName (entry.js assigns window.CyborgHunter itself, after the
-// double-load check), and the built file is small and carries the sentinel.
+// The one-line setup: build.js writes one file per framework from the same
+// entry (build-targets.js), each with the compile-time host flags of its
+// target (src/oneliner/build-flags.js) and no globalName (entry.js assigns
+// window.CyborgHunter itself, after the double-load check). Every file is
+// small, sets the shared sentinel and carries only its own hosts' adapters.
 // The bundles are built into a temporary directory (BUILD_OUTDIR), so this
 // file never rewrites the dist/ that the browser tests serve.
 import { describe, it, before, after } from 'node:test';
@@ -11,10 +13,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import esbuild from 'esbuild';
 import { MESSAGES } from '../../src/oneliner/errors.js';
+import { ONE_LINE_TARGETS, defineFor } from '../../build-targets.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const buildSrc = readFileSync(join(ROOT, 'build.js'), 'utf8');
+const CAP = 120 * 1024;   // bytes, for each one-line file
 
 let outDir;
 before(() => {
@@ -25,42 +30,91 @@ before(() => {
 });
 after(() => { rmSync(outDir, { recursive: true, force: true }); });
 
-// The ch.js block runs from its entry point to the next build (or, as the
-// last target, to the closing log line).
-function chBlock() {
-  const m = buildSrc.match(/src\/oneliner\/entry\.js[\s\S]*?(?=await esbuild\.build|console\.log\('Build complete)/);
+// The one-line loop runs to the closing log line (it is the last target).
+function oneLineBlock() {
+  const m = buildSrc.match(/for \(const target of ONE_LINE_TARGETS\)[\s\S]*?(?=console\.log\('Build complete)/);
   return m ? m[0] : '';
 }
 
-describe('build.js: the ch.js target', () => {
-  it('builds src/oneliner/entry.js as an IIFE into dist/ch.js', () => {
-    assert.ok(buildSrc.includes("entryPoints: ['src/oneliner/entry.js']"));
-    const block = chBlock();
-    assert.ok(block.includes("outfile: OUT + '/ch.js'"), block);
-    assert.ok(buildSrc.includes("const OUT = process.env.BUILD_OUTDIR || 'dist';"));
+// A string only one host's adapter carries: in the files that carry that
+// host, and in no other. (A field name the debug summary imports, such as
+// Qualtrics' __js_cyborg_hunter, is in every file and cannot serve.)
+const MARKERS = {
+  jspsych: 'extensions is not an array'
+};
+
+describe('build.js: the one-line targets', () => {
+  it('builds every target from src/oneliner/entry.js as an IIFE, with its own define and no globalName', () => {
+    const block = oneLineBlock();
+    assert.ok(block.includes("entryPoints: ['src/oneliner/entry.js']"), block);
+    assert.ok(block.includes('define: defineFor(target)'), block);
+    assert.ok(block.includes("outfile: OUT + '/' + target.file"), block);
     assert.ok(block.includes("format: 'iife'"), block);
-  });
-
-  it('sets no globalName: entry.js owns window.CyborgHunter', () => {
-    const block = chBlock();
-    assert.ok(block.length > 0);
     assert.ok(!block.includes('globalName'), block);
+    assert.ok(buildSrc.includes("const OUT = process.env.BUILD_OUTDIR || 'dist';"));
+  });
+
+  it('ch.js is a target, and every target names hosts this file has a marker for', () => {
+    assert.ok(ONE_LINE_TARGETS.some((t) => t.file === 'ch.js'));
+    for (const t of ONE_LINE_TARGETS) {
+      for (const h of t.hosts) assert.ok(h in MARKERS, t.file + ': no marker for ' + h);
+    }
+  });
+
+  it('defineFor turns a target into literal flags and its own file name', () => {
+    assert.deepStrictEqual(defineFor({ file: 'ch-x.js', hosts: ['labjs'] }),
+      { HAS_JSPSYCH: 'false', HAS_QUALTRICS: 'false', HAS_LABJS: 'true', CH_FILE: '"ch-x.js"' });
+  });
+
+  // A file built without the jsPsych adapter, as ch-qualtrics.js and
+  // ch-labjs.js are: the HAS_JSPSYCH guards in boot.js and replay-loader.js
+  // drop every call into it, and esbuild drops the code they reached.
+  it('a build without jsPsych carries none of the jsPsych adapter', async () => {
+    const r = await esbuild.build({
+      entryPoints: [join(ROOT, 'src', 'oneliner', 'entry.js')], define: defineFor({ file: 'ch-none.js', hosts: [] }),
+      bundle: true, minify: true, format: 'iife', platform: 'browser', write: false, logLevel: 'error'
+    });
+    assert.ok(!r.outputFiles[0].text.includes(MARKERS.jspsych));
+  });
+
+  it('docs/quickstart.md#which-file lists every target and nothing else', () => {
+    const doc = readFileSync(join(ROOT, 'docs', 'quickstart.md'), 'utf8');
+    const parts = doc.split(/^### Which file$/m);
+    assert.strictEqual(parts.length, 2, 'one "### Which file" heading');
+    const section = parts[1].split(/^#{2,3} /m)[0];
+    const files = [...section.matchAll(/^\| `([^`]+\.js)` \|/gm)].map((m) => m[1]).sort();
+    assert.deepStrictEqual(files, ONE_LINE_TARGETS.map((t) => t.file).sort());
   });
 });
 
-describe('dist/ch.js', () => {
-  it('exists, is under 120 KB and carries the double-load sentinel', () => {
-    const file = join(outDir, 'ch.js');
-    assert.ok(statSync(file).size < 120 * 1024, statSync(file).size + ' bytes');
-    assert.ok(readFileSync(file, 'utf8').includes('__cyborgHunterLoaded'));
+for (const target of ONE_LINE_TARGETS) {
+  describe('dist/' + target.file, () => {
+    it('exists, is under 120 KiB and sets the one-line sentinel', () => {
+      const file = join(outDir, target.file);
+      assert.ok(statSync(file).size < CAP, target.file + ': ' + statSync(file).size + ' bytes');
+      assert.match(readFileSync(file, 'utf8'), /\.__cyborgHunterLoaded="ch\.js"/);
+    });
+
+    it('names itself for a later double-load message', () => {
+      const src = readFileSync(join(outDir, target.file), 'utf8');
+      assert.ok(src.includes('"__cyborgHunterFile",{value:' + JSON.stringify(target.file)), target.file);
+    });
+
+    it('carries the adapters of its own hosts and none of the others', () => {
+      const src = readFileSync(join(outDir, target.file), 'utf8');
+      for (const [host, marker] of Object.entries(MARKERS)) {
+        assert.strictEqual(src.includes(marker), target.hosts.includes(host), target.file + ' / ' + host + ': ' + marker);
+      }
+    });
   });
-});
+}
 
 // dist/cyborg-hunter.min.js run in a bare context whose global is its own
 // window (as in a browser: the bundle's top-level `var CyborgHunter` and
-// window.CyborgHunter are one slot). Loaded after ch.js, min.js must leave
-// ch.js's namespace in place (the double-load message says it does not start
-// a second monitor); alone, or after another min.js, it is the core namespace.
+// window.CyborgHunter are one slot). Loaded after a one-line file (every one
+// sets the sentinel to 'ch.js'), min.js must leave that file's namespace in
+// place (the double-load message says it does not start a second monitor);
+// alone, or after another min.js, it is the core namespace.
 describe('dist/cyborg-hunter.min.js: window.CyborgHunter after the footer', () => {
   let src;
   before(() => {
@@ -84,6 +138,17 @@ describe('dist/cyborg-hunter.min.js: window.CyborgHunter after the footer', () =
     assert.strictEqual(g.__cyborgHunterLoaded, 'ch.js');
     assert.strictEqual(g.__cyborgHunterPrevNS, undefined);
     assert.deepStrictEqual(errors, [MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')]);
+  });
+
+  // Every one-line file sets the sentinel 'ch.js' and names itself in
+  // __cyborgHunterFile (boot.js); one of an earlier release has no mark and
+  // is ch.js.
+  it('after a one-line file: the error names the file its mark names; without a mark, ch.js', () => {
+    const named = load({ __cyborgHunterLoaded: 'ch.js', __cyborgHunterFile: 'ch-qualtrics.js', CyborgHunter: {} });
+    assert.deepStrictEqual(named.errors, [MESSAGES.doubleLoad('ch-qualtrics.js', 'cyborg-hunter.min.js')]);
+    assert.ok(named.errors[0].includes(': cyborg-hunter.min.js was loaded after ch-qualtrics.js. Fix: load only one of ch-qualtrics.js and cyborg-hunter.min.js '), named.errors[0]);
+    const unmarked = load({ __cyborgHunterLoaded: 'ch.js', CyborgHunter: {} });
+    assert.deepStrictEqual(unmarked.errors, [MESSAGES.doubleLoad('ch.js', 'cyborg-hunter.min.js')]);
   });
 
   it('alone: the core namespace, and the sentinel names min.js', () => {

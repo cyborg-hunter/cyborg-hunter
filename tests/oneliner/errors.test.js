@@ -3,7 +3,9 @@
 // researcher reading the console never has to guess what to change.
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DOCS, formatError, loudError, MESSAGES } from '../../src/oneliner/errors.js';
 
 const FORMAT = /^\[cyborg-hunter\] .+: .+\. Fix: .+\. https:\/\/.+docs\/.+\.md#/;
@@ -44,6 +46,11 @@ const CASES = {
     args: [],
     fix: 'keep one <script> tag',
     link: DOCS + 'advanced-integration.md#double-load'
+  },
+  wrongBuild: {
+    args: ['Qualtrics', 'ch-qualtrics.js', 'ch.js'],
+    fix: 'load ch-qualtrics.js in place of ch.js',
+    link: DOCS + 'quickstart.md#which-file'
   },
   bootFailed: {
     args: ['boom'],
@@ -181,6 +188,37 @@ describe('error catalogue', () => {
       .includes(': cyborg-hunter.min.js was loaded after ch.js. Fix:'));
   });
 
+  it('the wrong-file message names the framework, the running file and the file to load', () => {
+    assert.ok(MESSAGES.wrongBuild('jsPsych', 'ch.js', 'ch-labjs.js')
+      .startsWith('[cyborg-hunter] This page runs jsPsych, which ch-labjs.js does not monitor: each framework has its own one-line file, so ch-labjs.js records this page as a page without a framework. Fix: load ch.js in place of ch-labjs.js. '));
+  });
+
+  it('two different one-line files: the double-load fix names both', () => {
+    assert.ok(MESSAGES.doubleLoad('ch.js', 'ch-labjs.js')
+      .includes(': ch-labjs.js was loaded after ch.js. Fix: load only one of ch.js and ch-labjs.js. https'));
+  });
+
+  it('a one-line file after cyborg-hunter.min.js: the fix names that file', () => {
+    assert.ok(MESSAGES.doubleLoad('cyborg-hunter.min.js', 'ch-labjs.js')
+      .includes('. Fix: load only one of ch-labjs.js and cyborg-hunter.min.js (the one-liner already contains the monitor). https'));
+  });
+
+  // The messages any one-line file can log about itself: each names the
+  // file it is given (boot.js passes CH_FILE and keeps it as ctx.file), and
+  // ch.js when given none.
+  const NAMES_THE_FILE = {
+    randomId: ['ch-0123456789ab'], manualInitOnOneLiner: [], replayUnavailable: ['boom'],
+    replayRestoreFailed: ['boom'], replayOff: [], replaySaveReminder: [], notRunning: []
+  };
+  for (const [name, args] of Object.entries(NAMES_THE_FILE)) {
+    it(name + ' names the one-line file it is given, and ch.js without one', () => {
+      const msg = MESSAGES[name](...args, 'ch-labjs.js');
+      assert.ok(msg.includes('ch-labjs.js'), msg);
+      assert.ok(!msg.includes('ch.js'), msg);
+      assert.strictEqual(MESSAGES[name](...args), MESSAGES[name](...args, 'ch.js'));
+    });
+  }
+
   // ch.js loaded after the experiment code is one cause; a bundler or ES
   // module build calling jsPsychModule.initJsPsych / new JsPsych directly
   // never goes through window.initJsPsych at all.
@@ -226,15 +264,16 @@ describe('loud errors in the existing bundles', () => {
   it('build.js takes the min.js double-load messages from the catalogue', () => {
     const src = read('build.js');
     assert.match(src, /import \{ MESSAGES \} from '\.\/src\/oneliner\/errors\.js'/);
-    assert.match(src, /MESSAGES\.doubleLoad\('ch\.js', 'cyborg-hunter\.min\.js'\)/);
+    assert.match(src, /= '\[' \+\s*MESSAGES\.doubleLoad\(NAME, 'cyborg-hunter\.min\.js'\)\.split\(NAME\)/);
     assert.match(src, /MESSAGES\.coreLoadedTwice\(\)/);
   });
 
-  // "loaded after ch.js" is only true when the sentinel is ch.js's own; a
-  // second copy of min.js gets the neutral loaded-twice message instead.
+  // "loaded after <one-line file>" is only true when a one-line file set the
+  // sentinel; a second copy of min.js gets the neutral loaded-twice message
+  // instead.
   it('build.js: the min.js footer branches on which bundle set the sentinel', () => {
     const src = read('build.js');
-    assert.match(src, /window\.__cyborgHunterLoaded==="ch\.js"\)\{console\.error\(' \+\s*JSON\.stringify\(MESSAGES\.doubleLoad\(/);
+    assert.match(src, /window\.__cyborgHunterLoaded==="ch\.js"\)\{console\.error\(' \+\s*doubleLoadAfterOneLine \+/);
     assert.match(src, /\}else if\(window\.__cyborgHunterLoaded\)\{console\.error\(' \+\s*JSON\.stringify\(MESSAGES\.coreLoadedTwice\(\)\)/);
   });
 
@@ -242,5 +281,29 @@ describe('loud errors in the existing bundles', () => {
     const msg = MESSAGES.coreLoadedTwice();
     assert.ok(msg.startsWith('[cyborg-hunter] cyborg-hunter.min.js is loaded twice: '), msg);
     assert.ok(!msg.includes('after'), msg);
+  });
+});
+
+// Each call in src/oneliner of a message that names the running file hands it
+// that file: CH_FILE (build-flags.js), ctx.file, or the `file` an inert
+// namespace was built for (the bare identifier: a property that ends in
+// .file, such as wrongBuild.file, is another file). A call without one would
+// make every file but ch.js name ch.js.
+describe('messages that name the running file', () => {
+  const SRC = fileURLToPath(new URL('../../src/oneliner/', import.meta.url));
+  const NAMES = ['doubleLoad', 'randomId', 'manualInitOnOneLiner', 'replayUnavailable', 'replayRestoreFailed',
+    'replayOff', 'replaySaveReminder', 'notRunning', 'wrongBuild'];
+  const CALL = new RegExp('MESSAGES\\.(' + NAMES.join('|') + ')\\(');
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
+
+  it('every call in src/oneliner passes the file', () => {
+    const bad = [];
+    for (const f of walk(SRC).filter((p) => p.endsWith('.js'))) {
+      readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+        if (CALL.test(line) && !/(CH_FILE|ctx\.file|[(, ]file)\)/.test(line)) bad.push(f.slice(SRC.length) + ':' + (i + 1) + ': ' + line.trim());
+      });
+    }
+    assert.deepStrictEqual(bad, []);
   });
 });

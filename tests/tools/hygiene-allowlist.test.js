@@ -1,7 +1,8 @@
 // The hygiene gate's Prolific-parameter exception is path-scoped: the literal
 // passes only in the one-liner's resolver, tests and docs (tracked files) and
-// in the built bundles under $GATE_SCAN_DIR (dist/ch.js and the analyze
-// page's two outputs). Each case runs the real script in a throwaway git
+// in the built bundles under $GATE_SCAN_DIR (the one-line files, dist/ch.js
+// and dist/ch-<name>.js, and the analyze page's two outputs). Each case runs
+// the real script in a throwaway git
 // repo, so the project's index is never touched. The literal is
 // assembled at runtime so this file itself never contains it.
 import { describe, it } from 'node:test';
@@ -76,6 +77,18 @@ describe('hygiene gate: Prolific URL parameter allowlist', () => {
     assert.strictEqual(gate({}, { 'x/analyze/analyze.bundle.js': line }), 1);
     assert.strictEqual(gate({}, { 'other.js': line }), 1);
     assert.strictEqual(gate({}, { 'dist/other.js': line }), 1);
+  });
+
+  // build-targets.js writes one file per framework (dist/ch-qualtrics.js,
+  // dist/ch-labjs.js, ...), each with the resolver's parameter list.
+  it('under GATE_SCAN_DIR every one-line file may carry it, and no other file named like one', () => {
+    assert.strictEqual(gate({}, { 'dist/ch-qualtrics.js': line }), 0);
+    assert.strictEqual(gate({}, { 'dist/ch-labjs.js': line }), 0);
+    assert.strictEqual(gate({}, { 'dist/chunk.js': line }), 1);
+    assert.strictEqual(gate({}, { 'dist/ch.min.js': line }), 1);
+    assert.strictEqual(gate({}, { 'dist/ch-labjs.js.map': line }), 1);
+    assert.strictEqual(gate({}, { 'x/dist/ch-labjs.js': line }), 1);
+    assert.strictEqual(gate({}, { 'ch-labjs.js': line }), 1);
   });
 });
 
