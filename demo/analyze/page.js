@@ -537,8 +537,9 @@ export function createPage(root, worker, opts) {
 
   // Each drop or file choice ADDS to the list (files-panel.js), and the list
   // is checked again. Files added after the sample replace it: the sample is
-  // not a file list.
+  // not a file list. A drop also retires the empty hand-off's line.
   function addFiles(entries) {
+    q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
     if (state.sample) { state.sample = false; state.entries = []; }
     state.dropCount++;
@@ -552,6 +553,9 @@ export function createPage(root, worker, opts) {
     return check();
   }
   function loadSample() { if (busy()) return Promise.resolve(); state.sample = true; state.entries = []; return check(); }
+  // Opened from the demo with nothing to hand over (main.js): the files step
+  // says so above the drop zone.
+  function handoffEmpty() { q(root, 'handoff-empty').hidden = false; }
 
   // Wiring
   var zone = q(root, 'dropzone');
@@ -664,10 +668,15 @@ export function createPage(root, worker, opts) {
     var first = reportFirstSelection;
     reportFirstSelection = false;
     if (first && replayCard.userChose()) return;
+    // The report's load-time pick is its first row; when that one has no
+    // replay and another has, the card's own default (the first with one) stands.
+    var picked = state.result.participants.find(function (p) { return p.participantId === pid; });
+    var anyReplay = state.result.participants.some(function (p) { return p.hasReplay; });
+    if (first && picked && !picked.hasReplay && anyReplay) return;
     replayCard.select(pid);
   });
 
-  return { state: state, addFiles: addFiles, removeFile: removeFile, loadSample: loadSample, run: run, reset: reset,
+  return { state: state, addFiles: addFiles, removeFile: removeFile, loadSample: loadSample, handoffEmpty: handoffEmpty, run: run, reset: reset,
     selectParticipant: function (pid) { if (replayCard) replayCard.select(pid); },
     loadReplay: function () { return replayCard ? replayCard.load() : Promise.resolve(); } };
 }

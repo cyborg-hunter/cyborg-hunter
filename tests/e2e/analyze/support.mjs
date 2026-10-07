@@ -165,8 +165,9 @@ export async function buildReport(page) {
 }
 export function reportFrame(page) { return page.frameLocator('iframe.analyze-report'); }
 // The report selects its first row on load and tells the page, which moves
-// the replay dropdown there: wait for that before choosing a replay, or the
-// late message switches the dropdown away and tears the viewer down.
+// the replay dropdown there if that row has a replay or no row has one: wait
+// for that before choosing a replay, or the late message switches the
+// dropdown away and tears the viewer down.
 export async function reportSelected(page) {
   await expect.poll(() => page.evaluate(() => window.__chAnalyze.state.selected), { timeout: 30000 }).not.toBeNull();
 }

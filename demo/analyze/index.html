@@ -42,6 +42,7 @@ iframe.analyze-report{ width:100%; height:min(80vh,900px); border:1px solid var(
 <section class="step" data-step="files">
   <h2>1. Files &amp; settings</h2>
   <p>Participant files (jsPsych CSV or JSON), replay recordings (<code>&lt;id&gt;-replay-&lt;epoch&gt;.json[.gz]</code>), your <code>cyborg-hunter.config.json</code> if you have one, and the experiment's own CSS and image files for styled replays. Folders are fine, and every drop adds to the list: the data from one folder, the replays from another.</p>
+  <p class="hint" data-role="handoff-empty" hidden>Nothing was handed off from the demo: its files are kept for ten minutes. Drop files here instead.</p>
   <div class="dropzone" data-role="dropzone">Drop files or folders here, or
     <label><input type="file" multiple data-role="file-input"> choose files</label> /
     <label><input type="file" webkitdirectory data-role="dir-input"> choose a folder</label>

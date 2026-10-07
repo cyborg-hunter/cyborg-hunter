@@ -38,8 +38,8 @@ async function openInAnalyzer(page, rows = 5 + HANDOFF_ASSETS.length) {
 
 // After the build, the visitor's replay chosen in the replay card's
 // dropdown, which then shows its experiment-assets note. The report selects
-// its first row on load and moves the dropdown there (that row may be an
-// example without a recording); wait for that before choosing.
+// its first row on load and posts it (an example without a recording leaves
+// the dropdown where it is); wait for that before choosing.
 async function selectVisitorReplay(page, participantId) {
   await reportSelected(page);
   await page.selectOption('[data-role="replay-select"]', participantId);
@@ -85,6 +85,10 @@ test('"Open in the analyzer" hands over the five files and the fonts: listed as 
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   await buildReport(page);
   expect((await railOrder(page)).sort()).toEqual([participantId, 'example-1', 'example-2'].sort());
+  // The report's load-time pick is an example without a recording: the replay
+  // card stays on the visitor's, the only participant with one.
+  await reportSelected(page);
+  await expect(page.locator('[data-role="replay-select"]')).toHaveValue(participantId);
   await selectVisitorReplay(page, participantId);
   await expect(page.locator('[data-role="asset-note"]')).toHaveText('Experiment assets: 6 of 6 fonts matched.');
   await assertOnlyAllowed(page, seen, allow);
@@ -297,6 +301,24 @@ test('a stale hand-off record opens nothing in the analyzer and is deleted as it
   await expect.poll(() => recordStored(page)).toBe(false);
   await expect(page.locator('[data-role="files-panel"]')).toBeHidden();
   await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(0);
+  await expect(page.locator('[data-role="handoff-empty"]')).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// analyze/#from-demo with nothing stored (the record already read, or never
+// written): the files step says nothing was handed off, until the next drop.
+// ---------------------------------------------------------------------------
+test('a hand-off with nothing stored says so in the files step; the next drop hides the line', async ({ page }) => {
+  await page.goto('/analyze/#from-demo');
+  await waitReady(page);
+  const line = page.locator('[data-role="handoff-empty"]');
+  await expect(line).toBeVisible();
+  await expect(line).toHaveText('Nothing was handed off from the demo: its files are kept for ten minutes. Drop files here instead.');
+  await expect(page.locator('section[data-step="files"]')).toBeVisible();
+  await page.evaluate(() => window.__chAnalyze.addFiles([{ path: 'DEMO-DROP.json',
+    file: new File(['{"participantId":"DEMO-DROP"}'], 'DEMO-DROP.json', { type: 'application/json' }) }]));
+  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(1);
+  await expect(line).toBeHidden();
 });
 
 // ---------------------------------------------------------------------------

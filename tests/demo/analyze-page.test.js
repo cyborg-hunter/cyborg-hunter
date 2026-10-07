@@ -124,6 +124,20 @@ test('over http the page hands the worker File handles, not bytes', async () => 
   assert.deepEqual(t.transfers[0], []);
 });
 
+// Opened from the demo with nothing left to hand over (main.js): the files
+// step says so, until the next drop.
+test('an empty hand-off shows its line in the files step; the next drop hides it', async () => {
+  const t = boot();
+  assert.equal(role('handoff-empty').hidden, true);
+  t.page.handoffEmpty();
+  assert.equal(role('handoff-empty').hidden, false);
+  assert.equal(role('handoff-empty').textContent, 'Nothing was handed off from the demo: its files are kept for ten minutes. Drop files here instead.');
+  assert.ok(document.querySelector('section[data-step="files"]').contains(role('handoff-empty')));
+  assert.deepEqual(visibleStep(), ['files']);
+  t.page.addFiles(dropped());
+  assert.equal(role('handoff-empty').hidden, true);
+});
+
 test('from file:, the page reads each dropped file and transfers its bytes, for the check and again for the run', async () => {
   const t = boot({ transferBytes: true });
   t.page.addFiles(dropped());
@@ -414,6 +428,21 @@ test('the report\'s load-time selection moves the replay dropdown when the analy
   assert.equal(replaySelect().value, 'A');
   post('B');
   assert.equal(replaySelect().value, 'B');
+});
+
+test('the report\'s load-time selection of a participant without a replay leaves the card on the first one with a replay; a later click moves it', async () => {
+  const t = boot();
+  await toResults(t);          // triage order A, B: A has no recording, B has one
+  const frame = document.querySelector('iframe.analyze-report');
+  const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+  assert.equal(replaySelect().value, 'B');
+  post('A');                   // the report's first message: its own pick of row 1
+  assert.equal(t.page.state.selected, 'A', 'the page still knows what the report shows');
+  assert.equal(replaySelect().value, 'B', 'the card keeps the first participant with a replay');
+  assert.equal(action('load-replay').disabled, false);
+  post('A');                   // a row click afterwards moves the card
+  assert.equal(replaySelect().value, 'A');
+  assert.equal(role('asset-note').textContent, 'Participant A has no replay recording.');
 });
 
 test('a Load click counts as a choice the load-time selection leaves alone', async () => {
@@ -1406,7 +1435,10 @@ test('the replay card says why a participant\'s replay is not shown', async () =
   const frame = document.querySelector('iframe.analyze-report');
   frame.dispatchEvent(new win.Event('load'));
   assert.deepEqual([...replaySelect().options].map((o) => o.textContent), ['A (replay not shown)', 'B']);
-  window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: 'A' }, source: frame.contentWindow }));
+  const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+  post('A');                   // the report's load-time pick: the card stays on B
+  assert.equal(replaySelect().value, 'B');
+  post('A');                   // a row click on A
   assert.equal(role('asset-note').textContent, 'Participant A: ' + why);
   assert.equal(action('load-replay').disabled, true);
 });
