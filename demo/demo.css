@@ -1,6 +1,4 @@
-/* demo/demo.css — the tour in the report's own aesthetic (2026-10 reshape),
- * superseding "Lifted
- * Console" (spec §9, 2026-07-31). The demo wraps the report, so it reads as
+/* demo/demo.css — the tour in the report's own aesthetic, so the two read as
  * the same product: the report's six typefaces in matching roles (titles
  * Space Grotesk, prose Recursive, labels Sofia Sans, notes Tomorrow, numbers
  * Sora; code and the event stream stay system mono), its high-contrast
@@ -16,13 +14,11 @@
  * inputs and small chip outlines. Serif for step titles only. Teal is the
  * single accent (act pill, active tab, focus, live emphasis); reds/greens
  * are semantic (lamps, hard rows, tiers, REC) and never decorative.
- * Reference artifact: designs/demo-restyle-20260731/variant-b.html — this
- * file ports its tokens/treatments onto the real class inventory demo.js,
- * rail.js, live-pane.js, and the steps.js-driven engine render. Classes
- * are restyled, never renamed. Styling for the welcome-step aside player,
- * the live jsPsych mini-trials, and the old "Expect" callout is dropped
- * outright — those modules leave the codebase in a later task and have no
- * home in this design.
+ * The styles apply to the real class inventory of demo.js, rail.js,
+ * live-pane.js and the steps.js-driven engine render. Classes are restyled,
+ * never renamed. There is no styling for the welcome-step aside player, the
+ * live jsPsych mini-trials or the old "Expect" callout: those modules are no
+ * longer part of the demo.
  */
 
 /* The report's typefaces (same files, weight ranges from FONTS_MANIFEST.json;
@@ -202,7 +198,7 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
   margin-top:14px;}
 .endguard:hover{background:#2b2b2b;}
 .endguard:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
-/* No-trap guarantee (spec §6 step 9): while a guard violation is active,
+/* No-trap guarantee: while a guard violation is active,
  * demo.js reparents the button to <body> AFTER the violation overlay and
  * adds this class — same z-index as the overlay (2147483647, int max);
  * equal z-index + later sibling paints on top, so the button stays

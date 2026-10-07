@@ -99,7 +99,7 @@ function exitFullscreenIfActive() {
 
 // Step 8's 1.5s fullscreen-entry race. Calls OUR OWN requestFullscreen() —
 // not GuardFriction.requestFullscreen(), which fires the request and
-// swallows any promise rejection (prior eng review) — so we get a real
+// swallows any promise rejection — so we get a real
 // promise to race against a timeout and the 'fullscreenchange' event.
 // Resolves once fullscreen is confirmed active; rejects on timeout,
 // rejection, an unavailable API, or fullscreen ending before it settled.
@@ -253,7 +253,7 @@ function startTour(participantId, capabilities, manifest) {
   renderRail(railEl, { groups: RAIL_GROUPS, intro: RAIL_INTRO, introTitle: RAIL_INTRO_TITLE });
 
   // ----- Live session pane -----------------------------------------------
-  // Persistently visible record (spec §5.2), fed from the same signal
+  // Persistently visible record, fed from the same signal
   // dispatch as the rail. buildCurrentPayload() is the SAME buildPayload(...)
   // call buildDownloadFile('sessionData') makes, extracted so both stay in
   // sync (DRY) — declared here as a function so it can close over `monitor`
@@ -289,7 +289,7 @@ function startTour(participantId, capabilities, manifest) {
     state.pane.setPayload(buildCurrentPayload());
   }
 
-  // Lamp wiring is lifecycle-bound (spec: "starts and stops with the tour"),
+  // Lamp wiring is lifecycle-bound (it starts and stops with the tour),
   // but retires PERMANENTLY once the last step is reached — Back-nav can
   // no longer restart it, unlike a plain stop/start pair. startLampWiring/
   // stopLampWiring stay idempotent; lampWiringRetired is the one-way latch
@@ -301,7 +301,7 @@ function startTour(participantId, capabilities, manifest) {
   // announce a false "✓ detected" strip for a detection the visitor never
   // produced. Safe to retire for good: the rail is already hidden
   // permanently from that step onward, and the monitor itself keeps recording
-  // regardless (finalization belongs to the payload task, not this wiring).
+  // regardless (finalizing the payload is not this wiring's job).
   var lampWiringActive = false;
   var lampWiringRetired = false;
   var sessionPollId = null;
@@ -574,7 +574,7 @@ function startTour(participantId, capabilities, manifest) {
     }).join('');
   }
 
-  // ----- No-trap guarantee (spec §6 step 9) ------------------------------
+  // ----- No-trap guarantee -----------------------------------------------
   // The End button must stay REACHABLE while the guard's violation overlay
   // is up — a visitor who exits fullscreen and refuses to re-enter must
   // still be able to end the act. GuardFriction's overlay is a fixed
@@ -684,7 +684,7 @@ function startTour(participantId, capabilities, manifest) {
   // "Start" click before goTo(1) opens step 2's trial — recorderBridge reads
   // state.recorder live, so as long as this finishes first, the very first
   // trial gets bracketed too. The REC pill shows immediately regardless of
-  // whether attach actually succeeds (spec: replay is on by default); a
+  // whether attach actually succeeds (replay is on by default); a
   // failure keeps the tour degrading gracefully and marks
   // state.replayUnavailable so the files step can say so honestly instead
   // of just silently dropping the file.

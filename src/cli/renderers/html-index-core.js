@@ -1128,7 +1128,7 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
   // array is caller-supplied). With no participant there is no session to
   // describe, so render no replay section rather than an absent-state note.
   if (!participant) return '';
-  const replay = participant?.replay;
+  const replay = participant.replay;
   if (replay && replay.recording) {
     // Tier badge. It reads the v2 site
     // (extensions['cyborg-hunter'].tier) and falls back to the structural

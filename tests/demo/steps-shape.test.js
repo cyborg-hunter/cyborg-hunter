@@ -1,7 +1,7 @@
 // tests/demo/steps-shape.test.js
 // Structural contract the engine relies on: 11 steps, known ids in order,
 // every step has eyebrow/title/body and counts itself against the total, no
-// tier vocabulary before step 10 (G2 guard), and the last step's files and
+// tier vocabulary before step 10, and the last step's files and
 // the fonts its hand-off carries.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,8 +18,8 @@ test('step map', () => {
   for (const s of STEPS) { assert.ok(s.eyebrow && s.title && s.body, s.id); }
   STEPS.forEach((s, i) => assert.ok(s.eyebrow.endsWith('Step ' + (i + 1) + ' of ' + STEPS.length), s.id + ': ' + s.eyebrow));
 });
-test('G2: no tier vocabulary in steps 2-9', () => {
-  // G2 (spec §2) covers steps 2-9; step 1 may NAME the product ("triage report") without narrating scores.
+test('no tier vocabulary in steps 2-9', () => {
+  // Steps 2-9 only: step 1 may NAME the product ("triage report") without narrating scores.
   const before = STEPS.slice(1, 9).map(s => [s.title, s.body, JSON.stringify(s.task || {})].join(' ')).join(' ');
   for (const word of ['HARD', 'SOFT', 'CLEAN', 'tier', 'triage', 'preset']) {
     assert.ok(!before.includes(word), `"${word}" leaked before step 10`);

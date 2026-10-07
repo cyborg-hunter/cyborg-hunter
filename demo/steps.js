@@ -1,10 +1,10 @@
 // demo/steps.js
 // ALL tutorial copy as data. Numbers are {{path}} placeholders substituted
 // from signal-manifest.json at runtime — never hardcode thresholds here.
-// Register (spec 2026-07-31 G1): plain, dry, direct. Signals only until the
-// signals-to-scores step (G2).
+// Register: plain, dry, direct. Signals only until the signals-to-scores
+// step.
 
-/** Intro positioning copy. De-slopped 2026-08-01 (verbatim lock lifted). */
+/** Intro positioning copy. */
 export const POSITIONING =
   "Prolific's built-in Authenticity Checks give you a verdict inside one " +
   "platform. cyborg-hunter gives you the evidence: full behavioral traces, " +

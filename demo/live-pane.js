@@ -1,4 +1,4 @@
-// The live session record (spec §5.2): a persistently visible two-tab pane —
+// The live session record: a persistently visible two-tab pane —
 // an append-only signal stream (default) and the literal session JSON. Fed by
 // demo.js from the same onSignal dispatch as the rail. Frozen at results.
 //
