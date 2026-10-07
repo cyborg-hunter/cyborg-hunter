@@ -17,9 +17,8 @@
 // the last step (your files).
 
 import {
-  STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS, RAIL_INTRO,
-  RAIL_INTRO_TITLE, CODE_TABS, DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE,
-  SCORING_PANEL, SAVE_TO_FOLDER
+  STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS, CODE_TABS,
+  DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE, SCORING_PANEL, SAVE_TO_FOLDER
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
@@ -248,7 +247,7 @@ function startTour(participantId, capabilities, manifest) {
   // set once here rather than in every renderStep() innerHTML string.
   cardEl.classList.add('stepcard');
 
-  renderRail(railEl, { groups: RAIL_GROUPS, intro: RAIL_INTRO, introTitle: RAIL_INTRO_TITLE });
+  renderRail(railEl, { groups: RAIL_GROUPS });
 
   // ----- Live session pane -----------------------------------------------
   // Persistently visible record, fed from the same signal

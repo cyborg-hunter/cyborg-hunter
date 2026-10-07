@@ -4,11 +4,8 @@
 // its rows; light()/acknowledge() then update that remembered state without
 // needing the container passed back in each time.
 
-import { escHtml } from './util.js';
-
 var rowsByKey = {};
 var listEl = null;
-var awaitingNoteEl = null;
 
 function renderGroupRows(rows, rowClass) {
   return rows.map(function (r) {
@@ -22,18 +19,17 @@ function renderGroupRows(rows, rowClass) {
 }
 
 /**
- * Builds the grouped checklist inside `container` (#rail). Starts inert
- * ("awaiting your session" — the .check list carries an `awaiting` class)
- * until the first lamp lights, which clears it.
+ * Builds the checklist inside `container` (#rail): the title, then the
+ * detector lamps directly under it, then the Guard and Recording groups
+ * under their heads. Starts dimmed (the .check list carries an `awaiting`
+ * class) until the first lamp lights, which clears it.
  */
 export function renderRail(container, opts) {
   var groups = opts.groups;
 
   var html = '<h3>Tracked signals</h3>';
-  html += '<p class="sub awaiting-note">awaiting your session</p>';
-  html += '<p class="sub" title="' + escHtml(opts.introTitle) + '">' + escHtml(opts.intro) + '</p>';
   html += '<ul class="check awaiting">';
-  html += '<li class="hint">Detectors</li>' + renderGroupRows(groups.detectors);
+  html += renderGroupRows(groups.detectors);
   html += '<li class="hint">Guard</li>' + renderGroupRows(groups.guard, 'guardrow');
   html += '<li class="hint">Recording</li>' + renderGroupRows(groups.recording);
   html += '</ul>';
@@ -41,7 +37,6 @@ export function renderRail(container, opts) {
 
   rowsByKey = {};
   listEl = container.querySelector('.check');
-  awaitingNoteEl = container.querySelector('.awaiting-note');
   container.querySelectorAll('li[data-key]').forEach(function (li) {
     rowsByKey[li.dataset.key] = li;
   });
@@ -74,7 +69,6 @@ export function light(key, count, opts) {
   }
 
   if (listEl) listEl.classList.remove('awaiting');
-  if (awaitingNoteEl) awaitingNoteEl.hidden = true;
 
   return row;
 }

@@ -56,11 +56,12 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 1: intro -----
   await startTour(page); // lands on step 2 (baseline)
-  // The lamps' intro is one line with the full text as its tooltip. (The
-  // rail's other .sub is the "awaiting your session" note.)
-  const intro = page.locator('[data-role="rail"] .sub:not(.awaiting-note)');
-  await expect(intro).toHaveText(/^A demo instrument: a curated subset of what the library records\.$/);
-  await expect(intro).toHaveAttribute('title', /Idle gaps, window position/);
+  // The lamps panel is the title and the lamps: no intro line or note under
+  // the title, and the only group heads are Guard and Recording.
+  await expect(page.locator('#rail h3')).toHaveText('Tracked signals');
+  await expect(page.locator('#rail .sub')).toHaveCount(0);
+  await expect(page.locator('#rail')).not.toContainText(/detectors/i);
+  await expect(page.locator('#rail .check li:not([data-key])')).toHaveText(['Guard', 'Recording']);
 
   // ----- Step 2: baseline typing (real per-char typing lights nothing) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 11');

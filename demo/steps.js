@@ -12,14 +12,6 @@ export const POSITIONING =
   "classroom, or standalone), free and inspectable. Use them together: " +
   "platform-level screening plus study-level evidence you can defend in review.";
 
-/** Sidebar rail intro: one line, with the full framing as its tooltip. */
-export const RAIL_INTRO = 'A demo instrument: a curated subset of what the library records.';
-export const RAIL_INTRO_TITLE =
-  'Not part of the product UI. These lamps show a curated subset of what the ' +
-  'library records; the full record is in the live session record under the ' +
-  'card. Idle gaps, window position, zoom, DOM mutations, and the extension ' +
-  'scan also run in the background, but nothing on this page can trigger them on cue.';
-
 export const RAIL_GROUPS = {
   detectors: [
     { key: 'paste', label: 'paste', hardSignal: true },

@@ -2,11 +2,14 @@
 // Structural contract the engine relies on: 11 steps, known ids in order,
 // every step has eyebrow/title/body and its eyebrow (the card's step label)
 // is its count against the total and nothing else, no tier vocabulary before
-// step 10, and the last step's files and the fonts its hand-off carries.
+// step 10, the lamps panel's layout, and the last step's files and the fonts
+// its hand-off carries.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { STEPS, RAIL_GROUPS, RAIL_INTRO, RAIL_INTRO_TITLE, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
+import * as copy from '../../demo/steps.js';
+import { STEPS, RAIL_GROUPS, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
+import { renderRail } from '../../demo/rail.js';
 
 const IDS = ['intro','baseline','clipboard-cheat','tab-away','browser-rearrange',
   'autotype','guard-entry','guard-cheat','guard-debrief',
@@ -33,10 +36,24 @@ test('no tier vocabulary in steps 2-9', () => {
     assert.ok(!before.includes(word), `"${word}" leaked before step 10`);
   }
 });
-test('the rail intro is one sentence, with the full framing as its tooltip', () => {
-  assert.equal(RAIL_INTRO, 'A demo instrument: a curated subset of what the library records.');
-  assert.equal(typeof RAIL_INTRO_TITLE, 'string');
-  assert.ok(RAIL_INTRO_TITLE.includes('Idle gaps'), RAIL_INTRO_TITLE);
+test('the lamps panel is the title and the lamps: no intro copy, heads Guard and Recording only', () => {
+  assert.ok(!('RAIL_INTRO' in copy), 'RAIL_INTRO is still exported');
+  assert.ok(!('RAIL_INTRO_TITLE' in copy), 'RAIL_INTRO_TITLE is still exported');
+  // renderRail() only writes innerHTML and then looks rows up, so a bare
+  // container is enough to read the markup it builds.
+  const container = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
+  renderRail(container, { groups: RAIL_GROUPS });
+  const html = container.innerHTML;
+  assert.ok(html.startsWith('<h3>Tracked signals</h3><ul class="check awaiting">'), html.slice(0, 120));
+  assert.doesNotMatch(html, /class="sub|Detectors/);
+  // Group heads in source case (demo.css uppercases them): Guard, Recording.
+  const heads = [...html.matchAll(/<li class="hint">([^<]*)<\/li>/g)].map((m) => m[1]);
+  assert.deepEqual(heads, ['Guard', 'Recording']);
+  // The panel in order: the detector lamps, Guard and its lamp, Recording
+  // and its two lamps.
+  const items = [...html.matchAll(/<li (?:data-key="([^"]+)"|class="hint">([^<]*))/g)].map((m) => m[1] || m[2]);
+  assert.deepEqual(items, RAIL_GROUPS.detectors.map((r) => r.key)
+    .concat(['Guard', 'guardViolations', 'Recording', 'mousePaths', 'replay']));
 });
 test('rail has three tab-away bins', () => {
   const keys = RAIL_GROUPS.detectors.map(d => d.key);
