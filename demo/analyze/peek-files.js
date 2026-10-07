@@ -1,6 +1,8 @@
 // demo/analyze/peek-files.js
 // A cheap look at one participant file for the id suggestion: CSV header plus
-// a few rows (Papa preview), or a JSON object's scalar keys. Runs in the worker.
+// a few rows (Papa preview), a JSON array's first row, or a JSON object's
+// scalar keys (its first row's, for an object holding rows under `data`).
+// Runs in the worker.
 import Papa from 'papaparse';
 import { webGunzip } from './web-deps.js';
 import { artifactKind } from '../../src/cli/ingest-core.js';
@@ -17,6 +19,20 @@ function scalarKeys(obj, prefix) {
     if (v === null || typeof v !== 'object') { keys.push(prefix + k); values[prefix + k] = [String(v)]; }
   }
   return { keys: keys, values: values };
+}
+
+// An object that holds its rows under `data` and no other known shape: the
+// lab.js Transmit body ({ metadata: { slice, id, payload }, url, data }) or a
+// custom server's { subject, data }. The CLI reads it the same way
+// (src/cli/extract-core.js transmitRows), keying the participant from its
+// top-level fields or its rows. Its metadata is not offered: in a Transmit
+// body, metadata.id is lab.js's upload-session id, not the participant's.
+function rowsOf(json) {
+  if (Array.isArray(json.trials) || Array.isArray(json.responses) || Array.isArray(json.phaseTrials)) return null;
+  var d = json.data;
+  if (!Array.isArray(d) || d.length === 0) return null;
+  for (var i = 0; i < d.length; i++) if (!d[i] || typeof d[i] !== 'object' || Array.isArray(d[i])) return null;
+  return d;
 }
 
 // Gzip magic bytes: a .json.gz participant file is decompressed before
@@ -47,6 +63,17 @@ export async function peekParticipantFile(reader, opts) {
   if (Array.isArray(json)) return json.length && json[0] && typeof json[0] === 'object' ? scalarKeys(json[0], '') : null;
   if (!json || typeof json !== 'object') return null;
   var top = scalarKeys(json, '');
+  var rows = rowsOf(json);
+  if (rows) {
+    // The first row's keys, as for a top-level array, then the object's own.
+    var first = scalarKeys(rows[0], '');
+    for (var t = 0; t < top.keys.length; t++) {
+      if (first.values[top.keys[t]]) continue;
+      first.keys.push(top.keys[t]);
+      first.values[top.keys[t]] = top.values[top.keys[t]];
+    }
+    return first;
+  }
   if (json.metadata && typeof json.metadata === 'object') {
     var meta = scalarKeys(json.metadata, 'metadata.');
     top.keys = top.keys.concat(meta.keys);

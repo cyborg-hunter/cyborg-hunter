@@ -192,6 +192,41 @@ const CASES = {
     args: [],
     fix: 'use data-participant-id / data-preset on the ch.js tag instead',
     link: DOCS + 'advanced-integration.md#switching-to-the-one-liner'
+  },
+  loadedAboveLabJs: {
+    args: [],
+    fix: 'move the ch-labjs.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+    link: DOCS + 'labjs.md#placement'
+  },
+  labjsNotHookable: {
+    args: [],
+    fix: 'load lab.js from a <script> tag (lib/lab.js, as the builder exports it) above the ch-labjs.js tag; a bundled lab.js build cannot be hooked',
+    link: DOCS + 'labjs.md#placement'
+  },
+  labjsHookFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  labjsStudyAlreadyRunning: {
+    args: [],
+    fix: 'move the ch-labjs.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+    link: DOCS + 'labjs.md#placement'
+  },
+  labjsVersionUnsupported: {
+    args: ['23.0.0-alpha9'],
+    fix: 'use lab.js 20.x (the lib/lab.js a lab.js builder export contains), or mark trials and save CyborgHunter.data() as on a page without jsPsych',
+    link: DOCS + 'labjs.md#labjs-23'
+  },
+  secondLabJsStudy: {
+    args: [],
+    fix: 'run one study per page, or reload the page between studies',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  labjsColumnTaken: {
+    args: ['integrity'],
+    fix: 'nothing is lost; rename your integrity column if you want ch-labjs.js\'s value under its usual name',
+    link: DOCS + 'labjs.md#where-the-data-goes'
   }
 };
 
@@ -269,6 +304,14 @@ describe('error catalogue', () => {
     assert.ok(msg.includes('ch.js loaded after initJsPsych() ran'), msg);
     assert.ok(msg.includes('jsPsychModule.initJsPsych'), msg);
     assert.ok(msg.includes('new JsPsych'), msg);
+  });
+
+  // A lib/lab.js that did not load (a 404, a wrong path, a blocked request)
+  // leaves the same page as a bundled build: the section, no global.
+  it('the lab.js not-hookable message names both causes', () => {
+    const msg = MESSAGES.labjsNotHookable();
+    assert.ok(msg.includes('lib/lab.js did not load'), msg);
+    assert.ok(msg.includes('bundled'), msg);
   });
 
   it('the random-id message carries the generated id', () => {

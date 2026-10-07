@@ -96,11 +96,11 @@
 
 import { VERSION } from '../../shared/constants.js';
 import { MESSAGES } from '../errors.js';
+import { startFrictionNow } from '../guards.js';
 
 var KEY_PREFIX = 'cyborg-hunter:oneliner:session:';
 var WARN_CHARS = 4000000;
 var HIDDEN_INPUT = 'cyborgHunterData';
-var FULLSCREEN_SETTLE_MS = 100;   // the friction entry trial's own delay before start()
 
 function message(e) { return String((e && e.message) || e); }
 
@@ -301,26 +301,9 @@ export function installVanillaAdapter(opts) {
     writeState(json);
   }
 
-  // Mirrors the friction entry trial: fullscreen is requested inside the
-  // click (the user gesture), enforcement starts once it has settled.
-  // observeOnly: false explicitly, since start() keeps an earlier
-  // observe-only setting when the option is absent.
-  function startFriction() {
-    var F = win.GuardFriction;
-    if (!F) return;
-    if (!ctx.config.guards.friction) console.warn(MESSAGES.frictionStartWithoutFriction());
-    try { F.requestFullscreen(); } catch (e) { console.error(MESSAGES.guardFailed('friction', message(e))); }
-    win.setTimeout(function () {
-      try {
-        var token = F.start({ jsPsych: null, observeOnly: false, debug: !!ctx.config.debug });
-        Object.defineProperty(win, '_guardFrictionToken', {
-          value: token, writable: false, enumerable: false, configurable: true
-        });
-      } catch (e) {
-        console.error(MESSAGES.guardFailed('friction', message(e)));
-      }
-    }, FULLSCREEN_SETTLE_MS);
-  }
+  // The shared start (guards.js startFrictionNow); kept as a local name for
+  // the click handler and ctx.handlers below.
+  function startFriction() { startFrictionNow({ win: win, ctx: ctx }); }
 
   function onClick(ev) {
     try {

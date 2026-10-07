@@ -1421,9 +1421,22 @@ describe('host-specific calls', () => {
     assert.strictEqual(win.CyborgHunter.data(), undefined);
     assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
     assert.deepStrictEqual(warns, [
-      '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych trials are segmented automatically',
-      '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych trials are segmented automatically'
+      '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych and lab.js trials are segmented automatically',
+      '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych and lab.js trials are segmented automatically'
     ]);
+  });
+
+  it('on the lab.js host mark() and data() warn and do nothing', () => {
+    class Component { async run() {} async end() {} }
+    Component.metadata = { module: ['core'], nestedComponents: [] };
+    win.lab = { version: '20.2.4', core: { Component }, flow: {}, html: {} };
+    const ctx = start();
+    assert.strictEqual(ctx.host, 'labjs');
+    assert.strictEqual(win.CyborgHunter.mark('x'), undefined);
+    assert.strictEqual(win.CyborgHunter.data(), undefined);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+    assert.deepStrictEqual(warns, ['[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych and lab.js trials are segmented automatically', '[cyborg-hunter] mark()/data() are vanilla-mode calls; jsPsych and lab.js trials are segmented automatically']);
+    ctx.labjsAdapter.restore();
   });
 
   it('not hookable, guards the researcher listed already running: the fallback does not start them again', async () => {

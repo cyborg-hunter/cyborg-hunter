@@ -51,7 +51,7 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 | `dataDir` | string | `"./data"` | Directory containing participant data files |
 | `filePattern` | string | `"*.json"` (runtime) / `"*.{json,csv}"` (init) | Glob pattern for data files |
 | `assetsDir` | string | `null` | Folder holding the experiment's own stylesheets, images and fonts. Each stylesheet or image URL a replay recording references, and each font or image a matched stylesheet references, is matched to a file under this folder by path suffix (`https://host/exp/css/style.css` ↔ `css/style.css`), then by filename. An exact match is preferred; when there is none, a file whose path differs only in upper/lower case (`card_a.png` ↔ `Card_A.png`) is considered, ranked the same way: the best-fitting one is used; if several such files fit equally well, the URL is reported as ambiguous. The file is inlined into the replay (stylesheets as text, images and fonts as data URIs) and the report's replay section states what matched and what is missing. Images include each `srcset` candidate (on `<img>` and on a `<picture>`'s `<source>`), an SVG `<image>`'s `href`/`xlink:href` and an `<input type="image">`'s `src`. Video and audio are not matched: the replay shows them as placeholders and never plays them, and the note counts these elements in a clause of their own; a video's `poster` is an image. An ambiguous match (two files with the same suffix) is reported and left out. A directory that cannot be read stops the run with an error. Added for archives whose experiment server is gone; the browser analyzer does the same with dropped files. |
-| `participantIdField` | string | `"participantId"` | Field name holding the participant ID. **For jsPsych output, this is usually `"subject_ID"`.** Supports dot-paths since 0.6.1 (`"metadata.sessionId"`); plain names keep the historical top-level → `metadata` fallback. |
+| `participantIdField` | string | `"participantId"` | Field name holding the participant ID. **For jsPsych output, this is usually `"subject_ID"`.** Supports dot-paths since 0.6.1 (`"metadata.sessionId"`); plain names keep the historical top-level → `metadata` fallback. For lab.js data from the one-line setup, keep the default, and never `id`, which a Transmit body's `metadata` holds as lab.js's upload-session ID ([lab.js](labjs.md#saving-and-reading-the-data)). |
 | `trialIdField` | string | `"trialId"` | Field for trial ID |
 | `trialOrderField` | string | `"trialIndex"` | Field for trial order |
 | `integrityField` | string | `"integrity"` | Per-trial field that holds the integrity sub-object |
@@ -242,6 +242,18 @@ CLI flags override config-file values. Unknown flags now exit with an error rath
   "participantIdField": "subject_ID"
 }
 ```
+
+### lab.js (one-line setup)
+
+```json
+{
+  "dataDir": "./labjs-data",
+  "filePattern": "*.csv",
+  "participantIdField": "participantId"
+}
+```
+
+`*.csv` for the Download plugin or `exportCsv()`; `*.json` for `exportJson()` or the Transmit plugin's final `full` bodies ([lab.js → Saving and reading the data](labjs.md#saving-and-reading-the-data)).
 
 ## Browser library config
 

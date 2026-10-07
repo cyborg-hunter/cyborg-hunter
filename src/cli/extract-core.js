@@ -17,10 +17,76 @@ import { TRIAL_REPORT_FIELDS } from '../shared/schema.js';
 import { getByPath } from '../shared/paths.js';
 import { collectSegments, reassembleSegments, rebaseTrialReport } from './segment-reassembly.js';
 
-// A value that names a participant. 0 and false do (a CSV's dynamic typing
-// turns a numeric subject id into a number); undefined, null and an empty
-// string do not, as the `||` chain this replaced treated them.
+// lab.js's Transmit plugin and datastore.transmit() POST
+// { metadata: { slice, id, payload }, url, data: [rows] }; a server that
+// stores the body as it is yields this envelope. Its rows are the same as a
+// top-level array (exportJson): Shape 3. Only an object whose `data` is a
+// non-empty array of plain objects and that carries no other known shape
+// counts (a `{ data: [1, 2] }` is nobody's data file).
+function transmitRows(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (Array.isArray(raw.trials) || Array.isArray(raw.responses) || Array.isArray(raw.phaseTrials)) return null;
+  if (!Array.isArray(raw.data) || raw.data.length === 0) return null;
+  return raw.data.every(r => r && typeof r === 'object' && !Array.isArray(r)) ? raw.data : null;
+}
+
+// A value that names a participant. 0 and false do (a JSON export can hold a
+// numeric subject id); undefined, null and an empty string do not, as the
+// `||` chains this replaced treated them.
 const present = v => v !== undefined && v !== null && v !== '';
+
+// Rows written by the one-line setup on lab.js: they carry ch.js's id as
+// cyborgHunterParticipantId. Shared with parseCsvToRaw, which leaves such a
+// CSV's id to the rows (below) instead of hoisting row 0's.
+export function rowsCarryChId(rows) {
+  return rows.some(r => r && typeof r === 'object' && present(r.cyborgHunterParticipantId));
+}
+
+// The participant ids a file's rows carry. The one-line setup on lab.js
+// writes its own id onto every trial row as cyborgHunterParticipantId (and
+// into the integrity report as participantId), and onto row 0 as
+// participantId only when the study has set none at that point. So a
+// participantId that is none of ch.js's ids is the study's own, even when it
+// first appears on a later row (a form on the second screen): it keys the
+// participant, so the file is not split from the rest of the study's data.
+// Without one, ch.js's id keys it. Returns, as strings, { id, chId, chIds,
+// ownIds }: chIds and ownIds are the distinct ch.js ids and study ids in row
+// order, chId is the first ch.js id, and id is undefined when no row carries
+// one. One session's rows carry one ch.js id and at most one study id.
+function participantFromRows(rows, pidField, intField) {
+  const objects = rows.filter(r => r && typeof r === 'object');
+  const distinct = values => [...new Set(values.filter(present).map(String))];
+  const chIds = distinct(objects.map(r => r.cyborgHunterParticipantId));
+  const ownIds = distinct(objects.map(r => getByPath(r, pidField))).filter(v => !chIds.includes(v));
+  const inReport = objects
+    .map(r => (r[intField] && typeof r[intField] === 'object') ? getByPath(r[intField], pidField) : undefined)
+    .find(present);
+  const id = ownIds[0] ?? chIds[0] ?? (present(inReport) ? String(inReport) : undefined);
+  return { id, chId: chIds[0], chIds, ownIds };
+}
+
+// The one-line setup on lab.js writes a column under cyborgHunter_<name>
+// when the study already holds a value under <name> (adapters/labjs.js), so
+// the reader takes ch.js's value from there: such a row is read as a copy
+// with ch.js's value under <name>. Other rows are read as they are. A CSV
+// has every column on every row, so a row from before the study's first use
+// of <name> has an empty cyborgHunter_<name> cell (lab.js writes a missing
+// key and an empty string alike; Papa reads either as null) next to ch.js's
+// own value under <name>, which stays. In JSON an empty string under the
+// prefixed name is ch.js's value, and is taken.
+const CH_PREFIX = 'cyborgHunter_';
+function chColumns(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  let out = row;
+  for (const k of Object.keys(row)) {
+    if (k.length > CH_PREFIX.length && k.startsWith(CH_PREFIX)) {
+      if (out === row) out = { ...row };
+      if (row[k] !== undefined && row[k] !== null) out[k.slice(CH_PREFIX.length)] = row[k];
+      delete out[k];
+    }
+  }
+  return out;
+}
 
 // Extracts integrity trial data from a single participant's raw JSON.
 // Returns { participantId, trials, warnings, metadata }.
@@ -41,14 +107,45 @@ export function extractIntegrityData(raw, config) {
   const pidField = config.participantIdField || 'participantId';
   const intField = config.integrityField || 'integrity';
 
-  // Determine participant ID — check top level, then metadata sub-object.
+  // Shape 3 (a top-level array of rows: jsPsych's and lab.js's exportJson(),
+  // a JATOS result) and the lab.js Transmit envelope hold the same rows a
+  // { trials } file (Shape 1) does, so they are read as one: every reader
+  // below (session, rolling segments, honeypot, error markers) looks in
+  // raw.trials. Their participant id comes from the rows, as parseCsvToRaw
+  // hoists it for a CSV. So does the id of a { trials } file whose rows come
+  // from the one-line setup on lab.js (a lab.js CSV, or rows a server
+  // wrapped), so every lab.js file is keyed the same way.
+  const rows = Array.isArray(raw) ? raw : transmitRows(raw);
+  if (rows) raw = Array.isArray(raw) ? { trials: rows } : { ...raw, trials: rows };
+  if (Array.isArray(raw.trials)) {
+    const read = raw.trials.map(chColumns);
+    if (read.some((t, i) => t !== raw.trials[i])) raw = { ...raw, trials: read };
+  }
+  const fromLabJs = Array.isArray(raw.trials) && rowsCarryChId(raw.trials);
+  const idRows = Array.isArray(raw.trials) && (rows || fromLabJs) ? raw.trials : null;
+  const fromRows = idRows ? participantFromRows(idRows, pidField, intField) : {};
+  // Transmit posts an incremental slice of new rows on every idle and the
+  // full data at the end, so a server that stores each body holds several
+  // files per session. A slice is read (its rows are real), but it is partial
+  // and may be keyed apart from the full body (ch.js's id, when the study's
+  // own id sits on an earlier row), so say so.
+  if (rows && raw.metadata?.payload === 'incremental') {
+    warnings.push(
+      `this is one incremental slice of a lab.js upload (rows from ${raw.metadata.slice ?? '?'}, ` +
+      `session ${raw.metadata.id ?? '?'}); ingest only the final 'full' body, or the participant ` +
+      `appears with partial data`
+    );
+  }
+
+  // Determine participant ID — check top level, then metadata sub-object,
+  // then the rows (above).
   // Since 0.6.1 the field supports dot-paths ("metadata.sessionId"); plain
   // names keep the historical top-level → metadata fallback. An empty string
   // (or null) is missing, as the pre-0.6.1 `||` chain treated it; 0 and false
   // are ids. From here on the id is a string: the report names its files
   // after it and --participant compares strings, and a number stopped the
   // whole report at its first plot.
-  const resolved = [getByPath(raw, pidField), getByPath(raw.metadata, pidField)].find(present);
+  const resolved = [getByPath(raw, pidField), getByPath(raw.metadata, pidField), fromRows.id].find(present);
   const participantId = resolved === undefined ? 'unknown' : String(resolved);
   // An id field that resolves to nothing yields 'unknown'. Silently, that both
   // loses the real id AND collides every such file under one 'unknown' bucket
@@ -56,8 +153,27 @@ export function extractIntegrityData(raw, config) {
   // participantIdField is visible instead of producing an all-'unknown' cohort.
   if (participantId === 'unknown') {
     warnings.push(
-      `participantId unresolved (field "${pidField}" not found at top level or in ` +
-      `metadata) — defaulted to "unknown". Check participantIdField.`
+      `participantId unresolved (field "${pidField}" not found at top level` +
+      (idRows ? ', in metadata or on any row' : ' or in metadata') +
+      `) — defaulted to "unknown". Check participantIdField.`
+    );
+  }
+  // Rows from the one-line setup on lab.js that carry more than one ch.js id,
+  // or more than one id of the study's own, hold more than one session (a
+  // concatenated export). ch.js's id then names no single session, so it is
+  // not kept as a second name for the participant's replay recording
+  // (ingest-core.js attaches by it). Rows without ch.js's id have no such
+  // name, and are keyed by their first id as before.
+  const severalIds = !!fromRows.chIds && fromRows.chIds.length > 0 &&
+    (fromRows.chIds.length > 1 || fromRows.ownIds.length > 1);
+  if (severalIds) {
+    const list = ids => ids.slice(0, 5).join(', ') + (ids.length > 5 ? ', …' : '');
+    const named = [];
+    if (fromRows.ownIds.length > 1) named.push(`${pidField}: ${list(fromRows.ownIds)}`);
+    if (fromRows.chIds.length > 1) named.push(`cyborgHunterParticipantId: ${list(fromRows.chIds)}`);
+    warnings.push(
+      `the rows carry more than one participant id (${named.join('; ')}), as if the file held ` +
+      `several sessions; keyed by "${participantId}", and ch-labjs.js's id is not used to attach a replay recording`
     );
   }
 
@@ -72,8 +188,11 @@ export function extractIntegrityData(raw, config) {
   // needed experiment metadata AND the cyborg-hunter signal data on the same
   // trial object.
   if (Array.isArray(raw.trials)) {
+    // On lab.js rows from the one-line setup, ch.js's report is always an
+    // object; a study value under the same name (one its end handler wrote
+    // after ch.js's hook) is no trial report.
     trials = raw.trials
-      .filter(t => t && t[intField])
+      .filter(t => t && t[intField] && (!fromLabJs || typeof t[intField] === 'object'))
       .map(t => ({ ...t, ...t[intField] }));
     // One-line setup (0.10.0) across several pages: each page has its own
     // performance.now() origin, recorded as integritySegment.pageOrigin.
@@ -142,18 +261,13 @@ export function extractIntegrityData(raw, config) {
       // same x-axis as mouseEvents[].t (which is already trial-relative).
       normalizeTabAwayTimestamps(trials, raw);
     }
-    // Shape 3: Top-level array of trials. Same merge contract as Shape 1:
-    // outer trial fields survive, integrity wins on collision, and tab-away
-    // timestamps get normalized. The spread builds OUR copy, so the
-    // array-field coercion below mutates that copy — never a caller-owned or
-    // frozen object (a frozen one would throw instead of coercing). The
-    // outer-merge also keeps replay pointers (integrityReplayMeta /
-    // replayFinalizeError ride the outer trial rows) visible to
-    // attachReplayArtifacts.
-    else if (Array.isArray(raw)) {
-      trials = raw.filter(t => t && t[intField]).map(t => ({ ...t, ...t[intField] }));
-      normalizeTabAwayTimestamps(trials, raw);
-    }
+    // Shape 3 (a top-level array of trials) and the Transmit envelope were
+    // turned into raw.trials above, so the Shape-1 branch read them: the same
+    // merge contract (outer trial fields survive, integrity wins on
+    // collision, tab-away timestamps normalized), on OUR copies of the rows,
+    // never a caller-owned or frozen object. The outer merge keeps replay
+    // pointers (integrityReplayMeta / replayFinalizeError ride the outer
+    // trial rows) visible to attachReplayArtifacts.
   }
 
   // Normalize the raw mouseTrack → mouseEvents field name and derive
@@ -242,11 +356,19 @@ export function extractIntegrityData(raw, config) {
     warnings.push(`Qualtrics payload was reduced to fit the embedded-data cap (level ${truncated.level}: ${describeTruncation(truncated)}) — ${whole}`);
   }
 
+  // ch.js's own id, when the study keyed its rows by another, is kept for the
+  // reader and the replay attachment (rows of one session only; a copy,
+  // never the caller's metadata object).
+  let metadata = raw.metadata || {};
+  if (fromRows.chId !== undefined && !severalIds && fromRows.chId !== participantId) {
+    metadata = { ...(typeof metadata === 'object' ? metadata : {}), cyborgHunterParticipantId: fromRows.chId };
+  }
+
   return {
     participantId,
     trials,
     warnings,
-    metadata: raw.metadata || {},
+    metadata,
     session,
     score,
     // A payload the Qualtrics writer reduced (levels 1-5), whose older trials

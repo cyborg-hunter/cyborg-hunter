@@ -24,25 +24,27 @@
 //      here already for that;
 //   4. a monitor (its session starts at step 6);
 //   5. host: 'jspsych' when initJsPsych is already defined, in a file built
-//      with it (HAS_JSPSYCH), else 'vanilla' (the host adapters install their
-//      hooks into ctx.handlers). On the
-//      vanilla host a Qualtrics survey is recognised first
+//      with it (HAS_JSPSYCH), else 'labjs' when window.lab is, in a file
+//      built with it (HAS_LABJS; adapters/labjs.js; a lab.js 23 build is not
+//      hooked yet: one warning, and the vanilla host), else 'vanilla' (the
+//      host adapters install their hooks into ctx.handlers). On the vanilla
+//      host a Qualtrics survey is recognised first
 //      (adapters/qualtrics.js: ctx.qualtricsLayout 'new' | 'legacy' | null,
 //      with a console warning for the legacy layout), before replay, whose
-//      boot reminder depends on it. The vanilla
-//      adapter (adapters/vanilla.js) is installed before the first span
-//      opens: it restores a previous page's segment index, so the boot span
-//      is named after the continued index. On a Qualtrics survey it leaves
-//      the page boundary to the Qualtrics writer (ctx.qualtrics), installed
-//      right after it: one capped embedded-data write per page submit;
+//      boot reminder depends on it. The vanilla and lab.js adapters are
+//      installed before the first span opens: the vanilla one restores a
+//      previous page's segment index, so the boot span is named after the
+//      continued index. On a Qualtrics survey the vanilla adapter leaves the
+//      page boundary to the Qualtrics writer (ctx.qualtrics), installed right
+//      after it: one capped embedded-data write per page submit;
 //   6. the monitor's session starts and the segmenter keeps it inside a
 //      trial from this moment on ('span-<index>'), so a paste before the
 //      first host trial or mark is still recorded. The session start needs
 //      document.body (core signals/browser.js observes it), so with ch.js in
 //      <head> this step alone waits for DOMContentLoaded (a paste before
 //      then is not recorded); a failure then is logged as bootFailed;
-//   7. guards, vanilla host only (honeypot on by default, friction
-//      observe-only when enabled). On the jsPsych host the injected guard
+//   7. guards, vanilla and lab.js hosts only (honeypot on by default,
+//      friction observe-only when enabled). On the jsPsych host the injected guard
 //      extensions own them: their initialize() runs GuardHoneypot.init and
 //      friction's setJsPsych / injectRefusalNotices, and the entry trial
 //      starts enforcement. Starting them here too would init the honeypot
@@ -53,8 +55,8 @@
 //      vanilla host (its guards and adapter start then);
 //   8. replay, only with data-replay (replay-loader.js): on the jsPsych
 //      host a proxy extension the initJsPsych wrap lists, which loads
-//      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla host (and
-//      on the not-hookable fallback) the standalone recorder, started after
+//      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla and lab.js
+//      hosts (and on the not-hookable fallback) the standalone recorder, started after
 //      DOMContentLoaded. CyborgHunter.replay() is wired either way;
 //   9. window.CyborgHunter = the one-liner namespace; then the sentinel and
 //      the re-run hook (win.__cyborgHunterOnRerun, called by a same-file
@@ -81,7 +83,8 @@
 //         host, scriptSrc, handlers, win, api, qualtricsLayout,
 //         qualtricsSurveyId ('SV_…' on the new layout when found, else null),
 //         rerunCount, vanilla?, qualtrics? (Qualtrics writer),
-//         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
+//         labjs?, labjsAdapter? (lab.js), replaySrc?, replayProxy? (jsPsych),
+//         replay? (standalone recorder handle),
 //         debug? (data-debug) }
 //
 // boot never throws into the page: any failure is logged as bootFailed, a
@@ -108,15 +111,18 @@
 // files and rerun.js takes only the same file for a header re-run. ctx.file
 // is the running file's name (CH_FILE, build-flags.js), for
 // the messages that name it. Each call into the jsPsych adapter is guarded by
-// HAS_JSPSYCH, and each into the Qualtrics adapter by HAS_QUALTRICS, so a
-// file without one drops that code. A file on a page whose framework it does
-// not carry logs one wrongBuild error naming the file that does
-// (ctx.wrongBuild, which the data-debug badge shows too) and records the page
-// as a page without a framework: ch.js on a survey without jsPsych names
-// ch-qualtrics.js, a file without the jsPsych adapter on a jsPsych page names
-// ch.js. The exception is ch-qualtrics.js on a survey that also runs jsPsych,
-// whether jsPsych is there at boot or only by DOMContentLoaded: it records
-// the survey as a Qualtrics page and logs one qualtricsJsPsych warning.
+// HAS_JSPSYCH, each into the Qualtrics adapter by HAS_QUALTRICS, and each
+// into the lab.js adapter by HAS_LABJS, so a file without one drops that
+// code. A file on a page whose framework it does not carry logs one
+// wrongBuild error naming the file that does (ctx.wrongBuild, which the
+// data-debug badge shows too) and records the page as a page without a
+// framework: ch.js on a survey without jsPsych names ch-qualtrics.js, a file
+// without the jsPsych adapter on a jsPsych page names ch.js (a page with
+// jsPsych and lab.js is a jsPsych page), and a file without the lab.js
+// adapter on a lab.js page names ch-labjs.js. The exception is
+// ch-qualtrics.js on a survey that also runs jsPsych, whether jsPsych is
+// there at boot or only by DOMContentLoaded: it records the survey as a
+// Qualtrics page and logs one qualtricsJsPsych warning.
 
 import './build-flags.js';
 import { init } from '../core/monitor.js';
@@ -131,6 +137,7 @@ import { installJsPsychAdapter, installInertWrapper, watchHostPlacement } from '
 import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
 import { detectQualtrics, qualtricsSurveyId, installQualtricsAdapter } from './adapters/qualtrics.js';
+import { detectLabJs, installLabJsAdapter, watchLabJsPlacement } from './adapters/labjs.js';
 import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
 
@@ -184,8 +191,13 @@ export function boot(opts) {
     // pages.
     var qualtricsSeen = HAS_JSPSYCH && jsPsychPage ? null : detectQualtrics(win);
     var qualtrics = HAS_QUALTRICS ? qualtricsSeen : null;
+    // lab.js's global (adapters/labjs.js), on a page that is neither a
+    // jsPsych page nor a Qualtrics survey.
+    var labjsSeen = jsPsychPage || qualtricsSeen ? null : detectLabJs(win);
+    var labjs = HAS_LABJS ? labjsSeen : null;
     var wrongBuild = qualtricsSeen && !HAS_QUALTRICS ? { host: 'Qualtrics', file: 'ch-qualtrics.js' }
-      : jsPsychPage && !HAS_JSPSYCH && !qualtrics ? { host: 'jsPsych', file: 'ch.js' } : null;
+      : jsPsychPage && !HAS_JSPSYCH && !qualtrics ? { host: 'jsPsych', file: 'ch.js' }
+      : labjsSeen && !HAS_LABJS ? { host: 'lab.js', file: 'ch-labjs.js' } : null;
     if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
     else if (qualtrics && jsPsychPage) console.warn(MESSAGES.qualtricsJsPsych());
     var surveyId = HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
@@ -208,7 +220,14 @@ export function boot(opts) {
     monitor = monitorFactory(Object.assign({}, config.monitor, { participantId: pid.id, preset: config.preset }));
     var differ = createSegmentDiffer(monitor);
     var segmenter = createSegmenter({ monitor: monitor, differ: differ });
-    var host = HAS_JSPSYCH && jsPsychPage ? 'jspsych' : 'vanilla';
+    // A lab.js 23 build is not hooked yet: the page runs as a vanilla page,
+    // and the placement check below must not take it for a tag above lib/lab.js.
+    var labjsUnsupported = !!(labjs && labjs.generation !== 'classic');
+    if (labjsUnsupported) {
+      console.warn(MESSAGES.labjsVersionUnsupported(labjs.version));
+      labjs = null;
+    }
+    var host = HAS_JSPSYCH && jsPsychPage ? 'jspsych' : (labjs ? 'labjs' : 'vanilla');
 
     ctx = {
       file: CH_FILE,
@@ -253,6 +272,8 @@ export function boot(opts) {
           onWrite: ctx.debug ? function () { ctx.debug.refresh(); } : null
         });
       }
+    } else if (HAS_LABJS && host === 'labjs') {
+      ctx.labjsAdapter = installLabJsAdapter({ win: win, ctx: ctx, lab: labjs.lab, version: labjs.version, generation: labjs.generation });
     }
 
     // The session start observes document.body (core signals/browser.js), so
@@ -267,7 +288,7 @@ export function boot(opts) {
       }, { once: true });
     }
 
-    if (host === 'vanilla') {
+    if (host === 'vanilla' || host === 'labjs') {
       startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
       replay.startVanilla();
     } else if (HAS_JSPSYCH) adapter = installJsPsychAdapter({ win: win, ctx: ctx });
@@ -285,6 +306,9 @@ export function boot(opts) {
       }
     });
     else if (!jsPsychPage) noticeLateJsPsych(win, ctx);
+    // Not on a page whose framework this file does not carry: lab.js there is
+    // no tag placed above lib/lab.js.
+    if (HAS_LABJS && host === 'vanilla' && !labjsUnsupported && !wrongBuild) watchLabJsPlacement({ win: win, doc: win.document, ctx: ctx });
     try {
       Object.defineProperty(win, '__cyborgHunterFile', {
         value: CH_FILE, writable: false, enumerable: false, configurable: true
@@ -341,7 +365,10 @@ export function boot(opts) {
 // Qualtrics survey (ch-qualtrics.js; ctx.qualtricsLayout is set only with
 // HAS_QUALTRICS) that is a Qualtrics page, with the same qualtricsJsPsych
 // warning; elsewhere a page without a framework, with one wrongBuild error
-// naming ch.js.
+// naming ch.js. The exception is ch-labjs.js on a lab.js page (lab.js there
+// at boot, hooked): it logs the same error, but the message's "page without
+// a framework" does not hold there, since lab.js stays hooked and its rows
+// keep their columns.
 function noticeLateJsPsych(win, ctx) {
   var doc = win.document;
   if (doc.readyState !== 'loading') return;
@@ -375,7 +402,10 @@ function startMonitoring(ctx) {
 //            jsPsych as if ch.js were absent. An instance created before
 //            DOMContentLoaded keeps the extensions already injected (they
 //            stand down on ctx.bootError) and gets cyborgHunterError on every
-//            row.
+//            row;
+//   lab.js   the adapter stays installed: its hooks stand down on
+//            ctx.bootError and mark every trial row, as the jsPsych
+//            extension does.
 function failDeferred(ctx, adapter, e) {
   var msg = String((e && e.message) || e);
   ctx.bootError = msg;
@@ -405,6 +435,7 @@ function fail(win, ctx, adapter, e) {
   ctx.bootError = msg;
   if (ctx.qualtrics) { try { ctx.qualtrics.teardown(); } catch (_) { /* already failing */ } }
   if (ctx.vanilla) { try { ctx.vanilla.teardown(); } catch (_) { /* already failing */ } }
+  if (ctx.labjsAdapter) { try { ctx.labjsAdapter.restore(); } catch (_) { /* already failing */ } }
   if (ctx.monitor) { try { ctx.monitor.destroy(); } catch (_) { /* already failing; the boot error is the one to show */ } }
   console.error(MESSAGES.bootFailed(msg));
   try {

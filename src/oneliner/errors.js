@@ -303,5 +303,56 @@ export const MESSAGES = {
       'ch.js reads the participant ID and the preset from its own <script> tag',
       'use data-participant-id / data-preset on the ch.js tag instead',
       DOCS + 'advanced-integration.md#switching-to-the-one-liner');
+  },
+  // lab.js host. Placement is decided at DOMContentLoaded (adapters/labjs.js
+  // watchLabJsPlacement): window.lab must exist when ch-labjs.js boots.
+  loadedAboveLabJs: function () {
+    return formatError('Not monitoring lab.js components',
+      'ch-labjs.js was loaded before lib/lab.js, so lab.js\'s components could not be hooked',
+      'move the ch-labjs.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+      DOCS + 'labjs.md#placement');
+  },
+  labjsNotHookable: function () {
+    return formatError('Not monitoring lab.js components',
+      'the page has a data-labjs-section element but no window.lab (lib/lab.js did not load, or lab.js is bundled, which never defines it)',
+      'load lab.js from a <script> tag (lib/lab.js, as the builder exports it) above the ch-labjs.js tag; a bundled lab.js build cannot be hooked',
+      DOCS + 'labjs.md#placement');
+  },
+  // One per page: a hook failure marks the row (cyborgHunterError) and lab.js runs on.
+  labjsHookFailed: function (msg) {
+    return formatError('Cyborg Hunter could not hook a lab.js component', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn: a lab.js trial ended whose run() began before ch-labjs.js hooked
+  // lab.js (adapters/labjs.js); its events go into the next segment's gap.
+  labjsStudyAlreadyRunning: function () {
+    return formatError('The lab.js screen on display when ch-labjs.js started is not monitored',
+      'a lab.js study was already running when ch-labjs.js hooked lab.js, so that screen\'s row has no integrity columns, and what happens on it after ch-labjs.js started counts towards the next trial\'s gap',
+      'move the ch-labjs.js <script> below lib/lab.js and above your study script (script.js in a builder export)',
+      DOCS + 'labjs.md#placement');
+  },
+  // console.warn, at boot: window.lab is a lab.js 23 build (Component
+  // .prototype.lock), which ch-labjs.js does not hook yet; boot runs the vanilla host.
+  labjsVersionUnsupported: function (version) {
+    return formatError('lab.js ' + version + ' is not supported yet',
+      'ch-labjs.js hooks lab.js 20.x, the version the lab.js builder exports, so on this page it neither segments lab.js components nor writes into lab.js\'s rows, and runs as on a page without jsPsych',
+      'use lab.js 20.x (the lib/lab.js a lab.js builder export contains), or mark trials and save CyborgHunter.data() as on a page without jsPsych',
+      DOCS + 'labjs.md#labjs-23');
+  },
+  // console.warn: ch-labjs.js keeps one session per page and ends it when the first
+  // study's root component ends; components run after that get no columns.
+  secondLabJsStudy: function () {
+    return formatError('A second lab.js study ran after the first ended',
+      'ch-labjs.js records one session per page and ended it when the first study\'s root component ended, so components run after that are not monitored',
+      'run one study per page, or reload the page between studies',
+      DOCS + 'known-issues.md#one-line-setup');
+  },
+  // console.warn, once per name: the study holds a value under one of ch-labjs.js's
+  // column names (adapters/labjs.js); it stays, and ch-labjs.js's goes under
+  // cyborgHunter_<name>, where the report reads it.
+  labjsColumnTaken: function (key) {
+    return formatError('Your lab.js study uses the column ' + key + ', which ch-labjs.js also writes',
+      'ch-labjs.js keeps your value and writes its own as cyborgHunter_' + key + ' from here on, where the report reads it',
+      'nothing is lost; rename your ' + key + ' column if you want ch-labjs.js\'s value under its usual name',
+      DOCS + 'labjs.md#where-the-data-goes');
   }
 };

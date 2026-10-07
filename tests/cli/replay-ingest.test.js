@@ -188,6 +188,27 @@ describe('replay artifact ingest', () => {
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
+  // A CSV's id is read as written: a participant 007 is keyed '007', not
+  // '7', so the recording made under 007 attaches and --participant 007
+  // finds them.
+  it('attaches the recording of a CSV participant whose id is 007, under --participant 007 too', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'ch-replay-csv-'));
+    try {
+      const integrity = JSON.parse(participantFile('007')).trials[0].integrity;
+      const cell = '"' + JSON.stringify(integrity).replace(/"/g, '""') + '"';
+      writeFileSync(join(d, '007.csv'), ['participantId,trialId,integrity', '007,r1,' + cell].join('\n'));
+      writeFileSync(join(d, '007-replay-1751600000000.json'), JSON.stringify(recordingV2('007', 1751600000000)));
+      for (const only of [null, '007']) {
+        const { participants, warnings } = await ingest({
+          dataDir: d, filePattern: '*.json', integrityField: 'integrity', participantIdField: 'participantId',
+          ...(only ? { singleParticipant: only } : {}),
+        });
+        assert.deepStrictEqual(participants.map(p => p.participantId), ['007'], 'singleParticipant ' + only);
+        assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+      }
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+
   // Ownership and the latest-session pick read v1's `metadata` block. Making
   // the sniff recognise v2 without these would hand a v2 artifact to the
   // OWNERLESS branch, which verifies by filename alone — so a file recorded
@@ -961,5 +982,179 @@ describe('unreadable directory entries', () => {
     const { participants } = await ingest({
       dataDir: dir, filePattern: '*.csv', participantIdField: 'participantId', integrityField: 'integrity' });
     assert.deepStrictEqual(participants.map(p => p.participantId), ['P1']);
+  });
+});
+
+// The one-line setup on lab.js keys a participant by the study's own
+// participantId (row 0, RES-3) when it differs from ch.js's id, which every
+// trial row carries as cyborgHunterParticipantId (CH-3) and which the
+// recorder embeds. extract-core keeps ch.js's id in the participant's
+// metadata, and the recording is matched by it too, when that id names
+// nobody else in the dataset.
+describe('replay ingest — lab.js data keyed by the study\'s own participantId', () => {
+  let d;
+  beforeEach(() => { d = mkdtempSync(join(tmpdir(), 'ch-replay-labjs-')); });
+  afterEach(() => { rmSync(d, { recursive: true, force: true }); });
+
+  // exportJson(): row 0 carries the study's id, trial rows ch.js's.
+  function labjsRows(studyId, chId) {
+    const integrity = {
+      trialId: '0', participantId: chId, libraryVersion: '0.6.0',
+      startTime: 1000, duration_ms: 5000, trialStart_perfNow: 1000,
+      pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [],
+      trialSoftScore: 0, trialSignals: {},
+    };
+    return JSON.stringify([
+      { sender: 'intro', sender_id: '0', participantId: studyId, integrity, cyborgHunterParticipantId: chId },
+      { sender: 'final', sender_id: '1', participantId: null, integrity: { ...integrity, trialId: '1' }, cyborgHunterParticipantId: chId },
+      { sender: 'root', participantId: null },
+    ]);
+  }
+  const cfg = () => ({ dataDir: d, filePattern: '*.json', integrityField: 'integrity', participantIdField: 'participantId' });
+  const mismatch = (warnings) => warnings.some(w => /participant_id mismatch/i.test(String(w.warnings)));
+
+  it('attaches a recording named after the study\'s id that carries ch.js\'s id', async () => {
+    writeFileSync(join(d, 'RES-3.json'), labjsRows('RES-3', 'CH-3'));
+    writeFileSync(join(d, 'RES-3-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-3', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['RES-3']);
+    assert.strictEqual(participants[0].metadata.cyborgHunterParticipantId, 'CH-3');
+    assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+    assert.ok(!mismatch(warnings), JSON.stringify(warnings));
+  });
+
+  // The same rows exported as CSV: ch.js's id is read as written, so 007
+  // still names the recording that carries it.
+  it('a lab.js CSV: the recording that carries ch.js\'s id 007 attaches', async () => {
+    const rows = JSON.parse(labjsRows('RES-3', '007'));
+    const cols = ['sender', 'sender_id', 'participantId', 'integrity', 'cyborgHunterParticipantId'];
+    const cell = (v) => v == null ? '' : typeof v === 'object' ? '"' + JSON.stringify(v).replace(/"/g, '""') + '"' : String(v);
+    writeFileSync(join(d, 'RES-3.csv'), [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n'));
+    writeFileSync(join(d, 'RES-3-replay-1751600000000.json'), JSON.stringify(recordingV2('007', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['RES-3']);
+    assert.strictEqual(participants[0].metadata.cyborgHunterParticipantId, '007');
+    assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+    assert.ok(!mismatch(warnings), JSON.stringify(warnings));
+  });
+
+  it('attaches a recording named after ch.js\'s id', async () => {
+    writeFileSync(join(d, 'RES-3.json'), labjsRows('RES-3', 'CH-3'));
+    writeFileSync(join(d, 'CH-3-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-3', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['RES-3']);
+    assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+  });
+
+  it('attaches a recording under another producer\'s name by ch.js\'s embedded id', async () => {
+    writeFileSync(join(d, 'RES-3.json'), labjsRows('RES-3', 'CH-3'));
+    writeFileSync(join(d, 'session.json'), JSON.stringify(recordingV2('CH-3', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+  });
+
+  it('does not match by ch.js\'s id when two participants carry it', async () => {
+    writeFileSync(join(d, 'RES-3.json'), labjsRows('RES-3', 'CH-3'));
+    writeFileSync(join(d, 'RES-4.json'), labjsRows('RES-4', 'CH-3'));
+    writeFileSync(join(d, 'RES-3-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-3', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => p.replay), [null, null]);
+    assert.ok(mismatch(warnings), JSON.stringify(warnings));
+  });
+
+  it('does not match by ch.js\'s id when another participant is keyed by it', async () => {
+    writeFileSync(join(d, 'RES-3.json'), labjsRows('RES-3', 'P2'));
+    writeFileSync(join(d, 'P2.json'), participantFile('P2'));
+    writeFileSync(join(d, 'P2-replay-1751600000000.json'), JSON.stringify(recordingV2('P2', 1751600000000)));
+    writeFileSync(join(d, 'RES-3-replay-1751600000001.json'), JSON.stringify(recordingV2('P2', 1751600000001)));
+    const { participants, warnings } = await ingest(cfg());
+    const byId = Object.fromEntries(participants.map(p => [p.participantId, p]));
+    assert.strictEqual(byId['RES-3'].replay, null);
+    assert.ok(byId.P2.replay && byId.P2.replay.recording);
+    assert.ok(mismatch(warnings), JSON.stringify(warnings));
+  });
+
+  // --participant: the uniqueness guards count the whole dataset, not only
+  // the participant the report is filtered to.
+  it('--participant: a ch.js id that is another participant\'s key gives no alias', async () => {
+    writeFileSync(join(d, 'RES-3.json'), labjsRows('RES-3', 'P2'));
+    writeFileSync(join(d, 'P2.json'), participantFile('P2'));
+    writeFileSync(join(d, 'P2-replay-1751600000000.json'), JSON.stringify(recordingV2('P2', 1751600000000)));
+    writeFileSync(join(d, 'RES-3-replay-1751600000001.json'), JSON.stringify(recordingV2('P2', 1751600000001)));
+    const { participants, warnings } = await ingest({ ...cfg(), singleParticipant: 'RES-3' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['RES-3']);
+    assert.strictEqual(participants[0].replay, null, 'P2\'s recording must not attach to RES-3');
+    assert.ok(mismatch(warnings), JSON.stringify(warnings));
+  });
+
+  it('--participant: a ch.js id two participants share gives no alias', async () => {
+    writeFileSync(join(d, 'R1.json'), labjsRows('R1', 'C'));
+    writeFileSync(join(d, 'R2.json'), labjsRows('R2', 'C'));
+    writeFileSync(join(d, 'C-replay-1751600000000.json'), JSON.stringify(recordingV2('C', 1751600000000)));
+    const { participants } = await ingest({ ...cfg(), singleParticipant: 'R1' });
+    assert.deepStrictEqual(participants.map(p => p.participantId), ['R1']);
+    assert.strictEqual(participants[0].replay, null);
+  });
+
+  // Filenames are compared sanitized and lowercased, so ch.js ids that
+  // collide that way are ambiguous too.
+  const ownerless = (pid, epoch) => { const r = recordingV2(pid, epoch); delete r.participant_id; return r; };
+
+  it('ch.js ids that collide once sanitized give no alias; an id-less recording attaches to nobody', async () => {
+    writeFileSync(join(d, 'R1.json'), labjsRows('R1', 'a/b'));
+    writeFileSync(join(d, 'R2.json'), labjsRows('R2', 'a_b'));
+    writeFileSync(join(d, 'a_b-replay-1751600000000.json'), JSON.stringify(ownerless('x', 1751600000000)));
+    const { participants } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay]), [['R1', null], ['R2', null]]);
+  });
+
+  it('an id-less recording named after a unique ch.js id attaches, and the warning names that id', async () => {
+    writeFileSync(join(d, 'R1.json'), labjsRows('R1', 'CH-9'));
+    writeFileSync(join(d, 'CH-9-replay-1751600000000.json'), JSON.stringify(ownerless('x', 1751600000000)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.ok(participants[0].replay && participants[0].replay.recording, JSON.stringify(warnings));
+    const w = warnings.map(x => String(x.warnings)).find(t => /no embedded participant_id/.test(t));
+    assert.match(w, /CH-9/);
+    assert.match(w, /R1/);
+  });
+
+  it('--participant: participant keys that collide once sanitized keep an id-less recording ambiguous', async () => {
+    writeFileSync(join(d, 'ab1.json'), participantFile('a/b'));
+    writeFileSync(join(d, 'ab2.json'), participantFile('a_b'));
+    writeFileSync(join(d, 'a_b-replay-1751600000000.json'), JSON.stringify(ownerless('x', 1751600000000)));
+    const { participants, warnings } = await ingest({ ...cfg(), singleParticipant: 'a_b' });
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay]), [['a_b', null]]);
+    assert.ok(warnings.some(w => /ambiguous/.test(String(w.warnings))), JSON.stringify(warnings));
+  });
+
+  // Two sessions in one file (concatenated exports): each carries its own
+  // ch.js id, so neither id is a second name for this participant.
+  const concat = (...parts) => JSON.stringify(parts.flatMap(([studyId, chId]) => JSON.parse(labjsRows(studyId, chId))));
+  it('a file holding two sessions gives no alias: neither session\'s recording attaches through ch.js\'s ids', async () => {
+    writeFileSync(join(d, 'two.json'), concat(['RES-1', 'CH-1'], ['RES-2', 'CH-2']));
+    writeFileSync(join(d, 'CH-1-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-1', 1751600000000)));
+    writeFileSync(join(d, 'CH-2-replay-1751600000001.json'), JSON.stringify(recordingV2('CH-2', 1751600000001)));
+    const { participants, warnings } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay, p.metadata.cyborgHunterParticipantId]), [['RES-1', null, undefined]]);
+    const text = warnings.map(w => String(w.warnings)).join(' | ');
+    assert.match(text, /more than one participant id \(participantId: RES-1, RES-2; cyborgHunterParticipantId: CH-1, CH-2\)/);
+  });
+
+  // Two stamped sessions (no study id): the second session's row-0 stamp is
+  // ch.js's id, not the study's, so it neither keys the file nor lets the
+  // first session's id attach a recording to it.
+  it('a file holding two stamped sessions is keyed by the first ch.js id, and the other session\'s recording stays unattached', async () => {
+    writeFileSync(join(d, 'two.json'), concat(['CH-1', 'CH-1'], ['CH-2', 'CH-2']));
+    writeFileSync(join(d, 'CH-2-replay-1751600000001.json'), JSON.stringify(recordingV2('CH-2', 1751600000001)));
+    const { participants } = await ingest(cfg());
+    assert.deepStrictEqual(participants.map(p => [p.participantId, p.replay, p.metadata.cyborgHunterParticipantId]), [['CH-1', null, undefined]]);
+  });
+
+  it('a participant keyed by ch.js\'s own id is unaffected', async () => {
+    writeFileSync(join(d, 'CH-5.json'), labjsRows('CH-5', 'CH-5'));
+    writeFileSync(join(d, 'CH-5-replay-1751600000000.json'), JSON.stringify(recordingV2('CH-5', 1751600000000)));
+    const { participants } = await ingest(cfg());
+    assert.strictEqual(participants[0].metadata.cyborgHunterParticipantId, undefined);
+    assert.ok(participants[0].replay && participants[0].replay.recording);
   });
 });

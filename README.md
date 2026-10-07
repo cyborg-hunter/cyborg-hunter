@@ -50,7 +50,15 @@ Browser (experiment page): one tag, below `jspsych.js` and above your experiment
 <script src="https://unpkg.com/cyborg-hunter@0.11.0/dist/ch.js"></script>
 ```
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.11.0/dist/...`. You can also copy `dist/ch.js` (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
+Each framework has its own one-line file, with the same API and the same tag attributes ([quickstart § Which file](docs/quickstart.md#which-file)):
+
+| File | Use it for |
+|---|---|
+| `ch.js` | jsPsych 7 experiments, and pages without a framework |
+| `ch-qualtrics.js` | Qualtrics surveys, in the survey's header ([docs/qualtrics.md](docs/qualtrics.md)) |
+| `ch-labjs.js` | lab.js studies, below `lib/lab.js` ([docs/labjs.md](docs/labjs.md)) |
+
+For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.11.0/dist/...`. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
 
 Manual mode (advanced), for experiments that wire the jsPsych extension themselves: see [docs/advanced-integration.md](docs/advanced-integration.md#manual-mode). It loads these files instead of `ch.js`:
 
@@ -81,6 +89,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 - `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
 - Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (a POST form gets it as a hidden `cyborgHunterData` field).
 - Qualtrics: paste the `ch-qualtrics.js` tag into the survey's Look & Feel header and declare one embedded-data field; the CLI reads the CSV export ([docs/qualtrics.md](docs/qualtrics.md)).
+- lab.js: the `ch-labjs.js` tag below `lib/lab.js` and above the study script; every lab.js screen is a trial, and the integrity data lands in lab.js's own rows ([docs/labjs.md](docs/labjs.md)).
 
 Walk-through, placement and participant IDs: [docs/quickstart.md](docs/quickstart.md). Moving an experiment wired by hand: [docs/advanced-integration.md](docs/advanced-integration.md#switching-to-the-one-liner).
 
@@ -182,6 +191,7 @@ The optional **guard** extensions add: fullscreen / sidebar / focus enforcement 
 
 - [docs/quickstart.md](docs/quickstart.md) — zero to triage report
 - [docs/qualtrics.md](docs/qualtrics.md) — the one-line setup in a Qualtrics survey: header tag, embedded-data field, payload cap, reading the export
+- [docs/labjs.md](docs/labjs.md) — the one-line setup in a lab.js study: the `ch-labjs.js` tag below `lib/lab.js`, trial naming, the columns in lab.js's rows, reading the data
 - [docs/advanced-integration.md](docs/advanced-integration.md) — manual mode, switching to the one-line setup, the honeypot's ethics note, friction, pages without jsPsych, replay
 - [docs/worked-example.md](docs/worked-example.md) — full pipeline run on the bundled synthetic dataset, outputs interpreted
 - [docs/interpreting-signals.md](docs/interpreting-signals.md) — scores vs tiers, viewport shifts, phase scoping: the common misreadings

@@ -14,11 +14,12 @@
 //            the monitor through jsPsych.extensions['cyborg-hunter'] as in
 //            manual mode.
 //   vanilla  the standalone recorder (window.CyborgHunterReplay.attach)
-//            starts once the page has loaded (DOMContentLoaded) and follows
-//            the segmenter: adapters/vanilla.js ends its trial and starts the
-//            next span's at every cut, and stops it at pagehide. Recordings
-//            are per page. A page the browser shows again from the
-//            back/forward cache records on (see restore() below).
+//   lab.js   starts once the page has loaded (DOMContentLoaded) and follows
+//            the segmenter: the host adapter ends its trial and starts the
+//            next span's at every cut; adapters/vanilla.js also stops it at
+//            pagehide. Recordings are per page. A vanilla page the browser
+//            shows again from the back/forward cache records on (see
+//            restore() below).
 //
 // CyborgHunter.replay() stops the recorder, serializes it and returns the
 // recording for the researcher's own save code (default autoSave mode
@@ -43,6 +44,10 @@ var LOAD_TIMEOUT_MS = 15000;
 
 function message(e) { return String((e && e.message) || e); }
 
+// The hosts that run the standalone recorder (window.CyborgHunterReplay
+// .attach) rather than the jsPsych extension: vanilla and lab.js.
+function standaloneRecorder(ctx) { return ctx.host !== 'jspsych' && ctx.host !== 'manual'; }
+
 // The recorder's defaults under the one-liner; the researcher's
 // CyborgHunterConfig.replay keys (tier, autoSave) override them.
 // _ownerSavesRecording silences the recorder's "autoSave.mode is none"
@@ -55,15 +60,15 @@ function recorderConfig(ctx, params) {
 
 // Whether the researcher must save CyborgHunter.replay() themselves: replay
 // is on and has a script URL, and the recorder does not save itself
-// (CyborgHunterConfig.replay.autoSave, which only the jsPsych host runs).
-// Read by debug.js for the summary. The wording is the caller's: the
+// (CyborgHunterConfig.replay.autoSave, which only the jsPsych extension
+// runs). Read by debug.js for the summary. The wording is the caller's: the
 // Qualtrics text (replayQualtrics, REPLAY_QUALTRICS_REMINDER) when
 // ctx.qualtricsLayout is set, the generic one otherwise.
 export function replaySaveReminderApplies(ctx) {
   if (!ctx.config.replay || !ctx.replaySrc) return false;
   var autoSave = ctx.config.replay.autoSave;
   var selfSaving = !!(autoSave && autoSave.mode && autoSave.mode !== 'none');
-  return !(selfSaving && ctx.host !== 'vanilla');
+  return !(selfSaving && !standaloneRecorder(ctx));
 }
 
 // data-replay-src when given, else cyborg-hunter-replay.js next to the
@@ -266,9 +271,9 @@ function takeRecording(holder, opts) {
 }
 
 // The object holding the recorder handle (.api): the real jsPsych replay
-// extension behind the proxy, or the vanilla handle.
+// extension behind the proxy, or the standalone recorder's handle.
 function currentHolder(ctx) {
-  if (ctx.host === 'vanilla') return ctx.replay || null;
+  if (standaloneRecorder(ctx)) return ctx.replay || null;
   var ext = ctx.jsPsych && ctx.jsPsych.extensions && ctx.jsPsych.extensions[REPLAY_NAME];
   if (!ext) return null;
   return 'inner' in ext ? ext.inner : ext;
@@ -299,8 +304,9 @@ function replay(ctx) {
 // Installs ctx.handlers.replay (CyborgHunter.replay()) whether or not replay
 // is on. With data-replay: ctx.replaySrc, and on the jsPsych host
 // ctx.replayProxy, which adapters/jspsych.js lists in initJsPsych.
-// startVanilla() starts the vanilla recorder (vanilla host, or a jsPsych page
-// ch.js could not hook), once, after DOMContentLoaded; it sets ctx.replay.
+// startVanilla() starts the standalone recorder (vanilla and lab.js hosts, or
+// a jsPsych page ch.js could not hook), once, after DOMContentLoaded; it sets
+// ctx.replay.
 export function installReplay(opts) {
   var win = opts.win, ctx = opts.ctx;
   var doc = opts.doc || win.document;
@@ -319,7 +325,7 @@ export function installReplay(opts) {
     return none;
   }
   var autoSave = ctx.config.replay.autoSave;
-  if (ctx.host === 'vanilla' && autoSave && autoSave.mode && autoSave.mode !== 'none') {
+  if (standaloneRecorder(ctx) && autoSave && autoSave.mode && autoSave.mode !== 'none') {
     console.warn(MESSAGES.replayAutoSaveVanilla());
   }
   // With data-debug the summary says it (debug.js), so the page gets one line.

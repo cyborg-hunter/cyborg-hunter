@@ -6,6 +6,17 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ## [Unreleased]
 
 ### Added
+- One-line setup: one file per framework. `ch.js` stays the file for jsPsych
+  and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
+  surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
+  tag's attributes and the double-load sentinel, and each carries only its
+  own framework's adapter, so participants never download the others. A file
+  on a page that runs another framework logs one console error naming the
+  file to load (also on the `data-debug` badge) and records the page as a
+  page without a framework (one exception: `ch-labjs.js` on a lab.js page
+  whose jsPsych loads after it keeps lab.js hooked). `ch-qualtrics.js`
+  records a survey whose page also runs jsPsych as a Qualtrics page, with
+  one warning. See docs/quickstart.md#which-file.
 - One-line setup in Qualtrics surveys: `dist/ch-qualtrics.js` in the
   survey's Look & Feel header writes a capped summary of the session
   (scores, counts and event timings, never text the participant typed or
@@ -19,6 +30,21 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   the whole session from the carried totals while their event cells list
   only the kept entries, so a cell's count can be lower than its tile's.
   See docs/qualtrics.md.
+- One-line setup in lab.js studies: `dist/ch-labjs.js`, its tag below
+  `lib/lab.js` (lab.js 20.x, what the builder exports). Every lab.js
+  component that is shown is a trial, named from the `cyborgHunter`
+  component option, the `chTrialId` / `chPhase` parameters or a
+  `data-ch-trial` element, and its integrity columns are written into
+  lab.js's own rows. ch-labjs.js never overwrites the study's
+  `participantId`; its own ID goes into `cyborgHunterParticipantId`.
+  A value the study holds under one of ch-labjs.js's column names
+  (`integrity`, for example) is kept too: ch-labjs.js then writes its own
+  under `cyborgHunter_<name>`, with one console warning per name, and the
+  CLI and the analyze page read it from there.
+  When the root component ends, the final fields are written onto the last
+  trial row and the root row, before `on('end')` handlers run. A lab.js 23
+  pre-release is not hooked yet: one warning, and the page runs as one
+  without lab.js. See docs/labjs.md.
 - Standalone replay recorder (`CyborgHunterReplay.attach()`):
   `resumeSession()` records again after `stopSession()`, in later segments of
   the same recording; call `startTrial()` right after it.
@@ -29,8 +55,49 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   or that holds anything a JSON copy would change (a function, `undefined`,
   `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
   capture failure.
+- CLI and analyze page: the lab.js Transmit plugin's envelope
+  (`{ metadata, url, data: [rows] }`, what `datastore.transmit()` posts) is
+  read as a participant file. So is any object that holds its rows under
+  `data` (a custom server's `{ subject, data: [...] }`, for example), which
+  was dropped before. An incremental Transmit slice
+  (`metadata.payload: "incremental"`) is read with a warning: ingest only the
+  final `full` body.
+- CLI and analyze page: lab.js data from the one-line setup (`exportJson()`,
+  the Transmit body, `exportCsv()`, or those rows wrapped as
+  `{ trials: [...] }`) is keyed by the study's own `participantId`, even one
+  first set on a later screen, else by the setup's
+  `cyborgHunterParticipantId`; when the two differ, the setup's id is kept in
+  the participant's metadata as `cyborgHunterParticipantId`, and a session
+  recording that carries that id is attached to the participant (when no
+  other participant carries or is keyed by it). A file whose rows carry more
+  than one setup id, or more than one `participantId` besides it (several
+  sessions in one file), is read with a warning, and the setup's id is not
+  used to attach a recording to it.
+- Analyze page: for an object that holds its rows under `data` (the lab.js
+  Transmit body), the participant ID field is suggested from its first row
+  and its own top-level fields, never from its `metadata` (where `id` is
+  lab.js's upload-session id).
 
 ### Changed
+- CLI: with `--participant`, a replay recording that has no embedded
+  participant ID is judged against every participant file in the data, as
+  in a run without the filter. A file name that also fits another
+  participant there (`A` and `a`, say) is now ambiguous and not attached;
+  before, the filtered run attached it.
+- CLI and analyze page: a participant ID that is a number (a CSV column
+  holding numbers, or a study that stores one) is read as its string. Before,
+  such an ID stopped the whole report at the first plot
+  (`name.replace is not a function`), and `--participant 42` could not find
+  it. `0` and `false` are IDs now; a missing, `null` or empty ID is still
+  `unknown`.
+- CLI and analyze page: a participant file that is a top-level array of rows
+  (lab.js `exportJson()`, a JATOS result) is now keyed by the first row
+  carrying `participantId` (or `integrity.participantId`) instead of
+  `unknown`. Existing Shape-3 cohorts that relied on the `unknown` key get
+  their real ids; re-run `cyborg-hunter report` once after upgrading. Such a
+  file is now also read like a `{ trials: [...] }` file: a session report,
+  rolling segments, a honeypot disclosure and error markers on its rows are
+  found, where before the report said it had no session-level data.
 - Experiment assets (`assetsDir`, files dropped on `/analyze/`): a file whose
   path differs from the recorded URL only in upper/lower case now matches
   when no file matches exactly. Such files are ranked the same way as exact
@@ -60,12 +127,6 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trialId/phase now keeps that label on its row; unlabelled steps keep
   `gap-<n>`. Rows recorded by 0.10.x–0.11.x for such steps were labelled
   `gap-<n>`.
-- CLI and analyze page: a participant ID that is a number (a CSV column
-  holding numbers, or a study that stores one) is read as its string. Before,
-  such an ID stopped the whole report at the first plot
-  (`name.replace is not a function`), and `--participant 42` could not find
-  it. `0` and `false` are IDs now; a missing, `null` or empty ID is still
-  `unknown`.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the
@@ -165,6 +226,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   page fell back to `participantId`, which is wrong for jsPsych's
   `subject_ID`. The line beside the field counts the data files read and
   the recordings skipped.
+- CLI and analyze page: a CSV participant ID keeps its text (`007` stays
+  `007`, and so does ch-labjs.js's ID on lab.js rows). Before, `007` was
+  keyed `7`, so its replay recording did not attach and `--participant 007`
+  found nothing.
 
 ### Removed
 - Internal renderer wrappers removed

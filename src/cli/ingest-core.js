@@ -1,12 +1,14 @@
 // Loads JSON or CSV participant files, extracts integrity data, validates schema.
 //
-// Three input shapes:
+// Input shapes:
 //   1. JSON Shape 1 — { participantId: 'P1', trials: [{ integrity: {...} }] }
 //      jsPsych extension data with one file per participant.
 //   2. JSON Shape 2 — { metadata: {...}, responses: [{ mouseTrack, tabAwayEvents, ... }] }
 //      The original legacy format. Signal data lives flat on each response
 //      (no `integrity` wrapper). Pre-dates the standalone library.
-//   3. CSV — jsPsych default save format. Each row is a trial; nested objects
+//   3. JSON Shape 3 — a top-level array of rows, or { data: [rows] } (the
+//      lab.js Transmit body): read as Shape 1 by extract-core.js.
+//   4. CSV — jsPsych default save format. Each row is a trial; nested objects
 //      (integrity, integritySession, integrityScore) are JSON-stringified into
 //      single cells. We unwrap them and route through Shape 1.
 //   A Qualtrics CSV export is the exception to one file, one participant: it
@@ -32,7 +34,7 @@
 import Papa from 'papaparse';
 import { sanitizeId } from '../shared/constants.js';
 import { getByPath } from '../shared/paths.js';
-import { extractIntegrityData } from './extract-core.js';
+import { extractIntegrityData, rowsCarryChId } from './extract-core.js';
 import { isQualtricsExport, parseQualtricsExport } from './qualtrics-csv.js';
 // Spec §14 makes conversion the migration path for jsPsych-v1 recordings
 // (players are v2-only, there is no dual-read), so the converter is a runtime
@@ -225,6 +227,10 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
     files.push(reader);
   }
 
+  // Every participant file's key and ch.js id, taken before the
+  // --participant filter: the replay pass's ambiguity guards must count the
+  // whole dataset, or a filtered run would find every name unique.
+  const census = [];
   for (const reader of files) {
     try {
       const text = decodeUtf8(await reader.read());
@@ -240,6 +246,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
         ? parseCsvToRaw(text, config)
         : JSON.parse(text);
       const result = extractIntegrityData(raw, config);
+      if (result.trials.length > 0) census.push({ participantId: result.participantId, metadata: result.metadata });
 
       // --participant flag filters to a single participant
       if (config.singleParticipant && result.participantId !== config.singleParticipant) {
@@ -274,7 +281,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
     }
   }
 
-  await attachReplayArtifacts(participants, config, warnings, replayFiles, participantFiles, deps);
+  await attachReplayArtifacts(participants, census, config, warnings, replayFiles, participantFiles, deps);
 
   return { participants, warnings };
 }
@@ -332,7 +339,7 @@ function ingestQualtricsExport(text, path, config, participants, warnings) {
 // `entries`: readers for the replay directory's files. `participantPassFiles`:
 // what discovery handed the participant pass, so the foreign scan knows which
 // unreadable files already reported themselves there.
-async function attachReplayArtifacts(participants, config, warnings, entries, participantPassFiles, deps) {
+async function attachReplayArtifacts(participants, census, config, warnings, entries, participantPassFiles, deps) {
   const dir = config.replayDir || config.dataDir;
   // The shell lists the directory; a listing failure is reported here, where
   // it always was (silent for the default dataDir, whose own listing ran first).
@@ -352,14 +359,44 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // other id — on a literal {}, assigning a primitive to __proto__ is a
   // silent no-op, which skipped the duplicate warning AND the
   // ambiguous-association guard below.
+  // Both censuses count `census` (every participant file, taken before the
+  // --participant filter), so a filtered run sees the same ambiguity as a
+  // full one.
   const sanitize = sanitizeId;
+  const saneKey = (id) => sanitize(id).toLowerCase();
   const saneCounts = Object.create(null);
+  for (const p of census) {
+    const s = saneKey(p.participantId);
+    saneCounts[s] = (saneCounts[s] || 0) + 1;
+  }
   const idCounts = Object.create(null);
   for (const p of participants) {
-    const s = sanitize(p.participantId).toLowerCase();
-    saneCounts[s] = (saneCounts[s] || 0) + 1;
     idCounts[p.participantId] = (idCounts[p.participantId] || 0) + 1;
   }
+
+  // lab.js under the one-line setup: a participant keyed by the study's own
+  // participantId keeps ch.js's id in metadata.cyborgHunterParticipantId
+  // (extract-core sets it only when the two differ), and ch.js's recorder
+  // embeds ch.js's id. That id is a second name for the participant's
+  // recording, used only when it names nobody else in the whole dataset
+  // (census): no participant is keyed by it and no other participant
+  // carries it, both compared sanitized and lowercased, as the filename
+  // match is ('a/b' and 'a_b' are one name there). Otherwise it is ignored,
+  // and a recording carrying it falls to the mismatch warning below.
+  const chIdOf = (p) => {
+    const v = p.metadata && typeof p.metadata === 'object' ? p.metadata.cyborgHunterParticipantId : null;
+    return v == null || v === '' || String(v) === String(p.participantId) ? null : String(v);
+  };
+  const chIdCounts = Object.create(null);
+  for (const p of census) {
+    const c = chIdOf(p);
+    if (c !== null) chIdCounts[saneKey(c)] = (chIdCounts[saneKey(c)] || 0) + 1;
+  }
+  const aliasOf = (p) => {
+    const c = chIdOf(p);
+    if (c === null || chIdCounts[saneKey(c)] > 1 || saneCounts[saneKey(c)]) return null;
+    return c;
+  };
 
   // Duplicate participant ids (repeat runs, duplicate exports) are outside
   // the pipeline's data model — every renderer keys outputs by pid, so the
@@ -399,8 +436,11 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
   // fall between both routes with no warning.
   const claimedByName = new Set();
   for (const p of participants) {
-    const re = participantArtifactRe(sanitize(p.participantId));
-    for (const f of entries) if (re.test(f.name)) claimedByName.add(f.name);
+    const alias = aliasOf(p);
+    for (const id of alias === null ? [p.participantId] : [p.participantId, alias]) {
+      const re = participantArtifactRe(sanitize(id));
+      for (const f of entries) if (re.test(f.name)) claimedByName.add(f.name);
+    }
   }
   // Which unreadable files are ours to report: everything in an explicit
   // replayDir (nothing else lives there), plus anything in dataDir the
@@ -436,9 +476,14 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
     // which belongs to participant "a-replay".
     const sane = sanitize(p.participantId);
     const exactRe = participantArtifactRe(sane);
-    const mine = entries.filter(f => exactRe.test(f.name));
+    // ch.js's id on lab.js data keyed by the study's own id (aliasOf above).
+    const alias = aliasOf(p);
+    const saneAlias = alias === null ? null : sanitize(alias);
+    const aliasRe = saneAlias === null ? null : participantArtifactRe(saneAlias);
+    const mine = entries.filter(f => exactRe.test(f.name) || (aliasRe !== null && aliasRe.test(f.name)));
+    const ownsId = (id) => id === String(p.participantId) || (alias !== null && id === alias);
     // Foreign-named artifacts that named THIS participant inside themselves.
-    const mineForeign = foreign.filter(a => a.id !== null && a.id === String(p.participantId));
+    const mineForeign = foreign.filter(a => a.id !== null && ownsId(a.id));
     // The meta pointer rides on every trial row via addProperties.
     const meta = (p.trials && p.trials[0] && p.trials[0].integrityReplayMeta) || null;
     // Replay finalize failures ride the same way — surface them where the
@@ -535,18 +580,26 @@ async function attachReplayArtifacts(participants, config, warnings, entries, pa
         // must match EXACT-case (our recorder writes sanitize(pid) verbatim).
         // Case-tolerant matching stays for discovery, where the embedded-id
         // check catches cross-case impostors.
-        if (!cand.file.startsWith(sane + '-replay-')) {
+        // A file that matched through ch.js's id (aliasOf) is judged by that
+        // name and its own count, and the warnings name it.
+        const viaAlias = aliasRe !== null && aliasRe.test(cand.file) && !exactRe.test(cand.file);
+        const name = viaAlias ? saneAlias : sane;
+        const count = viaAlias
+          ? (chIdCounts[saneKey(alias)] || 0) + (saneCounts[saneKey(alias)] || 0)
+          : saneCounts[sane.toLowerCase()];
+        const via = viaAlias ? ` (named after ch-labjs.js's id ${alias}, its cyborgHunterParticipantId)` : '';
+        if (!cand.file.startsWith(name + '-replay-')) {
           warnings.push({ file: cand.path,
-            warnings: [`Replay artifact has no embedded participant_id and its filename case does not match "${sane}" exactly — not attached.`] });
-        } else if (saneCounts[sane.toLowerCase()] > 1) {
+            warnings: [`Replay artifact has no embedded participant_id and its filename case does not match "${name}" exactly — not attached.`] });
+        } else if (count > 1) {
           warnings.push({ file: cand.path,
-            warnings: [`Replay artifact has no embedded participant_id and its filename is ambiguous (${saneCounts[sane.toLowerCase()]} participants sanitize to "${sane}") — not attached to anyone.`] });
+            warnings: [`Replay artifact has no embedded participant_id and its filename is ambiguous (${count} participants sanitize to "${name}"${via}) — not attached to anyone.`] });
         } else {
           warnings.push({ file: cand.path,
-            warnings: [`Replay artifact has no embedded participant_id — cannot verify ownership; attaching to ${p.participantId} by unique filename match.`] });
+            warnings: [`Replay artifact has no embedded participant_id — cannot verify ownership; attaching to ${p.participantId} by unique filename match${via}.`] });
           owned.push(cand);
         }
-      } else if (String(embedded) === String(p.participantId)) {
+      } else if (ownsId(String(embedded))) {
         owned.push(cand);
       } else {
         warnings.push({ file: cand.path,
@@ -679,10 +732,16 @@ export function parseCsvToRaw(text, config) {
   // end text files with a newline, so almost every CSV from the wild has one.
   // Trim trailing whitespace defensively: trimEnd(), linear, where /\s+$/
   // backtracks quadratically over a long run of spaces inside the file.
+  // Numbers and booleans are parsed natively, except in the id columns
+  // (participantIdField, and ch.js's own id on lab.js rows): an id is the text
+  // it holds, so 007 stays '007' (typed, it would be keyed '7', and the
+  // recording made under 007 would not attach), 1e3 stays '1e3', TRUE stays
+  // 'TRUE'. An empty id cell then stays '' rather than null: the hoist below
+  // and extract-core read both as missing.
   const result = Papa.parse(text.trimEnd(), {
     header: true,
     skipEmptyLines: true,
-    dynamicTyping: true,  // numbers and booleans parsed natively, strings stay strings
+    dynamicTyping: (field) => field !== pidField && field !== 'cyborgHunterParticipantId',
   });
   const rows = result.data || [];
 
@@ -704,12 +763,22 @@ export function parseCsvToRaw(text, config) {
     }
   }
 
+  // A lab.js CSV from the one-line setup (its rows carry ch.js's id as
+  // cyborgHunterParticipantId) is keyed from its rows by extractIntegrityData,
+  // the way a top-level array of the same rows is: the study's own
+  // participantId, even from a later row, else ch.js's id. Row 0 may hold
+  // ch.js's id where the study's own sits on a later row, so nothing is
+  // hoisted. Other CSVs keep the row-0 hoist.
+  if (rowsCarryChId(rows)) return { trials: rows };
+
   // Hoist participant ID from the first row to the top level so Shape-1 ingest
-  // finds it via raw[pidField]. Falls back to 'unknown' if the column isn't there.
+  // finds it via raw[pidField]. Falls back to 'unknown' if the column isn't
+  // there or row 0's cell is empty.
   // getByPath supports dotted paths into JSON-parsed cells (e.g. a "metadata"
   // column that held a stringified object); Shape-1's flat-key-first lookup
   // then finds the hoisted value under the same (possibly dotted) key name.
-  const participantId = getByPath(rows[0], pidField) ?? 'unknown';
+  const hoisted = getByPath(rows[0], pidField);
+  const participantId = hoisted === undefined || hoisted === null || hoisted === '' ? 'unknown' : hoisted;
 
   return {
     [pidField]: participantId,

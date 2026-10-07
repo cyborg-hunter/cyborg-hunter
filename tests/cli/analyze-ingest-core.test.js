@@ -88,6 +88,17 @@ describe('ingestFiles over readers', () => {
     assert.strictEqual(warnings[0].file, '/nope');
     assert.match(warnings[0].warnings[0], /^replayDir not readable: ENOENT/);
   });
+
+  it('a lab.js Transmit incremental slice is warned about under its file name', async () => {
+    const row = (sender, integrity) => ({ sender, cyborgHunterParticipantId: 'ch-abc', integrity });
+    const slice = { metadata: { slice: 2, id: 'sess-1', payload: 'incremental' }, url: 'https://x/', data: [row('b', { trialId: '1', pasteEvents: [] })] };
+    const { participants, warnings } = await ingestFiles(
+      { participantFiles: [memReader('upload-2.json', textBytes(JSON.stringify(slice)))], replayFiles: [] },
+      { participantIdField: 'participantId', integrityField: 'integrity' }, nodeDeps);
+    assert.strictEqual(participants.length, 1);
+    const entry = warnings.find((w) => w.file === 'upload-2.json');
+    assert.ok(entry && entry.warnings.some((w) => w.includes('one incremental slice of a lab.js upload')), JSON.stringify(warnings));
+  });
 });
 
 describe('migrateArtifact (async)', () => {

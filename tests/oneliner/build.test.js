@@ -41,7 +41,8 @@ function oneLineBlock() {
 // Qualtrics' __js_cyborg_hunter, is in every file and cannot serve.)
 const MARKERS = {
   jspsych: 'extensions is not an array',
-  qualtrics: 'page-submit hook was in place'
+  qualtrics: 'page-submit hook was in place',
+  labjs: '__cyborgHunterLabJs'
 };
 
 describe('build.js: the one-line targets', () => {
@@ -88,6 +89,15 @@ describe('build.js: the one-line targets', () => {
     });
     const out = r.outputFiles[0].text;
     assert.ok(out.length < 50, out.length + ' bytes left: ' + out.slice(0, 120));
+  });
+
+  it('README.md#install lists every target and nothing else', () => {
+    const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+    const parts = readme.split(/^## Install$/m);
+    assert.strictEqual(parts.length, 2, 'one "## Install" heading');
+    const section = parts[1].split(/^## /m)[0];
+    const files = [...section.matchAll(/^\| `([^`]+\.js)` \|/gm)].map((m) => m[1]).sort();
+    assert.deepStrictEqual(files, ONE_LINE_TARGETS.map((t) => t.file).sort());
   });
 
   it('docs/quickstart.md#which-file lists every target and nothing else', () => {

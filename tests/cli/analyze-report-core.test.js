@@ -90,18 +90,21 @@ describe('numeric participant ids', () => {
     trialId: 't1', participantId: pid, libraryVersion: '0.6.0', startTime: 1000, duration_ms: 5000, trialStart_perfNow: 1000,
     pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {}
   });
+  const row = (pid) => ({ sender: 'a', participantId: pid, integrity: integrity(pid) });
   const config = (over) => ({ dataDir: d, filePattern: '*.json', participantIdField: 'participantId', integrityField: 'integrity', ...over });
   before(() => {
     d = mkdtempSync(join(tmpdir(), 'ch-numeric-ids-'));
     writeFileSync(join(d, 'shape1.json'), JSON.stringify({ participantId: 41, trials: [{ trialId: 't1', integrity: integrity(41) }] }));
     writeFileSync(join(d, 'zero.json'), JSON.stringify({ participantId: 0, trials: [{ trialId: 't1', integrity: integrity(0) }] }));
     writeFileSync(join(d, 'rows.csv'), 'participantId,integrity\n42,"' + JSON.stringify(integrity(42)).replace(/"/g, '""') + '"\n');
+    writeFileSync(join(d, 'array.json'), JSON.stringify([row(43)]));
+    writeFileSync(join(d, 'transmit.json'), JSON.stringify({ metadata: { slice: 0, id: 'up-1', payload: 'full' }, url: 'https://x/', data: [row(44)] }));
   });
   after(() => rmSync(d, { recursive: true, force: true }));
 
   it('every shape is keyed by the id\'s string, and the report draws every plot', async () => {
     const { participants } = await ingest(config());
-    assert.deepStrictEqual(participants.map((p) => p.participantId).sort(), ['0', '41', '42']);
+    assert.deepStrictEqual(participants.map((p) => p.participantId).sort(), ['0', '41', '42', '43', '44']);
     const m = memorySink();
     await buildReport(participants, cfg(config()),
       { sink: m.sink, createCanvas: makeRecordingCanvasFactory([]), encodePng: pngStub, replayClientSrc: '', fontFaceCss: '' });

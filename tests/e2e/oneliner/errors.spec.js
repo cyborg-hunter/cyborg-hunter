@@ -154,7 +154,7 @@ test('ch.js, then ch-qualtrics.js: the double-load error names both files, first
 });
 
 // Every one-line file runs a page without a framework the same way.
-for (const file of ['ch-qualtrics.js']) {
+for (const file of ['ch-qualtrics.js', 'ch-labjs.js']) {
   test(file + ' on a page without a framework records as ch.js does', async ({ page }) => {
     const log = collectConsole(page);
     await rewriteFixture(page, '**/vanilla-head.html', (html) => html.replace('/dist/ch.js', '/dist/' + file));
