@@ -18,7 +18,7 @@ export function buildExtensionsCsv(participants) {
     const extensions = p.session?.aiExtensionsFound || p.trials[0]?.extensionsDetected || [];
     for (const ext of extensions) {
       const name = typeof ext === 'string' ? ext : ext.name || 'unknown';
-      rows.push([pid, 'extension', name, ''].map(csvCell).join(','));
+      rows.push(row(pid, 'extension', name, ''));
     }
 
     // Sidebar detection. Prefer the current library's session-level
@@ -30,12 +30,16 @@ export function buildExtensionsCsv(participants) {
     // summary/triage count.
     const sidebarOpens = countSidebarOpenings(p.session?.sidebarEvents);
     if (sidebarOpens > 0) {
-      rows.push([pid, 'sidebar', 'browser_sidebar', `${sidebarOpens} open event${sidebarOpens === 1 ? '' : 's'}`].map(csvCell).join(','));
+      rows.push(row(pid, 'sidebar', 'browser_sidebar', `${sidebarOpens} open event${sidebarOpens === 1 ? '' : 's'}`));
     } else if (p.trials.some(t => (t.sidebarGapPx || 0) > 0)) {
       const maxGap = Math.max(...p.trials.map(t => t.sidebarGapPx || 0));
-      rows.push([pid, 'sidebar', 'browser_sidebar', `${maxGap}px gap`].map(csvCell).join(','));
+      rows.push(row(pid, 'sidebar', 'browser_sidebar', `${maxGap}px gap`));
     }
   }
 
   return { csv: [header, ...rows].join('\n') + '\n', rows: rows.length };
+}
+
+function row(...cells) {
+  return cells.map(csvCell).join(',');
 }

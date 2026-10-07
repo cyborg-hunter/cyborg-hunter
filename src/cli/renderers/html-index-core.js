@@ -26,7 +26,7 @@ import { resolveScoreWeights, customWeightsText, formatScore } from '../analyzer
 import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
-import { inlineSafeJson, inlineSafeSrc } from '../../shared/inline-safe.js';
+import { inlineSafeSrc } from '../../shared/inline-safe.js';
 import { annotationBlock } from './annotation-client.js';
 import { sanitize } from './report-id.js';
 
@@ -54,7 +54,6 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   const visualsUnavailableNote = opts.visualsUnavailableNote
     ?? 'Visual renderers not available (install the canvas package).';
   const imageSources = opts.imageSources ?? null;       // pid → {typingProfile, sessionTimeline, trajectories} data URIs (null entry = omit that img)
-  const inlineReplayModels = opts.inlineReplayModels ?? null; // pid → viewer model (pre-built via buildViewerModel)
   // Caller renders the replay in its own UI outside this report (the demo's
   // sibling viewer-host iframe — see demo/replay-host.js), so the report's
   // per-participant "Session replay" section would only ever show a stale
@@ -62,25 +61,18 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // false ⇒ output byte-identical (HTML snapshot contract, same as every
   // other opt here).
   const replayShownExternally = opts.replayShownExternally ?? false;
-  // Demo mode = any in-browser opt present. The report then runs inside an
-  // opaque-origin iframe where history.replaceState throws SecurityError, so
-  // the hash-sync emission gets a guard. Default emission is byte-identical.
-  const demoMode = !!(imageSources || inlineReplayModels);
+  // In-page = imageSources present: only the analyze page's in-page report
+  // (renderInPageHtml, report-core.js) passes them. The report then runs
+  // inside an opaque-origin iframe where history.replaceState throws
+  // SecurityError, so the hash-sync emission gets a guard. Default emission
+  // is byte-identical.
+  const inPage = !!imageSources;
 
-  // Preloaded replay models (demo mode only) — embedded ahead of the replay
-  // client script so window.__chReplay exists before any viewer code runs.
-  // This is DATA, so it takes the every-`<` rule (inline-safe.js rule 1),
-  // which is both lossless inside a JSON string and complete: no `<` survives
-  // for the HTML tokenizer to react to, in any of its states.
-  const preloadedReplayScript = inlineReplayModels
-    ? `<script>/* preloaded replay models (demo mode) */window.__chReplay = ${inlineSafeJson(inlineReplayModels)};</script>\n  `
-    : '';
-
-  // Hash-sync emission for the rail click handler (selectById, below): demo
-  // mode wraps it in a try/catch because the report runs in an opaque-origin
-  // sandboxed iframe, where history.replaceState throws SecurityError. The
-  // default (non-demo) value is the original, unwrapped line verbatim.
-  const hashSyncLine = demoMode
+  // Hash-sync emission for the rail click handler (selectById, below): the
+  // in-page report wraps it in a try/catch because it runs in an
+  // opaque-origin sandboxed iframe, where history.replaceState throws
+  // SecurityError. The default value is the original, unwrapped line verbatim.
+  const hashSyncLine = inPage
     ? "try { history.replaceState(null, '', `#p-${sanitized}`); } catch (e) { /* opaque-origin iframe: hash sync unavailable */ }"
     : "history.replaceState(null, '', `#p-${sanitized}`);";
 
@@ -124,7 +116,7 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // html-index-core.test.js (injected override).
   const detailHtml = triage.map((t, i) => {
     const participant = participants.find(p => p.participantId === t.participantId);
-    return renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, /* defaultVisible */ i === 0, imageSources, inlineReplayModels, replayShownExternally);
+    return renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, /* defaultVisible */ i === 0, imageSources, replayShownExternally);
   }).join('\n');
 
   const html = `<!DOCTYPE html>
@@ -861,7 +853,7 @@ ${fontFaceCss}    :root {
   <style>
 ${REPLAY_STYLES_CSS}
   </style>
-  ${preloadedReplayScript}<script>
+  <script>
 ${replayClientSrc}
   </script>
   <script>
@@ -895,17 +887,7 @@ ${replayClientSrc}
           mount.textContent = '';
           mount.appendChild(p);
         };
-        ${inlineReplayModels ? `// Demo mode: replay models are embedded via window.__chReplay, so
-        // check for a preloaded model before falling back to the
-        // script-tag network path.
-        const preloaded = (window.__chReplay || {})[pid];
-        if (preloaded) {
-          mount.removeAttribute('aria-busy');
-          mount.textContent = '';
-          window.initChReplayViewer(mount, preloaded, viewerOpts);
-          return;
-        }
-        ` : ''}const s = document.createElement('script');
+        const s = document.createElement('script');
         s.src = src;
         s.onload = function () {
           mount.removeAttribute('aria-busy');
@@ -1076,7 +1058,7 @@ function esc(str) {
 // and images. The `hidden` attribute is omitted on the
 // first pane so the report has a default selection on load; client JS toggles
 // `hidden` on the others when the user clicks a different cohort row.
-function renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, defaultVisible, imageSources, inlineReplayModels, replayShownExternally) {
+function renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, defaultVisible, imageSources, replayShownExternally) {
   const sanitized = sanitize(t.participantId);
   const tier = tierOf(t);
   const s = t.summary || {};
@@ -1089,15 +1071,14 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
   // the heading and the image together — without it, a missing PNG would leave
   // an orphan section heading floating above nothing.
   //
-  // Demo mode (imageSources present, keyed by the RAW participant id — same
-  // shape as inlineReplayModels below): swap the file-path src for a data URI
-  // supplied per plot, and omit a plot's block entirely when its entry is
-  // null/undefined rather than pointing at a PNG that doesn't exist in the
-  // sandboxed iframe.
-  const demoImages = imageSources ? imageSources[t.participantId] : null;
-  const imageBlock = (demoKey, file, label, alt) => {
-    const src = demoImages ? demoImages[demoKey] : `images/${file}_${sanitized}.png`;
-    if (demoImages && (src === null || src === undefined)) return '';
+  // In-page report (imageSources present, keyed by the RAW participant id):
+  // swap the file-path src for a data URI supplied per plot, and omit a
+  // plot's block entirely when its entry is null/undefined rather than
+  // pointing at a PNG that doesn't exist in the sandboxed iframe.
+  const inlineImages = imageSources ? imageSources[t.participantId] : null;
+  const imageBlock = (key, file, label, alt) => {
+    const src = inlineImages ? inlineImages[key] : `images/${file}_${sanitized}.png`;
+    if (inlineImages && (src === null || src === undefined)) return '';
     return `
     <div class="image-block">
       <h4 class="section-heading">${label}</h4>
@@ -1108,7 +1089,7 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     </div>`;
   };
   let imagesHtml;
-  if (visualsRendered || demoImages) {
+  if (visualsRendered || inlineImages) {
     // Order: typing profile → tab timeline → mouse trajectories. Typing speed
     // first because it's the most directly comparable across participants
     // (one bar per trial, threshold line).
@@ -1119,8 +1100,6 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     imagesHtml = `<p class="muted note">${esc(visualsUnavailableNote)}</p>`;
   }
 
-  const demoModel = inlineReplayModels ? inlineReplayModels[t.participantId] : null;
-
   return `<section class="participant" id="p-${sanitized}"${defaultVisible ? '' : ' hidden'}>
     ${renderDetailHeader(t, tier, participant, config)}
     ${renderSignalGrid(s, t)}
@@ -1129,7 +1108,7 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     ${renderSessionBlock(s, participant)}
     ${renderPasteEvidence(participant)}
     ${imagesHtml}
-    ${renderReplaySection(participant, sanitized, demoModel, replayShownExternally)}
+    ${renderReplaySection(participant, sanitized, replayShownExternally)}
   </section>`;
 }
 
@@ -1141,31 +1120,20 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
 // entirely: the caller shows the replay in its own UI outside this report,
 // so every branch below — including the absent-state messages — would be
 // stale or false for that caller.
-function renderReplaySection(participant, sanitized, demoModel = null, replayShownExternally = false) {
+function renderReplaySection(participant, sanitized, replayShownExternally = false) {
   if (replayShownExternally) return '';
-  // Defensive: a triage row can lack a matching participant object (the
-  // participants array is caller-supplied, and the demo-mode model lookup
-  // keys off the triage row, not this array). Every branch below reads
-  // participant fields — including sanitizeId(participant.participantId) in
-  // the demo path's asset fallback — so render no replay section at all
-  // rather than crash the whole page.
+  // A triage row can lack a matching participant object (the participants
+  // array is caller-supplied). With no participant there is no session to
+  // describe, so render no replay section rather than an absent-state note.
   if (!participant) return '';
   const replay = participant?.replay;
-  if ((replay && replay.recording) || demoModel) {
-    // Tier badge. The recording branch reads the v2 site
+  if (replay && replay.recording) {
+    // Tier badge. It reads the v2 site
     // (extensions['cyborg-hunter'].tier) and falls back to the structural
     // inference, through the SAME helper the viewer model uses — reading the
     // tier off a v1 `metadata` block badged every v2 recording "trace",
     // because v2 has no such block (the tier moved in serializer.js:145).
-    // The demo branch takes `demoModel.tier`: `inlineReplayModels` holds
-    // VIEWER MODELS (see the opts docblock above), and a viewer model has
-    // never had a `metadata` block in any version — that read resolved to
-    // "trace" for every model ever passed. Suspected-dead branch
-    // (demo/tests/tour.spec.js:420 records that the demo stopped passing
-    // inlineReplayModels), fixed rather than deleted.
-    const tier = demoModel
-      ? (demoModel.tier || 'trace')
-      : inferTier(replay.recording);
+    const tier = inferTier(replay.recording);
     // assetPath is stamped by replay-assets-core.js (collision-deduped filename)
     // and must be preferred — recomputing from the sanitized pid here would
     // resurrect the lossy-name collision the assets renderer just resolved.
@@ -1173,10 +1141,6 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
     // not this file's image-oriented sanitize (which truncates + strips
     // dots and would miss the asset filename for long/dotted pids).
     const assetPath = replay?.assetPath || `replay/${sanitizeId(participant.participantId)}.replay.js`;
-    // Demo mode: the model is already embedded via window.__chReplay (see
-    // preloadedReplayScript in renderIndexHtml), so the block is marked
-    // data-replay-preloaded instead of pointing the lazy loader at a file
-    // that doesn't exist in the sandboxed iframe.
     // Sheets the capture could not inline (cross-origin, fetch refused) are
     // href-only. Offer the fetch decision HERE, beside the one button, ticked
     // by default: an unstyled replay is misaligned by construction, and the
@@ -1196,7 +1160,7 @@ function renderReplaySection(participant, sanitized, demoModel = null, replaySho
     const assetNote = replay && replay.assetNote ? `
       <p class="replay-note">${esc(replay.assetNote)}</p>` : '';
     return `<div class="image-block replay-block" data-pid="${esc(participant.participantId)}"
-         ${demoModel ? 'data-replay-preloaded="true"' : `data-replay-src="${esc(assetPath)}"`}>
+         data-replay-src="${esc(assetPath)}">
       <h4 class="section-heading">Session replay <span class="replay-note">(${esc(tier)} tier)</span></h4>${assetNote}
       <div class="replay-mount">
         <button class="replay-load-btn" type="button">Load replay</button>${fetchCssLabel}
