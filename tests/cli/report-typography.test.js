@@ -32,7 +32,7 @@ const ROLES = {
   Sora: ['.detail-header-top .score-big', '.signal-value', '.score-total', '.cohort-row-top .pid',
     '.detail-header-top .pid-full', '.detail-header-sub.mono', '.tier-badge', '.tier-pill', '.replay-badge',
     '.cohort-row-top .score', '.totals-row .count', '.score-term .contrib', '.totals-title', '.totals-row', '.mono'],
-  Recursive: ['.signal-label', '.score-term .label', '.reason-excerpt', '.sig-cell li', '.legend-table td',
+  Recursive: ['.signal-label', '.score-term .label', '.reason-excerpt', '.sig-cell li', '.sig-more > summary', '.legend-table td',
     '.topbar button', '.filter-chip', '.search-wrap input', '.sort-wrap select',
     '.replay-segment-select', '.replay-play', '.replay-speed', '.replay-note', '.replay-pause-toggle',
     '.replay-load-btn', '.replay-css-btn', '.replay-fetch-css-label', '.replay-unstyled', '.replay-neutral-label'],

@@ -84,6 +84,35 @@ test('check on the sample finds three participant files and the id field its con
   assert.equal(checked.sampled, 3);
 });
 
+// A recording in the drop used to leave no candidate at all: its keys
+// (schema_version, segments, …) share nothing with a data file, and a field
+// must be in every peeked file. Measured before the fix: [] for both drops,
+// so the page fell back to participantId, which is wrong for jsPsych's subject_ID.
+test('check skips replay recordings when it suggests the id field: a DEMO session and its replay, no config', async () => {
+  const dir = 'tests/fixtures/demo';
+  const w = startWorker();
+  w.send({ type: 'check', files: [fileEntry(dir, 'DEMO-FIXT.json'), fileEntry(dir, 'DEMO-FIXT-replay-1785352263344.json')] });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.deepEqual(checked.idSuggestion, { suggested: 'participantId', candidates: [{ field: 'participantId', reason: 'known name' }] });
+  assert.equal(checked.sampled, 1);
+  assert.equal(checked.recordings, 1);
+});
+
+test('check skips replay recordings when it suggests the id field: jsPsych CSVs and one replay, no config', async () => {
+  const pilot = 'examples/synthetic-pilot/data';
+  const files = readdirSync(pilot).filter((f) => f.endsWith('.csv')).map((f) => fileEntry(pilot, f, 'data/' + f))
+    .concat([fileEntry('tests/fixtures/demo', 'DEMO-FIXT-replay-1785352263344.json', 'replays/DEMO-FIXT-replay-1785352263344.json')]);
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.equal(checked.idSuggestion.suggested, 'subject_ID');
+  assert.deepEqual(checked.idSuggestion.candidates[0], { field: 'subject_ID', reason: 'known name' });
+  assert.equal(checked.sampled, 3);
+  assert.equal(checked.recordings, 1);
+});
+
 test('run on the sample streams a zip of the full report and returns the in-page report', async () => {
   const w = startWorker();
   w.send({ type: 'check', sample: true });

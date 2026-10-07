@@ -21,6 +21,7 @@
 
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';
+import { listSidebarOpenings } from '../analyzers/summary.js';
 import { resolveScoreWeights, customWeightsText, formatScore } from '../analyzers/score-weights.js';
 import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
@@ -394,6 +395,7 @@ ${fontFaceCss}    :root {
     }
     .sig-cell ul { list-style: none; margin-top: 4px; font-size: 12px; padding: 0; }
     .sig-cell li { font-family: var(--ff-recursive); padding: 2px 0; word-break: break-word; }
+    .sig-more > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; cursor: pointer; }
     .muted { color: var(--dim); }
 
     /* Paste evidence — list of expandable entries */
@@ -1173,7 +1175,9 @@ function renderReasonQuote(t) {
 // an empty "Session-level signals" heading.
 function renderSessionBlock(s, participant) {
   const aiExt   = s.aiExtensionsFound || [];
-  const sidebar = participant?.session?.sidebarEvents || [];
+  // Openings, not raw log entries: the same walk the Sidebar tile counts with,
+  // so the cell and the tile agree.
+  const sidebar = listSidebarOpenings(participant?.session?.sidebarEvents);
   const kb      = participant?.session?.keyboardShortcuts || [];
 
   if (!aiExt.length && !sidebar.length && !kb.length) {
@@ -1183,15 +1187,13 @@ function renderSessionBlock(s, participant) {
   const cells = [];
   if (aiExt.length) {
     // AI extensions can be strings or {name: '...'} objects (legacy convention).
-    const lines = aiExt.slice(0, 3).map(e => esc(typeof e === 'string' ? e : (e?.name || 'unknown')));
-    cells.push(cellHtml('AI extensions', aiExt.length, lines));
+    cells.push(cellHtml('AI extensions', aiExt.map(e => esc(typeof e === 'string' ? e : (e?.name || 'unknown')))));
   }
   if (sidebar.length) {
-    cells.push(cellHtml('Sidebar events', sidebar.length, sidebar.slice(0, 3).map(formatSidebar)));
+    cells.push(cellHtml('Sidebar events', sidebar.map(formatSidebarOpening)));
   }
   if (kb.length) {
-    cells.push(cellHtml('Kb shortcuts', kb.length, kb.slice(0, 3).map(ev =>
-      esc(String(ev?.combo || ev?.key || 'unknown')))));
+    cells.push(cellHtml('Kb shortcuts', kb.map(ev => esc(String(ev?.combo || ev?.key || 'unknown')))));
   }
 
   return `
@@ -1200,33 +1202,37 @@ function renderSessionBlock(s, participant) {
   `;
 }
 
-// One signal cell: uppercase title + up to 3 preview lines + an overflow line
-// when the underlying count exceeds previewLines.length. Caller is responsible
-// for esc'ing entries in previewLines (we trust the caller here so callers can
-// embed safe markup like the muted span in formatSidebar).
-function cellHtml(title, count, previewLines) {
-  const overflow = count > previewLines.length
-    ? `<li class="muted">… +${count - previewLines.length} more</li>`
+// One signal cell: uppercase title, the first CELL_PREVIEW lines, and the rest
+// inside a <details> whose summary says how many there are. The browser opens
+// it with no script, so it works wherever the report is opened. Caller is
+// responsible for esc'ing every entry in `lines` (we trust the caller here so
+// callers can embed safe markup like the muted span in formatSidebarOpening).
+const CELL_PREVIEW = 3;
+function cellHtml(title, lines) {
+  const rest = lines.slice(CELL_PREVIEW);
+  const more = rest.length
+    ? `<details class="sig-more"><summary class="muted">… +${rest.length} more</summary><ul>${rest.map(l => `<li>${l}</li>`).join('')}</ul></details>`
     : '';
   return `<div class="sig-cell">
     <div class="sig-cell-title">${title}</div>
-    <ul>${previewLines.map(l => `<li>${l}</li>`).join('')}${overflow}</ul>
+    <ul>${lines.slice(0, CELL_PREVIEW).map(l => `<li>${l}</li>`).join('')}</ul>${more}
   </div>`;
 }
 
-// Format one sidebar event row, e.g. "+312px · 00:12" or "−308px · 00:45 (33.0s open)".
-// `deltaIW` is the signed innerWidth change at the event boundary — positive on
-// open (viewport shrank), negative on close. Falls back to `gap` / `gapPx` for
-// older fixtures. Timestamp is rendered as MM:SS from start-of-trial.
-function formatSidebar(ev) {
-  const gap = ev?.deltaIW ?? ev?.gap ?? ev?.gapPx ?? '?';
+// Format one sidebar opening (listSidebarOpenings), e.g. "+312px · 00:12 (33.0s open)".
+// The gap and the time are the opening entry's: `deltaIW` is the signed
+// innerWidth change at the boundary (positive on open: the viewport shrank),
+// with `gap` / `gapPx` for older fixtures, and the time is MM:SS from
+// start-of-trial. The duration is the closing entry's `duration_ms`; an
+// opening with no closing entry (still open at the end) shows none.
+function formatSidebarOpening({ opened, closed }) {
+  const gap = opened?.deltaIW ?? opened?.gap ?? opened?.gapPx ?? '?';
   const gapStr = typeof gap === 'number' ? (gap > 0 ? `+${gap}` : String(gap)) : String(gap);
-  const ts = ev?.t ?? ev?.timestamp ?? 0;
+  const ts = opened?.t ?? opened?.timestamp ?? 0;
   const mm = Math.floor(ts / 60000).toString().padStart(2, '0');
   const ss = Math.floor((ts % 60000) / 1000).toString().padStart(2, '0');
-  // Only "closed" events carry duration_ms; render it as the trailing parenthetical.
-  const dur = (ev?.type === 'closed' && ev?.duration_ms != null)
-    ? ` <span class="muted">(${(ev.duration_ms / 1000).toFixed(1)}s open)</span>`
+  const dur = closed?.duration_ms != null
+    ? ` <span class="muted">(${(closed.duration_ms / 1000).toFixed(1)}s open)</span>`
     : '';
   return `${esc(gapStr)}px · ${mm}:${ss}${dur}`;
 }
@@ -1336,11 +1342,15 @@ function renderPasteEvidence(participant) {
     // For short pastes we render a static · marker — nothing to expand.
     const toggleGlyph = isLong ? '▸' : '·';
     const toggleAttr = isLong ? '' : ' disabled aria-label="No expansion needed"';
+    // The full text has no `hidden` attribute: the stylesheet hides it until
+    // the entry is expanded (.paste-entry:not(.expanded) .paste-full), and
+    // `[hidden]` is `display: none !important` there, which the click handler's
+    // .expanded class could never override.
     return `<div class="paste-entry">
       <button class="paste-toggle" type="button" aria-expanded="false"${toggleAttr}>${toggleGlyph}</button>
       <span class="mono paste-trial">[${esc(p.trialId)}]</span>
       <span class="paste-preview mono">${esc(preview)}</span>
-      ${isLong ? `<span class="paste-full mono" hidden>${esc(p.text)}</span>` : ''}
+      ${isLong ? `<span class="paste-full mono">${esc(p.text)}</span>` : ''}
     </div>`;
   }).join('');
 

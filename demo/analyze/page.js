@@ -27,6 +27,13 @@ function download(name, blobOrText, type) {
   // Revoked later, not now: the browser may still be reading the blob.
   setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
 }
+// What the id suggestion was read from: the data files peeked, and the
+// replay recordings among the dropped JSON files, which the peek leaves out.
+function filesInspectedText(sampled, recordings) {
+  var text = sampled + ' data file' + (sampled === 1 ? '' : 's') + ' inspected';
+  if (recordings) text += '; ' + recordings + ' replay recording' + (recordings === 1 ? '' : 's') + ' skipped';
+  return text;
+}
 function listWarnings(ul, items) {
   ul.innerHTML = '';
   (items || []).forEach(function (w) {
@@ -234,10 +241,11 @@ export function createPage(root, worker, opts) {
     var c = checked.counts;
     // classify-files.js puts every JSON file in BOTH the participant and the
     // replay list (ingest tells a recording from data by content), so the
-    // replay list is the JSON count and each file is counted once here.
+    // replay list is the JSON count and each file is counted once here. The
+    // line under the id field says how many were data and how many replays.
     var json = c.replay, csv = c.participant - c.replay;
     q(root, 'counts').innerHTML =
-      '<span><b>' + c.participant + '</b> data files (' + csv + ' CSV, ' + json + ' JSON: participant data or recordings, told apart when the report is built)</span>' +
+      '<span><b>' + c.participant + '</b> data or replay files (' + csv + ' CSV, ' + json + ' JSON)</span>' +
       '<span><b>' + c.assets + '</b> experiment assets</span><span><b>' + (checked.configFound ? '1' : '0') + '</b> config file</span>' +
       (c.ignored ? '<span><b>' + c.ignored + '</b> ignored</span>' : '');
     var sel = q(root, 'id-field'); sel.innerHTML = '';
@@ -253,7 +261,7 @@ export function createPage(root, worker, opts) {
     }
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
     state.idField = sel.value;
-    q(root, 'id-reason').textContent = checked.sampled + ' file(s) inspected';
+    q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
     listWarnings(q(root, 'check-warnings'), checked.configWarnings);
     var tested = state.limits && state.limits.testedParticipants;
     if (tested && c.participant > tested) {

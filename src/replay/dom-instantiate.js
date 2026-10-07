@@ -300,8 +300,9 @@ var IFRAME_SKIP = { src: true, srcdoc: true };
 
 // Design §7 renders media as a state badge and a lane marker, with no playback,
 // and honours `media_src` only so the element has its shape. `autoplay` is the
-// one recorded attribute that would start playback with nobody asking, and the
-// shell CSP allows `media-src *`, so it is dropped where it lands.
+// one recorded attribute that would start playback with nobody asking, so it
+// is dropped where it lands, whatever media the embedding page's policy allows
+// (the CLI report's shell allows none: `media-src 'none'`).
 var MEDIA_TAGS = { video: true, audio: true };
 var MEDIA_SKIP = { autoplay: true };
 
@@ -725,8 +726,8 @@ function applyAttr(patch, mount) {
   if (el.getAttribute(PLACEHOLDER_ATTR) === 'iframe'
       && IFRAME_SKIP[name.toLowerCase()] === true) return;
   // Media likewise never receives the MEDIA_SKIP names after mount: a patch
-  // setting `autoplay` would start the playback instantiation refused, and the
-  // shell CSP allows `media-src *`. The tag is the one instantiation keyed the
+  // setting `autoplay` would start the playback instantiation refused, whatever
+  // media the embedding page's policy allows. The tag is the one instantiation keyed the
   // skip set on, and no patch can change an element's tag. Silent and
   // uncounted, as above. SET verb only — removing `autoplay` can only stop
   // playback, never start it.
