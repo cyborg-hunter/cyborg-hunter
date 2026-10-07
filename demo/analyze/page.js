@@ -62,8 +62,9 @@ function listWarnings(ul, items) {
 }
 
 export function createPage(root, worker, opts) {
-  // settingsWritten: the JSON of the panel values last written from a check's
-  // config (check), null until the first check and after Start over.
+  // settingsWritten: the JSON of the settings last taken from a check's
+  // config, the panel's values and the config's participant-id field (check);
+  // null until the first check and after Start over.
   // idSuggested: the Participant ID field the last check's suggestion put in
   // the select, so a later check tells the analyst's own pick from it.
   var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, result: null,
@@ -298,14 +299,16 @@ export function createPage(root, worker, opts) {
     var checked = await reply;
     state.checked = checked;
     renderFiles(checked);
-    // The panel is written from the config only when the config's values
-    // differ from the ones it was last written from: a drop that adds data
-    // files, or a recording, keeps what the analyst set. A replacement after
+    // The settings are taken from the config only when the config's values
+    // differ from the ones last taken: a drop that adds data files, or a
+    // recording, keeps what the analyst set. The config's participant-id
+    // field counts too (the id field below follows it). A replacement after
     // the first check says so under the list (one sentence, this check's).
     var fromFile = settingsFromConfig(checked.config);
-    var json = JSON.stringify(fromFile);
+    var json = JSON.stringify([fromFile, checked.config.participantIdField]);
+    var configChanged = json !== state.settingsWritten;
     var replaced = null;
-    if (json !== state.settingsWritten) {
+    if (configChanged) {
       if (state.settingsWritten) replaced = settingsReplacedText(checked);
       settingsPanel.write(fromFile);
       state.settingsWritten = json;
@@ -324,10 +327,10 @@ export function createPage(root, worker, opts) {
       var o2 = document.createElement('option'); o2.value = checked.config.participantIdField; o2.textContent = checked.config.participantIdField + ' — CLI default'; sel.appendChild(o2);
     }
     // The analyst's own pick (a field other than the one the last check
-    // suggested) stays while this check still offers it; otherwise the
-    // check's suggestion. `=== true`: only a listed field, never a name the
-    // object inherits.
-    var pick = state.idField !== state.idSuggested && offered[state.idField] === true ? state.idField : null;
+    // suggested) stays while this check still offers it and the config is
+    // unchanged; otherwise the check's suggestion, as for the settings above.
+    // `=== true`: only a listed field, never a name the object inherits.
+    var pick = !configChanged && state.idField !== state.idSuggested && offered[state.idField] === true ? state.idField : null;
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
     state.idSuggested = sel.value;
     if (pick) sel.value = pick;

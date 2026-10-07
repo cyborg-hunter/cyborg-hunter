@@ -1076,8 +1076,9 @@ test('removing the config puts the defaults back and says so; after Start over t
 
 // The Participant ID field is listed again from each check's candidates. The
 // analyst's own pick (another field than the one the check suggested) stays
-// while the new list still offers it; a field the page itself suggested
-// follows the new suggestion.
+// while the new list still offers it and the config is unchanged; a field the
+// page itself suggested follows the new suggestion, and so does any field
+// once the config changed (as the rest of the settings do).
 const pickIdField = (field) => {
   role('id-field').value = field;
   role('id-field').dispatchEvent(new win.Event('change', { bubbles: true }));
@@ -1118,8 +1119,8 @@ test('a participant-id field the page suggested follows the next check\'s sugges
   await until(() => t.sent.length === 1);
   t.emit(CHECKED);
   await tick();
-  // A config naming run_id arrives: the check suggests it, subject_ID still listed.
-  await dropMore(t, 'cyborg-hunter.config.json', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'from cyborg-hunter.config.json' }, { field: 'subject_ID', reason: 'known name' }] } });
+  // More data, the same config: the check now suggests run_id, subject_ID still listed.
+  await dropMore(t, 'more.csv', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'known name' }, { field: 'subject_ID', reason: 'known name' }] } });
   assert.equal(role('id-field').value, 'run_id');
   pickIdField('subject_ID');
   t.page.reset();
@@ -1128,6 +1129,20 @@ test('a participant-id field the page suggested follows the next check\'s sugges
   t.emit({ ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'from cyborg-hunter.config.json' }, { field: 'subject_ID', reason: 'known name' }] } });
   await tick();
   assert.equal(role('id-field').value, 'run_id', 'after Start over the first check takes the suggestion');
+});
+
+test('a config that names another participant-id field replaces the analyst\'s pick, even one still offered', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  pickIdField('run_id');
+  // Only the id field differs from the config before.
+  await dropMore(t, 'cyborg-hunter.config.json', { ...CHECKED, config: { participantIdField: 'subject_ID' },
+    idSuggestion: { suggested: 'subject_ID', candidates: [{ field: 'subject_ID', reason: 'from cyborg-hunter.config.json' }, { field: 'run_id', reason: 'constant within each file, unique across files' }] } });
+  assert.equal(role('id-field').value, 'subject_ID');
+  assert.deepEqual(checkNotes(), ['unknown key "dataDri"', 'Settings replaced from cyborg-hunter.config.json.']);
 });
 
 test('on the results, a post-hoc setting re-analyses without reading the files, and the report swaps in place', async () => {
