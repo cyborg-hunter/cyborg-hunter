@@ -416,7 +416,7 @@ export const HANDOFF_ASSETS = [
  * this page only. */
 export const HANDOFF = {
   buttonLabel: 'Open in the analyzer →',
-  buttonHint: 'The files below, kept in this browser: nothing is uploaded.',
+  buttonHint: 'The files below and this page\'s fonts, kept in this browser: nothing is uploaded.',
   failed: 'This browser would not keep the files for the analyzer. Save them ' +
     'below and drop them on <a href="analyze/">the analyzer</a> instead.',
   leaveHint: 'Leaving this page ends the session: open it in the analyzer or save the files first; ' +

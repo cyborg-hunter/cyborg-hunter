@@ -902,7 +902,9 @@ function startTour(participantId, capabilities, manifest) {
   // the page's fonts (HANDOFF_ASSETS) follow, fetched from this site under
   // the relative path the recorded stylesheet names them by, so the
   // analyzer matches them and the visitor's replay renders in them. The
-  // folder save leaves them out: they are not study data.
+  // folder save leaves them out: they are not study data. A data file that
+  // cannot be fetched fails the whole set; a font that cannot be fetched is
+  // left out with a warning, and the replay's note names it as missing.
   function handoffFiles(opts) {
     var all = [];
     DOWNLOAD_BATCHES.forEach(function (b) { all = all.concat(b.files); });
@@ -912,7 +914,12 @@ function startTour(participantId, capabilities, manifest) {
       return built ? { path: built.filename, blob: jsonBlob(built.data) } : null;
     });
     if (opts && opts.withAssets) {
-      HANDOFF_ASSETS.forEach(function (path) { files.push(fetchFile(path, path)); });
+      HANDOFF_ASSETS.forEach(function (path) {
+        files.push(fetchFile(path, path).catch(function (err) {
+          console.warn('cyborg-hunter demo: a font was not handed over', path, err);
+          return null;
+        }));
+      });
     }
     return Promise.all(files).then(function (got) { return got.filter(Boolean); });
   }

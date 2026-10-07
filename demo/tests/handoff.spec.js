@@ -26,13 +26,13 @@ const viewerModelFromFixture = (name) =>
   buildViewerModel(JSON.parse(readFileSync(join(V2_FIXTURES, name + '.json'), 'utf8')));
 
 // From the files step: "Open in the analyzer", until the analyze page lists
-// the five files and the six fonts (the hash dropped once read). Returns the
-// visitor's id, read on the tour before it is left.
-async function openInAnalyzer(page) {
+// `rows` files, by default the five files and the six fonts (the hash dropped
+// once read). Returns the visitor's id, read on the tour before it is left.
+async function openInAnalyzer(page, rows = 5 + HANDOFF_ASSETS.length) {
   const participantId = await pid(page);
   await page.locator('[data-action="open-analyzer"]').click();
   await expect(page).toHaveURL(/\/analyze\/$/, { timeout: 30000 });
-  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(5 + HANDOFF_ASSETS.length, { timeout: 30000 });
+  await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(rows, { timeout: 30000 });
   return participantId;
 }
 
@@ -88,6 +88,32 @@ test('"Open in the analyzer" hands over the five files and the fonts: listed as 
   await expect(note).toHaveText(/6 of 6 fonts matched/);
   await expect(note).not.toHaveText(/missing/);
   await assertOnlyAllowed(page, seen, allow);
+});
+
+// ---------------------------------------------------------------------------
+// A font the site does not serve (here one answered with a 404) is left out
+// of the hand-off with a warning in the console; the files and the other
+// fonts still go, and the replay's note names the font as missing.
+// ---------------------------------------------------------------------------
+test('a font the hand-off cannot fetch is left out: the files still go, and the note names the font as missing', async ({ page, baseURL }) => {
+  test.setTimeout(120000);
+  await fastForwardToFiles(page);
+  const lost = 'assets/fonts/tomorrow/tomorrow-400.woff2';
+  expect(HANDOFF_ASSETS).toContain(lost);
+  await page.route(baseURL + '/' + lost, (route) => route.fulfill({ status: 404, body: 'not found' }));
+  const warnings = [];
+  page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
+  const participantId = await openInAnalyzer(page, 5 + HANDOFF_ASSETS.length - 1);
+  const assets = await page.locator('[data-role="file-rows"] tr').evaluateAll((trs) => trs
+    .filter((tr) => tr.querySelectorAll('td')[1].textContent === 'experiment asset')
+    .map((tr) => tr.querySelector('td').textContent));
+  expect(assets.sort()).toEqual(HANDOFF_ASSETS.filter((p) => p !== lost).sort());
+  expect(warnings.filter((w) => w.includes('cyborg-hunter demo: a font was not handed over') && w.includes(lost))).toHaveLength(1);
+  await buildReport(page);
+  await reportSelected(page);
+  await page.selectOption('[data-role="replay-select"]', participantId);
+  await expect(page.locator('[data-role="asset-note"]'))
+    .toHaveText('Experiment assets: 5 of 6 fonts matched (missing: tomorrow-400.woff2).');
 });
 
 // ---------------------------------------------------------------------------
