@@ -7,8 +7,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ### Added
 - Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
-  14:03 UTC`). The id is a hash of the participant ids, so a report rebuilt
-  from the same files keeps it, whatever the settings.
+  14:03 UTC`). The id is a hash of the participant ids and of each one's
+  trial count and first and last trial timestamps, so a report rebuilt from
+  the same files keeps it, whatever the settings, and two studies that share
+  participant ids get different ids.
 - Reports: annotate each participant with Include, Exclude or Flag and a
   note (keys `i`, `e`, `f` for the selected one). The rail shows the label
   and how many participants are reviewed. The report keeps the annotations

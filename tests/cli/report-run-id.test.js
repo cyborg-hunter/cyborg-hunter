@@ -1,6 +1,8 @@
 // The report's run id and time (report-core.js runIdOf; the top bar of
-// html-index-core.js). The id names the cohort: its participant ids, sorted
-// and hashed, so a rebuild of the same files under other settings keeps it.
+// html-index-core.js). The id names the cohort and its data: each participant
+// id with its trial count and first and last trial timestamps, sorted and
+// hashed, so a rebuild of the same files under other settings keeps it and two
+// studies that share ids 1…N do not.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -18,11 +20,42 @@ const NOW = () => '2026-10-05T14:03:12.345Z';
 const cohort = (ids) => ids.map((participantId) => ({ participantId }));
 
 describe('the run id', () => {
-  it('is the first 16 hex digits of the sha256 of the sorted ids as JSON, whatever their order', async () => {
-    const expected = createHash('sha256').update('["P1","P2","P3"]', 'utf8').digest('hex').slice(0, 16);
+  it('is the first 16 hex digits of the sha256 of the sorted [id, trial count, first and last timestamp] rows as JSON, whatever their order', async () => {
+    const expected = createHash('sha256').update('[["P1",0,null,null],["P2",0,null,null],["P3",0,null,null]]', 'utf8').digest('hex').slice(0, 16);
     assert.equal(await runIdOf(cohort(['P2', 'P3', 'P1']), nodeDeps.sha256), expected);
     assert.equal(await runIdOf(cohort(['P1', 'P2', 'P3']), webSha256), expected, 'the browser hash agrees');
     assert.notEqual(await runIdOf(cohort(['P1', 'P2']), nodeDeps.sha256), expected, 'another cohort, another id');
+    const stamped = [{ participantId: 7, trials: [
+      { integrity: { timestamp: '2026-01-01T00:00:00Z' } }, { integrity: {} }, { integrity: { timestamp: '2026-01-01T00:10:00Z' } }] }];
+    const row = createHash('sha256').update('[["7",3,"2026-01-01T00:00:00Z","2026-01-01T00:10:00Z"]]', 'utf8').digest('hex').slice(0, 16);
+    assert.equal(await runIdOf(stamped, nodeDeps.sha256), row, 'the id as a string, the first and the last trial\'s stamps');
+    assert.equal(await runIdOf(stamped, webSha256), row, 'the browser hash agrees');
+  });
+
+  it('follows the data, not the config or the file names', async () => {
+    const sha = async (s) => createHash('sha256').update(s).digest('hex');
+    const p = (id, ts1, ts2) => ({ participantId: id, trials: [
+      { trialId: 't1', integrity: { timestamp: ts1 } }, { trialId: 't2', integrity: { timestamp: ts2 } }] });
+    const a = [p('1', '2026-01-01T00:00:00Z', '2026-01-01T00:10:00Z'), p('2', '2026-01-01T01:00:00Z', '2026-01-01T01:10:00Z')];
+    const b = [p('2', '2026-02-01T01:00:00Z', '2026-02-01T01:10:00Z'), p('1', '2026-02-01T00:00:00Z', '2026-02-01T00:10:00Z')];
+    assert.strictEqual(await runIdOf(a, sha), await runIdOf([...a].reverse(), sha)); // order-free
+    assert.notStrictEqual(await runIdOf(a, sha), await runIdOf(b, sha));             // same ids, other data
+    assert.match(await runIdOf(a, sha), /^[0-9a-f]{16}$/);
+  });
+
+  it('gives participants without timestamps a stable id from the trial count', async () => {
+    const sha = async (s) => createHash('sha256').update(s).digest('hex');
+    const q = (id, n) => ({ participantId: id, trials: Array.from({ length: n }, () => ({ integrity: {} })) });
+    assert.strictEqual(await runIdOf([q('1', 3)], sha), await runIdOf([q('1', 3)], sha));
+    assert.notStrictEqual(await runIdOf([q('1', 3)], sha), await runIdOf([q('1', 4)], sha));
+  });
+
+  it('reads the stamp ingest leaves on the trial itself when there is no integrity object (legacy responses, another integrityField)', async () => {
+    const flat = [{ participantId: 'L', trials: [{ timestamp: '2026-03-01T00:00:00Z' }, { timestamp: '2026-03-01T00:05:00Z' }] }];
+    const nested = [{ participantId: 'L', trials: [{ integrity: { timestamp: '2026-03-01T00:00:00Z' } }, { integrity: { timestamp: '2026-03-01T00:05:00Z' } }] }];
+    const none = [{ participantId: 'L', trials: [{}, {}] }];
+    assert.equal(await runIdOf(flat, nodeDeps.sha256), await runIdOf(nested, nodeDeps.sha256));
+    assert.notEqual(await runIdOf(flat, nodeDeps.sha256), await runIdOf(none, nodeDeps.sha256));
   });
 
   it('is in the top bar with the time of the run, in the CLI report and in the in-page one', async () => {
