@@ -64,7 +64,9 @@ function listWarnings(ul, items) {
 export function createPage(root, worker, opts) {
   // settingsWritten: the JSON of the panel values last written from a check's
   // config (check), null until the first check and after Start over.
-  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, result: null,
+  // idSuggested: the Participant ID field the last check's suggestion put in
+  // the select, so a later check tells the analyst's own pick from it.
+  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, result: null,
     zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
@@ -321,7 +323,14 @@ export function createPage(root, worker, opts) {
     if (!checked.idSuggestion.candidates.length) {
       var o2 = document.createElement('option'); o2.value = checked.config.participantIdField; o2.textContent = checked.config.participantIdField + ' — CLI default'; sel.appendChild(o2);
     }
+    // The analyst's own pick (a field other than the one the last check
+    // suggested) stays while this check still offers it; otherwise the
+    // check's suggestion. `=== true`: only a listed field, never a name the
+    // object inherits.
+    var pick = state.idField !== state.idSuggested && offered[state.idField] === true ? state.idField : null;
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
+    state.idSuggested = sel.value;
+    if (pick) sel.value = pick;
     state.idField = sel.value;
     q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
     listWarnings(q(root, 'check-warnings'), (checked.configWarnings || []).concat(replaced ? [replaced] : []));
@@ -540,7 +549,7 @@ export function createPage(root, worker, opts) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
-    state.runId = null; state.annotations = null; state.settingsWritten = null;
+    state.runId = null; state.annotations = null; state.settingsWritten = null; state.idField = null; state.idSuggested = null;
     q(root, 'annotations-status').textContent = '';
     annotationsUnstored = false;
     stopWatchdog();

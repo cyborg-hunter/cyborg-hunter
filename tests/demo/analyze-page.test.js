@@ -1074,6 +1074,62 @@ test('removing the config puts the defaults back and says so; after Start over t
   assert.deepEqual(checkNotes(), []);
 });
 
+// The Participant ID field is listed again from each check's candidates. The
+// analyst's own pick (another field than the one the check suggested) stays
+// while the new list still offers it; a field the page itself suggested
+// follows the new suggestion.
+const pickIdField = (field) => {
+  role('id-field').value = field;
+  role('id-field').dispatchEvent(new win.Event('change', { bubbles: true }));
+};
+const dropMore = async (t, name, reply) => {
+  const n = t.sent.length;
+  t.page.addFiles([{ path: name, file: new File([name], name, { lastModified: n + 10 }) }]);
+  await until(() => t.sent.length === n + 1);
+  t.emit(reply);
+  await tick();
+};
+
+test('a drop keeps the analyst\'s participant-id field while the check still offers it, and the suggestion otherwise', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  assert.equal(role('id-field').value, 'subject_ID');
+  pickIdField('run_id');
+  await dropMore(t, 'more.csv', CHECKED);
+  assert.equal(role('id-field').value, 'run_id', 'a data-only drop keeps the pick');
+  // run_id is no longer constant within each file: the check stops offering it.
+  const withoutRunId = { ...CHECKED, idSuggestion: { suggested: 'subject_ID', candidates: [{ field: 'subject_ID', reason: 'known name' }, { field: 'pid', reason: 'constant within each file, unique across files' }] } };
+  await dropMore(t, 'odd.csv', withoutRunId);
+  assert.equal(role('id-field').value, 'subject_ID', 'the pick is gone from the list: the suggestion');
+  // The pick gave way: a later list that offers run_id again keeps the suggestion.
+  await dropMore(t, 'later.csv', CHECKED);
+  assert.equal(role('id-field').value, 'subject_ID');
+  action('run').click();
+  await tick();
+  assert.equal(t.sent.at(-1).participantIdField, 'subject_ID');
+});
+
+test('a participant-id field the page suggested follows the next check\'s suggestion; Start over forgets the analyst\'s pick', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  // A config naming run_id arrives: the check suggests it, subject_ID still listed.
+  await dropMore(t, 'cyborg-hunter.config.json', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'from cyborg-hunter.config.json' }, { field: 'subject_ID', reason: 'known name' }] } });
+  assert.equal(role('id-field').value, 'run_id');
+  pickIdField('subject_ID');
+  t.page.reset();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.at(-1).type === 'check');
+  t.emit({ ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'from cyborg-hunter.config.json' }, { field: 'subject_ID', reason: 'known name' }] } });
+  await tick();
+  assert.equal(role('id-field').value, 'run_id', 'after Start over the first check takes the suggestion');
+});
+
 test('on the results, a post-hoc setting re-analyses without reading the files, and the report swaps in place', async () => {
   const t = boot();
   await toResults(t);
