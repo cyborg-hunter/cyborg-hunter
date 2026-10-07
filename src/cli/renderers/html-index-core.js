@@ -888,7 +888,7 @@ const SIGNALS = [
 // signals light up. Misses share the same footprint as hits, in the muted
 // "tone-zero" style. Cleans show all-zero, suspicious shows a few lit cells.
 function renderSignalGrid(summary, triageRow) {
-  const aiExt = (summary.aiExtensionsFound || summary.extensionsDetected || []).length;
+  const aiExt = summary.aiExtensionCount ?? (summary.aiExtensionsFound || summary.extensionsDetected || []).length;
   const edgeExits = triageRow?.edgeExitCount ?? 0;
 
   const tiles = SIGNALS.map(sig => {

@@ -19,6 +19,117 @@ describe('summary', () => {
     assert.equal(summary.totalSoftScore, 3);
   });
 
+  // reducedPayload (extract-core.js): a Qualtrics payload reduced to fit the
+  // embedded-data cap, which empties older trials' event lists.
+  it('takes clipboard totals from the session counters when a reduced payload emptied the trial lists', () => {
+    const empty = { pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] };
+    const participant = {
+      participantId: 'P1',
+      reducedPayload: { level: 2 },
+      trials: [{ ...empty }, { ...empty }],
+      session: { pasteCount: 7, copyCount: 2, dropCount: 1 }
+    };
+    const summary = computeParticipantSummary(participant, {});
+    assert.equal(summary.totalPasteEvents, 7);
+    assert.equal(summary.totalCopyEvents, 2);
+    assert.equal(summary.totalDropEvents, 1);
+  });
+
+  it('keeps the per-trial sums when they agree with the session counters', () => {
+    const participant = {
+      participantId: 'P1',
+      reducedPayload: { level: 1 },
+      trials: [
+        { pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] },
+        { pasteEvents: [{ t: 2 }, { t: 3 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }
+      ],
+      session: { pasteCount: 3 }
+    };
+    assert.equal(computeParticipantSummary(participant, {}).totalPasteEvents, 3);
+  });
+
+  it('a phase-scoped summary ignores the whole-session counters', () => {
+    const participant = {
+      participantId: 'P1',
+      phaseScoped: true,
+      reducedPayload: { level: 2 },
+      trials: [{ pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }],
+      session: { pasteCount: 9 }
+    };
+    assert.equal(computeParticipantSummary(participant, {}).totalPasteEvents, 1);
+  });
+
+  it('ignores a session counter that is not a finite, non-negative number', () => {
+    const trials = [{ pasteEvents: [{ t: 1 }, { t: 2 }], copyEvents: [{ t: 3 }], dropEvents: [], tabAwayEvents: [] }];
+    for (const bad of ['oops', '7', NaN, -4, Infinity, null, {}, true]) {
+      const summary = computeParticipantSummary({ participantId: 'P1', reducedPayload: { level: 2 }, trials, session: { pasteCount: bad, copyCount: bad, dropCount: bad } }, {});
+      assert.deepStrictEqual([summary.totalPasteEvents, summary.totalCopyEvents, summary.totalDropEvents], [2, 1, 0], String(bad));
+    }
+  });
+
+  // A reduced payload also carries the whole session's other counts
+  // (src/oneliner/qualtrics-payload.js truncated.totals); they replace the
+  // counts made from the entries and rows it kept.
+  const TOTALS = { trialCount: 20, trialSoftScoreSum: 11, tabAways: 40, tabAwayMs: 320000, tabAwayFlicker: 4, tabAwayMedium: 30, tabAwayLong: 6, tabAwayCutoffMs: 5000,
+    trialsWithTabAway: 20, fastTypingTrials: 3, idleGaps: 7, syntheticInsertions: 2, foreignInputs: 5, sidebarOpenings: 4,
+    keyboardShortcuts: 6, viewportWidthShifts: 8, zoomChanges: 9, extensionInjections: 1, devToolsEvents: 0, aiExtensions: 2 };
+  const keptOnly = () => ({
+    participantId: 'P1',
+    trials: [{ pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [{ duration_ms: 4000 }], charsPerSec: 2 }],
+    session: { tabAwaySums: [4000], sidebarEvents: [], keyboardShortcuts: [], viewportWidthShifts: [], zoomChanges: [],
+      extensionInjections: [], devToolsEvents: [], aiExtensionsFound: [{ name: 'Merlin', t: 1 }] }
+  });
+  it('a reduced payload\'s carried totals replace the counts made from what it kept', () => {
+    const s = computeParticipantSummary({ ...keptOnly(), reducedPayload: { level: 3, totals: TOTALS } }, {});
+    assert.deepStrictEqual([s.trialCount, s.totalSoftScore, s.meanTypingSpeed], [20, 11, 2]);   // the mean stays over the kept rows
+    assert.deepStrictEqual(
+      [s.totalTabAways, s.totalTabAwayDuration_ms, s.tabAwayFlickerCount, s.tabAwayMediumCount, s.tabAwayLongCount, s.tabAwayCutoffMs,
+        s.trialsWithTabAway, s.trialsWithFastTyping, s.totalIdleGaps, s.totalSyntheticInsertions, s.totalForeignInputEvents,
+        s.sidebarEventCount, s.keyboardShortcutCount, s.layoutShiftCount, s.zoomChangeCount, s.extensionInjectionCount,
+        s.devToolsEventCount, s.aiExtensionCount],
+      [40, 320000, 4, 30, 6, 5000, 20, 3, 7, 2, 5, 4, 6, 8, 9, 1, 0, 2]);
+    assert.deepStrictEqual(s.aiExtensionsFound, [{ name: 'Merlin', t: 1 }]);   // the names kept
+  });
+  it('carried totals are ignored when not finite numbers >= 0, when not reduced, and when phase-scoped', () => {
+    const bad = { tabAways: -1, sidebarOpenings: '4', keyboardShortcuts: NaN, zoomChanges: Infinity, aiExtensions: null };
+    const s = computeParticipantSummary({ ...keptOnly(), reducedPayload: { level: 3, totals: bad } }, {});
+    assert.deepStrictEqual([s.totalTabAways, s.sidebarEventCount, s.keyboardShortcutCount, s.zoomChangeCount, s.aiExtensionCount], [1, 0, 0, 0, undefined]);
+    const plain = computeParticipantSummary({ ...keptOnly(), reducedPayload: null, totals: TOTALS }, {});
+    assert.strictEqual(plain.totalTabAways, 1);
+    assert.ok(!('aiExtensionCount' in plain));
+    const scoped = computeParticipantSummary({ ...keptOnly(), phaseScoped: true, reducedPayload: { level: 3, totals: TOTALS } }, {});
+    assert.strictEqual(scoped.totalTabAways, 1);
+  });
+  it('the carried AI-extension count feeds the score and the reason when names were dropped', () => {
+    const s = computeParticipantSummary({ ...keptOnly(), reducedPayload: { level: 3, totals: TOTALS } }, {});
+    const { weights } = resolveScoreWeights({ aiExtensions: 1, paste: 0, copy: 0, sidebar: 0, tabaway: 0 });
+    assert.deepStrictEqual(decomposeScore(s, 0, false, weights), [['aiExtensions', 2]]);
+    assert.match(generateTriageReason(s), /Merlin and 1 more AI extension detected/);
+    const none = computeParticipantSummary({ ...keptOnly(), session: { ...keptOnly().session, aiExtensionsFound: [] }, reducedPayload: { level: 4, totals: TOTALS } }, {});
+    assert.match(generateTriageReason(none), /(^|; )2 AI extensions detected/);
+    // Nothing carried: names and count as before.
+    const plain = computeParticipantSummary(keptOnly(), {});
+    assert.match(generateTriageReason(plain), /(^|; )Merlin detected/);
+    assert.deepStrictEqual(decomposeScore(plain, 0, false, weights), [['aiExtensions', 1]]);
+  });
+
+  // Anywhere else the totals are the per-trial sums, as they always were:
+  // counters can run ahead of the trial rows when events fall outside them
+  // (pastes before a jsPsych page's first trial, practice trials a
+  // researcher dropped from the file).
+  it('an unreduced payload keeps the per-trial sums, whatever the session counters say', () => {
+    const participant = {
+      participantId: 'P1',
+      trials: [
+        { pasteEvents: [{ t: 1 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] },
+        { pasteEvents: [{ t: 2 }], copyEvents: [], dropEvents: [], tabAwayEvents: [] }
+      ],
+      session: { pasteCount: 5, copyCount: 3, dropCount: 1 }
+    };
+    const summary = computeParticipantSummary(participant, {});
+    assert.deepStrictEqual([summary.totalPasteEvents, summary.totalCopyEvents, summary.totalDropEvents], [2, 0, 0]);
+  });
+
   it('hard-flag fallback fires when cumulative sessionTotal crosses countThreshold', () => {
     const participant = {
       participantId: 'P1',

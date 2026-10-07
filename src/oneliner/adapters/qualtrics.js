@@ -1,0 +1,440 @@
+// src/oneliner/adapters/qualtrics.js
+// The Qualtrics host: ch.js pasted into a survey's Look & Feel header. There
+// is no jsPsych, so boot picks the vanilla host; this module tells boot that
+// the page is a Qualtrics survey and which layout it runs, so the debug
+// summary, the console messages and the embedded-data writer can name the
+// right field.
+//
+// detectQualtrics(win) → null | { layout: 'new' | 'legacy' }
+//   'new'     Qualtrics.SurveyEngine has addOnPageSubmit and setJSEmbeddedData
+//             (the New Survey Taking Experience; the value lands in the Survey
+//             Flow field __js_cyborg_hunter)
+//   'legacy'  addOnPageSubmit and setEmbeddedData but no setJSEmbeddedData
+//             (the older layout; the value lands in the field cyborg_hunter)
+//   null      anything else: no Qualtrics global, or an object without the
+//             page-submit API, which ch.js could not write through anyway
+// Nothing here throws into the page: a Qualtrics global whose properties
+// throw on access reads as no Qualtrics.
+//
+// qualtricsSurveyId(win, attr) → 'SV_…' | null
+//   The survey the page belongs to. Every survey on a Qualtrics brand domain
+//   shares one origin, so they share a tab's sessionStorage; under the New
+//   Survey Taking Experience boot keeps the saved session and a kept random
+//   id per survey with it (adapters/vanilla.js keyScope), so a second survey
+//   in the tab does not continue the first. attr, the tag's
+//   data-qualtrics-survey-id (a researcher can pipe ${e://Field/SurveyID}
+//   into it), wins when it holds an id; piped text Qualtrics did not resolve
+//   is not one. Otherwise the page address: a path part /jfe/form/SV_…, the
+//   same on every page of a response and after a reload; then an older
+//   link's ?SID=SV_… (no other query parameter: one may name another survey,
+//   a referrer or a redirect). null when neither has an id. In Preview ch.js
+//   runs in frames at /jfe/preview/app, with no id in the address (live
+//   survey, 2026-10-05): there only the attribute gives one. Never throws.
+//
+// installQualtricsAdapter({ win, ctx, maxChars?, builder?, registerOnce?, writeOnRerun?, onWrite? }) → {
+//   write(reason) → null | { payload, written }   payload: what was checked
+//                 and handed to Qualtrics (or the error marker); written:
+//                 whether the setter took it. null once torn down
+//   page()        1 at install, +1 per header re-run (Qualtrics re-renders
+//                 the header on every page of the New Survey Taking
+//                 Experience); under the legacy layout, where each page is
+//                 a new boot, the session's page count
+//   declared()    whether the field is declared in Survey Flow: always null
+//                 (unknown). On a live survey (2026-10-05) setJSEmbeddedData
+//                 keeps every value in a client-side object and
+//                 getJSEmbeddedData reads that object back, declared or not,
+//                 so no read-back can tell; Qualtrics drops an undeclared
+//                 value only on its server. The stored value (View Response,
+//                 the export) is the check. The legacy getter is not checked
+//                 live, so it is not read either
+//   lastWrite()   null | { chars, cap, level, error? }, the last write the
+//                 setter took; chars in UTF-8 bytes, like the cap
+//   missed()      how many page submits ran no callback of this writer (see
+//                 "A submit before the header ran again" below)
+//   teardown()
+// }
+// onWrite, called after every write (boot passes the debug badge's
+// refresh with data-debug, so this module does not import debug.js); what it
+// throws is dropped.
+// The writer owns the page boundary, so boot installs the vanilla adapter
+// with pageBoundaries: false (its submit and pagehide cuts would leave an
+// empty extra segment per page). At each page submit the writer closes the
+// open span as a 'page' segment, builds the payload from the vanilla blob
+// (qualtrics-payload.js), checks it and writes it.
+//
+// Qualtrics refuses a submit whose embedded data is too long or malformed,
+// and the participant cannot go on, so only a checked string reaches the
+// setter: the builder's json, read once, must be a string within the cap in
+// UTF-8 bytes (right whether Qualtrics counts characters or bytes) that
+// parses to an object. Anything else (the builder threw, no string, not a
+// JSON object, over the cap) is logged and replaced by an error marker of a
+// fixed shape, a few hundred bytes, measured like any payload: a cap too
+// small even for that gets nothing.
+//
+// One cut and write per submit task: Qualtrics runs every addOnPageSubmit
+// callback of a submit in one task, so a callback it kept from an earlier
+// page cannot cut and write a second time; a zero-delay timer, or the next
+// page, clears the latch. A submit that force-response validation then stops
+// is a task of its own, and the submit after it writes again, with what came
+// in between. CyborgHunter.data() cuts, writes and returns the checked
+// payload (or the marker), once per task too: inside a submit (the
+// final-page question script) it and the writer's own callback share the
+// latch, in either order, so the page is one row; data() then returns the
+// payload this task wrote, and the submit still counts as one (see below).
+// A data() call of its own is its own task, so it never takes a submit's
+// write. User input (pointerdown, keydown, in the capture phase) also clears
+// the latch: it always starts a task of its own, and in a hidden tab, where
+// Chrome throttles timers, the latch's timer may still be pending at the
+// participant's next click. Without a timer there is no latch: an extra cut
+// beats none. A failed write is
+// logged and noted in the blob, and the survey goes on. At pagehide (a
+// reload, a closed tab) the session is saved without a cut, so a ch.js
+// booting again in the tab continues it; the legacy layout, where every page
+// is a new boot, also saves it at every submit callback.
+//
+// A submit before the header ran again. Qualtrics shows the next page at
+// once, but the header's script may be fetched again and land later, and a
+// participant can submit the page in between. A callback Qualtrics kept from
+// an earlier page then writes it as usual (the latch above, nothing keyed to
+// the page number, which lags until the late re-runs land). When Qualtrics
+// drops the callbacks after each submit, nothing in the page runs at that
+// submit: its post carries the previous value. Every header re-run is a page
+// change, so a re-run that finds fewer submit tasks than re-runs knows a page
+// went without a callback: it cuts that page's span as a row of its own,
+// writes it (the next submit posts it), and notes the gap in the payload
+// (cyborgHunterError, which the CLI reports) and on the data-debug badge.
+// Counted in totals, not page numbers, so late re-runs after a kept callback
+// wrote never count as a miss. A stopped (force response) or refused submit
+// runs the callbacks without a page change, which can hide a later miss but
+// never invents one; only a header re-run without a page change, which no
+// Qualtrics page is known to do, would add a near-empty row. A miss also goes
+// unseen when every re-run is late (each page's submit runs the hook the
+// previous page's late re-run registered, so the counts stay level): then,
+// as after a stopped or refused submit and its retry, the missed page and
+// the next one share a row, with nothing lost and no note. The note is one
+// note whose count goes up ("(×n)"), so misses cannot crowd the payload's
+// other notes out of its cyborgHunterError field. The final page
+// has no re-run after it: there the documented final-page question script
+// (CyborgHunter.data() from addOnPageSubmit) is the only writer.
+//
+// Nothing here throws into the page: the submit callback, the re-run hook
+// and data() each end in a catch-all, and the error text, the console calls,
+// the note they make and data()'s last resort, the error marker, cannot throw
+// either (a page that makes JSON.stringify throw gets no write at all).
+//
+// Two switches, for a Qualtrics that behaves otherwise than the live
+// four-page survey checked on 2026-10-05 (where the hook registered from
+// the header fired at every submit, the final page's too, and each submit
+// ran only the callbacks registered on its own page; so both are false):
+//   REGISTER_ONCE   Qualtrics keeps addOnPageSubmit callbacks across pages,
+//                   so the hook is registered once, not once per page
+//   WRITE_ON_RERUN  the hook registered from the header never fires: each
+//                   header re-run writes the page before it, and a
+//                   final-page question script calls CyborgHunter.data()
+//                   to write the last page
+// installQualtricsAdapter also takes registerOnce / writeOnRerun, and a
+// builder in place of buildQualtricsPayload, so tests cover both paths and
+// every kind of bad builder output whatever the constants and the builder do.
+// maxChars can only lower the cap: above MAX_CHARS, or not a positive
+// integer, it is MAX_CHARS.
+
+import { VERSION } from '../../shared/constants.js';
+import { MESSAGES } from '../errors.js';
+import { buildQualtricsPayload } from '../qualtrics-payload.js';
+
+export var FIELD_NAME = 'cyborg_hunter';          // the name passed to setJSEmbeddedData
+export var STORED_FIELD = '__js_cyborg_hunter';   // the Survey Flow field (New Survey Taking Experience)
+export var LEGACY_FIELD = 'cyborg_hunter';        // the Survey Flow field under the legacy layout (setEmbeddedData)
+// The longest serialized payload ch.js writes into one submit, in UTF-8
+// bytes. Qualtrics refuses a submit (HTTP 400) in which any one
+// embedded-data value is over 20,000 UTF-8 bytes; other values do not count
+// against it (live survey, 2026-10-05). The cap keeps headroom under that.
+export var MAX_CHARS = 12000;
+export var REGISTER_ONCE = false;
+export var WRITE_ON_RERUN = false;
+var ID_MAX = 128;    // the error marker's participant id, in UTF-16 code units
+var NOTE_MAX = 200;  // an error's text: it becomes a note every later payload carries
+var MISSED_NOTE = 'a Qualtrics page was submitted before Cyborg Hunter\'s page-submit hook was in place ' +
+  '(the header script ran late); its activity was written when the header ran again';
+
+export function detectQualtrics(win) {
+  try {
+    var se = win.Qualtrics && win.Qualtrics.SurveyEngine;
+    if (!se || typeof se.addOnPageSubmit !== 'function') return null;
+    if (typeof se.setJSEmbeddedData === 'function') return { layout: 'new' };
+    if (typeof se.setEmbeddedData === 'function') return { layout: 'legacy' };
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function qualtricsSurveyId(win, attr) {
+  try {
+    var own = /^SV_[A-Za-z0-9]+$/.exec(String(attr === null || attr === undefined ? '' : attr).trim());
+    if (own) return own[0];
+    // A path part first: /jfe/form/SV_… and /jfe/preview/…/SV_…; then the
+    // query's SID (an older link's ?SID=SV_…).
+    var m = /(?:^|\/)(SV_[A-Za-z0-9]+)(?=\/|$)/.exec(win.location.pathname) ||
+      /[?&]SID=(SV_[A-Za-z0-9]+)(?=&|$)/.exec(win.location.search);
+    return m ? m[1] : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Whatever was thrown: an object without a prototype, or one whose message
+// getter throws, has no string form.
+function message(e) {
+  try { return String((e && e.message) || e).slice(0, NOTE_MAX); } catch (_) { return 'unknown error'; }
+}
+
+// The page's console may be broken too; the write never depends on it.
+function log(kind, text) {
+  try { console[kind](text); } catch (_) { /* nothing left to tell */ }
+}
+
+// UTF-8 bytes. A string never has fewer UTF-8 bytes than UTF-16 code units.
+function utf8Bytes(s) {
+  try { return new TextEncoder().encode(s).length; } catch (_) { return Infinity; }
+}
+
+export function installQualtricsAdapter(opts) {
+  var win = opts.win, ctx = opts.ctx;
+  // The cap is clamped here, the one place every caller goes through: a
+  // positive integer can lower it (tests do), nothing can raise it above
+  // MAX_CHARS, and anything else means MAX_CHARS.
+  var maxChars = Number.isInteger(opts.maxChars) && opts.maxChars > 0 ? Math.min(opts.maxChars, MAX_CHARS) : MAX_CHARS;
+  var builder = opts.builder || buildQualtricsPayload;
+  var registerOnce = opts.registerOnce === undefined ? REGISTER_ONCE : opts.registerOnce;
+  var writeOnRerun = opts.writeOnRerun === undefined ? WRITE_ON_RERUN : opts.writeOnRerun;
+  var onWrite = opts.onWrite || null;
+  var legacy = ctx.qualtricsLayout === 'legacy';
+  var page = 1;
+  var registeredPage = null;   // the page the last addOnPageSubmit call was for
+  var task = null;             // this task's latch: { submitted, cut, payload, written }
+  var submitWrotePage = null;  // the page a submit callback's write was taken on
+  var warnedPage = null;       // the page the reduced-payload warning was logged on
+  var last = null;
+  var reruns = 0;             // header re-runs: page changes
+  var submitTasks = 0;         // submit tasks that ran a callback of this writer (catch-ups included)
+  var missed = 0;              // page changes with no such submit task
+  var missedNote = -1;         // the index of the missed-page note (vanilla noteError)
+  var active = true;
+  var vanillaData = ctx.handlers.data;
+
+  // The page for people (the debug summary, the failure note). Every legacy
+  // page is a new boot, so the header-run count is 1 on each; there the
+  // vanilla session's page count is the page.
+  function pageNumber() {
+    if (!legacy) return page;
+    try { return ctx.vanilla.blob().cyborgHunterOneLiner.pageCount; } catch (_) { return page; }
+  }
+
+  function failed(cause) {
+    log('error', MESSAGES.qualtricsWriteFailed(cause));
+    try { ctx.vanilla.noteError('Qualtrics write failed on page ' + pageNumber() + ': ' + cause); } catch (_) { /* logged above */ }
+  }
+
+  // The builder's result, checked. Each field is read once: a getter could
+  // answer differently the second time, and the string checked must be the
+  // string written. → { json, payload, bytes, level, full } or { code, detail? }
+  function build() {
+    var json, level, full;
+    try {
+      var r = builder({ blob: ctx.vanilla.blob(), maxChars: maxChars });
+      if (r !== null && r !== undefined) { json = r.json; level = r.level; full = r.fullChars; }
+    } catch (e) {
+      return { code: 'build-failed', detail: message(e) };
+    }
+    if (typeof json !== 'string') return { code: 'no-json' };
+    // The length test first: a string far over the cap is neither encoded nor parsed.
+    var bytes = json.length > maxChars ? Infinity : utf8Bytes(json);
+    if (!(bytes <= maxChars)) return { code: 'over-cap' };
+    var payload = null;
+    try { payload = JSON.parse(json); } catch (_) { /* below */ }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { code: 'invalid-json' };
+    return {
+      json: json, payload: payload, bytes: bytes,
+      level: typeof level === 'number' && isFinite(level) ? level : null,
+      full: typeof full === 'number' && isFinite(full) && full > 0 ? full : undefined
+    };
+  }
+
+  // Written in place of a payload that failed its check: fixed fields and the
+  // participant id without control characters, cut to ID_MAX, so a few
+  // hundred bytes at most. Cannot throw: when a page script makes
+  // JSON.stringify throw (an Object.prototype.toJSON of its own), the marker
+  // has no json and is never written, and data() still returns its payload.
+  function marker(code) {
+    var id = '';
+    try { id = String(ctx.participantId).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, ID_MAX); } catch (_) { /* no id */ }
+    var payload = {
+      participantId: id,
+      libraryVersion: VERSION,
+      cyborgHunterOneLiner: { version: VERSION, host: 'qualtrics', truncated: true, error: code },
+      trials: [],
+      cyborgHunterError: 'the Qualtrics payload could not be written (' + code + ')'
+    };
+    var json = null;
+    try { json = JSON.stringify(payload); } catch (_) { /* nothing can be serialized on this page */ }
+    return { json: json, payload: payload, bytes: json === null ? Infinity : utf8Bytes(json) };
+  }
+
+  function set(json) {
+    try {
+      var se = win.Qualtrics.SurveyEngine;
+      if (legacy) se.setEmbeddedData(LEGACY_FIELD, json);
+      else se.setJSEmbeddedData(FIELD_NAME, json);
+      return true;
+    } catch (e) {
+      failed(message(e));
+      return false;
+    }
+  }
+
+  // reason ('submit', 'data', 'rerun') is for reading the code only.
+  function write(reason) {
+    if (!active) return null;
+    var r = null;
+    try { r = writeChecked(); } catch (_) { /* r stays null */ }
+    try { if (onWrite) onWrite(); } catch (_) { /* a debug aid never stops the survey */ }
+    return r;
+  }
+
+  // The cut, the checked build and the setter: write() calls this inside a
+  // catch-all.
+  function writeChecked() {
+    try { ctx.vanilla.cut('page'); } catch (e) {   // { error } alone (no open span): write what exists
+      log('error', MESSAGES.vanillaEventFailed(message(e)));
+    }
+    var b = build();
+    if (b.code) {
+      failed(b.code + (b.detail ? ': ' + b.detail : ''));
+      var m = marker(b.code);
+      var ok = m.bytes <= maxChars && set(m.json);
+      if (ok) last = { chars: m.bytes, cap: maxChars, level: null, error: b.code };
+      return { payload: m.payload, written: ok };
+    }
+    if (!set(b.json)) return { payload: b.payload, written: false };
+    last = { chars: b.bytes, cap: maxChars, level: b.level };
+    // After the setter, so a broken console cannot keep the payload back.
+    if (b.level > 0 && warnedPage !== page) {
+      warnedPage = page;
+      log('warn', MESSAGES.qualtricsPayloadReduced(b.level, b.full, maxChars));
+    }
+    return { payload: b.payload, written: true };
+  }
+
+  // The running task's latch, made on first use and cleared by a zero-delay
+  // timer (or the next page). null when no timer can be set.
+  function currentTask() {
+    if (task) return task;
+    var t = { submitted: false, cut: false, payload: null, written: false };
+    try { win.setTimeout(function () { if (task === t) task = null; }, 0); } catch (_) { return null; }
+    task = t;
+    return t;
+  }
+
+  function onPageSubmit() {
+    try {
+      if (!active) return;
+      var t = currentTask();
+      if (!t || !t.submitted) {
+        submitTasks += 1;
+        if (t) t.submitted = true;
+      }
+      if (!t || !t.cut) {
+        var r = write('submit');
+        if (t && r) { t.cut = true; t.payload = r.payload; t.written = r.written; }
+        if (r && r.written) submitWrotePage = page;
+      } else if (t.written) submitWrotePage = page;   // data() made this submit's cut, and it was written
+      // Legacy pages are full page loads: the next page's boot restores the
+      // session from here (adapters/vanilla.js), so every callback saves,
+      // latched or not. Not on the new layout, where the page stays and this
+      // would stringify the raw traces at every submit.
+      if (legacy) ctx.vanilla.persist();
+    } catch (_) { /* never into Qualtrics' submit */ }
+  }
+
+  // A reload or a closed tab (never a page change inside the survey, which
+  // keeps this document): the session is saved, so a ch.js booting again in
+  // this tab continues it (adapters/vanilla.js restore) and the next write
+  // still holds the earlier pages. Qualtrics resumes a reloaded response on
+  // the same page. No cut: the open span is not a page the survey submitted.
+  // Outside the submit hook, so the save's stringify of the raw traces costs
+  // the submit nothing.
+  function onPageHide() {
+    try { if (active) ctx.vanilla.persist(); } catch (_) { /* the page is going away */ }
+  }
+
+  function ensureHook() {
+    if (registeredPage !== null && (registerOnce || registeredPage === page)) return;
+    try {
+      win.Qualtrics.SurveyEngine.addOnPageSubmit(onPageSubmit);
+      registeredPage = page;
+    } catch (e) {
+      log('error', MESSAGES.qualtricsWriteFailed('addOnPageSubmit: ' + message(e)));
+    }
+  }
+
+  // User input starts a new task: the latch from an earlier one is gone.
+  function onInput() { task = null; }
+  var INPUT = { capture: true, passive: true };
+
+  ensureHook();
+  win.addEventListener('pagehide', onPageHide);
+  win.document.addEventListener('pointerdown', onInput, INPUT);
+  win.document.addEventListener('keydown', onInput, INPUT);
+  // A re-run is the next page, so any submit from here is a new one. With
+  // writeOnRerun the page before it is written first, under its own page
+  // number, unless that page's submit callback fired after all and its
+  // write was taken: a second write would add an empty row. A write by
+  // CyborgHunter.data() does not count (the page may go on after it), and a
+  // submit whose setter failed gets the re-run's write as a retry.
+  ctx.handlers.rerun = function () {
+    try {
+      reruns += 1;
+      if (writeOnRerun) {
+        if (submitWrotePage !== page) write('rerun');
+      } else if (submitTasks < reruns) {
+        missed += reruns - submitTasks;
+        submitTasks = reruns;
+        try {
+          var text = MISSED_NOTE + ' (×' + missed + ')';
+          if (missedNote < 0) missedNote = ctx.vanilla.noteError(text);
+          else ctx.vanilla.updateNote(missedNote, text);
+        } catch (_) { /* the write below still goes */ }
+        write('rerun');
+      }
+      page += 1;
+      task = null;
+      ensureHook();
+    } catch (_) { /* never into the header's re-run */ }
+  };
+  ctx.handlers.data = function () {
+    try {
+      var t = currentTask();
+      if (t && t.cut && t.payload) return t.payload;   // this task already cut and wrote
+      var r = write('data');
+      if (t && r) { t.cut = true; t.payload = r.payload; t.written = r.written; }
+      return r.payload;
+    } catch (_) { return marker('build-failed').payload; }
+  };
+
+  return {
+    write: write,
+    page: pageNumber,
+    declared: function () { return null; },   // no read-back can tell (see above)
+    lastWrite: function () { return last; },
+    missed: function () { return missed; },
+    teardown: function () {
+      active = false;   // a hook Qualtrics already holds cannot be removed
+      win.removeEventListener('pagehide', onPageHide);
+      win.document.removeEventListener('pointerdown', onInput, INPUT);
+      win.document.removeEventListener('keydown', onInput, INPUT);
+      delete ctx.handlers.rerun;
+      ctx.handlers.data = vanillaData;
+    }
+  };
+}

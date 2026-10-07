@@ -19,7 +19,7 @@ The integrity monitor writes its observations into the same data file your exper
 
 For production studies pin an exact version (see [README § Install](../README.md#install)).
 
-Placed below `jspsych.js` and above your experiment code, this tag monitors every trial, records each one as its own segment and writes the integrity data into the rows your experiment already saves. On a page without jsPsych, you can mark trials yourself and save `CyborgHunter.data()`. Placement, the participant ID, the tag's attributes and a smoke test: [quickstart.md](quickstart.md#2-add-one-script-tag). Manual mode (wiring the jsPsych extension yourself), the migration note, friction and replay under the one-line setup: [advanced-integration.md](advanced-integration.md).
+Placed below `jspsych.js` and above your experiment code, this tag monitors every trial, records each one as its own segment and writes the integrity data into the rows your experiment already saves. On a page without jsPsych, you can mark trials yourself and save `CyborgHunter.data()`. In a Qualtrics survey the `ch-qualtrics.js` tag goes in the Look & Feel header, and it writes a capped summary into one embedded-data field at every page submit: [qualtrics.md](qualtrics.md). Placement, the participant ID, the tag's attributes and a smoke test: [quickstart.md](quickstart.md#2-add-one-script-tag). Manual mode (wiring the jsPsych extension yourself), the migration note, friction and replay under the one-line setup: [advanced-integration.md](advanced-integration.md).
 
 ## Per-trial parameters
 

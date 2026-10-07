@@ -7,6 +7,23 @@ export function computeSummary(participants, config) {
   return participants.map(p => computeParticipantSummary(p, config));
 }
 
+// A reduced Qualtrics payload (extract-core.js reducedPayload) kept only some
+// of the session's rows and entries, and carries the whole session's counts
+// (src/oneliner/qualtrics-payload.js truncated.totals): each summary field
+// below is taken from the carried count named next to it, so the trial count
+// and the per-trial soft scores' sum cover the same session as the other
+// counts. aiExtensionCount exists only then (the names of the AI extensions
+// found stay those kept), and the means over trials stay over the kept rows.
+const CARRIED_TOTALS = {
+  trialCount: 'trialCount', totalSoftScore: 'trialSoftScoreSum', totalTabAways: 'tabAways', totalTabAwayDuration_ms: 'tabAwayMs', tabAwayFlickerCount: 'tabAwayFlicker',
+  tabAwayMediumCount: 'tabAwayMedium', tabAwayLongCount: 'tabAwayLong', tabAwayCutoffMs: 'tabAwayCutoffMs',
+  trialsWithTabAway: 'trialsWithTabAway', trialsWithFastTyping: 'fastTypingTrials', totalIdleGaps: 'idleGaps',
+  totalSyntheticInsertions: 'syntheticInsertions', totalForeignInputEvents: 'foreignInputs',
+  sidebarEventCount: 'sidebarOpenings', keyboardShortcutCount: 'keyboardShortcuts', layoutShiftCount: 'viewportWidthShifts',
+  zoomChangeCount: 'zoomChanges', extensionInjectionCount: 'extensionInjections', devToolsEventCount: 'devToolsEvents',
+  aiExtensionCount: 'aiExtensions'
+};
+
 export function computeParticipantSummary(participant, config) {
   const trials = participant.trials;
   const n = trials.length;
@@ -17,6 +34,17 @@ export function computeParticipantSummary(participant, config) {
   // keyboard shortcuts, viewport shifts, zoom) stay session-wide by design —
   // see phase-scope.js.
   const phaseScoped = participant.phaseScoped === true;
+  // A Qualtrics payload reduced to fit the embedded-data cap (extract-core.js
+  // reducedPayload) has emptied older trials' event lists but kept the
+  // monitor's counters, which then floor the per-trial sums. Only there: on
+  // any other payload the totals are the per-trial sums, as they always were.
+  // A session counter is used only when it is a finite, non-negative number;
+  // anything else (a damaged or hand-edited file) would make a total NaN.
+  const reduced = !phaseScoped && !!participant.reducedPayload;
+  const sessionCount = key => {
+    const n = reduced ? participant.session?.[key] : 0;
+    return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : 0;
+  };
 
   // Three-way tab-away duration bins for display. The 3s boundary matches
   // config.thresholds.tabAwayDurationMs — the scoring engine's soft-score cutoff.
@@ -35,14 +63,15 @@ export function computeParticipantSummary(participant, config) {
   const typingCutoff_cps =
     savedThresholds.typingSpeedCps ?? config.typingSpeedThreshold_cps ?? 10;
 
-  return {
+  const summary = {
     participantId: participant.participantId,
     trialCount: n,
 
-    // Clipboard signals — paste is the strongest indicator of copy-paste from AI
-    totalPasteEvents: sum(trials, t => (t.pasteEvents || []).length),
-    totalCopyEvents: sum(trials, t => (t.copyEvents || []).length),
-    totalDropEvents: sum(trials, t => (t.dropEvents || []).length),
+    // Clipboard signals — paste is the strongest indicator of copy-paste from AI.
+    // A reduced payload's session counters floor the per-trial sums (above).
+    totalPasteEvents: Math.max(sum(trials, t => (t.pasteEvents || []).length), sessionCount('pasteCount')),
+    totalCopyEvents: Math.max(sum(trials, t => (t.copyEvents || []).length), sessionCount('copyCount')),
+    totalDropEvents: Math.max(sum(trials, t => (t.dropEvents || []).length), sessionCount('dropCount')),
 
     // Tab-away — leaving the experiment page (visibility change or blur).
     // Prefer session-level durations (cyborgHunter.tabAwaySums) which capture
@@ -146,6 +175,16 @@ export function computeParticipantSummary(participant, config) {
     // Pass through metadata for downstream use
     metadata: participant.metadata || {}
   };
+
+  // A carried count is used only when it is a finite, non-negative number.
+  const totals = reduced ? participant.reducedPayload.totals : null;
+  if (totals) {
+    for (const [field, key] of Object.entries(CARRIED_TOTALS)) {
+      const v = totals[key];
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) summary[field] = v;
+    }
+  }
+  return summary;
 }
 
 // Re-derives the hard-flag verdict from raw event counts within a phase-scoped

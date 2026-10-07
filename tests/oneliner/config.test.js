@@ -12,7 +12,7 @@ afterEach(() => { console.warn = origWarn; });
 
 describe('readConfig', () => {
   it('DATA_KEYS lists the tag attributes the one-liner reads', () => {
-    assert.deepStrictEqual(DATA_KEYS, ['preset', 'participantId', 'guards', 'replay', 'replaySrc', 'debug']);
+    assert.deepStrictEqual(DATA_KEYS, ['preset', 'participantId', 'guards', 'replay', 'replaySrc', 'debug', 'qualtricsSurveyId']);
   });
 
   it('reads the tag attributes (bare data-replay / data-debug count as set)', () => {
@@ -31,6 +31,7 @@ describe('readConfig', () => {
     assert.strictEqual(c.replaySrc, null);
     assert.strictEqual(c.debug, false);
     assert.strictEqual(c.participantIdAttr, null);
+    assert.strictEqual(c.qualtricsSurveyIdAttr, null);
     assert.deepStrictEqual(c.monitor, {});
   });
 
@@ -91,6 +92,13 @@ describe('readConfig', () => {
     const c = readConfig({ dataset: { participantId: 'A1', replaySrc: 'https://cdn/r.js' } });
     assert.strictEqual(c.participantIdAttr, 'A1');
     assert.strictEqual(c.replaySrc, 'https://cdn/r.js');
+  });
+
+  // Checked against the survey-id format where it is used (adapters/qualtrics.js).
+  it('data-qualtrics-survey-id is read as given, and only from the tag', () => {
+    assert.strictEqual(readConfig({ dataset: { qualtricsSurveyId: 'SV_abc' } }).qualtricsSurveyIdAttr, 'SV_abc');
+    const c = readConfig({ dataset: {}, globalConfig: { qualtricsSurveyId: 'SV_abc' } });
+    assert.strictEqual(c.qualtricsSurveyIdAttr, null);
   });
 
   it('autoMonitor / excludeTrialTypes are dropped with a warning; other init() keys are kept', () => {

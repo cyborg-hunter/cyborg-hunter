@@ -42,6 +42,55 @@ describe('extractIntegrityData (pure core)', () => {
   });
 });
 
+describe('a reduced one-line payload', () => {
+  const raw = (truncated) => ({
+    participantId: 'P1',
+    cyborgHunterOneLiner: { version: '0.12.0', host: 'qualtrics', pageCount: 4, truncated },
+    trials: [{ trialId: 't1', integrity: { trialId: 't1', libraryVersion: '0.12.0', participantId: 'P1', startTime: 0, duration_ms: 10,
+      pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {} } }]
+  });
+
+  it('warns once, naming the level and the non-zero counts', () => {
+    const r = extractIntegrityData(raw({ level: 2, droppedSessionEntries: {}, pagesTrimmed: 3, pagesDropped: 0 }), {});
+    const hits = r.warnings.filter(w => /embedded-data cap/.test(w));
+    assert.strictEqual(hits.length, 1);
+    assert.match(hits[0], /reduced to fit the embedded-data cap \(level 2: 3 pages trimmed\)/);
+  });
+
+  it('lists dropped session entries and dropped pages', () => {
+    const r = extractIntegrityData(raw({ level: 3, droppedSessionEntries: { tabAwayEvents: 55, keyboardShortcuts: 0 }, pagesTrimmed: 4, pagesDropped: 35 }), {});
+    assert.ok(r.warnings.some(w => w.includes('(level 3: 55 tabAwayEvents entries dropped, 4 pages trimmed, 35 pages dropped)')), r.warnings.join('\n'));
+  });
+
+  // The note says which numbers are the whole session's: with the carried
+  // totals every count is; a reduced payload without them (built before
+  // the writer carried them) keeps only its clipboard counters whole.
+  it('says which numbers are the whole session\'s, with and without carried totals', () => {
+    const withTotals = extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2, totals: { tabAways: 3 } }), {});
+    assert.ok(withTotals.warnings.some(w => w.endsWith("— its counts, scores and tier are the whole session's; the page rows, the means taken over them (typing speed, mouse metrics), the event lists and the names of AI extensions cover only what it kept")), withTotals.warnings.join('\n'));
+    const without = extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2 }), {});
+    assert.ok(without.warnings.some(w => w.endsWith("— its paste, copy and drop counts, scores and tier are the whole session's; its other counts, per-page rows and event lists cover only what it kept")), without.warnings.join('\n'));
+    const five = extractIntegrityData({ participantId: 'P1', cyborgHunterOneLiner: { host: 'qualtrics', truncated: { level: 5 } }, trials: [] }, {});
+    assert.ok(five.warnings.some(w => w.endsWith('(level 5: nothing listed) — no page of the session was kept, so the response is not in the report')), five.warnings.join('\n'));
+  });
+
+  it('says nothing when the payload was not reduced', () => {
+    const r = extractIntegrityData(raw(false), {});
+    assert.ok(!r.warnings.some(w => /embedded-data cap/.test(w)));
+  });
+
+  it('marks the participant as reduced, with the level and the carried totals, only when the payload was', () => {
+    assert.deepStrictEqual(extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2 }), {}).reducedPayload, { level: 3, totals: null });
+    const totals = { tabAways: 40, sidebarOpenings: 2 };
+    assert.deepStrictEqual(extractIntegrityData(raw({ level: 3, droppedSessionEntries: {}, pagesTrimmed: 4, pagesDropped: 2, totals }), {}).reducedPayload, { level: 3, totals });
+    assert.strictEqual(extractIntegrityData(raw({ level: 2, totals: [1, 2] }), {}).reducedPayload.totals, null);
+    for (const t of [false, undefined, true, 'yes']) {
+      assert.strictEqual(extractIntegrityData(raw(t), {}).reducedPayload, null, String(t));
+    }
+    assert.strictEqual(extractIntegrityData({ participantId: 'P1', trials: [] }, {}).reducedPayload, null);
+  });
+});
+
 describe('ruleChronologicalCompare (pure core)', () => {
   it('orders gallery before post_gallery_query before classification, end_requery last', () => {
     const trials = [

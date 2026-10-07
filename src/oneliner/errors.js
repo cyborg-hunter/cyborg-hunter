@@ -30,17 +30,22 @@ function own(file) { return file || 'ch.js'; }
 
 // The data-debug summary's part for MESSAGES.replaySaveReminder (debug.js).
 export const REPLAY_SAVE_REMINDER = 'data-replay is on: save CyborgHunter.replay() in your save code';
+// Its replacement under Qualtrics (MESSAGES.replayQualtrics).
+export const REPLAY_QUALTRICS_REMINDER = 'replay is on: it is never written to Qualtrics; save CyborgHunter.replay() to your own server';
 
 export const MESSAGES = {
   // first: the bundle that set the sentinel, by its own file name (boot.js
   // reads a one-line file's from win.__cyborgHunterFile); second: the one
   // loaded after it. The fix names the one-line file involved, and both
-  // when two different one-line files meet.
+  // when two different one-line files meet. The same one-line file twice
+  // (two tags, or two versions of it) is told to load that file once.
   doubleLoad: function (first, second) {
     var oneLine = first === MIN_FILE ? second : first;
     var other = first !== second && first !== MIN_FILE && second !== MIN_FILE ? second : MIN_FILE;
-    return formatError('Not starting a second monitor', second + ' was loaded after ' + first,
-      'load only one of ' + oneLine + ' and ' + other + (other === MIN_FILE ? ' (the one-liner already contains the monitor)' : ''),
+    var fix = first === second && first !== MIN_FILE
+      ? 'load ' + first + ' only once: keep one of its <script> tags'
+      : 'load only one of ' + oneLine + ' and ' + other + (other === MIN_FILE ? ' (the one-liner already contains the monitor)' : '');
+    return formatError('Not starting a second monitor', second + ' was loaded after ' + first, fix,
       DOCS + 'advanced-integration.md#double-load');
   },
   // min.js's own sentinel found by a second copy of min.js: nothing to say
@@ -96,6 +101,11 @@ export const MESSAGES = {
   },
   bootFailed: function (msg) {
     return formatError('Cyborg Hunter did not start', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
+  },
+  // The running copy's re-run hook (boot.js): a host re-executed the same
+  // ch.js and a handler of the host adapter threw. The monitor keeps running.
+  rerunFailed: function (msg) {
+    return formatError('Cyborg Hunter could not handle a page change', msg, REPORT_FIX, DOCS + 'known-issues.md#one-line-setup');
   },
   // The jsPsych host: wrapping initJsPsych, walking the timeline at run(),
   // and the end-of-session hook. jsPsych keeps running after each of them.
@@ -222,6 +232,53 @@ export const MESSAGES = {
       own(file) + ' records the session but does not save the recording',
       'save CyborgHunter.replay() in your save code',
       DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
+  // console.info, once at boot, in place of replaySaveReminder when the page
+  // is a Qualtrics survey (adapters/qualtrics.js): a recording is megabytes,
+  // an embedded-data field holds a few thousand characters.
+  replayQualtrics: function () {
+    return formatError('data-replay is on under Qualtrics',
+      'recordings never fit in embedded data, so ch-qualtrics.js does not write them',
+      'save CyborgHunter.replay() to your own server from a final-page question script',
+      DOCS + 'qualtrics.md#replay');
+  },
+  // console.warn, once at boot: the survey runs the legacy layout, which has
+  // setEmbeddedData but no setJSEmbeddedData, so the stored field is named
+  // without the __js_ prefix.
+  qualtricsLegacyLayout: function () {
+    return formatError('Qualtrics legacy layout detected',
+      'setJSEmbeddedData is missing, so the payload is written with setEmbeddedData to the field cyborg_hunter',
+      'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
+      DOCS + 'qualtrics.md#legacy-layout');
+  },
+  // console.warn, once at boot (on every page under the legacy layout), or
+  // once at DOMContentLoaded when jsPsych is defined only after the tag:
+  // ch-qualtrics.js on a survey that also runs jsPsych (boot.js). The survey
+  // is recorded as a Qualtrics page; the jsPsych trials get no rows of their
+  // own, which needs the jsPsych adapter this file does not carry.
+  qualtricsJsPsych: function () {
+    return formatError('The jsPsych trials on this survey are not recorded one by one',
+      'ch-qualtrics.js carries the Qualtrics adapter but not the jsPsych one, so it records this survey as a Qualtrics page: rows per page in embedded data, none per jsPsych trial',
+      'nothing to change for the page rows; rows per trial need ch.js, which writes them into jsPsych\'s data and writes nothing into embedded data',
+      DOCS + 'qualtrics.md#jspsych-inside-a-survey');
+  },
+  // console.error: the embedded-data setter threw, or the payload could not
+  // be built within the cap (msg starts with a code: build-failed, no-json,
+  // invalid-json, over-cap; an error marker then takes its place). The
+  // survey carries on.
+  qualtricsWriteFailed: function (msg) {
+    return formatError('Cyborg Hunter could not write to Qualtrics embedded data', msg, REPORT_FIX,
+      DOCS + 'qualtrics.md#troubleshooting');
+  },
+  // console.warn, once per page: the payload was over the cap and a reduced
+  // level was written instead (the report notes what was dropped). `full`,
+  // the size before reduction, only when the builder reports it.
+  qualtricsPayloadReduced: function (level, full, cap) {
+    return formatError('The Qualtrics payload was reduced',
+      'the full summary was ' + (typeof full === 'number' ? full + ' bytes, ' : '') + 'above the cap of ' + cap +
+        ' bytes; level ' + level + ' of the ladder was written',
+      'nothing to fix for this participant; a report note says what was dropped. Shorter surveys, or fewer tab switches, keep the full summary',
+      DOCS + 'qualtrics.md#payload-size');
   },
   // console.warn, once, from the inert window.CyborgHunter that boot leaves
   // when ch.js failed (api.js buildInertApi): the call did nothing.

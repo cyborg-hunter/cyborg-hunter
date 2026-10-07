@@ -213,11 +213,12 @@ Your existing data still reads in the CLI. Files saved in manual mode are unchan
 
 | The page loads | What happens | Remove |
 |---|---|---|
-| `ch.js`, then `cyborg-hunter.min.js` | One error. ch.js keeps monitoring, and `CyborgHunter` and `IntegrityMonitor` still point at ch.js's namespace. | the `cyborg-hunter.min.js` tag |
+| `ch.js` (or another one-line file), then `cyborg-hunter.min.js` | One error, naming the one-line file that ran (`cyborg-hunter.min.js was loaded after ch-qualtrics.js`, say). The one-line file keeps monitoring, and `CyborgHunter` and `IntegrityMonitor` still point at its namespace. | the `cyborg-hunter.min.js` tag |
 | `cyborg-hunter.min.js`, then `ch.js` | One error. ch.js stands down: nothing is monitored; `cyborg-hunter.min.js` keeps the namespace for your manual wiring. | the `ch.js` tag to stay in manual mode; the old tags and the manual wiring to switch ([Switching to the one-liner](#switching-to-the-one-liner)) |
 | `ch.js`, then `extension-guard-friction.js` or `extension-guard-honeypot.js` | `Not redefining GuardFriction` / `Not redefining GuardHoneypot`; ch.js's copy stays. | the guard tags |
 | `cyborg-hunter.min.js` twice | `cyborg-hunter.min.js is loaded twice`. | one of the two tags |
-| `ch.js` twice | `ch.js was loaded after ch.js`; the first copy keeps monitoring. | one of the two tags |
+| The same one-line file twice on a [Qualtrics](qualtrics.md) survey, same version (`ch-qualtrics.js` in the header) | Nothing is logged. Qualtrics runs the survey header again on every page, so a second run of the same file and version there is taken for that, and the first copy keeps monitoring. The exception is `ch.js` on a survey whose page already runs jsPsych when it loads: it takes the page for a jsPsych page and logs the double-load error at each re-run ([jsPsych inside a survey](qualtrics.md#jspsych-inside-a-survey)). | the second tag, if it is not the header's |
+| A one-line file twice anywhere else, two versions, or two different one-line files (`ch.js`, then `ch-qualtrics.js`) | `… was loaded after …`, naming the files in load order (`ch.js was loaded after ch.js`, `ch-qualtrics.js was loaded after ch.js`), after `Not redefining GuardFriction` / `Not redefining GuardHoneypot`; the first copy keeps monitoring. | one of the two tags |
 
 ## Honeypot: ethics and IRB note
 

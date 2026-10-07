@@ -40,6 +40,7 @@ export function loadConfig(cliArgs) {
   if (flags.filePattern) config.filePattern = flags.filePattern;
   if (flags.integrityField) config.integrityField = flags.integrityField;
   if (flags.sessionIntegrityPath) config.sessionIntegrityPath = flags.sessionIntegrityPath;
+  if (flags.qualtricsField) config.qualtricsField = flags.qualtricsField;
   if (flags['no-visuals']) config.noVisuals = true;
 
   // Resolve relative paths to absolute (relative to cwd)
@@ -67,6 +68,7 @@ export function loadConfig(cliArgs) {
 //   --file-pattern <glob>          # config.filePattern
 //   --integrity-field <name>       # config.integrityField
 //   --session-integrity-path <p>   # config.sessionIntegrityPath (dotted)
+//   --qualtrics-field <name>       # config.qualtricsField
 //   --assets-dir <path>            # config.assetsDir
 //   --no-visuals                   # skip canvas-rendered images
 //
@@ -89,6 +91,7 @@ export function parseFlags(args) {
     '--file-pattern': 'filePattern',
     '--integrity-field': 'integrityField',
     '--session-integrity-path': 'sessionIntegrityPath',
+    '--qualtrics-field': 'qualtricsField',
     '--assets-dir': 'assetsDir',
   };
   for (let i = 0; i < args.length; i++) {

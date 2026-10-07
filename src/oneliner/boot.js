@@ -15,13 +15,26 @@
 //   3. participant id (warns when it has to fall back to a random id). The
 //      id is kept for the tab in sessionStorage, so a later page without an
 //      id of its own reuses the first page's random id (source 'session')
-//      and continues its session; a URL, attribute or config id still wins;
+//      and continues its session; a URL, attribute or config id still wins.
+//      Under Qualtrics' New Survey Taking Experience the kept id and the
+//      saved session are per survey (ctx.qualtricsSurveyId, the SV_… id:
+//      adapters/qualtrics.js qualtricsSurveyId): every survey on a brand
+//      domain shares the tab's sessionStorage, and a second survey in the tab
+//      must not continue the first. The Qualtrics check (step 5) is read
+//      here already for that;
 //   4. a monitor (its session starts at step 6);
 //   5. host: 'jspsych' when initJsPsych is already defined, in a file built
 //      with it (HAS_JSPSYCH), else 'vanilla' (the host adapters install their
-//      hooks into ctx.handlers). The vanilla adapter (adapters/vanilla.js) is
-//      installed before the first span opens: it restores a previous page's
-//      segment index, so the boot span is named after the continued index;
+//      hooks into ctx.handlers). On the
+//      vanilla host a Qualtrics survey is recognised first
+//      (adapters/qualtrics.js: ctx.qualtricsLayout 'new' | 'legacy' | null,
+//      with a console warning for the legacy layout), before replay, whose
+//      boot reminder depends on it. The vanilla
+//      adapter (adapters/vanilla.js) is installed before the first span
+//      opens: it restores a previous page's segment index, so the boot span
+//      is named after the continued index. On a Qualtrics survey it leaves
+//      the page boundary to the Qualtrics writer (ctx.qualtrics), installed
+//      right after it: one capped embedded-data write per page submit;
 //   6. the monitor's session starts and the segmenter keeps it inside a
 //      trial from this moment on ('span-<index>'), so a paste before the
 //      first host trial or mark is still recorded. The session start needs
@@ -43,19 +56,32 @@
 //      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla host (and
 //      on the not-hookable fallback) the standalone recorder, started after
 //      DOMContentLoaded. CyborgHunter.replay() is wired either way;
-//   9. window.CyborgHunter = the one-liner namespace; then the sentinel;
+//   9. window.CyborgHunter = the one-liner namespace; then the sentinel and
+//      the re-run hook (win.__cyborgHunterOnRerun, called by a same-file
+//      re-run of ch.js instead of a second boot: rerun.js, entry.js), and on
+//      a Qualtrics survey the mark that makes such a re-run silent
+//      (win.__cyborgHunterRerunHost; on other pages a second tag is loud);
 //  10. data-debug only (debug.js): the badge and the console summary, shown
 //      once now and again when the jsPsych timeline is walked.
 //
-// boot({ script, win, monitorFactory?, participantParams? }) → ctx | null
+// boot({ script, win, monitorFactory?, participantParams?, qualtricsMaxChars? }) → ctx | null
 //   script:            the ch.js <script> element (document.currentScript), or null
 //   win:               the window (the core monitor itself uses the globals)
 //   monitorFactory:    core init(); injectable for tests
 //   participantParams: URL parameter names for the participant id, in order
+//   qualtricsMaxChars: the Qualtrics writer's cap; injectable for tests. A
+//                      page reaches it through CyborgHunterConfig
+//                      .qualtricsMaxChars (config.js), a test seam for the
+//                      browser harness that can only lower the cap: the
+//                      writer clamps either one to MAX_CHARS
+//                      (adapters/qualtrics.js), so no option pushes a write
+//                      above Qualtrics' limit
 // ctx = { file (CH_FILE), wrongBuild (null | { host, file }), config,
 //         participantId, participantIdSource, monitor, differ, segmenter,
-//         host, scriptSrc, handlers, win, api, vanilla?, replaySrc?,
-//         replayProxy? (jsPsych), replay? (vanilla handle),
+//         host, scriptSrc, handlers, win, api, qualtricsLayout,
+//         qualtricsSurveyId ('SV_…' on the new layout when found, else null),
+//         rerunCount, vanilla?, qualtrics? (Qualtrics writer),
+//         replaySrc?, replayProxy? (jsPsych), replay? (vanilla handle),
 //         debug? (data-debug) }
 //
 // boot never throws into the page: any failure is logged as bootFailed, a
@@ -79,12 +105,18 @@
 // sentinel value, 'ch.js', so cyborg-hunter.min.js's footer and rerun.js read
 // any of them as the one-line setup, and names itself in
 // win.__cyborgHunterFile (non-enumerable), so a later double load names both
-// files. ctx.file is the running file's name (CH_FILE, build-flags.js), for
+// files and rerun.js takes only the same file for a header re-run. ctx.file
+// is the running file's name (CH_FILE, build-flags.js), for
 // the messages that name it. Each call into the jsPsych adapter is guarded by
-// HAS_JSPSYCH, so a file without it drops that code; such a file on a
-// jsPsych page logs one wrongBuild error naming ch.js (ctx.wrongBuild, which
-// the data-debug badge shows too) and records the page as a page without a
-// framework.
+// HAS_JSPSYCH, and each into the Qualtrics adapter by HAS_QUALTRICS, so a
+// file without one drops that code. A file on a page whose framework it does
+// not carry logs one wrongBuild error naming the file that does
+// (ctx.wrongBuild, which the data-debug badge shows too) and records the page
+// as a page without a framework: ch.js on a survey without jsPsych names
+// ch-qualtrics.js, a file without the jsPsych adapter on a jsPsych page names
+// ch.js. The exception is ch-qualtrics.js on a survey that also runs jsPsych,
+// whether jsPsych is there at boot or only by DOMContentLoaded: it records
+// the survey as a Qualtrics page and logs one qualtricsJsPsych warning.
 
 import './build-flags.js';
 import { init } from '../core/monitor.js';
@@ -98,6 +130,7 @@ import { MESSAGES } from './errors.js';
 import { installJsPsychAdapter, installInertWrapper, watchHostPlacement } from './adapters/jspsych.js';
 import { OneLinerExtension } from './adapters/jspsych-extension.js';
 import { installVanillaAdapter } from './adapters/vanilla.js';
+import { detectQualtrics, qualtricsSurveyId, installQualtricsAdapter } from './adapters/qualtrics.js';
 import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
 
@@ -136,10 +169,27 @@ export function boot(opts) {
 
     var script = opts.script || null;
     var config = readConfig({ dataset: (script && script.dataset) || {}, globalConfig: win.CyborgHunterConfig });
-    // The page's framework, against the ones this file carries (step 5).
+    // The page's framework, against the ones this file carries (step 5). A
+    // file with the jsPsych adapter takes a page with jsPsych for a jsPsych
+    // page, Qualtrics or not. The others look for a Qualtrics survey first:
+    // ch-qualtrics.js records a survey that also runs jsPsych as a Qualtrics
+    // page, with one warning that its trials get no rows of their own. A
+    // framework the file does not carry gets one wrongBuild error naming the
+    // file that does, and the page is recorded as a page without a framework.
     var jsPsychPage = typeof win.initJsPsych === 'function';
-    var wrongBuild = jsPsychPage && !HAS_JSPSYCH ? { host: 'jsPsych', file: 'ch.js' } : null;
+    // A Qualtrics survey (the vanilla host; the layout goes on ctx at step
+    // 5). Under the new layout the kept id and the saved session are per
+    // survey. Not under the legacy layout, where every page is a new load: an
+    // address without the survey id on a later page would lose the earlier
+    // pages.
+    var qualtricsSeen = HAS_JSPSYCH && jsPsychPage ? null : detectQualtrics(win);
+    var qualtrics = HAS_QUALTRICS ? qualtricsSeen : null;
+    var wrongBuild = qualtricsSeen && !HAS_QUALTRICS ? { host: 'Qualtrics', file: 'ch-qualtrics.js' }
+      : jsPsychPage && !HAS_JSPSYCH && !qualtrics ? { host: 'jsPsych', file: 'ch.js' } : null;
     if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
+    else if (qualtrics && jsPsychPage) console.warn(MESSAGES.qualtricsJsPsych());
+    var surveyId = HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
+    var pidKey = surveyId ? PID_KEY + ':' + surveyId : PID_KEY;
 
     var pid = resolveParticipantId({
       search: (win.location && win.location.search) || '',
@@ -149,11 +199,11 @@ export function boot(opts) {
       random: function () { return randomParticipantId(win.crypto || globalThis.crypto); }
     });
     if (pid.source === 'random') {
-      var kept = sessionGet(win, PID_KEY);
+      var kept = sessionGet(win, pidKey);
       if (kept) pid = { id: kept, source: 'session' };
       else console.warn(MESSAGES.randomId(pid.id, CH_FILE));
     }
-    sessionSet(win, PID_KEY, pid.id);
+    sessionSet(win, pidKey, pid.id);
 
     monitor = monitorFactory(Object.assign({}, config.monitor, { participantId: pid.id, preset: config.preset }));
     var differ = createSegmentDiffer(monitor);
@@ -174,7 +224,9 @@ export function boot(opts) {
       scriptNonce: (script && script.nonce) || null,   // copied onto the lazily loaded replay <script>
       handlers: {},
       win: win,
-      api: null
+      api: null,
+      qualtricsLayout: null,
+      qualtricsSurveyId: surveyId
     };
     ctx.api = buildPublicApi(ctx);
     // data-debug only: the badge, the console summary and the perf counters.
@@ -182,8 +234,26 @@ export function boot(opts) {
       ctx.debug = createDebug({ doc: win.document, ctx: ctx });
       win.__cyborgHunterDebug = { stats: ctx.debug.stats };
     }
+    // The Qualtrics layout (read above): set before installReplay, whose boot
+    // reminder names Qualtrics when this is set.
+    if (host === 'vanilla') {
+      ctx.qualtricsLayout = qualtrics ? qualtrics.layout : null;
+      if (ctx.qualtricsLayout === 'legacy') console.warn(MESSAGES.qualtricsLegacyLayout());
+    }
     var replay = installReplay({ win: win, ctx: ctx });
-    if (host === 'vanilla') ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });
+    if (host === 'vanilla') {
+      // Under Qualtrics the writer owns the page boundary: the vanilla
+      // adapter cuts on marks only, and keeps the session per survey on the
+      // new layout. With data-debug the badge shows each write.
+      // The cap's two overrides are for tests.
+      ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: surveyId });
+      if (HAS_QUALTRICS && ctx.qualtricsLayout) {
+        ctx.qualtrics = installQualtricsAdapter({
+          win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars || config.qualtricsMaxChars,   // the writer clamps it to MAX_CHARS
+          onWrite: ctx.debug ? function () { ctx.debug.refresh(); } : null
+        });
+      }
+    }
 
     // The session start observes document.body (core signals/browser.js), so
     // with ch.js in <head> it waits for DOMContentLoaded; everything else,
@@ -214,7 +284,7 @@ export function boot(opts) {
         }
       }
     });
-    else noticeLateJsPsych(win, ctx);
+    else if (!jsPsychPage) noticeLateJsPsych(win, ctx);
     try {
       Object.defineProperty(win, '__cyborgHunterFile', {
         value: CH_FILE, writable: false, enumerable: false, configurable: true
@@ -222,6 +292,32 @@ export function boot(opts) {
     } catch (_) { /* a page's own locked name: a diagnostic mark must never stop monitoring */ }
     win.CyborgHunter = ctx.api;
     win.__cyborgHunterLoaded = 'ch.js';
+    // A host that re-renders its header runs this same ch.js again
+    // (rerun.js, entry.js): the re-run calls this hook instead of booting.
+    // Non-enumerable, so it stays out of the page's own window walks; not
+    // writable, so a plain assignment by page code cannot replace it.
+    ctx.rerunCount = 0;
+    Object.defineProperty(win, '__cyborgHunterOnRerun', {
+      value: function (info) {
+        ctx.rerunCount += 1;
+        var h = ctx.handlers.rerun;
+        if (h) {
+          try { h(info); } catch (e) { console.error(MESSAGES.rerunFailed(String((e && e.message) || e))); }
+        }
+        if (ctx.debug) ctx.debug.refresh();
+      },
+      writable: false, enumerable: false, configurable: true
+    });
+    // Only Qualtrics re-runs its header, so only a page where this file found
+    // a Qualtrics survey takes a second run of this version for a re-run
+    // (rerun.js markRerun); elsewhere a second tag stays the loud double load.
+    // That includes a file without the Qualtrics adapter, which said so once
+    // (wrongBuild) and must not repeat it on every page.
+    if (qualtricsSeen) {
+      Object.defineProperty(win, '__cyborgHunterRerunHost', {
+        value: 'qualtrics', writable: false, enumerable: false, configurable: true
+      });
+    }
     // One console summary per page: vanilla logs once the DOM is parsed;
     // jsPsych logs from the wrapped run() (after the walk), so here it only
     // shows the badge.
@@ -238,14 +334,20 @@ export function boot(opts) {
 // A file without the jsPsych adapter whose tag sits above jspsych.js: the
 // check at step 5 ran before initJsPsych existed, so the file looks once more
 // when the DOM is parsed (the jsPsych adapter's placement check does the same
-// for ch.js). A document already parsed at boot was fully seen by step 5. It
-// only reports: initJsPsych is left alone and the page stays a page without a
-// framework.
+// for ch.js). It is registered only when jsPsych was absent at boot: a page
+// whose jsPsych was already there got its one message at step 5. A document
+// already parsed at boot was fully seen by step 5. It only reports:
+// initJsPsych is left alone and the page stays as boot found it. On a
+// Qualtrics survey (ch-qualtrics.js; ctx.qualtricsLayout is set only with
+// HAS_QUALTRICS) that is a Qualtrics page, with the same qualtricsJsPsych
+// warning; elsewhere a page without a framework, with one wrongBuild error
+// naming ch.js.
 function noticeLateJsPsych(win, ctx) {
   var doc = win.document;
   if (doc.readyState !== 'loading') return;
   doc.addEventListener('DOMContentLoaded', function () {
     if (ctx.wrongBuild || typeof win.initJsPsych !== 'function') return;
+    if (ctx.qualtricsLayout) { console.warn(MESSAGES.qualtricsJsPsych()); return; }
     ctx.wrongBuild = { host: 'jsPsych', file: 'ch.js' };
     console.error(MESSAGES.wrongBuild('jsPsych', 'ch.js', CH_FILE));
   }, { once: true });
@@ -301,6 +403,7 @@ function failDeferred(ctx, adapter, e) {
 function fail(win, ctx, adapter, e) {
   var msg = String((e && e.message) || e);
   ctx.bootError = msg;
+  if (ctx.qualtrics) { try { ctx.qualtrics.teardown(); } catch (_) { /* already failing */ } }
   if (ctx.vanilla) { try { ctx.vanilla.teardown(); } catch (_) { /* already failing */ } }
   if (ctx.monitor) { try { ctx.monitor.destroy(); } catch (_) { /* already failing; the boot error is the one to show */ } }
   console.error(MESSAGES.bootFailed(msg));

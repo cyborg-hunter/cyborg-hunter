@@ -516,6 +516,31 @@ describe('vanilla host: forms and page loads', () => {
     assert.deepStrictEqual(warns.filter((w) => w.includes('sessionStorage')), [MESSAGES.storageNearlyFull()]);
     small.teardown();
   });
+
+  // A host adapter can keep one session per scope (Qualtrics: per survey).
+  it('keyScope saves and restores under a scoped key; without it the key is unchanged', async () => {
+    const { installVanillaAdapter } = await import('../../src/oneliner/adapters/vanilla.js');
+    const ctx = start();
+    ctx.vanilla.teardown();
+    const plain = installVanillaAdapter({ win, ctx });
+    plain.persist();
+    plain.teardown();
+    assert.ok(win.sessionStorage.getItem(KEY), 'cyborg-hunter:oneliner:session:P1');
+    win.sessionStorage.removeItem(KEY);
+
+    const scoped = installVanillaAdapter({ win, ctx, keyScope: 'SV_abc' });
+    scoped.persist();
+    scoped.teardown();
+    assert.strictEqual(win.sessionStorage.getItem(KEY), null);
+    assert.ok(win.sessionStorage.getItem('cyborg-hunter:oneliner:session:SV_abc:P1'));
+
+    const same = installVanillaAdapter({ win, ctx, keyScope: 'SV_abc' });
+    assert.strictEqual(same.blob().cyborgHunterOneLiner.pageCount, 2, 'the same scope restores');
+    same.teardown();
+    const other = installVanillaAdapter({ win, ctx, keyScope: 'SV_other' });
+    assert.strictEqual(other.blob().cyborgHunterOneLiner.pageCount, 1, 'another scope starts fresh');
+    other.teardown();
+  });
 });
 
 describe('vanilla host: page-load edge cases', () => {
@@ -1047,6 +1072,32 @@ describe('vanilla host: page-load edge cases', () => {
     assert.notStrictEqual(win.HTMLFormElement.prototype.submit, native);
     ctx.vanilla.teardown();
     assert.strictEqual(win.HTMLFormElement.prototype.submit, native);
+  });
+
+  // A host adapter that owns the page boundary (Qualtrics) installs the
+  // vanilla adapter with pageBoundaries: false.
+  it('pageBoundaries: false installs no submit, pagehide or submit() wrap', async () => {
+    const { installVanillaAdapter } = await import('../../src/oneliner/adapters/vanilla.js');
+    const posted = stubNativeSubmit();
+    const native = win.HTMLFormElement.prototype.submit;
+    const ctx = start();
+    ctx.vanilla.teardown();
+    ctx.vanilla = installVanillaAdapter({ win, ctx, pageBoundaries: false });
+    assert.strictEqual(win.HTMLFormElement.prototype.submit, native, 'submit() is not wrapped');
+
+    const f = form();
+    submit(f);
+    f.submit();
+    assert.strictEqual(posted.length, 1, 'the browser\'s submit() still runs');
+    win.dispatchEvent(new win.Event('pagehide'));
+    assert.strictEqual(ctx.vanilla.blob().trials.length, 0);
+    assert.strictEqual(f.querySelector('input[name="cyborgHunterData"]'), null);
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+
+    click(el('<button data-ch-trial="q2">Next</button>'));
+    assert.strictEqual(ctx.vanilla.blob().trials.length, 1, 'a mark still cuts');
+    assert.strictEqual(ctx.vanilla.blob().trials[0].integritySegment.source, 'manual');
+    assert.deepStrictEqual(errors, []);
   });
 
   for (const name of ['participantId', 'pid']) {

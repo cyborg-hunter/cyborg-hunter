@@ -40,7 +40,8 @@ function oneLineBlock() {
 // host, and in no other. (A field name the debug summary imports, such as
 // Qualtrics' __js_cyborg_hunter, is in every file and cannot serve.)
 const MARKERS = {
-  jspsych: 'extensions is not an array'
+  jspsych: 'extensions is not an array',
+  qualtrics: 'page-submit hook was in place'
 };
 
 describe('build.js: the one-line targets', () => {
@@ -77,6 +78,18 @@ describe('build.js: the one-line targets', () => {
     assert.ok(!r.outputFiles[0].text.includes(MARKERS.jspsych));
   });
 
+  // The payload builder makes its field specs with top-level calls
+  // (listOf, fields). Marked /* @__PURE__ */, they are dropped from a bundle
+  // that never calls the builder, as every file but ch-qualtrics.js is.
+  it('the Qualtrics payload builder leaves nothing in a bundle that does not call it', async () => {
+    const r = await esbuild.build({
+      stdin: { contents: "import './src/oneliner/qualtrics-payload.js';", resolveDir: ROOT },
+      bundle: true, minify: true, format: 'iife', platform: 'browser', write: false, logLevel: 'error'
+    });
+    const out = r.outputFiles[0].text;
+    assert.ok(out.length < 50, out.length + ' bytes left: ' + out.slice(0, 120));
+  });
+
   it('docs/quickstart.md#which-file lists every target and nothing else', () => {
     const doc = readFileSync(join(ROOT, 'docs', 'quickstart.md'), 'utf8');
     const parts = doc.split(/^### Which file$/m);
@@ -105,6 +118,14 @@ for (const target of ONE_LINE_TARGETS) {
       for (const [host, marker] of Object.entries(MARKERS)) {
         assert.strictEqual(src.includes(marker), target.hosts.includes(host), target.file + ' / ' + host + ': ' + marker);
       }
+    });
+
+    // rerun.js marks a same-file re-run before the guard cores evaluate: their
+    // "Not redefining" branches read the flag, so it must come first in the bundle.
+    it('evaluates the re-run check before the guard cores', () => {
+      const src = readFileSync(join(outDir, target.file), 'utf8');
+      const flag = src.indexOf('__cyborgHunterRerun');
+      assert.ok(flag >= 0 && flag < src.indexOf('Not redefining GuardFriction') && flag < src.indexOf('Not redefining GuardHoneypot'));
     });
   });
 }

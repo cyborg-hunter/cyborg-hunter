@@ -60,3 +60,10 @@ it('docs/quickstart.md version pins match package.json', () => {
     assert.strictEqual(v, pkg.version, 'stale version pin in docs/quickstart.md');
   }
 });
+
+it('docs/qualtrics.md version pins match package.json', () => {
+  const doc = readFileSync(new URL('../../docs/qualtrics.md', import.meta.url), 'utf8');
+  for (const [, v] of doc.matchAll(/cyborg-hunter@(\d+\.\d+\.\d+)/g)) {
+    assert.strictEqual(v, pkg.version, 'stale version pin in docs/qualtrics.md');
+  }
+});

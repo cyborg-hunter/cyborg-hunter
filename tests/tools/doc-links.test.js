@@ -1,7 +1,7 @@
 // Every documentation link the package ships must land somewhere: the
 // relative .md links in README.md and docs/*.md, and the docs URLs inside
-// the one-line setup's console messages (src/oneliner/errors.js) and the
-// guard bundles' double-load errors. A link's file must exist under docs/
+// the one-line setup's console messages (src/oneliner/errors.js), the
+// guard bundles' double-load errors and the CLI's ingest warnings. A link's file must exist under docs/
 // (or the repo root) and its #anchor must be a heading of that file, slugged
 // the way GitHub slugs headings. Local working notes outside docs/ are
 // not checked.
@@ -87,6 +87,10 @@ function messageLinks() {
   for (const m of read('src/oneliner/errors.js').matchAll(/DOCS \+ '([^']+)'/g)) {
     links.push({ from: 'src/oneliner/errors.js', target: 'docs/' + m[1] });
   }
+  // The CLI's warnings name a docs page as plain text (docs/<file>.md#<anchor>).
+  for (const m of read('src/cli/ingest-core.js').matchAll(/(docs\/[A-Za-z0-9_-]+\.md#[A-Za-z0-9_-]+)/g)) {
+    links.push({ from: 'src/cli/ingest-core.js', target: m[1] });
+  }
   for (const f of ['src/jspsych/extension-guard-friction.js', 'src/jspsych/extension-guard-honeypot.js', 'build.js']) {
     for (const m of read(f).matchAll(/github\.com\/cyborg-hunter\/cyborg-hunter\/blob\/main\/(docs\/[^\s'"`)]+)/g)) {
       links.push({ from: f, target: m[1] });
@@ -113,7 +117,7 @@ describe('documentation links', () => {
     });
   }
 
-  it('the docs links in console messages resolve (errors.js, guard bundles)', () => {
+  it('the docs links in console messages resolve (errors.js, guard bundles, CLI ingest)', () => {
     const links = messageLinks();
     assert.ok(links.length >= 20, 'found only ' + links.length + ' message links');
     const bad = links
@@ -121,5 +125,26 @@ describe('documentation links', () => {
       .filter((x) => x.p)
       .map((x) => x.l.from + ': ' + x.l.target + ' (' + x.p + ')');
     assert.deepStrictEqual(bad, []);
+  });
+});
+
+// docs/qualtrics.md quotes two scripts the Qualtrics harness runs
+// (tests/e2e/oneliner/fixtures/qualtrics-harness.html): the replay recipe
+// and the final-page line. The doc must show exactly what the e2e suite tests.
+describe('docs/qualtrics.md scripts match the Qualtrics harness', () => {
+  const doc = read('docs/qualtrics.md');
+  const harness = read('tests/e2e/oneliner/fixtures/qualtrics-harness.html');
+  const blocks = [...doc.matchAll(/```js\n([\s\S]*?)```/g)].map((m) => m[1].trim());
+
+  it('the replay recipe', () => {
+    const recipe = /<script type="text\/plain" id="qx-replay-recipe">([\s\S]*?)<\/script>/.exec(harness);
+    assert.ok(recipe, 'no recipe block in the harness');
+    assert.ok(blocks.includes(recipe[1].trim()), 'docs/qualtrics.md does not quote the harness recipe');
+  });
+
+  it('the final-page line', () => {
+    const line = /\(0, eval\)\('(Qualtrics\.SurveyEngine\.addOnPageSubmit\([^']*)'\)/.exec(harness);
+    assert.ok(line, 'no final-page line in the harness');
+    assert.ok(blocks.includes(line[1].trim()), 'docs/qualtrics.md does not quote the harness final-page line');
   });
 });

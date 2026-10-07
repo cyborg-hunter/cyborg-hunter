@@ -26,8 +26,8 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 > `typingSpeedThreshold_cps`, `thresholds.tabAwayDurationMs` (the tab-away
 > display/soft-bin cutoff), `scoring.softScoreThreshold` (an optional analyst
 > override for the soft-flag cutoff — by default the CLI uses each participant's
-> own saved threshold), and `scoreWeights` (the triage-score weights, since
-> 0.9.0), plus `platformIdField`/`showPlatformId` for the HTML detail header. The remaining fields below — `trialIdField`, `trialOrderField`,
+> own saved threshold), `scoreWeights` (the triage-score weights, since
+> 0.9.0) and `qualtricsField` (the Qualtrics export column), plus `platformIdField`/`showPlatformId` for the HTML detail header. The remaining fields below — `trialIdField`, `trialOrderField`,
 > `trialsPerParticipant`, `conditionField`, `groupField`,
 > `tabAwayMinDuration_ms`, `idleGapThreshold_ms`, `suspiciouslyFastRT_ms`,
 > `trajectoryGrid`, `trajectoryTrialLabel`, `trajectoryResponseField`,
@@ -56,6 +56,7 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 | `trialOrderField` | string | `"trialIndex"` | Field for trial order |
 | `integrityField` | string | `"integrity"` | Per-trial field that holds the integrity sub-object |
 | `sessionIntegrityPath` | string | `null` | Dotted path to the session-level integrity object (`"payload.cyborgHunter"`) for pipelines that nest `getSessionReport()` output somewhere non-standard. Checked before the built-in locations; falls through to them when it resolves to nothing **or to an object that doesn't look like a session report** (no `tabAwaySums`/`hardScore`/`softScore`/`anyHardTriggered`/`trialsCompleted` key — e.g. a near-miss path landing one level up the tree). Added 0.6.1. |
+| `qualtricsField` | string | `"__js_cyborg_hunter"` | The column of a Qualtrics CSV export that holds the one-line setup's payload. A `.csv` whose first header row has `ResponseId` (`ResponseID` in a legacy export) and this column (or the legacy-layout column `cyborg_hunter`), plus one sign that Qualtrics wrote it (a second Qualtrics column such as `StartDate`, the `ImportId` header row, or a first non-empty payload cell written by `ch-qualtrics.js`), is read as a Qualtrics export: one participant per response row, the row's `ResponseId` recorded as `metadata.qualtricsResponseId` and used as the participant ID when the payload carries no ID or only a random `ch-…` ID. Both the default exporter (three header rows) and the legacy exporter (one) are read. Change it only if the payload column has another name in your file (for example, an export edited by hand); `ch-qualtrics.js` writes `__js_cyborg_hunter` (`cyborg_hunter` under the legacy layout) and no other name, so declaring a field under another name captures nothing ([qualtrics.md](qualtrics.md#declare-the-field)). |
 | `trialsPerParticipant` | number | `null` | Expected trial count (`null` skips the check) |
 | `platformIdField` | string | `null` | Prolific/MTurk ID field (dot-paths supported). Read by the HTML report only when `showPlatformId` is true |
 | `showPlatformId` | boolean | `false` | Render the platform ID as a secondary line in the participant detail header. Off by default: reports circulate more freely than raw data, and the platform ID is what re-identifies a participant (added 0.6.1) |
@@ -201,6 +202,7 @@ CLI flags override config-file values. Unknown flags now exit with an error rath
 | `--file-pattern <glob>` | Override `filePattern` |
 | `--integrity-field <name>` | Override `integrityField` |
 | `--session-integrity-path <path>` | Override `sessionIntegrityPath` (dotted, e.g. `payload.cyborgHunter`) |
+| `--qualtrics-field <name>` | Override `qualtricsField` |
 | `--assets-dir <path>` | Override `assetsDir` |
 | `--participant <id>` | Generate report for a single participant |
 | `--no-visuals` | Skip image generation (no `canvas` package needed) |

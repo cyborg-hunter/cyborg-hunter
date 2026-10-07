@@ -18,6 +18,22 @@ function jsCtx(extra) {
   }, extra);
 }
 
+// A Qualtrics page: the vanilla host with ctx.qualtricsLayout (and, on the
+// new layout, the survey id) set at boot and the adapter handle (page,
+// declared() as the writer answers it, null; last write) on ctx.qualtrics.
+function qxCtx(extra) {
+  return Object.assign({
+    host: 'vanilla',
+    qualtricsLayout: 'new',
+    qualtricsSurveyId: 'SV_test',
+    rerunCount: 0,
+    qualtrics: { page: () => 1, declared: () => null, lastWrite: () => null },
+    participantIdSource: 'attribute',
+    config: { debug: true, guards: { honeypot: true, friction: false }, replay: null },
+    win: null
+  }, extra);
+}
+
 beforeEach(() => { win = new Window({ url: 'https://lab.example/s.html' }); logs = []; });
 
 describe('createDebug', () => {
@@ -176,5 +192,62 @@ describe('createDebug', () => {
     d.update();
     d.remove();
     assert.strictEqual(win.document.getElementById('ch-debug-badge'), null);
+  });
+});
+
+describe('createDebug under Qualtrics', () => {
+  it('summary under Qualtrics names the page and the field, whose state is unknown', () => {
+    var d = createDebug({ doc: win.document, ctx: qxCtx({ win: win }), log: log });
+    assert.strictEqual(d.summary(),
+      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off');
+  });
+
+  it('badge under Qualtrics shows re-runs and the last write', () => {
+    var c = qxCtx({ win: win, rerunCount: 2, qualtrics: { page: () => 3, declared: () => null, lastWrite: () => ({ chars: 4812, cap: 12000, level: 0 }) } });
+    var d = createDebug({ doc: win.document, ctx: c, log: log });
+    assert.strictEqual(d.badgeText(),
+      'Cyborg Hunter active · Qualtrics detected · page 3 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off · header re-run ×2 · last write 4812/12000 bytes');
+    // The re-runs and the last write are live state: the logged summary leaves them out.
+    assert.ok(!d.summary().includes('re-run'), d.summary());
+    assert.ok(!d.summary().includes('last write'), d.summary());
+  });
+
+  // The saved session is kept per survey only when boot found the survey id.
+  it('new layout without a survey id: the summary, not the badge, says the saved session is shared', () => {
+    var d = createDebug({ doc: win.document, ctx: qxCtx({ win: win, qualtricsSurveyId: null }), log: log });
+    assert.strictEqual(d.summary(),
+      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off · ' +
+      'no survey id in the address or data-qualtrics-survey-id: the saved session is shared by every survey in this tab');
+    assert.ok(!d.badgeText().includes('survey id'), d.badgeText());
+  });
+
+  it('the legacy layout, which keeps no session per survey, has no survey-id note', () => {
+    var c = qxCtx({ win: win, qualtricsLayout: 'legacy', qualtricsSurveyId: null });
+    assert.ok(!createDebug({ doc: win.document, ctx: c, log: log }).summary().includes('survey id'));
+  });
+
+  it('legacy layout names its field', () => {
+    var c = qxCtx({ win: win, qualtricsLayout: 'legacy' });
+    var s = createDebug({ doc: win.document, ctx: c, log: log }).summary();
+    assert.match(s, /^Cyborg Hunter active · Qualtrics detected \(legacy layout, field cyborg_hunter\) · page 1 · /);
+    assert.match(s, / · field cyborg_hunter unknown · /);
+    assert.ok(!s.includes('__js_cyborg_hunter'), s);
+  });
+
+  // Before the writer is installed ctx.qualtrics is undefined, and boot sets
+  // rerunCount only after the debug object exists.
+  it('without the adapter handle: page 1, field unknown, no re-run or write parts', () => {
+    var c = qxCtx({ win: win, qualtrics: undefined, rerunCount: undefined });
+    var d = createDebug({ doc: win.document, ctx: c, log: log });
+    assert.strictEqual(d.badgeText(),
+      'Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off');
+  });
+
+  it('data-replay under Qualtrics: the summary says the recording is never written to Qualtrics', () => {
+    var c = qxCtx({ win: win, replaySrc: 'https://x/cyborg-hunter-replay.js' });
+    c.config = Object.assign({}, c.config, { replay: {} });
+    var s = createDebug({ doc: win.document, ctx: c, log: log }).summary();
+    assert.ok(s.endsWith(' · replay is on: it is never written to Qualtrics; save CyborgHunter.replay() to your own server'), s);
+    assert.ok(!s.includes('in your save code'), s);
   });
 });

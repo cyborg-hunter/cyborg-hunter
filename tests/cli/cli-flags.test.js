@@ -85,6 +85,23 @@ describe('CLI flag parsing — 0.6.1 additions', () => {
   });
 });
 
+// qualtricsField: the Qualtrics export column holding ch.js's payload.
+describe('CLI flag parsing — qualtricsField', () => {
+  it('accepts --qualtrics-field and defaults to __js_cyborg_hunter', () => {
+    assert.equal(parseFlags(['--qualtrics-field', '__js_ch']).qualtricsField, '__js_ch');
+    const dir = mkdtempSync(join(tmpdir(), 'ch-cfg-'));
+    const cwd = process.cwd();
+    try {
+      process.chdir(dir);
+      assert.equal(loadConfig([]).qualtricsField, '__js_cyborg_hunter');
+      assert.equal(loadConfig(['--qualtrics-field', '__js_ch']).qualtricsField, '__js_ch');
+    } finally {
+      process.chdir(cwd);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // assetsDir: the experiment's stylesheets and images for styled replays.
 describe('CLI flag parsing — assetsDir', () => {
   it('accepts --assets-dir', () => {

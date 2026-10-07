@@ -7,6 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOCS, formatError, loudError, MESSAGES } from '../../src/oneliner/errors.js';
+import { ONE_LINE_TARGETS } from '../../build-targets.js';
 
 const FORMAT = /^\[cyborg-hunter\] .+: .+\. Fix: .+\. https:\/\/.+docs\/.+\.md#/;
 
@@ -68,6 +69,11 @@ const CASES = {
     link: DOCS + 'known-issues.md#one-line-setup'
   },
   sessionEndFailed: {
+    args: ['boom'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'known-issues.md#one-line-setup'
+  },
+  rerunFailed: {
     args: ['boom'],
     fix: 'open an issue with this message and your <script> tag',
     link: DOCS + 'known-issues.md#one-line-setup'
@@ -157,6 +163,31 @@ const CASES = {
     fix: 'remove the finalize() call from your on_finish (keep your own save code)',
     link: DOCS + 'advanced-integration.md#switching-to-the-one-liner'
   },
+  replayQualtrics: {
+    args: [],
+    fix: 'save CyborgHunter.replay() to your own server from a final-page question script',
+    link: DOCS + 'qualtrics.md#replay'
+  },
+  qualtricsLegacyLayout: {
+    args: [],
+    fix: 'declare cyborg_hunter (not __js_cyborg_hunter) in Survey Flow, or switch the survey to the New Survey Taking Experience',
+    link: DOCS + 'qualtrics.md#legacy-layout'
+  },
+  qualtricsJsPsych: {
+    args: [],
+    fix: 'nothing to change for the page rows; rows per trial need ch.js, which writes them into jsPsych\'s data and writes nothing into embedded data',
+    link: DOCS + 'qualtrics.md#jspsych-inside-a-survey'
+  },
+  qualtricsWriteFailed: {
+    args: ['setJSEmbeddedData threw'],
+    fix: 'open an issue with this message and your <script> tag',
+    link: DOCS + 'qualtrics.md#troubleshooting'
+  },
+  qualtricsPayloadReduced: {
+    args: [2, 15000, 12000],
+    fix: 'nothing to fix for this participant; a report note says what was dropped. Shorter surveys, or fewer tab switches, keep the full summary',
+    link: DOCS + 'qualtrics.md#payload-size'
+  },
   extensionParamsIgnored: {
     args: [],
     fix: 'use data-participant-id / data-preset on the ch.js tag instead',
@@ -203,6 +234,17 @@ describe('error catalogue', () => {
       .includes('. Fix: load only one of ch-labjs.js and cyborg-hunter.min.js (the one-liner already contains the monitor). https'));
   });
 
+  // Two tags of one file, or two versions of it: the fix is about that file
+  // alone, and names no file the page does not load.
+  for (const { file } of ONE_LINE_TARGETS) {
+    it(file + ' loaded twice: the fix says to load it once', () => {
+      const msg = MESSAGES.doubleLoad(file, file);
+      assert.match(msg, FORMAT);
+      assert.ok(msg.includes(': ' + file + ' was loaded after ' + file + '. Fix: load ' + file + ' only once: keep one of its <script> tags. https'), msg);
+      assert.ok(!msg.includes('cyborg-hunter.min.js'), msg);
+    });
+  }
+
   // The messages any one-line file can log about itself: each names the
   // file it is given (boot.js passes CH_FILE and keeps it as ctx.file), and
   // ch.js when given none.
@@ -231,6 +273,23 @@ describe('error catalogue', () => {
 
   it('the random-id message carries the generated id', () => {
     assert.ok(MESSAGES.randomId('ch-0123456789ab').includes('using ch-0123456789ab. Fix:'));
+  });
+
+  it('the payload-reduced message carries the size, the cap and the level written', () => {
+    assert.ok(MESSAGES.qualtricsPayloadReduced(2, 15000, 12000)
+      .includes(': the full summary was 15000 bytes, above the cap of 12000 bytes; level 2 of the ladder was written. Fix:'));
+  });
+
+  // The writer does not build a second time to learn the full size: without
+  // one from the builder the message leaves it out.
+  it('the payload-reduced message without a full size names the cap and the level only', () => {
+    assert.ok(MESSAGES.qualtricsPayloadReduced(2, undefined, 12000)
+      .includes(': the full summary was above the cap of 12000 bytes; level 2 of the ladder was written. Fix:'));
+  });
+
+  it('the Qualtrics write failure carries the setter\'s message as its cause', () => {
+    assert.ok(MESSAGES.qualtricsWriteFailed('setJSEmbeddedData threw')
+      .startsWith('[cyborg-hunter] Cyborg Hunter could not write to Qualtrics embedded data: setJSEmbeddedData threw. Fix:'));
   });
 
   it('loudError prints the formatted message through console.error', () => {

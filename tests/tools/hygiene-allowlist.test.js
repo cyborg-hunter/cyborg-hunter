@@ -55,7 +55,8 @@ describe('hygiene gate: Prolific URL parameter allowlist', () => {
       'tests/oneliner/debug.test.js': line,
       'tests/e2e/oneliner/fixtures/page.html': line,
       'docs/quickstart.md': line,
-      'docs/advanced-integration.md': line
+      'docs/advanced-integration.md': line,
+      'docs/qualtrics.md': line
     }), 0);
   });
 
