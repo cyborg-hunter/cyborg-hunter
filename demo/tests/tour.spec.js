@@ -40,6 +40,7 @@ import {
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
 import { VERSION } from '../../src/shared/constants.js';
+import { SAVE_TO_FOLDER } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
@@ -306,8 +307,10 @@ test('the files step leaves fullscreen via the plugin, with no false violation l
 // files carry the visitor's id). Where the browser has a folder picker
 // (Chrome, Edge), one "Save all into a folder" writes all five files into
 // the folder the visitor picks; the picker is stubbed here, since a test
-// cannot answer the browser's own dialog. Without it, only the per-file Save
-// buttons are offered (the happy path above saves through each of them).
+// cannot answer the browser's own dialog. A dismissed picker changes nothing;
+// a folder that cannot be written says so. Without the picker, only the
+// per-file Save buttons are offered (the happy path above saves through each
+// of them).
 // ---------------------------------------------------------------------------
 test('files step: "Save all into a folder" writes the five files through the folder picker', async ({ page }) => {
   await page.addInitScript(() => {
@@ -317,10 +320,16 @@ test('files step: "Save all into a folder" writes the five files through the fol
       return {
         name: 'demo-files',
         getFileHandle: async (name, o) => ({
-          createWritable: async () => ({
-            write: async (blob) => { window.__written.push({ name, size: blob.size, create: !!(o && o.create) }); },
-            close: async () => {},
-          }),
+          createWritable: async () => {
+            let entry = null;
+            return {
+              write: async (blob) => {
+                entry = { name, size: blob.size, create: !!(o && o.create), closed: false };
+                window.__written.push(entry);
+              },
+              close: async () => { entry.closed = true; },
+            };
+          },
         }),
       };
     };
@@ -337,11 +346,82 @@ test('files step: "Save all into a folder" writes the five files through the fol
   await btn.click();
   await expect(btn).toHaveText(/Saved 5 files to demo-files/);
   await expect(btn).toBeDisabled();
+  // Written in the order the cards list them (batch order), each one closed.
   const written = await page.evaluate(() => window.__written);
-  expect(written.map((w) => w.name).sort()).toEqual(
-    (await page.evaluate(() => Array.from(document.querySelectorAll('.file small')).map((s) => s.textContent))).sort());
+  expect(written.map((w) => w.name)).toEqual(cardNames);
   expect(written.every((w) => w.size > 0 && w.create)).toBe(true);
-  expect(await page.evaluate(() => window.__pickerOpts.mode)).toBe('readwrite');
+  expect(written.filter((w) => w.closed)).toHaveLength(5);
+  expect(await page.evaluate(() => window.__pickerOpts))
+    .toEqual({ mode: 'readwrite', id: 'cyborg-hunter-demo', startIn: 'downloads' });
+});
+
+test('files step: a dismissed folder picker changes nothing', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__pickerCalls = 0;
+    window.showDirectoryPicker = async () => {
+      window.__pickerCalls++;
+      throw new DOMException('', 'AbortError');
+    };
+  });
+  await fastForwardToFiles(page);
+  const btn = page.locator('[data-action="save-folder"]');
+  const label = await btn.textContent();
+  await btn.click();
+  await expect.poll(() => page.evaluate(() => window.__pickerCalls)).toBe(1);
+  await expect(btn).toBeEnabled();
+  await expect(btn).toHaveText(label);
+  await expect(page.locator('[data-role="handoff-note"]')).toBeHidden();
+});
+
+test('files step: a folder that cannot be written says so and leaves the button usable', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.showDirectoryPicker = async () => ({
+      name: 'demo-files',
+      getFileHandle: async () => { throw new Error('mock: the folder refuses new files'); },
+    });
+  });
+  await fastForwardToFiles(page);
+  const btn = page.locator('[data-action="save-folder"]');
+  const label = await btn.textContent();
+  await btn.click();
+  const note = page.locator('[data-role="handoff-note"]');
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(SAVE_TO_FOLDER.failed);
+  await expect(btn).toBeEnabled();
+  await expect(btn).toHaveText(label);
+});
+
+// A write that fails part-way aborts its file (the browser then discards
+// its temporary copy instead of leaving it in the folder), and a later save
+// that succeeds takes the failure line away again.
+test('files step: a failed write aborts its file; a later save clears the failure line', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__aborted = [];
+    let failNextWrite = true;
+    window.showDirectoryPicker = async () => ({
+      name: 'demo-files',
+      getFileHandle: async (name) => ({
+        createWritable: async () => ({
+          write: async () => {
+            if (failNextWrite) { failNextWrite = false; throw new Error('mock: the disk is full'); }
+          },
+          close: async () => {},
+          abort: async () => { window.__aborted.push(name); },
+        }),
+      }),
+    });
+  });
+  await fastForwardToFiles(page);
+  const firstCard = await page.locator('.file small').first().textContent();
+  const btn = page.locator('[data-action="save-folder"]');
+  const note = page.locator('[data-role="handoff-note"]');
+  await btn.click();
+  await expect(note).toHaveText(SAVE_TO_FOLDER.failed);
+  expect(await page.evaluate(() => window.__aborted)).toEqual([firstCard]);
+
+  await btn.click();
+  await expect(btn).toHaveText(/Saved 5 files to demo-files/);
+  await expect(note).toBeHidden();
 });
 
 test('files step: without the folder picker only the per-file Save buttons are offered', async ({ page }) => {
@@ -351,6 +431,11 @@ test('files step: without the folder picker only the per-file Save buttons are o
   await expect(page.locator('[data-action="download"]')).toHaveCount(3);
   await expect(page.locator('.file-actions a[download]')).toHaveCount(2);
   await expect(page.locator('[data-role="leave-hint"]')).toContainText('save the files first');
+  // The config caveat, once, right after the first batch's grid.
+  await expect(page.locator('[data-role="config-caveat"]')).toHaveCount(1);
+  await expect(page.locator('.files + .file-caveat')).toHaveCount(1);
+  expect(await page.evaluate(() => document.querySelector('.files').nextElementSibling.getAttribute('data-role')))
+    .toBe('config-caveat');
 });
 
 // ---------------------------------------------------------------------------

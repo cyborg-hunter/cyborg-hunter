@@ -919,32 +919,45 @@ function startTour(participantId, capabilities, manifest) {
   // written into it, in batch order. Rendered only where the API exists
   // (Chrome, Edge); elsewhere the per-file buttons are the way. A dismissed
   // picker changes nothing; a write failure says so and leaves the per-file
-  // buttons.
+  // buttons. The note line is shared with the hand-off, so a success clears
+  // only this save's own failure line.
   function saveToFolder(button) {
     if (button.disabled) return;
     var picker = window.showDirectoryPicker({
       mode: 'readwrite', id: 'cyborg-hunter-demo', startIn: 'downloads'
     });
     button.disabled = true;
+    var note = cardEl.querySelector('[data-role="handoff-note"]');
     picker.then(function (dir) {
       return handoffFiles().then(function (files) {
         return files.reduce(function (p, f) {
-          return p.then(function () {
-            return dir.getFileHandle(f.path, { create: true })
-              .then(function (h) { return h.createWritable(); })
-              .then(function (w) { return w.write(f.blob).then(function () { return w.close(); }); });
-          });
+          return p.then(function () { return writeFileTo(dir, f); });
         }, Promise.resolve()).then(function () {
           button.textContent = 'Saved ' + files.length + ' files to ' + dir.name + ' ✓';
+          if (note && note.textContent === SAVE_TO_FOLDER.failed) note.hidden = true;
         });
       });
     }).catch(function (err) {
       button.disabled = false;
       if (err && err.name === 'AbortError') return;
       console.warn('cyborg-hunter demo: the folder could not be written', err);
-      var note = cardEl.querySelector('[data-role="handoff-note"]');
       if (note) { note.textContent = SAVE_TO_FOLDER.failed; note.hidden = false; }
     });
+  }
+
+  // One { path, blob } written into the picked folder. The browser writes
+  // into a temporary file (a .crswap beside the target) until close(); a
+  // write that fails aborts the stream, which discards that temporary, and
+  // the failure goes on to saveToFolder.
+  function writeFileTo(dir, f) {
+    return dir.getFileHandle(f.path, { create: true })
+      .then(function (h) { return h.createWritable(); })
+      .then(function (w) {
+        return w.write(f.blob).then(function () { return w.close(); }, function (err) {
+          var aborted = typeof w.abort === 'function' ? w.abort() : null;
+          return Promise.resolve(aborted).catch(function () {}).then(function () { throw err; });
+        });
+      });
   }
 
   function renderClosingCta() {

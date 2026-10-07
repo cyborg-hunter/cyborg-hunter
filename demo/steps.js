@@ -449,7 +449,8 @@ export const REPLICATE = {
   installNote: '',
 };
 
-/** Config caveat shown next to the downloadable cyborg-hunter.config.json. */
+/** Config caveat, shown once on the last step, under the grid of the batch
+ * that holds cyborg-hunter.config.json (the first batch). */
 export const CONFIG_CAVEAT =
   "This config matches the demo's data shape. A real study likely needs " +
   "participantIdField 'subject_ID' and filePattern '*.csv' (see quickstart §6).";
