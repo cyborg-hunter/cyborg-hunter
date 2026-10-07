@@ -245,8 +245,9 @@ pre code{background:none;padding:0;}
 .card h3, .lp-title{font-family:var(--ff-sofia);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--dim);font-weight:600;margin:0 0 4px;}
 
-/* Rail (rail.js): checklist of tracked signals. */
-.check{list-style:none;margin:0;padding:0;font-size:12.5px;
+/* Rail (rail.js): checklist of tracked signals. The detector lamps come
+ * first, with no head above them, so the list keeps the gap under the title. */
+.check{list-style:none;margin:10px 0 0;padding:0;font-size:12.5px;
   max-height:calc(100vh - 220px);overflow-y:auto;}
 .check li{display:flex;align-items:center;gap:9px;padding:3px 0;color:var(--dim);}
 .check li.lit{color:var(--ink);}
@@ -254,9 +255,9 @@ pre code{background:none;padding:0;}
 .check li.lit.hardlit .lamp{background:var(--hard);border-color:var(--hard);}
 .check li.always .lamp{background:var(--line-soft);border-color:var(--line-soft);}
 .check li .n{margin-left:auto;font-family:var(--ff-sora);font-variant-numeric:tabular-nums;font-size:11.5px;}
-.check .hint, .check li.grouphead{font-family:var(--ff-sofia);padding-top:12px;font-size:10.5px;
+.check .hint{font-family:var(--ff-sofia);padding-top:12px;font-size:10.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--dim);}
-.check.awaiting li:not(.hint):not(.grouphead){opacity:.55;}
+.check.awaiting li:not(.hint){opacity:.55;}
 /* Unlit lamps keep the soft line: with the high-contrast --line an empty
  * ring would read as lit. */
 .lamp{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--line-soft);

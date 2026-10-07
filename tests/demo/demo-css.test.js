@@ -86,6 +86,13 @@ test('active tabs keep their weight (no width jump in a joined control)', () => 
   }
 });
 
+test('the lamps sit a gap under the rail title; group heads are styled as .hint only', () => {
+  // The first rows are lamps, not a head, so the list itself carries the gap
+  // a head's padding used to give.
+  assert.equal(lastProp(rules, '.check', 'margin'), '10px 0 0');
+  assert.doesNotMatch(css, /grouphead/);
+});
+
 test('no promoted state remains: the wide stream rules are unconditional', () => {
   assert.doesNotMatch(css, /\.promoted/);
   assert.match(css, /\[data-role="live-pane"\] \.lp-body\{grid-template-columns:156px minmax\(0,1fr\);\}/);
