@@ -830,19 +830,13 @@ function startTour(participantId, capabilities, manifest) {
   // popup/auto-download.
   function triggerDownload(filename, data) {
     var url = URL.createObjectURL(jsonBlob(data));
-    clickDownload(url, filename);
-    URL.revokeObjectURL(url);
-  }
-
-  // Clicks a throwaway <a download> for `href`, inside the caller's click
-  // handler (the browser's user gesture).
-  function clickDownload(href, filename) {
     var a = document.createElement('a');
-    a.href = href;
+    a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // A built file's bytes, as the Save button writes them and the hand-off
@@ -879,8 +873,9 @@ function startTour(participantId, capabilities, manifest) {
   // "Open in the analyzer": the files the batches offer and the page's
   // fonts, stored for the analyze page (handoff.js), which this tab then
   // opens. The navigation waits for the write, so no popup blocker is
-  // involved, and Back returns to the tour. If the browser refuses the
-  // store, the step says so; the Save buttons still work.
+  // involved, and Back returns to the tour. If a data file cannot be
+  // fetched or the browser refuses the store, the step says so; the Save
+  // buttons still work.
   function openInAnalyzer(button) {
     if (button.disabled) return;
     button.disabled = true;

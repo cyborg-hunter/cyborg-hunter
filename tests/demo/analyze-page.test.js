@@ -1161,6 +1161,18 @@ test('the analyst\'s pick is remembered through a check that happens to suggest 
   assert.equal(role('id-field').value, 'run_id');
 });
 
+test('choosing the suggestion again lets the field follow the suggestions once more', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  pickIdField('run_id');
+  pickIdField('subject_ID');   // the suggestion: no longer a pick of the analyst's own
+  await dropMore(t, 'more.csv', { ...CHECKED, idSuggestion: { suggested: 'run_id', candidates: [{ field: 'run_id', reason: 'known name' }, { field: 'subject_ID', reason: 'known name' }] } });
+  assert.equal(role('id-field').value, 'run_id', 'the new suggestion stands');
+});
+
 // The sample, and files dropped after it, replace the cohort: the settings
 // start over as at the first check, and nothing says they were replaced.
 test('the sample, and a drop after it, start the settings over: the new cohort\'s values and no note', async () => {

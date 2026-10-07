@@ -25,7 +25,8 @@ var numberOrNull = function (text) {
 
 /**
  * The panel's values from a config (the dropped config merged over the CLI's
- * defaults, as the check returns it).
+ * defaults, as the check returns it). A value added here must join
+ * settingsKey, or a config that differs only in it never counts as changed.
  */
 export function settingsFromConfig(config) {
   var scope = config.phaseScope || {};

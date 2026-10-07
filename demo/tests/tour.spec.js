@@ -40,7 +40,7 @@ import {
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
 import { VERSION } from '../../src/shared/constants.js';
-import { SAVE_TO_FOLDER } from '../steps.js';
+import { HANDOFF, SAVE_TO_FOLDER } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
@@ -422,6 +422,31 @@ test('files step: a failed write aborts its file; a later save clears the failur
   await btn.click();
   await expect(btn).toHaveText(/Saved 5 files to demo-files/);
   await expect(note).toBeHidden();
+});
+
+// The note line is shared with the hand-off: a folder save that succeeds
+// takes away only its own failure line, never the hand-off's.
+test('files step: a folder save that succeeds leaves the hand-off\'s failure line on screen', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.showDirectoryPicker = async () => ({
+      name: 'demo-files',
+      getFileHandle: async () => ({
+        createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+      }),
+    });
+  });
+  await fastForwardToFiles(page);
+  await page.evaluate(() => { indexedDB.open = () => { throw new Error('refused by the test'); }; });
+  await page.locator('[data-action="open-analyzer"]').click();
+  const note = page.locator('[data-role="handoff-note"]');
+  const handoffFailed = HANDOFF.failed.replace(/<[^>]+>/g, '');   // the note's text, without its link
+  await expect(note).toHaveText(handoffFailed);
+
+  const btn = page.locator('[data-action="save-folder"]');
+  await btn.click();
+  await expect(btn).toHaveText(/Saved 5 files to demo-files/);
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText(handoffFailed);
 });
 
 test('files step: without the folder picker only the per-file Save buttons are offered', async ({ page }) => {

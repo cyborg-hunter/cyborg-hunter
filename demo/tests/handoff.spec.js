@@ -348,7 +348,7 @@ test('a refused hand-off keeps the visitor on the files step, says why, and enab
   const note = page.locator('[data-role="handoff-note"]');
   await expect(note).toBeVisible();
   await expect(note).toHaveAttribute('role', 'status');
-  await expect(note).toContainText('would not keep the files');
+  await expect(note).toContainText('could not be prepared for the analyzer');
   await expect(note.locator('a[href="analyze/"]')).toHaveCount(1);
   await expect(button).toBeEnabled();
   await expect(page.locator('#card h2')).toHaveText('Your files');
@@ -367,7 +367,7 @@ test('a data file the hand-off cannot fetch fails the whole hand-off: the visito
   await button.click();
   const note = page.locator('[data-role="handoff-note"]');
   await expect(note).toBeVisible();
-  await expect(note).toContainText('would not keep the files');
+  await expect(note).toContainText('could not be prepared for the analyzer');
   await expect(button).toBeEnabled();
   await expect(page).toHaveURL(baseURL + '/');
   await expect(page.locator('#card h2')).toHaveText('Your files');

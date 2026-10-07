@@ -1142,7 +1142,7 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
     // Fallback uses the SHARED sanitizer (persistence/ingest/assets),
     // not this file's image-oriented sanitize (which truncates + strips
     // dots and would miss the asset filename for long/dotted pids).
-    const assetPath = replay?.assetPath || `replay/${sanitizeId(participant.participantId)}.replay.js`;
+    const assetPath = replay.assetPath || `replay/${sanitizeId(participant.participantId)}.replay.js`;
     // Sheets the capture could not inline (cross-origin, fetch refused) are
     // href-only. Offer the fetch decision HERE, beside the one button, ticked
     // by default: an unstyled replay is misaligned by construction, and the
@@ -1150,7 +1150,7 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
     // Rendered only when it applies, so recordings with inlined CSS keep the
     // exact markup the snapshot tests pin.
     // Read as the viewer's tolerant loader reads it: a non-list counts none.
-    const externalSheets = replay && replay.recording && Array.isArray(replay.recording.stylesheets)
+    const externalSheets = Array.isArray(replay.recording.stylesheets)
       ? replay.recording.stylesheets.filter((sh) => sh && sh.kind === 'link' && sh.css == null).length
       : 0;
     const fetchCssLabel = externalSheets > 0
@@ -1159,7 +1159,7 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
       : '';
     // What the experiment's own files (assetsDir / dropped folder) supplied;
     // absent unless an asset map was applied, so the markup is otherwise unchanged.
-    const assetNote = replay && replay.assetNote ? `
+    const assetNote = replay.assetNote ? `
       <p class="replay-note">${esc(replay.assetNote)}</p>` : '';
     return `<div class="image-block replay-block" data-pid="${esc(participant.participantId)}"
          data-replay-src="${esc(assetPath)}">

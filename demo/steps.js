@@ -86,7 +86,7 @@ jsPsych.run([trial]);`,
 showQuestion('What is the capital of Australia?');   // your code
 
 CyborgHunter.init({ participantId: subject.id, preset: 'standard' });
-CyborgHunter.startTrial('q1');   // 'q1' is just your label for this trial
+CyborgHunter.startTrial('q1');   // 'q1' is your label for this trial
 // participant answers
 CyborgHunter.endTrial();         // seal q1's integrity record
 
@@ -411,14 +411,15 @@ export const HANDOFF_ASSETS = [
 ];
 
 /** The last step's one-click hand-off to the analyze page (demo/handoff.js).
- * `failed` is first-party HTML: the step shows it when the browser refuses to
- * store the files. `leaveHint` sits under the button: the session lives in
- * this page only. */
+ * `failed` is first-party HTML: the step shows it when the files could not be
+ * handed over (an example file failed to download, or the browser refused to
+ * store them). `leaveHint` sits under the button: the session lives in this
+ * page only. */
 export const HANDOFF = {
   buttonLabel: 'Open in the analyzer →',
   buttonHint: 'The files below and this page\'s fonts, kept in this browser: nothing is uploaded.',
-  failed: 'This browser would not keep the files for the analyzer. Save them ' +
-    'below and drop them on <a href="analyze/">the analyzer</a> instead.',
+  failed: 'The files could not be prepared for the analyzer. Save them below ' +
+    'and drop them on <a href="analyze/">the analyzer</a> instead.',
   leaveHint: 'Leaving this page ends the session: open it in the analyzer or save the files first; ' +
     'Back from the analyzer starts a new tour.',
 };
