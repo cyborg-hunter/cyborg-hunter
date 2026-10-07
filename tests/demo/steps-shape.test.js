@@ -4,7 +4,7 @@
 // tier vocabulary before step 10 (G2 guard), and the last step's files.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STEPS, RAIL_GROUPS, RAIL_INTRO, RAIL_INTRO_TITLE, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF } from '../../demo/steps.js';
+import { STEPS, RAIL_GROUPS, RAIL_INTRO, RAIL_INTRO_TITLE, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER } from '../../demo/steps.js';
 
 const IDS = ['intro','baseline','clipboard-cheat','tab-away','browser-rearrange',
   'autotype','guard-entry','guard-cheat','guard-debrief',
@@ -43,5 +43,11 @@ test('the last step offers five files in two batches: the session built here, th
     assert.ok(b.heading);
     for (const f of b.files) assert.ok(f.label && f.filename && f.description, f.filename);
   }
-  assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed);
+  assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed && HANDOFF.leaveHint);
+  assert.ok(SAVE_TO_FOLDER.buttonLabel && SAVE_TO_FOLDER.hint && SAVE_TO_FOLDER.failed);
+});
+test('the walkthrough saves through the folder button or one file per click, not a per-batch "Save all"', () => {
+  const text = REPLICATE.sections[0].text;
+  assert.doesNotMatch(text, /"Save all"/);
+  assert.ok(text.includes('one download per click'), text);
 });

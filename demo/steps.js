@@ -338,7 +338,7 @@ set separately, in the CLI's config file, on the analysis side. Below is
 both, as they actually read in code.</p>
 <p>Ordering the participant list is a separate step, done afterward by the
 CLI, once every session already has a tier. Tier comes first, always: hard
-rows before soft before clean. Inside a tier, a fixed ranking score orders
+rows before soft before clean. Inside a tier, a default ranking score orders
 the rest, one the weights above never touch: 5 points per paste event, 5
 per copy event, 3 per sidebar-open, 1 per tab-away past the participant's
 cutoff (a flicker under that cutoff scores nothing). A hard trigger, a
@@ -367,8 +367,9 @@ data.</p>`.trim(),
   },
 ];
 
-/** The last step's files, in two download batches (a Save link per file and
- * a "Save all" per batch, no zip): the session built in this tab (`key`,
+/** The last step's files, in two download batches (a Save button per file,
+ * and one "Save all into a folder" for all five where the browser has a
+ * folder picker; no zip): the session built in this tab (`key`,
  * built by demo.js's buildDownloadFile) and the two example participants the
  * site serves (`href`). A session file's card shows the name it is saved
  * under (demo.js sessionFileName); its `filename` here is the pattern, shown
@@ -399,12 +400,24 @@ export const DOWNLOAD_BATCHES = [
 
 /** The last step's one-click hand-off to the analyze page (demo/handoff.js).
  * `failed` is first-party HTML: the step shows it when the browser refuses to
- * store the files. */
+ * store the files. `leaveHint` sits under the button: the session lives in
+ * this page only. */
 export const HANDOFF = {
   buttonLabel: 'Open in the analyzer →',
   buttonHint: 'The files below, kept in this browser: nothing is uploaded.',
   failed: 'This browser would not keep the files for the analyzer. Save them ' +
     'below and drop them on <a href="analyze/">the analyzer</a> instead.',
+  leaveHint: 'Leaving this page ends the session: open it in the analyzer or save the files first; ' +
+    'Back from the analyzer starts a new tour.',
+};
+
+/** The last step's "Save all into a folder" (demo.js saveToFolder), offered
+ * only where the browser has a folder picker (Chrome, Edge). `failed` is
+ * plain text: the step shows it when the folder could not be written. */
+export const SAVE_TO_FOLDER = {
+  buttonLabel: 'Save all into a folder…',
+  hint: 'Chrome and Edge: pick an empty folder once; the five files are written into it.',
+  failed: 'The folder could not be written. Save the files one by one below.',
 };
 
 /** The last step's documentation-style walkthrough. Rendered as numbered
@@ -413,10 +426,9 @@ export const HANDOFF = {
 export const REPLICATE = {
   sections: [
     { n: 1, heading: 'Save the five files into one empty folder',
-      text: 'Use "Save all" on each batch above, or the Save button of each file. After the first file of a "Save all", ' +
-        'your browser may ask whether this site may download several files: allow it, or save the rest with their own ' +
-        'Save buttons. If a session file is still blocked, use its "show as text" link and save the text yourself; for an ' +
-        'example file, right-click its Save link and choose "Save link as".',
+      text: 'Use "Save all into a folder" above (Chrome and Edge), or the Save button of each file: browsers allow ' +
+        'one download per click, so each file has its own. If a session file is blocked, use its "show as text" link ' +
+        'and save the text yourself; for an example file, right-click its Save link and choose "Save link as".',
       code: null },
     { n: 2, heading: 'Install Node.js if you don’t have it',
       text: 'Node 18 or newer. Check with:',

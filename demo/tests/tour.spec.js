@@ -303,10 +303,28 @@ test('the files step leaves fullscreen via the plugin, with no false violation l
 
 // ---------------------------------------------------------------------------
 // 10b. The files step's cards name each file as it is saved (the session
-// files carry the visitor's id), and each batch's "Save all" saves every file
-// in it from one click, next to the per-file Save buttons.
+// files carry the visitor's id). Where the browser has a folder picker
+// (Chrome, Edge), one "Save all into a folder" writes all five files into
+// the folder the visitor picks; the picker is stubbed here, since a test
+// cannot answer the browser's own dialog. Without it, only the per-file Save
+// buttons are offered (the happy path above saves through each of them).
 // ---------------------------------------------------------------------------
-test('files step: the cards name the files as saved, and Save all saves each batch', async ({ page }) => {
+test('files step: "Save all into a folder" writes the five files through the folder picker', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__written = [];
+    window.showDirectoryPicker = async (opts) => {
+      window.__pickerOpts = opts;
+      return {
+        name: 'demo-files',
+        getFileHandle: async (name, o) => ({
+          createWritable: async () => ({
+            write: async (blob) => { window.__written.push({ name, size: blob.size, create: !!(o && o.create) }); },
+            close: async () => {},
+          }),
+        }),
+      };
+    };
+  });
   await fastForwardToFiles(page);
   const participantId = await pid(page);
   const cardNames = await page.locator('.file small').allTextContents();
@@ -314,18 +332,25 @@ test('files step: the cards name the files as saved, and Save all saves each bat
   expect(cardNames[1]).toMatch(new RegExp('^' + participantId + '-replay-\\d+\\.json$'));
   expect(cardNames.slice(2)).toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
 
-  // One click per batch; the browser's downloads, as Playwright sees them.
-  const saveAll = async (batch, count) => {
-    const names = [];
-    const onDownload = (download) => names.push(download.suggestedFilename());
-    page.on('download', onDownload);
-    await page.locator(`[data-action="save-all"][data-batch="${batch}"]`).click();
-    await expect.poll(() => names.length).toBe(count);
-    page.off('download', onDownload);
-    return names.sort();
-  };
-  expect(await saveAll(0, 3)).toEqual(cardNames.slice(0, 3).sort());
-  expect(await saveAll(1, 2)).toEqual(['example-1.json', 'example-2.json']);
+  await expect(page.locator('[data-action="save-all"]')).toHaveCount(0);
+  const btn = page.locator('[data-action="save-folder"]');
+  await btn.click();
+  await expect(btn).toHaveText(/Saved 5 files to demo-files/);
+  await expect(btn).toBeDisabled();
+  const written = await page.evaluate(() => window.__written);
+  expect(written.map((w) => w.name).sort()).toEqual(
+    (await page.evaluate(() => Array.from(document.querySelectorAll('.file small')).map((s) => s.textContent))).sort());
+  expect(written.every((w) => w.size > 0 && w.create)).toBe(true);
+  expect(await page.evaluate(() => window.__pickerOpts.mode)).toBe('readwrite');
+});
+
+test('files step: without the folder picker only the per-file Save buttons are offered', async ({ page }) => {
+  await page.addInitScript(() => { delete window.showDirectoryPicker; });
+  await fastForwardToFiles(page);
+  await expect(page.locator('[data-action="save-folder"]')).toHaveCount(0);
+  await expect(page.locator('[data-action="download"]')).toHaveCount(3);
+  await expect(page.locator('.file-actions a[download]')).toHaveCount(2);
+  await expect(page.locator('[data-role="leave-hint"]')).toContainText('save the files first');
 });
 
 // ---------------------------------------------------------------------------

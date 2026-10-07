@@ -18,7 +18,8 @@
 
 import {
   STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS, RAIL_INTRO,
-  RAIL_INTRO_TITLE, CODE_TABS, DOWNLOAD_BATCHES, HANDOFF, REPLICATE, SCORING_PANEL
+  RAIL_INTRO_TITLE, CODE_TABS, DOWNLOAD_BATCHES, HANDOFF, REPLICATE, SCORING_PANEL,
+  SAVE_TO_FOLDER
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
@@ -791,9 +792,9 @@ function startTour(participantId, capabilities, manifest) {
     }
     if (key === 'replay') {
       // renderFileCard() disables this button when
-      // state.replayUnavailable; Save all (saveBatch) and the hand-off
-      // (handoffFiles) call this anyway and leave out the null it returns
-      // then, or when finalizeReplay() has nothing to return.
+      // state.replayUnavailable; the folder save and the hand-off (both
+      // through handoffFiles) call this anyway and leave out the null it
+      // returns then, or when finalizeReplay() has nothing to return.
       var recording = finalizeReplay();
       if (!recording) return null;
       return { filename: sessionFileName('replay'), data: recording };
@@ -842,19 +843,6 @@ function startTour(participantId, capabilities, manifest) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  }
-
-  // "Save all": every file of one batch from this one click, in order — a
-  // session file built and written as its Save button does (a missing
-  // recording is skipped), an example from the site. A browser may ask
-  // before the second download of one click; the walkthrough (REPLICATE)
-  // says to allow it or to use the per-file Save buttons.
-  function saveBatch(batch) {
-    batch.files.forEach(function (f) {
-      if (f.href) { clickDownload(f.href, f.filename); return; }
-      var toSave = buildDownloadFile(f.key);
-      if (toSave) triggerDownload(toSave.filename, toSave.data);
-    });
   }
 
   // A built file's bytes, as the Save button writes them and the hand-off
@@ -926,6 +914,39 @@ function startTour(participantId, capabilities, manifest) {
     })).then(function (files) { return files.filter(Boolean); });
   }
 
+  // "Save all into a folder": the folder picker first, inside the click
+  // (it needs the user's activation), then every file of both batches
+  // written into it, in batch order. Rendered only where the API exists
+  // (Chrome, Edge); elsewhere the per-file buttons are the way. A dismissed
+  // picker changes nothing; a write failure says so and leaves the per-file
+  // buttons.
+  function saveToFolder(button) {
+    if (button.disabled) return;
+    var picker = window.showDirectoryPicker({
+      mode: 'readwrite', id: 'cyborg-hunter-demo', startIn: 'downloads'
+    });
+    button.disabled = true;
+    picker.then(function (dir) {
+      return handoffFiles().then(function (files) {
+        return files.reduce(function (p, f) {
+          return p.then(function () {
+            return dir.getFileHandle(f.path, { create: true })
+              .then(function (h) { return h.createWritable(); })
+              .then(function (w) { return w.write(f.blob).then(function () { return w.close(); }); });
+          });
+        }, Promise.resolve()).then(function () {
+          button.textContent = 'Saved ' + files.length + ' files to ' + dir.name + ' ✓';
+        });
+      });
+    }).catch(function (err) {
+      button.disabled = false;
+      if (err && err.name === 'AbortError') return;
+      console.warn('cyborg-hunter demo: the folder could not be written', err);
+      var note = cardEl.querySelector('[data-role="handoff-note"]');
+      if (note) { note.textContent = SAVE_TO_FOLDER.failed; note.hidden = false; }
+    });
+  }
+
   function renderClosingCta() {
     return (
       '<p class="secondary">' + escHtml(CLOSING_CTA.installInvitation) + ' ' +
@@ -948,13 +969,6 @@ function startTour(participantId, capabilities, manifest) {
         '<div class="file-actions"><a class="btn" href="' + f.href + '" download="' + f.filename + '">Save</a></div></div>';
     }
     var disabled = f.key === 'replay' && state.replayUnavailable;
-    // Config caveat (spec :182/:288): first-party copy, so innerHTML is
-    // safe here the same as every other steps.js string this panel
-    // renders (f.label, f.description, etc.) — rendered directly under
-    // the config file's Save/show-as-text row, not restructuring the panel.
-    var caveat = f.key === 'config'
-      ? '<p class="file-caveat" data-role="config-caveat">' + tpl(CONFIG_CAVEAT) + '</p>'
-      : '';
     return (
       '<div class="file">' +
       info(sessionFileName(f.key) || f.filename, disabled ? 'recording unavailable in this browser' : f.description) +
@@ -962,12 +976,15 @@ function startTour(participantId, capabilities, manifest) {
       '<button class="btn" data-action="download" data-key="' + f.key +
       '" data-saved-label="' + f.savedLabel + '"' + (disabled ? ' disabled' : '') + '>Save</button>' +
       (disabled ? '' : '<a href="#" data-action="showtext" data-key="' + f.key + '">show as text</a>') +
-      '</div>' + caveat + '</div>'
+      '</div></div>'
     );
   }
 
-  // The last step's panel: the hand-off to the analyzer first, then the
-  // two download batches, then the command-line walkthrough.
+  // The last step's panel: the hand-off to the analyzer first, with the
+  // line that leaving the page ends the session; then "Save all into a
+  // folder" where the browser has a folder picker; then the two download
+  // batches, each a heading and an even grid of cards; then the
+  // command-line walkthrough.
   function renderDownloadsPanel(task) {
     // scramble coupling: same .jspsych-content convention as renderTaskPanel
     // below — GuardFriction's obfuscateContent() only touches
@@ -978,12 +995,22 @@ function startTour(participantId, capabilities, manifest) {
     parts.push(
       '<div class="handoff"><button class="btn" data-action="open-analyzer">' + escHtml(HANDOFF.buttonLabel) + '</button>' +
       '<span class="hint">' + escHtml(HANDOFF.buttonHint) + '</span></div>' +
+      '<p class="hint" data-role="leave-hint">' + escHtml(HANDOFF.leaveHint) + '</p>' +
       '<p class="rule" data-role="handoff-note" role="status" hidden></p>'
     );
-    DOWNLOAD_BATCHES.forEach(function (batch, b) {
-      parts.push('<div class="batch-head"><h3 class="batch-heading">' + escHtml(batch.heading) + '</h3>' +
-        '<button class="btn" data-action="save-all" data-batch="' + b + '">Save all</button></div>');
+    if ('showDirectoryPicker' in window) {
+      parts.push('<div class="batch-head"><button class="btn" data-action="save-folder">' +
+        escHtml(SAVE_TO_FOLDER.buttonLabel) + '</button>' +
+        '<span class="hint">' + escHtml(SAVE_TO_FOLDER.hint) + '</span></div>');
+    }
+    DOWNLOAD_BATCHES.forEach(function (batch) {
+      parts.push('<div class="batch-head"><h3 class="batch-heading">' + escHtml(batch.heading) + '</h3></div>');
       parts.push('<div class="files">' + batch.files.map(renderFileCard).join('') + '</div>');
+      // The config caveat, once, under the grid that holds the config file.
+      // First-party copy (steps.js), so rendering it as HTML is safe.
+      if (batch.files.some(function (f) { return f.key === 'config'; })) {
+        parts.push('<p class="file-caveat" data-role="config-caveat">' + tpl(CONFIG_CAVEAT) + '</p>');
+      }
     });
     parts.push(
       '<dialog class="filetext-dialog"><h3></h3><pre></pre>' +
@@ -1011,10 +1038,11 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // Config-as-source snippets: both built from the manifest's real values, never hand-typed, so a preset change
-  // can't silently drift from what's displayed (same principle as
-  // tools/gen-signal-manifest.mjs's own docblock). Shows the 'standard'
-  // preset specifically — what this session actually collected under.
+  // Config-as-source snippets: both built from the manifest's real values,
+  // never hand-typed, so a preset change can't silently drift from what's
+  // displayed (same principle as tools/gen-signal-manifest.mjs's own
+  // docblock). Shows the 'standard' preset specifically — what this session
+  // actually collected under.
   function buildInitSnippet(manifest) {
     var soft = (manifest.presets && manifest.presets.standard &&
       manifest.presets.standard.scoring.soft) || {};
@@ -1337,8 +1365,8 @@ function startTour(participantId, capabilities, manifest) {
     }
     var analyzerBtn = e.target.closest('[data-action="open-analyzer"]');
     if (analyzerBtn) { openInAnalyzer(analyzerBtn); return; }
-    var saveAllBtn = e.target.closest('[data-action="save-all"]');
-    if (saveAllBtn) { saveBatch(DOWNLOAD_BATCHES[Number(saveAllBtn.dataset.batch)]); return; }
+    var folderBtn = e.target.closest('[data-action="save-folder"]');
+    if (folderBtn) { saveToFolder(folderBtn); return; }
     var downloadBtn = e.target.closest('[data-action="download"]');
     if (downloadBtn) {
       var toSave = buildDownloadFile(downloadBtn.dataset.key);

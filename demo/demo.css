@@ -174,7 +174,7 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
   border:none;background:var(--ink);color:#fff;cursor:pointer;}
 .btn:hover{background:#2b2b2b;}
 /* A disabled button (the hand-off while it runs, a Save whose recording is
- * missing) reads as unavailable, on hover too. */
+ * missing, the folder save once done) reads as unavailable, on hover too. */
 .btn:disabled{background:var(--line);color:var(--dim);cursor:not-allowed;}
 .btn:focus-visible, button:focus-visible, a:focus-visible{
   outline:2px solid var(--ink);outline-offset:2px;}
@@ -368,26 +368,29 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .lp-caption code{font-family:var(--mono);font-size:11px;}
 
 /* ---------------------------------------------------------------------
- * Files step (the last one) — the hand-off to the analyzer, the two
- * download batches' file cards, and the "show as text" fallback dialog.
+ * Files step (the last one) — the hand-off to the analyzer and the line
+ * under it, "Save all into a folder" (a .batch-head row of its own), the
+ * two download batches' file cards on an even grid, the config caveat under
+ * the first grid, and the "show as text" fallback dialog.
  * --------------------------------------------------------------------- */
-.handoff{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 14px;}
+.handoff{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 8px;}
 .batch-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:18px 0 8px;}
 .batch-heading{font-family:var(--ff-sofia);font-size:15px;font-weight:600;margin:0;}
-.files{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px;}
-.file{display:flex;flex-direction:column;gap:10px;min-width:190px;
+.files{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:0 0 14px;}
+.file{display:flex;flex-direction:column;gap:10px;min-width:0;
   background:var(--panel);box-shadow:var(--shadow);border:1px solid var(--line);border-radius:0;padding:10px 14px;
   font:13px/1.4 var(--mono);}
 .file-info{display:flex;flex-direction:column;gap:2px;}
 /* 11px reading text: Recursive, not the display-ish Tomorrow (12px floor). */
 .file small{display:block;font-family:var(--ff-recursive);color:var(--dim);font-size:11px;}
 .file .file-desc{display:block;font-family:var(--ff-recursive);color:var(--dim);font-size:11px;}
-.file .file-actions{display:flex;gap:12px;align-items:center;}
+/* margin-top:auto: every card's Save row sits at the bottom of its grid row. */
+.file .file-actions{display:flex;gap:12px;align-items:center;margin-top:auto;}
 .file .file-actions a{color:var(--ink);font-size:12px;text-decoration:underline;text-underline-offset:3px;}
 /* An example's Save is a link styled as the session files' Save button. */
 .file .file-actions a.btn{color:#fff;font-size:inherit;text-decoration:none;}
-.file .file-caveat{font-family:var(--ff-recursive);color:var(--dim);font-size:11px;font-style:italic;
-  max-width:220px;margin:0;}
+/* Under the grid, not in a card; its margin is .task p's. */
+.file-caveat{font-family:var(--ff-recursive);color:var(--dim);font-size:11px;font-style:italic;}
 
 .filetext-dialog{max-width:640px;width:90vw;padding:18px;border:1px solid var(--line);
   border-radius:0;box-shadow:var(--shadow);background:var(--panel);color:var(--ink);}
