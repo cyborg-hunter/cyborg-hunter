@@ -47,19 +47,21 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // was hand-rolled in nine places and missing from exactly this one, which is
   // why the rule now lives in one module.
   const replayClientSrc = inlineSafeSrc(opts.replayClientSrc);
-  // @font-face rules for the report's typefaces (report-fonts.js builds them
-  // as base64 data URIs for the CLI). Absent → no faces, and every role
-  // renders in its fallback stack (the demo bundle and the snapshot tests).
+  // @font-face rules for the report's typefaces, as base64 data URIs
+  // (report-fonts.js builds them for the CLI, and tools/build-analyze.mjs
+  // bakes the same rules into the analyze bundle). Absent → no faces, and
+  // every role renders in its fallback stack (the snapshot tests).
   const fontFaceCss = opts.fontFaceCss ? String(opts.fontFaceCss) + '\n' : '';
   const visualsUnavailableNote = opts.visualsUnavailableNote
     ?? 'Visual renderers not available (install the canvas package).';
   const imageSources = opts.imageSources ?? null;       // pid → {typingProfile, sessionTimeline, trajectories} data URIs (null entry = omit that img)
-  // Caller renders the replay in its own UI outside this report (the demo's
-  // sibling viewer-host iframe — see demo/replay-host.js), so the report's
-  // per-participant "Session replay" section would only ever show a stale
-  // "not enabled"-style message: emit no replay section at all. Default
-  // false ⇒ output byte-identical (HTML snapshot contract, same as every
-  // other opt here).
+  // Caller renders the replay in its own UI outside this report: only the
+  // analyze page's in-page report (renderInPageHtml, report-core.js) passes
+  // it, and the page's replay card shows the replay beside the report (see
+  // demo/replay-host.js), so the report's per-participant "Session replay"
+  // section would only ever show a stale "not enabled"-style message: emit
+  // no replay section at all. Default false ⇒ output byte-identical (HTML
+  // snapshot contract, same as every other opt here).
   const replayShownExternally = opts.replayShownExternally ?? false;
   // In-page = imageSources present: only the analyze page's in-page report
   // (renderInPageHtml, report-core.js) passes them. The report then runs

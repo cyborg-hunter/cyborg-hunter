@@ -7,11 +7,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ### Added
 - Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
-  14:03 UTC`). The id is a hash of the participant ids and of each one's
-  trial count and first and last trial timestamps, so a report rebuilt from
-  the same files keeps it, whatever the settings, and two studies that share
+  14:03 UTC`). The id is a hash of each participant's id, trial count, and
+  first and last trial timestamps. A report rebuilt from the same files keeps
+  it, whatever the settings, and the CLI and `/analyze/` give the same files
+  the same id, in whatever order they read them. Two studies that share
   participant ids get different ids when their trials carry timestamps
-  (0.6.1 and later).
+  (0.6.1 and later), so their annotations stay apart.
 - Reports: annotate each participant with Include, Exclude or Flag and a
   note (keys `i`, `e`, `f` for the selected one). The rail shows the label
   and how many participants are reviewed. The report keeps the annotations
@@ -42,8 +43,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   (scores, counts and event timings, never text the participant typed or
   pasted) into the declared embedded-data field `__js_cyborg_hunter` at
   every page submit, and stays silent when Qualtrics runs the header again
-  on the next page. The CLI and the analyze page read the Qualtrics CSV
-  export, one participant per response (`qualtricsField`,
+  on the next page. Each survey opened in a tab keeps a session of its own:
+  the tag's `data-qualtrics-survey-id`, which the install snippet fills with
+  `${e://Field/SurveyID}`, names the survey, and the page address does when
+  the attribute is missing or unfilled. The CLI and the analyze page read
+  the Qualtrics CSV export, one participant per response (`qualtricsField`,
   `--qualtrics-field`). Replay recordings are never written to Qualtrics.
   In a report built from a reduced payload (session entries cut to the
   newest ones), the Sidebar, keyboard-shortcut and AI-extension tiles count
@@ -111,7 +115,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   integrity and session-report fields, platform ID and trajectory order).
   On the results, a change re-analyses in place without dropping the files
   again; a change to the ID, integrity or session-report field reads the
-  files again from the same list.
+  files again from the same list. A drop that adds data files or recordings
+  keeps the panel's values; only a config whose values differ from the
+  loaded one replaces them, and a line under the file list says so. The
+  Participant ID field likewise keeps the analyst's choice while the files
+  still offer it and the config is unchanged.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
@@ -170,12 +178,30 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   button, and a line says whether the settings came from a dropped
   `cyborg-hunter.config.json` or are the defaults.
 - Live demo: the tour ends with your files. Its last step, "Your files",
-  offers the session data, the replay recording and a config, plus two
-  example participants, as two batches of Save links (no zip), and an
-  "Open in the analyzer" button that hands all five to `/analyze/` in the
-  same browser, where they are listed as if dropped. The report the tour
-  used to build at its end, and its scoring playground, are gone: the
-  analyzer builds the report and holds the settings. The tour has 11 steps.
+  takes the page's full width and offers the session data, the replay
+  recording and a config, plus two example participants, each with its own
+  Save button (no zip). In Chrome and Edge, "Save all into a folder" writes
+  all five into one folder the visitor picks. "Open in the analyzer" hands
+  the five files and the page's six fonts to `/analyze/` in the same
+  browser, where they are listed as if dropped and the visitor's replay
+  renders in the tour's typefaces. The hand-off keeps them for ten minutes;
+  `/analyze/` opened from it later says that nothing was handed off. The
+  report the tour used to build at its end, its scoring playground and the
+  scoring step's weight inputs are gone: the scoring step shows the
+  visitor's soft score so far, as the library computes it with the standard
+  weights, and the analyzer builds the report and holds the settings that
+  apply after collection (its settings panel). The tour has 11 steps.
+- Live demo: the live session record sits under the step card on every
+  step, and the column on the right holds the signal lamps alone, which stay
+  in view while the step scrolls. Before, the record shared that column
+  with the lamps and moved under the card for one step only.
+- CSV files (`summary.csv`, `event-log.csv`, `extensions.csv`, and the
+  annotations' Export CSV in the report and on `/analyze/`): a text cell
+  that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written
+  with a leading apostrophe (`'`), so a spreadsheet reads it as text instead
+  of running it as a formula. Numbers, negative ones included, are written
+  unchanged. `extensions.csv` now quotes a participant ID that holds a comma
+  or a quote, as the other files do.
 - Replay viewer: the stage shows the participant's whole recorded viewport,
   scaled to fit on both axes. Before, it took the available width only, and a
   tall recording ran below the window. **1:1** shows the recorded page at
@@ -230,7 +256,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - `/analyze/`: selecting a participant without a replay recording in the
   report no longer leaves the previous participant's replay on screen. The
   replay card closes it and says `Participant <id> has no replay recording.`;
-  Load stays disabled until a participant with a recording is selected.
+  Load stays disabled until a participant with a recording is selected. A
+  new report opens on its first participant; when that one has no recording
+  and another has, the card stays on the first participant with one.
 - One-line setup with `data-replay` on pages without jsPsych: a page the
   browser shows again from the back/forward cache (Back) now records on, from
   a keyframe segment marked
@@ -311,6 +339,17 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   (`src/cli/renderers/{trajectories,session-timeline,typing-profile,html-index,replay-assets}.js`).
   The report is unchanged. Deep imports of these undocumented paths no longer
   resolve.
+- Two options of undocumented deep-import paths: `renderIndexHtml`
+  (`src/cli/renderers/html-index-core.js`) no longer reads
+  `inlineReplayModels`, which embedded replay models in the page, and
+  `fontFaceCss` (`src/cli/renderers/font-face-css.js`) no longer takes a
+  third `display` argument; its faces always use `font-display: block`, the
+  default before. Nothing in the package passed either, and the report is
+  unchanged. A call that still passes one gets the default page, or
+  `block`.
+- Live demo site: `report-frame.js` and `replay-host.js` are no longer
+  published at the site's root. The analyze page's bundle holds them, and
+  the tour never loaded them.
 
 ## [0.11.0] — 2026-10-02
 

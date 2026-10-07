@@ -105,7 +105,7 @@ describe('report fonts: plumbing into index.html', () => {
     assert.ok(firstStyle.includes(fontCss), 'inside the report <style>');
   });
 
-  it('renderIndexHtml without opts.fontFaceCss emits no @font-face (demo and snapshot path)', async () => {
+  it('renderIndexHtml without opts.fontFaceCss emits no @font-face (the snapshot path)', async () => {
     const { renderIndexHtml } = await import('../../src/cli/renderers/html-index-core.js');
     const { summaries, triage, participants } = tiny();
     const html = await renderIndexHtml(summaries, triage, participants, { outputDir: '.' }, false);

@@ -34,12 +34,13 @@ const SITE_DIR = join(ROOT, '.demo-site');
 export const DEMO_DIR = join(ROOT, 'demo');
 
 // Imported by the analyze page and bundled into analyze.bundle.js; the tour
-// does not load them.
+// does not load them. Add a demo/ module here when only the analyze page
+// imports it.
 const BUNDLED_ONLY = new Set(['report-frame.js', 'replay-host.js']);
 
 // Excludes demo/tests/ (Playwright specs + helpers — dev-only, must not ship
-// publicly), under demo/analyze/, everything but the page and its built
-// bundle (the other files there are build inputs of tools/build-analyze.mjs),
+// publicly); under demo/analyze/, everything but the page and its built
+// bundle (the other files there are build inputs of tools/build-analyze.mjs);
 // and BUNDLED_ONLY. Everything else under demo/ is runtime: index.html,
 // demo.css, the tour's *.js modules, signal-manifest.json, assets/.
 export function isRuntimeFile(src) {
