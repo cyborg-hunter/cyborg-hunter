@@ -10,9 +10,10 @@
 //   1. `node build.js` -> dist/ (skipped if dist/ is newer than every file
 //      under src/ — "if stale").
 //   2. `node tools/build-analyze.mjs` -> demo/analyze/analyze.bundle.js.
-//   3. Copy demo/* (excluding demo/tests/ — Playwright specs must not ship
-//      in the public artifact — and, under demo/analyze/, everything but
-//      index.html and the built bundle) and dist/ into .demo-site/.
+//   3. Copy demo/* and dist/ into .demo-site/, leaving out demo/tests/
+//      (Playwright specs must not ship in the public artifact), everything
+//      under demo/analyze/ but index.html and the built bundle, and the two
+//      scripts only that bundle uses.
 //   4. Copy the report's typefaces, which demo.css loads for the tour.
 //   5. Write the analyze page as one offline file,
 //      .demo-site/analyze/cyborg-hunter-analyze.html (bundle inlined, policy
@@ -32,14 +33,19 @@ const ROOT = join(__dirname, '..');
 const SITE_DIR = join(ROOT, '.demo-site');
 export const DEMO_DIR = join(ROOT, 'demo');
 
+// Imported by the analyze page and bundled into analyze.bundle.js; the tour
+// does not load them.
+const BUNDLED_ONLY = new Set(['report-frame.js', 'replay-host.js']);
+
 // Excludes demo/tests/ (Playwright specs + helpers — dev-only, must not ship
-// publicly) and, under demo/analyze/, everything but the page and its built
-// bundle: the other files there are build inputs of tools/build-analyze.mjs.
-// Everything else under demo/ is runtime: index.html, demo.css, the *.js
-// modules, signal-manifest.json, assets/.
+// publicly), under demo/analyze/, everything but the page and its built
+// bundle (the other files there are build inputs of tools/build-analyze.mjs),
+// and BUNDLED_ONLY. Everything else under demo/ is runtime: index.html,
+// demo.css, the tour's *.js modules, signal-manifest.json, assets/.
 export function isRuntimeFile(src) {
   const rel = relative(DEMO_DIR, src);
   if (rel === 'tests' || rel.startsWith('tests' + sep)) return false;
+  if (BUNDLED_ONLY.has(rel)) return false;
   if (rel.startsWith('analyze' + sep)) {
     const inner = rel.slice(('analyze' + sep).length);
     return inner === 'index.html' || inner === 'analyze.bundle.js';
