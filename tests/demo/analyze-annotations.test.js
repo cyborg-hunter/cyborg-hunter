@@ -37,12 +37,13 @@ test('the state is stored under ch-annot:<runId>; a storage that refuses leaves 
   const items = new Map();
   const storage = { getItem: (k) => (items.has(k) ? items.get(k) : null), setItem: (k, v) => items.set(k, v) };
   assert.equal(storageKey(RUN), 'ch-annot:' + RUN);
-  saveAnnotations(storage, RUN, { A: { label: 'flag', note: '', annotatedAt: NOW } });
+  assert.equal(saveAnnotations(storage, RUN, { A: { label: 'flag', note: '', annotatedAt: NOW } }), true, 'stored');
   assert.deepEqual({ ...loadAnnotations(storage, RUN) }, { A: { label: 'flag', note: '', annotatedAt: NOW } });
   assert.deepEqual({ ...loadAnnotations(storage, 'ffffffffffffffff') }, {}, 'another run starts empty');
   const refusing = { getItem: () => { throw new Error('SecurityError'); }, setItem: () => { throw new Error('SecurityError'); } };
   assert.deepEqual({ ...loadAnnotations(refusing, RUN) }, {});
-  saveAnnotations(refusing, RUN, {});
+  assert.equal(saveAnnotations(refusing, RUN, {}), false, 'a refused write says so');
+  assert.equal(saveAnnotations(null, RUN, {}), false, 'no storage: not stored');
   assert.deepEqual({ ...loadAnnotations(null, RUN) }, {});
 });
 

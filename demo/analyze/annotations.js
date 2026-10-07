@@ -37,8 +37,17 @@ export function loadAnnotations(storage, runId, cohortIds) {
   try { return readAnnotations(storage, runId, cohortIds); } catch (e) { return Object.create(null); }
 }
 
+/**
+ * Stores the state under the run's key. Returns whether storage took it:
+ * false where storage is refused (see pageStorage) or will not take the
+ * write (setItem throws when storage is full).
+ */
 export function saveAnnotations(storage, runId, annotations) {
-  try { if (storage) storage.setItem(storageKey(runId), JSON.stringify(annotations)); } catch (e) { /* see pageStorage */ }
+  try {
+    if (!storage) return false;
+    storage.setItem(storageKey(runId), JSON.stringify(annotations));
+    return true;
+  } catch (e) { return false; }
 }
 
 /**

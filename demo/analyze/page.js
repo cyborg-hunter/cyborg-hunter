@@ -24,6 +24,9 @@ import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotati
 import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
+// The annotations status line once storage has not taken a write
+// (changeAnnotations); the CLI report says the same of its own storage.
+var UNSTORED_TEXT = 'This browser does not let the page store annotations: they last until Start over or until the page is closed. Export JSON keeps them.';
 
 function q(root, role) { return root.querySelector('[data-role="' + role + '"]'); }
 function download(name, blobOrText, type) {
@@ -64,6 +67,9 @@ export function createPage(root, worker, opts) {
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
   var reportUrl = null;
+  // True once storage has not taken this cohort's annotations
+  // (changeAnnotations); cleared with the status line for each new cohort.
+  var annotationsUnstored = false;
   // True from a run's results until the new report's first selection message:
   // that one is the report's own load-time pick of its first row.
   var reportFirstSelection = false;
@@ -422,6 +428,7 @@ export function createPage(root, worker, opts) {
       state.runId = done.runId || null;
       state.annotations = state.runId ? loadAnnotations(pageStorage(), state.runId, cohortIds()) : null;
       q(root, 'annotations-status').textContent = '';
+      annotationsUnstored = false;
     }
     state.zipUrl = URL.createObjectURL(new Blob(state.zipParts, { type: 'application/zip' }));
     updateControls();
@@ -460,15 +467,23 @@ export function createPage(root, worker, opts) {
   // One change (a function that applies it to a state and says whether it
   // applied), made to what storage holds now rather than to this page's
   // copy: another tab of the page on the same cohort may have written since.
-  // Where storage is refused the change goes to the page's own state.
+  // Once storage has not taken a write (refused, or full), the page's own
+  // copy is the base for the rest of this cohort: storage's copy lacks the
+  // changes it did not take, and a change made over it would drop them from
+  // the page, the report and the exports. The status line says so, once.
   function changeAnnotations(change) {
     var storage = pageStorage();
     var stored = null;
-    try { stored = readAnnotations(storage, state.runId, cohortIds()); } catch (e) { /* refused: see pageStorage */ }
+    if (!annotationsUnstored) {
+      try { stored = readAnnotations(storage, state.runId, cohortIds()); } catch (e) { /* refused: see pageStorage */ }
+    }
     var target = stored || state.annotations;
     if (!change(target)) return;
     state.annotations = target;
-    if (stored) saveAnnotations(storage, state.runId, stored);
+    if (!annotationsUnstored && !saveAnnotations(storage, state.runId, target)) {
+      annotationsUnstored = true;
+      q(root, 'annotations-status').textContent = UNSTORED_TEXT;
+    }
     postAnnotations();
   }
   // One change the report posted (annotations.js checks it).
@@ -483,6 +498,7 @@ export function createPage(root, worker, opts) {
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
     state.runId = null; state.annotations = null;
     q(root, 'annotations-status').textContent = '';
+    annotationsUnstored = false;
     stopWatchdog();
     hideStallHint();
     discardZip();
@@ -599,7 +615,9 @@ export function createPage(root, worker, opts) {
         Object.keys(result.annotations).forEach(function (id) { map[id] = result.annotations[id]; });
         return true;
       });
-      status.textContent = importMessage(result);
+      // The import's message replaces the status line, so it repeats the
+      // storage note (changeAnnotations) while that holds.
+      status.textContent = importMessage(result) + (annotationsUnstored ? ' ' + UNSTORED_TEXT : '');
     }).catch(function (err) { status.textContent = 'Import failed: ' + (err && err.message ? err.message : String(err)); });
   });
   // Another tab of the page on the same cohort changed the annotations

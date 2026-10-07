@@ -1246,6 +1246,41 @@ describe('annotations', () => {
     assert.deepEqual(posted.at(-1).annotations, { B: entry('include') }, 'read as an import is: Z is not in this report');
   });
 
+  // Storage that reads but will not take a write (setItem throws, as it does
+  // when storage is full): a change made over storage's copy would drop the
+  // change before it, which storage never took. The page's own copy is the
+  // base from then on, and the status line says so once.
+  test('a refused write keeps every change in the page, the report and the export, and the status line says so once', async () => {
+    const r = await toAnnotatedResults();
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); }, removeItem() {}, clear() {}, key: () => null, length: 0 };
+    Object.defineProperty(window, 'localStorage', { configurable: true, get: () => full });
+    const made = [];
+    const saved = URL.createObjectURL;
+    URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+    try {
+      r.annotate();
+      r.annotate({ participantId: 'B', label: 'flag', note: '' });
+      assert.deepEqual(Object.keys(r.t.page.state.annotations).sort(), ['A', 'B'], 'the page holds both changes');
+      assert.deepEqual(Object.keys(posted.at(-1).annotations).sort(), ['A', 'B'], 'the report shows both');
+      action('annotations-json').click();
+      assert.deepEqual(Object.keys(JSON.parse(await made.at(-1).text()).annotations).sort(), ['A', 'B'], 'the export keeps both');
+      const note = 'This browser does not let the page store annotations: they last until Start over or until the page is closed. Export JSON keeps them.';
+      assert.equal(role('annotations-status').textContent, note);
+      // An import's message takes the status line and keeps the note.
+      const input = role('annotations-input');
+      Object.defineProperty(input, 'files', { configurable: true, value: [new File([JSON.stringify({ format: 'cyborg-hunter-annotations', runId: RUN,
+        annotations: { B: { label: 'include', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } })], 'a.json')] });
+      input.dispatchEvent(new win.Event('change'));
+      await until(() => role('annotations-status').textContent !== note);
+      assert.equal(role('annotations-status').textContent, 'Imported 1 annotation. ' + note);
+      assert.deepEqual(Object.keys(r.t.page.state.annotations).sort(), ['A', 'B'], 'the import is made over the page\'s copy too');
+    } finally {
+      URL.createObjectURL = saved;
+      Object.defineProperty(window, 'localStorage', original);
+    }
+  });
+
   test('the annotation exports and the import wait for a re-analysis, as the other downloads do', async () => {
     const r = await toAnnotatedResults();
     const controls = () => [action('annotations-csv'), action('annotations-json'), role('annotations-input')];
