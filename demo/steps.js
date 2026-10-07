@@ -97,24 +97,18 @@ const payload = CyborgHunter.getSessionReport();
 
 /**
  * Step-10 scoring panel (demo.js's renderScoringPanel/wireScoringPanel):
- * per-signal weight editors + two config-as-source snippets. Field order/
- * labels here; the live numbers come from signal-manifest.json (never
- * hand-typed) so a preset change can't silently drift from what's shown.
+ * the visitor's soft score so far, as the library itself computes it under
+ * the standard weights, a pointer to the analyzer's settings panel for
+ * re-weighting, and two config-as-source snippets. The copy lives here; the
+ * numbers come from the monitor and signal-manifest.json (never hand-typed)
+ * so a preset change can't silently drift from what's shown.
  */
 export const SCORING_PANEL = {
-  weightsIntro:
-    'Move a weight and the score below recomputes against your own ' +
-    'session, using the same arithmetic the CLI runs.',
-  weightFields: [
-    { key: 'copy', label: 'copy' },
-    { key: 'tabAway', label: 'tab-away past the cutoff' },
-    { key: 'typingSpeed', label: 'fast typing' },
-    { key: 'sidebarEvent', label: 'sidebar open' },
-    { key: 'devTools', label: 'DevTools shortcut' },
-    { key: 'foreignInput', label: 'foreign input' },
-  ],
-  configIntro: "As it actually reads in the library's scoring config:",
-  cliConfigIntro: "As it actually reads in the CLI's config file:",
+  intro: 'Your session so far, scored with the standard weights, the same arithmetic the command-line tool runs.',
+  analyzerNote: 'Changing the weights after the fact is the analyzer’s job: its settings panel ' +
+    're-scores the report as you move them, and exports the config that reproduces it on the command line.',
+  configIntro: 'As it reads in the library’s scoring config:',
+  cliConfigIntro: 'As it reads in the CLI’s config file:',
 };
 
 /**
@@ -339,8 +333,7 @@ two presets they belong to (standard, strict), are set once, in the
 library's scoring config, when a study is initialized. The soft-score
 threshold, and two threshold fallbacks (tab-away cutoff, typing speed), are
 set separately, in the CLI's config file, on the analysis side. Below is
-both, as they actually read in code: move a weight and your own soft score
-recomputes against it, live.</p>
+both, as they actually read in code.</p>
 <p>Ordering the participant list is a separate step, done afterward by the
 CLI, once every session already has a tier. Tier comes first, always: hard
 rows before soft before clean. Inside a tier, a fixed ranking score orders

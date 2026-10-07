@@ -238,12 +238,7 @@ function startTour(participantId, capabilities, manifest) {
     // Live session pane (demo/live-pane.js) + its own clock zero, set right
     // after creation below.
     pane: null,
-    t0: 0,
-    // The scoring step's per-signal weight edits (weights), read by
-    // playground.js's mergePlaygroundConfig() for that step's live
-    // soft-score readout. controls and preset stay null: nothing on the
-    // tour sets them, so the manifest's own preset applies.
-    scoringOverrides: { weights: {}, controls: null, preset: null }
+    t0: 0
   };
 
   var cardEl = document.getElementById('card');
@@ -272,10 +267,9 @@ function startTour(participantId, capabilities, manifest) {
   // opts.final is the download seam's flag ONLY (buildDownloadFile passes
   // it for 'sessionData') — with it set, and once the last step has
   // snapshotted state.sessionReport, this reads that frozen snapshot instead
-  // of a fresh live one. Without it (paneRow()'s live-pane feed, and step
-  // 10's "your soft score … from the session so far" readout), this keeps
-  // reading monitor.getSessionReport() live, same as before — freezing
-  // either of those inputs would quietly make "so far" false.
+  // of a fresh live one. Without it (paneRow()'s live-pane feed), this keeps
+  // reading monitor.getSessionReport() live, same as before — freezing that
+  // feed would quietly make the pane's "so far" record false.
   function buildCurrentPayload(opts) {
     var trials = state.trialReports.map(function (r) {
       return { trialId: r.trialId, integrity: r };
@@ -1017,17 +1011,6 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // Cached module import: the scoring step's live-score readout needs
-  // playground.js each time the step renders — a repeated dynamic import
-  // of the same specifier resolves from the module cache (no second
-  // network fetch), so this local promise just avoids a redundant await
-  // chain on a return visit.
-  var playgroundModPromise = null;
-  function loadPlayground() {
-    if (!playgroundModPromise) playgroundModPromise = import('./playground.js');
-    return playgroundModPromise;
-  }
-
   // Config-as-source snippets (step 10, walkthrough item 7a): both built
   // from the manifest's real values, never hand-typed, so a preset change
   // can't silently drift from what's displayed (same principle as
@@ -1066,35 +1049,17 @@ function startTour(participantId, capabilities, manifest) {
     }, null, 2);
   }
 
-  // Step 10's scoring panel (walkthrough item 7): per-signal weight editors
-  // seeded from state.scoringOverrides.weights (falling back to the active
-  // preset's own defaults) plus the two config-as-source snippets above.
-  // Interactivity (weight-input listener, live soft-score readout) is
-  // wired separately by wireScoringPanel() once playground.js has loaded —
-  // this function only builds the static HTML shell, same split every
-  // other step-specific panel here uses.
+  // Step 10's scoring panel: the visitor's soft score so far (filled in by
+  // wireScoringPanel(), which reads the monitor), the pointer to the
+  // analyzer's settings panel for re-weighting, and the two config-as-source
+  // snippets above. This function only builds the static HTML shell, same
+  // split every other step-specific panel here uses.
   function renderScoringPanel(manifest) {
-    var presetName = state.scoringOverrides.preset || manifest.preset || 'standard';
-    var presetEntry = (manifest.presets && manifest.presets[presetName]) || {};
-    var baseSoft = (presetEntry.scoring && presetEntry.scoring.soft) || {};
-    var weights = state.scoringOverrides.weights;
-
-    var editorsHtml = SCORING_PANEL.weightFields.map(function (f) {
-      var base = baseSoft[f.key];
-      if (!base) return ''; // e.g. strict scores no copy soft — no editor for a term that isn't scored
-      var current = weights[f.key] != null ? weights[f.key] : base.weight;
-      return (
-        '<label>' + escHtml(f.label) +
-        ' <input type="number" min="0" max="20" data-role="weight-input" data-weight-key="' +
-        f.key + '" value="' + escHtml(current) + '"></label>'
-      );
-    }).join(' ');
-
     return (
       '<div class="task" data-role="scoring-panel">' +
-      '<p class="hint">' + escHtml(SCORING_PANEL.weightsIntro) + '</p>' +
-      '<div class="weight-editors">' + editorsHtml + '</div>' +
+      '<p class="hint">' + escHtml(SCORING_PANEL.intro) + '</p>' +
       '<p class="hint" data-role="live-score"></p>' +
+      '<p class="hint">' + escHtml(SCORING_PANEL.analyzerNote) + '</p>' +
       '<p class="hint">' + escHtml(SCORING_PANEL.configIntro) + '</p>' +
       '<pre><code>' + escHtml(buildInitSnippet(manifest)) + '</code></pre>' +
       '<p class="hint">' + escHtml(SCORING_PANEL.cliConfigIntro) + '</p>' +
@@ -1103,43 +1068,17 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // Step 10: wires the weight-input listener + the live current-soft-score
-  // readout (buildCurrentPayload() -> recomputeSignals(), against the
-  // visitor's own session so far). Debounced (reuses playground.js's
-  // makeDebounced) so dragging an input's spinner doesn't recompute on
-  // every intermediate value. Called fresh from goTo() every time step 10
-  // renders — the previous render's panel/listeners are gone with the old
-  // innerHTML, same discipline as every other step-specific wiring here.
+  // Step 10: fills in the soft score so far, the library's own number from
+  // monitor.getSessionReport() (the standard preset this session runs
+  // under), checked against the manifest's threshold for that preset.
+  // Called fresh from goTo() every time step 10 renders, so a return visit
+  // shows the score as it stands then.
   function wireScoringPanel(manifest) {
-    var panel = cardEl.querySelector('[data-role="scoring-panel"]');
     var scoreEl = cardEl.querySelector('[data-role="live-score"]');
-    if (!panel || !scoreEl) return;
-
-    loadPlayground().then(function (playgroundMod) {
-      function showScore() {
-        var merged = playgroundMod.mergePlaygroundConfig(manifest, state.scoringOverrides);
-        if (!merged) { scoreEl.textContent = ''; return; }
-        var payload = playgroundMod.recomputeSignals(
-          [buildCurrentPayload()], merged.controls, merged.scoring)[0];
-        var session = payload.metadata.integritySession || {};
-        scoreEl.textContent = 'Your soft score with these weights, from the session so far: ' +
-          (session.softScore || 0) + ' (flags at ' + merged.scoring.softScoreThreshold + ' or above).';
-      }
-      var debouncedShowScore = playgroundMod.makeDebounced(showScore, 200);
-
-      panel.addEventListener('input', function (e) {
-        var input = e.target.closest('[data-weight-key]');
-        if (!input) return;
-        var value = Number(input.value);
-        if (!isFinite(value)) return;
-        state.scoringOverrides.weights[input.dataset.weightKey] = value;
-        debouncedShowScore();
-      });
-
-      showScore();
-    }).catch(function (err) {
-      console.warn('cyborg-hunter demo: scoring panel failed to load playground', err);
-    });
+    if (!scoreEl) return;
+    var session = monitor.getSessionReport() || {};
+    scoreEl.textContent = 'Your soft score so far, with the standard weights: ' +
+      (session.softScore || 0) + ' (flags at ' + manifest.signals.softScoreThreshold + ' or above).';
   }
 
   // Step 8's guard entry: the library's own entry message rendered VERBATIM
@@ -1275,9 +1214,9 @@ function startTour(participantId, capabilities, manifest) {
     }
     html += renderTaskPanel(step.task);
     if (step.showCodeTabs) html += renderCodeTabs();
-    // The scoring step (walkthrough item 7): config-as-source snippets +
-    // per-signal weight editors. task: null for this step, so this is a
-    // sibling of the (empty) task panel.
+    // The scoring step: the soft score so far + config-as-source snippets.
+    // task: null for this step, so this is a sibling of the (empty) task
+    // panel.
     if (step.id === 'signals-to-scores') html += renderScoringPanel(manifest);
     html += '<div class="btnrow">';
     if (i > 0) html += '<a href="#" class="skip" data-action="back">Back</a>';
@@ -1331,9 +1270,8 @@ function startTour(participantId, capabilities, manifest) {
     // Repaints from state.chipCounts (not a reset) so Back-then-forward into
     // guard-cheat shows the tally already accumulated this session.
     if (step.task && step.task.kind === 'guard-cheat') renderViolationChips();
-    // The scoring step (walkthrough item 7): wire the weight-input listener
-    // + live soft-score readout fresh against the new panel markup
-    // renderStep() just wrote.
+    // The scoring step: fill in the soft score so far against the new panel
+    // markup renderStep() just wrote.
     if (step.id === 'signals-to-scores') wireScoringPanel(manifest);
     if (step.id === 'your-files') {
       // Snapshotted here (not earlier): the files step comes after every

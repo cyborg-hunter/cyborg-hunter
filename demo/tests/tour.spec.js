@@ -390,10 +390,10 @@ test('XSS paste: a hostile <script> string is escaped in the live pane, never ex
 });
 
 // ---------------------------------------------------------------------------
-// 4. Step 10's weight editors (walkthrough item 7): a per-signal weight edit
-// rescores the visitor's own session so far, live.
+// 4. Step 10's live score: the library's own soft score for the visitor's
+// session so far, under the standard weights; re-weighting is the analyzer's.
 // ---------------------------------------------------------------------------
-test('step 10 weight edit recomputes the live soft score from the session so far', async ({ page }) => {
+test('step 10 shows the library\'s own soft score from the session so far', async ({ page }) => {
   test.setTimeout(60000);
   await startTour(page); // -> baseline
   await typeRealistically(page.locator('#card textarea'), 'a city in Australia');
@@ -405,19 +405,12 @@ test('step 10 weight edit recomputes the live soft score from the session so far
   await expect(page.locator('.eyebrow')).toContainText('Step 8 of 11', { timeout: 5000 });
   await page.locator('.endguard').click(); // -> guard-debrief
   await primaryButton(page).click(); // -> signals-to-scores (step 10)
-
-  // Baseline: the standard preset's copy weight (2) x 1 hit = a soft score
-  // of 2, well under the flag threshold (6) — CLEAN going in.
-  const copyWeightInput = page.locator('[data-weight-key="copy"]');
-  await copyWeightInput.waitFor({ timeout: 5000 });
-  await expect(copyWeightInput).toHaveValue('2');
+  // No inputs: the score is the library's own, with the standard weights
+  // (one copy hit × weight 2 = 2, under the threshold of 6).
+  await expect(page.locator('[data-weight-key]')).toHaveCount(0);
   const liveScore = page.locator('[data-role="live-score"]');
-  await expect(liveScore).toContainText(/so far: 2 \(/, { timeout: 5000 });
-
-  // Raise the copy weight past the flag threshold: 1 hit x 20 = 20 >= 6.
-  await copyWeightInput.fill('20');
-  await copyWeightInput.dispatchEvent('input');
-  await expect(liveScore).toContainText(/so far: 20 \(/, { timeout: 5000 });
+  await expect(liveScore).toHaveText(/^Your soft score so far, with the standard weights: 2 \(flags at 6 or above\)\.$/, { timeout: 5000 });
+  await expect(page.locator('[data-role="scoring-panel"]')).toContainText('settings panel');
 });
 
 // ---------------------------------------------------------------------------

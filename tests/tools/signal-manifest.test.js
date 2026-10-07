@@ -47,14 +47,15 @@ describe('buildManifest', () => {
   });
 });
 
-// Playground data: presets.{standard,strict} carry the control prefills
-// and the verbatim soft-scoring maps recomputeSignals runs with. Pinned
-// against constants.js so demo-side scoring can never drift from the
-// library's real presets (there is no hand-mirrored table left in demo JS).
-describe('buildManifest presets block (playground scoring source)', () => {
+// Presets block: presets.{standard,strict} carry each preset's thresholds
+// and its verbatim soft-scoring map, so step 10's snippet and the docs can
+// show either preset. Pinned against constants.js so the demo's numbers can
+// never drift from the library's real presets (there is no hand-mirrored
+// table in demo JS).
+describe('buildManifest presets block (the demo\'s scoring source)', () => {
   const m = buildManifest();
 
-  it('emits both selectable presets regardless of the top-level preset', () => {
+  it('emits both presets regardless of the top-level preset', () => {
     assert.deepStrictEqual(Object.keys(m.presets).sort(), ['standard', 'strict']);
     assert.deepStrictEqual(Object.keys(buildManifest('strict').presets).sort(), ['standard', 'strict']);
   });
@@ -78,10 +79,10 @@ describe('buildManifest presets block (playground scoring source)', () => {
     });
   }
 
-  it('strict has no soft.copy — the gating recomputeSignals mirrors', () => {
+  it('strict has no soft.copy — the gating scoring.js applies', () => {
     // scoring.js only scores a signal whose key exists in scoring.soft;
     // strict scores copy as HARD-only. A hand-added copy entry here would
-    // make the playground invent a soft term the library never computes.
+    // make the demo show a soft term the library never computes.
     assert.strictEqual(PRESETS.strict.scoring.soft.copy, undefined);
     assert.strictEqual(m.presets.strict.scoring.soft.copy, undefined);
   });

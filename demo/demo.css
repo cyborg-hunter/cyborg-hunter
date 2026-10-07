@@ -148,9 +148,6 @@ textarea, input[type="text"]{width:100%;font:inherit;padding:10px 12px;
   color:var(--ink);resize:vertical;}
 textarea{min-height:74px;}
 input[type="text"]{max-width:440px;}
-/* Number inputs and selects (the scoring step's weight editors) otherwise
- * take the UA form-control font. */
-input[type="number"], select{font:inherit;}
 textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-offset:-1px;}
 
 /* Step 6 autotype: field visually "disables" while characters are inserted
@@ -397,15 +394,6 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .filetext-dialog::backdrop{background:rgba(0,0,0,.4);}
 .filetext-dialog h3{margin:0 0 10px;font:600 13px/1 var(--ff-sofia);}
 .filetext-dialog pre{max-height:60vh;overflow:auto;user-select:text;margin:0 0 14px;}
-
-/* ---------------------------------------------------------------------
- * Scoring step panel (walkthrough item 7) — per-signal weight editors.
- * Wrapped in .task for the recessed background; config-as-source snippets
- * below it inherit the global `pre`/.code-tabs treatment unchanged.
- * --------------------------------------------------------------------- */
-.weight-editors{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 10px;}
-.weight-editors label{font-size:13px;display:flex;align-items:center;gap:6px;}
-.weight-editors input[type="number"]{width:56px;}
 
 /* The files step's command-line walkthrough — numbered sections. .replicate
  * pre inherits the global `pre` rule above (background/padding/radius/
