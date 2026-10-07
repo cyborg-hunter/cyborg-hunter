@@ -9,12 +9,7 @@
  * Fonts load from assets/fonts/, copied from src/cli/renderers/fonts/ by
  * tools/assemble-demo-site.mjs.
  *
- * Earlier header, kept for the class-inventory notes below:
- * Light-only. Elevation instead of borders; borders survive only on text
- * inputs and small chip outlines. Serif for step titles only. Teal is the
- * single accent (act pill, active tab, focus, live emphasis); reds/greens
- * are semantic (lamps, hard rows, tiers, REC) and never decorative.
- * The styles apply to the real class inventory of demo.js, rail.js,
+ * Light-only. The styles apply to the real class inventory of demo.js, rail.js,
  * live-pane.js and the steps.js-driven engine render. Classes are restyled,
  * never renamed. There is no styling for the welcome-step aside player, the
  * live jsPsych mini-trials or the old "Expect" callout: those modules are no
