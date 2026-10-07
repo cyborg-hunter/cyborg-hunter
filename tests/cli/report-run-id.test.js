@@ -2,13 +2,16 @@
 // html-index-core.js). The id names the cohort and its data: each participant
 // id with its trial count and first and last trial timestamps, sorted and
 // hashed, so a rebuild of the same files under other settings keeps it and two
-// studies that share ids 1…N do not.
+// studies that share ids 1…N do not (when their trials carry timestamps).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { ingest, nodeDeps } from '../../src/cli/ingest.js';
 import { buildReport, renderInPageHtml, runIdOf } from '../../src/cli/report-core.js';
 import { mergeConfig } from '../../src/cli/config-core.js';
+import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { applyPhaseScope } from '../../src/cli/analyzers/phase-scope.js';
 import { webSha256 } from '../../demo/analyze/web-deps.js';
 
 // webSha256 reads the browser's global `crypto`; Node 18 (the engines floor)
@@ -18,6 +21,15 @@ if (!globalThis.crypto) globalThis.crypto = (await import('node:crypto')).webcry
 const CLI = { dataDir: 'tests/cli/fixtures', filePattern: '*_participant.json', participantIdField: 'participantId', integrityField: 'integrity' };
 const NOW = () => '2026-10-05T14:03:12.345Z';
 const cohort = (ids) => ids.map((participantId) => ({ participantId }));
+const hashOf = (text) => createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16);
+// A fixture participant whose trials carry a phase and a stamp each, read by
+// ingest's own extractor: the first trial a warmup, the rest the main task.
+const stampedFixture = (file, day) => {
+  const raw = JSON.parse(readFileSync(file, 'utf8'));
+  raw.trials = raw.trials.map((t, i) => ({ ...t, integrity: { ...t.integrity,
+    phase: i === 0 ? 'warmup' : 'main', timestamp: '2026-04-' + day + 'T00:0' + i + ':00.000Z' } }));
+  return extractIntegrityData(raw, { participantIdField: 'participantId', integrityField: 'integrity' });
+};
 
 describe('the run id', () => {
   it('is the first 16 hex digits of the sha256 of the sorted [id, trial count, first and last timestamp] rows as JSON, whatever their order', async () => {
@@ -41,6 +53,32 @@ describe('the run id', () => {
     assert.strictEqual(await runIdOf(a, sha), await runIdOf([...a].reverse(), sha)); // order-free
     assert.notStrictEqual(await runIdOf(a, sha), await runIdOf(b, sha));             // same ids, other data
     assert.match(await runIdOf(a, sha), /^[0-9a-f]{16}$/);
+    // A phase scope filters the trials the analyzers see, not the ones the id
+    // is taken from: the report keeps its id with and without one.
+    const participants = [stampedFixture('tests/cli/fixtures/clean_participant.json', '01'),
+      stampedFixture('tests/cli/fixtures/suspicious_participant.json', '02')];
+    const runIdUnder = async (phaseScope) => (await buildReport(participants, mergeConfig({ ...CLI, phaseScope }).config,
+      { sink: () => {}, replayClientSrc: '', fontFaceCss: '', sha256: nodeDeps.sha256, now: NOW })).runId;
+    const unscoped = await runIdUnder(undefined);
+    assert.equal(unscoped, await runIdOf(participants, nodeDeps.sha256));
+    assert.equal(await runIdUnder({ include: ['main'] }), unscoped, 'include');
+    assert.equal(await runIdUnder({ exclude: ['warmup'] }), unscoped, 'exclude');
+    assert.notEqual(await runIdOf(applyPhaseScope(participants, { include: ['main'] }), nodeDeps.sha256), unscoped,
+      'the scoped trials would give another id');
+  });
+
+  it('orders equal ids by the rest of their rows, so input order (sorted paths, drop order) does not matter', async () => {
+    const one = { participantId: 'P1', trials: [{ integrity: { timestamp: '2026-01-01T00:00:00Z' } }] };
+    const two = { participantId: 'P1', trials: [{ integrity: { timestamp: '2026-01-01T00:05:00Z' } }, { integrity: { timestamp: '2026-01-01T00:10:00Z' } }] };
+    const expected = hashOf('[["P1",1,"2026-01-01T00:00:00Z","2026-01-01T00:00:00Z"],["P1",2,"2026-01-01T00:05:00Z","2026-01-01T00:10:00Z"]]');
+    assert.equal(await runIdOf([one, two], nodeDeps.sha256), expected);
+    assert.equal(await runIdOf([two, one], nodeDeps.sha256), expected);
+    assert.equal(await runIdOf([two, one], webSha256), expected, 'the browser hash agrees');
+  });
+
+  it('sorts ids by code unit, not by locale or by number', async () => {
+    const expected = hashOf('[["10",0,null,null],["9",0,null,null],["B",0,null,null],["b",0,null,null]]');
+    assert.equal(await runIdOf(cohort(['b', '9', 'B', '10']), nodeDeps.sha256), expected);
   });
 
   it('gives participants without timestamps a stable id from the trial count', async () => {
@@ -56,6 +94,11 @@ describe('the run id', () => {
     const none = [{ participantId: 'L', trials: [{}, {}] }];
     assert.equal(await runIdOf(flat, nodeDeps.sha256), await runIdOf(nested, nodeDeps.sha256));
     assert.notEqual(await runIdOf(flat, nodeDeps.sha256), await runIdOf(none, nodeDeps.sha256));
+    // Through ingest's own extractor: another integrityField leaves the stamp
+    // on the trial, and the id is the one the nested form gives.
+    const read = extractIntegrityData({ participantId: 'L', trials: [
+      { ch: { timestamp: '2026-03-01T00:00:00Z' } }, { ch: { timestamp: '2026-03-01T00:05:00Z' } }] }, { integrityField: 'ch' });
+    assert.equal(await runIdOf([read], nodeDeps.sha256), await runIdOf(nested, nodeDeps.sha256));
   });
 
   it('is in the top bar with the time of the run, in the CLI report and in the in-page one', async () => {

@@ -46,24 +46,31 @@ export const REPORT_FILES = ['summary.csv', 'score-weights.json', 'triage.md', '
 
 // The run id names the cohort and its data: each participant's id with a
 // config-free fingerprint (trial count, first and last trial timestamps), the
-// list sorted, as JSON, hashed with the injected sha256; its first 16 hex
-// digits. A rebuild of the same files under another config keeps it, so the
-// annotations stored under it (ch-annot:<runId>) stay with the report; two
-// studies that share ids 1…N do not.
+// list sorted by id, then by the rest of the row, as JSON, hashed with the
+// injected sha256; its first 16 hex digits. A rebuild of the same files under
+// another config keeps it, so the annotations stored under it
+// (ch-annot:<runId>) stay with the report; two studies that share ids 1…N do
+// not. Ingest keeps two records with one id (a repeat upload, a lab.js slice
+// stored next to its final body), and the CLI reads files in path order while
+// the analyze page takes them in drop order, so equal ids are ordered by the
+// rest of their rows: the order is total, and both get the same id.
 // A trial's stamp is its integrity report's timestamp. Legacy `responses`
 // data and an integrityField other than `integrity` carry no such object;
 // ingest leaves the stamp on the trial itself there, so that is read next.
-// Data from before 0.6.1 has none (null), and the trial count alone remains.
+// Data from before 0.6.1 has none unless the experiment stamped its own
+// trials; without one, the trial count alone remains.
 export async function runIdOf(participants, sha256) {
   const isStamp = (v) => typeof v === 'string';
   const stamp = (t) => {
     if (t && t.integrity && isStamp(t.integrity.timestamp)) return t.integrity.timestamp;
     return (t && isStamp(t.timestamp)) ? t.timestamp : null;
   };
+  const cmp = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
   const rows = participants.map((p) => {
     const trials = Array.isArray(p.trials) ? p.trials : [];
     return [String(p.participantId), trials.length, stamp(trials[0]), stamp(trials[trials.length - 1])];
-  }).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  });
+  rows.sort((a, b) => cmp(a[0], b[0]) || cmp(JSON.stringify(a), JSON.stringify(b)));
   return String(await sha256(JSON.stringify(rows))).slice(0, 16);
 }
 

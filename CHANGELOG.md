@@ -10,7 +10,8 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   14:03 UTC`). The id is a hash of the participant ids and of each one's
   trial count and first and last trial timestamps, so a report rebuilt from
   the same files keeps it, whatever the settings, and two studies that share
-  participant ids get different ids.
+  participant ids get different ids when their trials carry timestamps
+  (0.6.1 and later).
 - Reports: annotate each participant with Include, Exclude or Flag and a
   note (keys `i`, `e`, `f` for the selected one). The rail shows the label
   and how many participants are reviewed. The report keeps the annotations
