@@ -32,6 +32,8 @@ export function createReplayCard(container, assets, requestModel) {
   var chosen = false;
 
   function current() { return participants.find(function (p) { return p.participantId === select.value; }) || null; }
+  // Whether the dropdown is on this participant (with a replay or not).
+  function shows(pid) { return select.value === pid; }
   function teardown() { generation++; teardownReplayHost(mount); }
   // missing: the id of a participant the report selected who has no
   // recording here. In a run without any recording the run-level note says
@@ -83,6 +85,7 @@ export function createReplayCard(container, assets, requestModel) {
   var api = {
     setParticipants: function (list) { participants = list; chosen = false; teardown(); render(); },
     userChose: function () { return chosen; },
+    shows: shows,
     select: function (pid) {
       var p = participants.find(function (x) { return x.participantId === pid; });
       if (p && p.hasReplay) {

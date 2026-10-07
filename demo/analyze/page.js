@@ -72,8 +72,9 @@ export function createPage(root, worker, opts) {
   // (changeAnnotations); cleared with the status line for each new cohort.
   var annotationsUnstored = false;
   // True from a run's results until the new report's first selection message:
-  // that one is the report's own load-time pick, of its first row unless the
-  // report reopened on the analyst's earlier pick (reportReopened).
+  // that one is the report's own load-time pick, its first row or the
+  // participant it reopens on (showResults). reportReopened: it reopens on a
+  // participant the replay card already showed, the analyst's own pick.
   var reportFirstSelection = false;
   var reportReopened = false;
   // The report posts a selection message when its script runs. One that has
@@ -446,6 +447,10 @@ export function createPage(root, worker, opts) {
     // another in the meantime. Read before setParticipants tears it down.
     var reopen = state.selected && done.triageOrder.indexOf(state.selected) >= 0 ? state.selected : null;
     var mounted = root.querySelector('iframe.replay-host-frame');
+    // The reopen is the analyst's own pick only if the card already showed
+    // that participant (a row click or a dropdown choice put it there), not
+    // when the report picked it on load and the card stayed on another.
+    var cardOnReopen = !!(reopen && replayCard && replayCard.shows(reopen));
     var reloadReplay = !!(reopen && mounted && mounted.dataset.participantId === reopen &&
       done.participants.some(function (p) { return p.participantId === reopen && p.hasReplay; }));
     // reportUrl moves to the new document only once it has loaded: a failed
@@ -468,7 +473,7 @@ export function createPage(root, worker, opts) {
     replayCard.setParticipants(done.participants);
     settingsPanel.setPhases(done.phases);
     reportFirstSelection = true;
-    reportReopened = !!reopen;
+    reportReopened = cardOnReopen;
     reportPosted = false;
   }
 
@@ -563,7 +568,10 @@ export function createPage(root, worker, opts) {
   }
   // Opened from the demo with nothing to hand over (main.js): the files step
   // says so above the drop zone, until a drop, the sample or Start over.
-  function handoffEmpty() { q(root, 'handoff-empty').hidden = false; }
+  function handoffEmpty() {
+    if (state.entries.length || state.sample) return;   // a drop or the sample came first
+    q(root, 'handoff-empty').hidden = false;
+  }
 
   // Wiring
   var zone = q(root, 'dropzone');
@@ -667,8 +675,8 @@ export function createPage(root, worker, opts) {
     if (watchdogErrorShown) clearError();
     if (!replayCard || !state.result) return;
     var pid = e.data.participantId;
-    var known = typeof pid === 'string' && state.result.participants.some(function (p) { return p.participantId === pid; });
-    if (!known) return;
+    var picked = typeof pid === 'string' && state.result.participants.find(function (p) { return p.participantId === pid; });
+    if (!picked) return;
     state.selected = pid;
     // The report's load-time pick must not undo a replay the analyst chose
     // (or loaded) while the report frame was still loading; every later
@@ -676,13 +684,12 @@ export function createPage(root, worker, opts) {
     var first = reportFirstSelection;
     reportFirstSelection = false;
     if (first && replayCard.userChose()) return;
-    // The load-time pick of a fresh report is its first row: when that one
-    // has no replay and another has, the card's own default (the first with
-    // one) stands. A report reopened on the analyst's earlier pick is followed
-    // there, replay or not.
-    var picked = state.result.participants.find(function (p) { return p.participantId === pid; });
+    // When the load-time pick has no replay and another participant has one,
+    // the card's own default (the first with one) stands, unless the report
+    // reopened on a participant the card already showed (reportReopened):
+    // the card follows it there, replay or not.
     var anyReplay = state.result.participants.some(function (p) { return p.hasReplay; });
-    if (first && !reportReopened && picked && !picked.hasReplay && anyReplay) return;
+    if (first && !reportReopened && !picked.hasReplay && anyReplay) return;
     replayCard.select(pid);
   });
 

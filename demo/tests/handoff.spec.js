@@ -88,6 +88,7 @@ test('"Open in the analyzer" hands over the five files and the fonts: listed as 
   // The report's load-time pick is an example without a recording: the replay
   // card stays on the visitor's, the only participant with one.
   await reportSelected(page);
+  expect(await page.evaluate(() => window.__chAnalyze.state.selected)).not.toBe(participantId);
   await expect(page.locator('[data-role="replay-select"]')).toHaveValue(participantId);
   await selectVisitorReplay(page, participantId);
   await expect(page.locator('[data-role="asset-note"]')).toHaveText('Experiment assets: 6 of 6 fonts matched.');
