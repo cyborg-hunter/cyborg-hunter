@@ -4,6 +4,8 @@
 // and text (if paste). No fs access: report-core.js sinks it, event-log.js
 // writes it.
 
+import { csvCell } from '../../shared/csv-cell.js';
+
 // The file's text and its row count (for the console line).
 export function buildEventLogCsv(participants) {
   // duration_ms column is populated for tab-aways (which have intrinsic
@@ -50,13 +52,5 @@ export function buildEventLogCsv(participants) {
 }
 
 function formatRow(pid, trialId, type, timestamp, duration, text) {
-  return [pid, trialId, type, timestamp ?? '', duration ?? '', escapeCSV(text ?? '')].join(',');
-}
-
-function escapeCSV(val) {
-  const str = String(val);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
+  return [pid, trialId, type, timestamp, duration, text].map(csvCell).join(',');
 }
