@@ -125,8 +125,8 @@ test('over http the page hands the worker File handles, not bytes', async () => 
 });
 
 // Opened from the demo with nothing left to hand over (main.js): the files
-// step says so, until the next drop.
-test('an empty hand-off shows its line in the files step; the next drop hides it', async () => {
+// step says so, until a drop, the sample or Start over.
+test('an empty hand-off shows its line in the files step; a drop, the sample or Start over hides it', async () => {
   const t = boot();
   assert.equal(role('handoff-empty').hidden, true);
   t.page.handoffEmpty();
@@ -136,6 +136,16 @@ test('an empty hand-off shows its line in the files step; the next drop hides it
   assert.deepEqual(visibleStep(), ['files']);
   t.page.addFiles(dropped());
   assert.equal(role('handoff-empty').hidden, true);
+
+  const s = boot();
+  s.page.handoffEmpty();
+  action('sample').click();
+  assert.equal(role('handoff-empty').hidden, true, 'the sample');
+
+  const r = boot();
+  r.page.handoffEmpty();
+  r.page.reset();
+  assert.equal(role('handoff-empty').hidden, true, 'Start over');
 });
 
 test('from file:, the page reads each dropped file and transfers its bytes, for the check and again for the run', async () => {
@@ -1145,6 +1155,37 @@ describe('a re-analysis keeps the analyst\'s place', () => {
     assert.equal(host[0].dataset.participantId, 'p.2/b');
     assert.equal(replaySelect().value, 'p.2/b');
     assert.equal(role('error').hidden, true, 'every swap loaded');
+  });
+
+  // A fresh report's load-time pick of a row without a replay leaves the card
+  // on the first participant with one; a report reopened on the analyst's own
+  // pick follows it there, replay or not.
+  test('a re-analysis reopened on a participant without a replay shows that participant\'s entry in the card', async () => {
+    const t = boot({ timers: fakeTimers() });
+    await toCheck(t);
+    action('run').click();
+    await tick();
+    t.emit(DONE);                // triage order A, B: A has no recording, B has one
+    await tick();
+    const frame = document.querySelector('iframe.analyze-report');
+    frame.dispatchEvent(new win.Event('load'));
+    const post = (pid) => window.dispatchEvent(new win.MessageEvent('message', { data: { type: 'cyborg-hunter:select', participantId: pid }, source: frame.contentWindow }));
+    post('A');                   // the fresh report's load-time pick
+    assert.equal(replaySelect().value, 'B');
+    post('A');                   // the analyst clicks row A
+    assert.equal(replaySelect().value, 'A');
+    setField('softScoreThreshold', '2');
+    await tick();
+    assert.equal(t.sent.at(-1).type, 'reanalyze');
+    t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+    t.emit(DONE);
+    await tick();
+    assert.match(frame.src, /^blob:[^#]*#p-A$/, 'the new report opens on A');
+    frame.dispatchEvent(new win.Event('load'));
+    post('A');                   // the reopened report's load-time pick
+    assert.equal(replaySelect().value, 'A', 'the card follows the analyst\'s pick');
+    assert.equal(role('asset-note').textContent, 'Participant A has no replay recording.');
+    assert.equal(action('load-replay').disabled, true);
   });
 });
 

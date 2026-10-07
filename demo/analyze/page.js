@@ -72,8 +72,10 @@ export function createPage(root, worker, opts) {
   // (changeAnnotations); cleared with the status line for each new cohort.
   var annotationsUnstored = false;
   // True from a run's results until the new report's first selection message:
-  // that one is the report's own load-time pick of its first row.
+  // that one is the report's own load-time pick, of its first row unless the
+  // report reopened on the analyst's earlier pick (reportReopened).
   var reportFirstSelection = false;
+  var reportReopened = false;
   // The report posts a selection message when its script runs. One that has
   // not arrived reportWatchdogMs after the frame loaded means the report did
   // not render (seen in Firefox with a few hundred participants).
@@ -466,6 +468,7 @@ export function createPage(root, worker, opts) {
     replayCard.setParticipants(done.participants);
     settingsPanel.setPhases(done.phases);
     reportFirstSelection = true;
+    reportReopened = !!reopen;
     reportPosted = false;
   }
 
@@ -509,6 +512,7 @@ export function createPage(root, worker, opts) {
   }
 
   function reset() {
+    q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
     state.runId = null; state.annotations = null;
@@ -537,7 +541,7 @@ export function createPage(root, worker, opts) {
 
   // Each drop or file choice ADDS to the list (files-panel.js), and the list
   // is checked again. Files added after the sample replace it: the sample is
-  // not a file list. A drop also retires the empty hand-off's line.
+  // not a file list.
   function addFiles(entries) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
@@ -552,9 +556,13 @@ export function createPage(root, worker, opts) {
     if (!state.entries.length) { reset(); return Promise.resolve(); }
     return check();
   }
-  function loadSample() { if (busy()) return Promise.resolve(); state.sample = true; state.entries = []; return check(); }
+  function loadSample() {
+    q(root, 'handoff-empty').hidden = true;
+    if (busy()) return Promise.resolve();
+    state.sample = true; state.entries = []; return check();
+  }
   // Opened from the demo with nothing to hand over (main.js): the files step
-  // says so above the drop zone.
+  // says so above the drop zone, until a drop, the sample or Start over.
   function handoffEmpty() { q(root, 'handoff-empty').hidden = false; }
 
   // Wiring
@@ -668,11 +676,13 @@ export function createPage(root, worker, opts) {
     var first = reportFirstSelection;
     reportFirstSelection = false;
     if (first && replayCard.userChose()) return;
-    // The report's load-time pick is its first row; when that one has no
-    // replay and another has, the card's own default (the first with one) stands.
+    // The load-time pick of a fresh report is its first row: when that one
+    // has no replay and another has, the card's own default (the first with
+    // one) stands. A report reopened on the analyst's earlier pick is followed
+    // there, replay or not.
     var picked = state.result.participants.find(function (p) { return p.participantId === pid; });
     var anyReplay = state.result.participants.some(function (p) { return p.hasReplay; });
-    if (first && picked && !picked.hasReplay && anyReplay) return;
+    if (first && !reportReopened && picked && !picked.hasReplay && anyReplay) return;
     replayCard.select(pid);
   });
 
