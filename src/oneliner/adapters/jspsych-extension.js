@@ -89,7 +89,7 @@ export class OneLinerExtension {
     name: 'cyborg-hunter',
     // Hand-bumped with the package version (tests/cli/version-invariant.test.js
     // pins it to package.json by reading this literal).
-    version: '0.11.0',
+    version: '0.12.0',
     data: {
       integrity: { type: 'object' },
       integritySegment: { type: 'object' }

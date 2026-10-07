@@ -5,18 +5,16 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-07
+
+Qualtrics and lab.js: two more one-line files, `dist/ch-qualtrics.js` for
+Qualtrics surveys and `dist/ch-labjs.js` for lab.js studies, next to
+`dist/ch.js` for jsPsych and pages without a framework. The CLI and the
+`/analyze/` page read both frameworks' data. Also fixes for the one-line
+setup on pages without jsPsych (form submits, pages restored from the
+back/forward cache), the jsPsych extensions, session replay and the report.
+
 ### Added
-- One-line setup: one file per framework. `ch.js` stays the file for jsPsych
-  and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
-  surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
-  tag's attributes and the double-load sentinel, and each carries only its
-  own framework's adapter, so participants never download the others. A file
-  on a page that runs another framework logs one console error naming the
-  file to load (also on the `data-debug` badge) and records the page as a
-  page without a framework (one exception: `ch-labjs.js` on a lab.js page
-  whose jsPsych loads after it keeps lab.js hooked). `ch-qualtrics.js`
-  records a survey whose page also runs jsPsych as a Qualtrics page, with
-  one warning. See docs/quickstart.md#which-file.
 - One-line setup in Qualtrics surveys: `dist/ch-qualtrics.js` in the
   survey's Look & Feel header writes a capped summary of the session
   (scores, counts and event timings, never text the participant typed or
@@ -45,16 +43,17 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trial row and the root row, before `on('end')` handlers run. A lab.js 23
   pre-release is not hooked yet: one warning, and the page runs as one
   without lab.js. See docs/labjs.md.
-- Standalone replay recorder (`CyborgHunterReplay.attach()`):
-  `resumeSession()` records again after `stopSession()`, in later segments of
-  the same recording; call `startTrial()` right after it.
-  `startTrial({ extensions })` sets a segment's vendor `extensions`. The
-  one-line setup uses both for a page restored from the back/forward cache,
-  marking its segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
-  A value that is not an object keyed by lowercase vendor names (`"my-lab"`),
-  or that holds anything a JSON copy would change (a function, `undefined`,
-  `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
-  capture failure.
+- One-line setup: one file per framework. `ch.js` stays the file for jsPsych
+  and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
+  surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
+  tag's attributes and the double-load sentinel, and each carries only its
+  own framework's adapter, so participants never download the others. A file
+  on a page that runs another framework logs one console error naming the
+  file to load (also on the `data-debug` badge) and records the page as a
+  page without a framework (one exception: `ch-labjs.js` on a lab.js page
+  whose jsPsych loads after it keeps lab.js hooked). `ch-qualtrics.js`
+  records a survey whose page also runs jsPsych as a Qualtrics page, with
+  one warning. See docs/quickstart.md#which-file.
 - CLI and analyze page: the lab.js Transmit plugin's envelope
   (`{ metadata, url, data: [rows] }`, what `datastore.transmit()` posts) is
   read as a participant file. So is any object that holds its rows under
@@ -77,6 +76,16 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   Transmit body), the participant ID field is suggested from its first row
   and its own top-level fields, never from its `metadata` (where `id` is
   lab.js's upload-session id).
+- Standalone replay recorder (`CyborgHunterReplay.attach()`):
+  `resumeSession()` records again after `stopSession()`, in later segments of
+  the same recording; call `startTrial()` right after it.
+  `startTrial({ extensions })` sets a segment's vendor `extensions`. The
+  one-line setup uses both for a page restored from the back/forward cache,
+  marking its segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
+  A value that is not an object keyed by lowercase vendor names (`"my-lab"`),
+  or that holds anything a JSON copy would change (a function, `undefined`,
+  `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
+  capture failure.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
