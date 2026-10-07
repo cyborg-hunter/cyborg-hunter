@@ -214,11 +214,11 @@ export async function fastForwardToFiles(page, answer = 'a city in Australia') {
   await primaryButton(page).click(); // -> clipboard-cheat (step 3)
   await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry (step 7)
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('.eyebrow')).toContainText('Step 8 of 11', { timeout: 5000 }); // guard-cheat
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 }); // guard-cheat
   await page.locator('.endguard').click(); // -> guard-debrief (step 9)
   await primaryButton(page).click(); // -> signals-to-scores (step 10)
   await primaryButton(page).click(); // -> your files (step 11)
-  await expect(page.locator('.eyebrow')).toContainText('Step 11 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 11 of 11');
 }
 
 export function primaryButton(page) {
@@ -233,6 +233,9 @@ export function railRow(page, key) {
   return page.locator(`#rail li[data-key="${key}"]`);
 }
 
-export function pid(page) {
-  return page.locator('#pid').textContent();
+// The visitor's id, read on the files step: the session-data card names its
+// file after it (<id>.json).
+export async function pid(page) {
+  const name = await page.locator('.file:has([data-key="sessionData"]) small').textContent();
+  return name.replace(/\.json$/, '');
 }

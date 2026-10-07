@@ -171,7 +171,6 @@ function boot() {
   // analyzer page never opened: it must not reach a later visit there.
   clearHandoff().catch(function () {});
   var participantId = randomParticipantId();
-  document.getElementById('pid').textContent = participantId;
 
   // Snapshotted ONCE at boot — later resizes rearrange layout but never
   // terminate a running session (states-and-edge-rules: 830→700→900px case).
@@ -243,7 +242,6 @@ function startTour(participantId, capabilities, manifest) {
   };
 
   var cardEl = document.getElementById('card');
-  var progressEl = document.getElementById('progress');
   var railEl = document.getElementById('rail');
   var colsEl = document.querySelector('.cols');
   // The CSS card treatment (background/shadow/padding) lives on this class;
@@ -737,17 +735,6 @@ function startTour(participantId, capabilities, manifest) {
 
   function scoresIndex() {
     return STEPS.findIndex(function (s) { return s.id === 'signals-to-scores'; });
-  }
-
-  // .eyebrow .act2 (demo.css) colors the "Act 2" prefix red — it's a
-  // descendant selector, so act2 steps need that prefix wrapped in its own span.
-  function renderEyebrow(step) {
-    if (step.act !== 'act2') return step.eyebrow;
-    var idx = step.eyebrow.indexOf('·');
-    if (idx === -1) return step.eyebrow;
-    var prefix = step.eyebrow.slice(0, idx).trim();
-    var rest = step.eyebrow.slice(idx);
-    return '<span class="act2">' + prefix + '</span> ' + rest;
   }
 
   // The name a session file is saved under: buildDownloadFile writes it and
@@ -1254,7 +1241,7 @@ function startTour(participantId, capabilities, manifest) {
   function renderStep(i) {
     var step = STEPS[i];
     var html = '';
-    html += '<p class="eyebrow">' + renderEyebrow(step) + '</p>';
+    html += '<p class="eyebrow" data-role="step-label">' + step.eyebrow + '</p>';
     html += '<h2>' + tpl(step.title) + '</h2>';
     html += '<div class="stepcopy">' + tpl(step.body) + '</div>';
     // Violation chips render OUTSIDE the task panel deliberately: the panel
@@ -1361,7 +1348,6 @@ function startTour(participantId, capabilities, manifest) {
     // takes the full width instead (.cols.full, demo.css). Follows the rail,
     // so it would drop again if the rail ever showed.
     colsEl.classList.toggle('full', railEl.hidden);
-    progressEl.textContent = 'Step ' + (i + 1) + ' of ' + STEPS.length;
   }
 
   cardEl.addEventListener('click', function (e) {

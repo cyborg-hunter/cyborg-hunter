@@ -115,7 +115,8 @@ export const SCORING_PANEL = {
 
 /**
  * The 11-step script. Advance is never blocked; every task is an invitation.
- * act: intro | act1 | act2 | bridge | finale
+ * act: intro | act1 | act2 | bridge | finale, set on body[data-view] for the
+ * CSS and never shown. eyebrow: the card's step label, the step count only.
  */
 export const STEPS = [
   {
@@ -158,7 +159,7 @@ the analyzer, a page of this same site.</p>`.trim(),
   {
     id: 'baseline',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 2 of 11',
+    eyebrow: 'Step 2 of 11',
     title: 'Answer a question normally',
     body: `
 <p>Type your answer to the question below the way you normally would. This
@@ -179,7 +180,7 @@ source code, with the cyborg-hunter wiring around it.</p>`.trim(),
   {
     id: 'clipboard-cheat',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 3 of 11',
+    eyebrow: 'Step 3 of 11',
     title: 'Now cheat with the clipboard',
     body: `
 <p>Suppose you don't know the answer and an AI does. Play that participant:
@@ -202,7 +203,7 @@ the words.</p>`.trim(),
   {
     id: 'tab-away',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 4 of 11',
+    eyebrow: 'Step 4 of 11',
     title: 'Leave the tab, three ways',
     body: `
 <p>Imagine an AI app open in another window. Switch away and come back
@@ -221,7 +222,7 @@ of each absence either way.</p>`.trim(),
   {
     id: 'browser-rearrange',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 5 of 11',
+    eyebrow: 'Step 5 of 11',
     title: 'Dock an AI beside the task',
     body: `
 <p>The modern cheat doesn't always leave the tab. Browsers now ship AI
@@ -238,7 +239,7 @@ continues, whatever shape the window takes.</p>`.trim(),
   {
     id: 'autotype',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 6 of 11',
+    eyebrow: 'Step 6 of 11',
     title: 'Let something else type',
     body: `
 <p>Press the button and watch the field fill itself: text appearing with no
@@ -264,7 +265,7 @@ not automatic verdicts.</p>`.trim(),
   {
     id: 'guard-entry',
     act: 'act2',
-    eyebrow: 'Act 2 · Guarded · Step 7 of 11',
+    eyebrow: 'Step 7 of 11',
     title: 'The other approach: prevention',
     body: `
 <p>Everything so far was detection: record quietly, report later. The guard
@@ -288,7 +289,7 @@ until you do.</p>`.trim(),
   {
     id: 'guard-cheat',
     act: 'act2',
-    eyebrow: 'Act 2 · Guarded · Step 8 of 11',
+    eyebrow: 'Step 8 of 11',
     title: 'Try the same tricks',
     body: `
 <p>Tab away. Press Esc. Click another window. Each attempt logs a violation
@@ -305,7 +306,7 @@ that, fullscreen is no longer required.</p>`.trim(),
   {
     id: 'guard-debrief',
     act: 'act2',
-    eyebrow: 'Act 2 · Guarded · Step 9 of 11',
+    eyebrow: 'Step 9 of 11',
     title: 'What enforcement left behind',
     body: `
 <p>The guard is off. Scroll the session record: every violation from the

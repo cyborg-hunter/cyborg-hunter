@@ -1,8 +1,8 @@
 // tests/demo/steps-shape.test.js
 // Structural contract the engine relies on: 11 steps, known ids in order,
-// every step has eyebrow/title/body and counts itself against the total, no
-// tier vocabulary before step 10, and the last step's files and
-// the fonts its hand-off carries.
+// every step has eyebrow/title/body and its eyebrow (the card's step label)
+// is its count against the total and nothing else, no tier vocabulary before
+// step 10, and the last step's files and the fonts its hand-off carries.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,7 +16,15 @@ test('step map', () => {
   assert.equal(STEPS.length, 11);
   assert.deepEqual(STEPS.map(s => s.id), IDS);
   for (const s of STEPS) { assert.ok(s.eyebrow && s.title && s.body, s.id); }
-  STEPS.forEach((s, i) => assert.ok(s.eyebrow.endsWith('Step ' + (i + 1) + ' of ' + STEPS.length), s.id + ': ' + s.eyebrow));
+  STEPS.forEach((s, i) => assert.equal(s.eyebrow, 'Step ' + (i + 1) + ' of ' + STEPS.length, s.id));
+});
+test('no step label names an act', () => {
+  // The act lives in each step's `act` field (body[data-view], for the CSS);
+  // the labels a visitor reads never say it.
+  for (const s of STEPS) {
+    const labels = [s.eyebrow, s.primaryLabel || ''].concat((s.secondary || []).map((x) => x.label));
+    for (const label of labels) assert.doesNotMatch(label, /\bAct\b/, s.id + ': ' + label);
+  }
 });
 test('no tier vocabulary in steps 2-9', () => {
   // Steps 2-9 only: step 1 may NAME the product ("triage report") without narrating scores.

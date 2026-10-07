@@ -32,8 +32,8 @@
 // gen-example-fixtures.mjs uses for its EPOCH:
 //   - pid: the demo assigns a random 'DEMO-'+4-base36 id per session; a
 //     committed fixture needs a fixed one, so every occurrence of the captured
-//     id (the top-level participant_id and the pid text the topbar renders into
-//     each segment's DOM snapshot) is replaced with DEMO-FIXT via a whole-file
+//     id (the top-level participant_id and any pid text the page renders into
+//     the segments' DOM snapshots) is replaced with DEMO-FIXT via a whole-file
 //     string swap of the full 'DEMO-xxxx' token (distinctive; no collisions).
 //   - the wall-clock anchor (recording_started_at) is pinned to the fixture's
 //     existing filename epoch so the file OVERWRITES IN PLACE under the same
@@ -221,7 +221,7 @@ async function main() {
     const capturedPid = JSON.parse(rawReplay).participant_id;
     if (!/^DEMO-/.test(capturedPid)) throw new Error('unexpected pid: ' + capturedPid);
 
-    // String swap first (catches the pid the topbar renders into the segment
+    // String swap first (catches the pid the page renders into the segment
     // DOM snapshots, not just the participant_id field), then parse + pin.
     const swapped = rawReplay.split(capturedPid).join('DEMO-FIXT');
     const replay = JSON.parse(swapped);

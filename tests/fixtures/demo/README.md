@@ -76,8 +76,8 @@ stable id, so every occurrence of the captured id is replaced with `DEMO-FIXT`.
 
 For the replay, `gen-demo-fixture.mjs` does this automatically: a whole-file
 string swap of the full `DEMO-xxxx` token (distinctive enough that collisions
-are impossible) covers the top-level `participant_id` and the pid text the
-topbar renders into each segment's DOM snapshot. `ingest.js`'s
+are impossible) covers the top-level `participant_id` and any pid text the
+page renders into the segments' DOM snapshots. `ingest.js`'s
 `attachReplayArtifacts()` cross-checks the embedded `participant_id` against the
 filename/participant record, so those must agree or the replay silently fails to
 attach; the generator asserts the old id appears nowhere before writing.

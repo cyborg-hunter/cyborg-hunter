@@ -3,7 +3,8 @@
      copy (steps.js), and generated signal-manifest.json populate #card, the
      live session record ([data-role="live-pane"]) and the instrument
      column's lamps (#rail / [data-role="rail"]) at runtime — this file only
-     lays out the topbar, two-column grid, and script load order.
+     lays out the topbar (the brand, then the REC cue demo.js shows once the
+     session records), two-column grid, and script load order.
 
      [data-role="pane-slot"] is the live session record's permanent home,
      under the step card on every step. It is a sibling of #card, not part
@@ -24,8 +25,6 @@
 
 <div class="topbar">
   <span class="brand">cyborg-hunter · live demo</span>
-  <span class="pid" id="pid"></span>
-  <span class="act" id="progress"></span>
   <span class="rec" id="rec" hidden><span class="dot"></span>REC replay</span>
 </div>
 

@@ -61,7 +61,7 @@ test('typefaces mirror the report roles', () => {
     '.eyebrow': 'Sofia Sans', '.card h3': 'Sofia Sans', '.task .label': 'Sofia Sans', '.replicate h3': 'Sofia Sans',
     '.batch-heading': 'Sofia Sans', '.filetext-dialog h3': 'Sofia Sans', '.lp-cols': 'Sofia Sans',
     '.hint': 'Tomorrow', '.rule': 'Tomorrow', '.lp-caption': 'Recursive', '.file small': 'Recursive',
-    '.check li .n': 'Sora', '.topbar .pid': 'Sora', '.rec': 'Sora', '.chip': 'Sora',
+    '.check li .n': 'Sora', '.rec': 'Sora', '.chip': 'Sora',
     '.btn': 'Recursive', '.code-tab': 'Recursive', '.lp-tab': 'Recursive',
     '.lp-t': 'ui-monospace', '.lp-stream': 'ui-monospace', 'pre': 'ui-monospace',
   };
