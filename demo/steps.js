@@ -167,8 +167,8 @@ the analyzer, a page of this same site.</p>`.trim(),
     body: `
 <p>Type your answer to the question below the way you normally would. This
 is the baseline: an honest answer produces keystrokes at a human rhythm and
-not much else. Watch the session record while you type: each event lands
-as a row the moment it happens.</p>
+not much else. Watch the lamps on the right as you type; the session record
+under this card lists each event the moment it happens.</p>
 <p>Below the task: what this exact question looks like in an experiment's
 source code, with the cyborg-hunter wiring around it.</p>`.trim(),
     task: {
@@ -232,7 +232,7 @@ of each absence either way.</p>`.trim(),
 sidebars (Gemini, Copilot, the Edge panel) that dock next to the page,
 reading it while the participant works. Docking one changes the window's
 geometry, and geometry is recorded: open a sidebar, split the window, or
-just resize it, and watch the record.</p>
+resize it, and watch the record.</p>
 <p>Resizing never ends the session. The layout adapts and recording
 continues, whatever shape the window takes.</p>`.trim(),
     task: { kind: 'sidebar-resize', trialId: 'act1-sidebar' },

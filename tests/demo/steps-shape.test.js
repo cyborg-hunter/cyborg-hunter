@@ -4,7 +4,7 @@
 // tier vocabulary before step 10 (G2 guard), and the last step's files.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STEPS, RAIL_GROUPS, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF } from '../../demo/steps.js';
+import { STEPS, RAIL_GROUPS, RAIL_INTRO, RAIL_INTRO_TITLE, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF } from '../../demo/steps.js';
 
 const IDS = ['intro','baseline','clipboard-cheat','tab-away','browser-rearrange',
   'autotype','guard-entry','guard-cheat','guard-debrief',
@@ -22,6 +22,11 @@ test('G2: no tier vocabulary in steps 2-9', () => {
   for (const word of ['HARD', 'SOFT', 'CLEAN', 'tier', 'triage', 'preset']) {
     assert.ok(!before.includes(word), `"${word}" leaked before step 10`);
   }
+});
+test('the rail intro is one sentence, with the full framing as its tooltip', () => {
+  assert.equal(RAIL_INTRO, 'A demo instrument: a curated subset of what the library records.');
+  assert.equal(typeof RAIL_INTRO_TITLE, 'string');
+  assert.ok(RAIL_INTRO_TITLE.includes('Idle gaps'), RAIL_INTRO_TITLE);
 });
 test('rail has three tab-away bins', () => {
   const keys = RAIL_GROUPS.detectors.map(d => d.key);

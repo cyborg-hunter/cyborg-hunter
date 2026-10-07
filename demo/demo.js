@@ -249,6 +249,7 @@ function startTour(participantId, capabilities, manifest) {
   var cardEl = document.getElementById('card');
   var progressEl = document.getElementById('progress');
   var railEl = document.getElementById('rail');
+  var colsEl = document.querySelector('.cols');
   // The CSS card treatment (background/shadow/padding) lives on this class;
   // set once here rather than in every renderStep() innerHTML string.
   cardEl.classList.add('stepcard');
@@ -1364,6 +1365,10 @@ function startTour(participantId, capabilities, manifest) {
       retireLampWiring();
       railEl.hidden = true;
     }
+    // With the rail hidden the right column would stand empty: the step
+    // takes the full width instead (.cols.full, demo.css). Follows the rail,
+    // so it would drop again if the rail ever showed.
+    colsEl.classList.toggle('full', railEl.hidden);
     progressEl.textContent = 'Step ' + (i + 1) + ' of ' + STEPS.length;
   }
 

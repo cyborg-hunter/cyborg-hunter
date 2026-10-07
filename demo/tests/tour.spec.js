@@ -361,6 +361,11 @@ test('live pane: row count strictly grows across acts; raw-JSON tab shows partic
 
   // Raw-JSON tab: the literal payload the pid.json download carries.
   await page.locator('.lp-tab[data-tab="json"]').click();
+  // The rail is hidden on this view and the grid collapses to one column,
+  // so the JSON takes the record's full width, not the rail's 156px track.
+  const bodyBox = await page.locator('.lp-body').boundingBox();
+  const jsonBox = await page.locator('[data-role="lp-json"]').boundingBox();
+  expect(jsonBox.width).toBeGreaterThanOrEqual(bodyBox.width * 0.9);
   const jsonText = await page.locator('[data-role="lp-json"]').textContent();
   expect(jsonText).toContain('"participantId"');
   expect(() => JSON.parse(jsonText)).not.toThrow();
@@ -454,9 +459,20 @@ test('act2-skip path: fullscreen failure falls back, skip lands on "From signals
   await page.locator('a[data-key="skipToScores"]').click();
   await expect(page.locator('.eyebrow')).toContainText('Step 10 of 11');
   await expect(page.locator('#card h2')).toHaveText('From signals to scores');
+  await expect(page.locator('.cols')).not.toHaveClass(/\bfull\b/);
 
   await primaryButton(page).click(); // -> your files
   await expect(page.locator('.eyebrow')).toContainText('Step 11 of 11');
+  // The rail retires here, so the step takes the full width.
+  await expect(page.locator('.cols')).toHaveClass(/\bfull\b/);
+  await expect(page.locator('.instrument')).not.toBeVisible();
+
+  // The rail's retirement is one-way (demo.js, lampWiringRetired): it stays
+  // hidden on Back, and the full width follows it.
+  await backButton(page).click(); // -> signals-to-scores
+  await expect(page.locator('.eyebrow')).toContainText('Step 10 of 11');
+  await expect(page.locator('#rail')).toBeHidden();
+  await expect(page.locator('.cols')).toHaveClass(/\bfull\b/);
 });
 
 // ---------------------------------------------------------------------------
