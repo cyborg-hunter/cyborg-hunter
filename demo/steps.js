@@ -121,31 +121,19 @@ export const STEPS = [
 a browser library that records integrity signals while participants work
 (clipboard use, tab switches, typing dynamics, automation traces), and a
 command-line tool that turns those records into a triage report a reviewer
-can read in minutes. It exists because participants increasingly answer
-studies with an AI in a second window, and self-report doesn't catch that.</p>
-<p>This demo makes you the participant. You'll trigger the signals yourself,
-watch them being recorded, run into the enforcement mode, and end with your
-session's files, one click away from a real report built from them in the
-analyzer. Two instruments on this page are demo-only: the signal lamps on
-the right and the live session record below
-this card. The lamps show a curated handful of what cyborg-hunter records; the
-full list is in docs/signals-reference.md. The recording itself is the
-actual product, behaving exactly as it does in a study.</p>
-<p>The tour runs in four parts: Act 1 (steps 2 through 6) lets you try every
-trick unguarded, while everything is still recorded; Act 2 (steps 7 through
-9) puts the same tricks under enforcement; step 10 turns the recorded
-signals into scores; step 11 hands you your session's files, to open in the
-analyzer, which builds the report in your browser, or to save and run
-through the command-line tool yourself.</p>
-<p>Recording starts the moment you click Start: mouse movement is sampled,
-not tracked pixel by pixel, and keystroke rhythm and tab switches are
-recorded as well. Everything stays in this browser. No server, no upload;
-the session recording (REC, top bar) is kept in memory so your report can
-include a replay, and it leaves this tab only if you save it or open it in
-the analyzer, a page of this same site.</p>`.trim(),
+can read in minutes. The goal is to catch participants using AI assistance
+during behavioral experiments.</p>
+<p>This demo makes you the participant. It invites you to trigger some of the
+signals yourself via your actions, over several successive steps. The panel
+on the right ("Tracked signals") notifies you of the signals as they are
+being tracked by the plugin. In the end, you will be able to download your
+session's files and generate a report from them in the analyzer, just like
+you would from the traces left by a real participant taking your study. Your
+data stays entirely in this browser and will not be uploaded to an external
+server.</p>`.trim(),
     positioning: true,
     task: null,
-    primaryLabel: 'Start',
+    primaryLabel: 'Start the demo',
     secondary: null,
   },
   {

@@ -230,12 +230,40 @@ test('top bar: the title, then the REC cue; the card label says the step only', 
   await expect(page.locator('#rec')).toBeHidden();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 1 of 11');
 
-  await primaryButton(page).click(); // -> baseline (step 2)
+  await page.getByRole('button', { name: 'Start the demo', exact: true }).click(); // -> baseline (step 2)
   await expect(page.locator('#rec')).toBeVisible();
   await expect(page.locator('#rec')).toHaveText('REC replay');
   expect(await bar.evaluate((el) => Array.from(el.children, (c) => c.className))).toEqual(['brand', 'rec']);
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 11');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'act1');
+});
+
+// ---------------------------------------------------------------------------
+// The first step: two paragraphs that name no act, then one button, "Start
+// the demo", larger than the tour's other buttons and centred 28px under the
+// text. The size and the centring are the first step's only.
+// ---------------------------------------------------------------------------
+test('first step: two paragraphs, then a large "Start the demo" centred under them', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#card h2').waitFor();
+  const paragraphs = page.locator('#card .stepcopy p');
+  await expect(paragraphs).toHaveCount(2);
+  await expect(page.locator('#card')).not.toContainText(/\bAct\b/);
+  await expect(page.locator('#card button')).toHaveCount(1);
+
+  const start = page.getByRole('button', { name: 'Start the demo', exact: true });
+  await expect(start).toHaveCSS('font-size', '17px');
+  await expect(start).toHaveCSS('padding', '14px 28px');
+  const text = await page.locator('#card .stepcopy').boundingBox();
+  const last = await paragraphs.last().boundingBox();
+  const button = await start.boundingBox();
+  expect(Math.abs((button.x + button.width / 2) - (text.x + text.width / 2))).toBeLessThan(1);
+  expect(Math.round(button.y - (last.y + last.height))).toBe(28);
+
+  await start.click(); // -> baseline (step 2): the tour's own button again
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 11');
+  await expect(primaryButton(page)).toHaveCSS('font-size', '15px');
+  await expect(primaryButton(page)).toHaveCSS('padding', '10px 22px');
 });
 
 // ---------------------------------------------------------------------------

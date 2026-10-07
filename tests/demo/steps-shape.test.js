@@ -29,6 +29,26 @@ test('no step label names an act', () => {
     for (const label of labels) assert.doesNotMatch(label, /\bAct\b/, s.id + ': ' + label);
   }
 });
+test('the first step says what the demo is for, in two paragraphs, and starts with "Start the demo"', () => {
+  const intro = STEPS[0];
+  assert.equal(intro.id, 'intro');
+  const body = intro.body.replace(/\s+/g, ' ');
+  assert.ok(body.startsWith('<p>cyborg-hunter is an open-source toolkit for online behavioral research: a browser ' +
+    'library that records integrity signals while participants work (clipboard use, tab switches, typing dynamics, ' +
+    'automation traces), and a command-line tool that turns those records into a triage report a reviewer can read ' +
+    'in minutes. The goal is'), body);
+  assert.ok(body.includes('The goal is to catch participants using AI assistance during behavioral experiments.'), body);
+  assert.ok(body.includes('This demo makes you the participant. It invites you to trigger some of the signals ' +
+    'yourself via your actions, over several successive steps. The panel on the right ("Tracked signals") ' +
+    'notifies you of the signals as they are being tracked by the plugin. In the end, you will be able to ' +
+    "download your session's files and generate a report from them in the analyzer, just like you would from " +
+    'the traces left by a real participant taking your study. Your data stays entirely in this browser and ' +
+    'will not be uploaded to an external server.'), body);
+  assert.doesNotMatch(body, /It exists because/);
+  assert.equal((body.match(/<p>/g) || []).length, 2);
+  assert.doesNotMatch(body, /\bAct\b/);
+  assert.equal(intro.primaryLabel, 'Start the demo');
+});
 test('no tier vocabulary in steps 2-9', () => {
   // Steps 2-9 only: step 1 may NAME the product ("triage report") without narrating scores.
   const before = STEPS.slice(1, 9).map(s => [s.title, s.body, JSON.stringify(s.task || {})].join(' ')).join(' ');

@@ -226,8 +226,8 @@ function startTour(participantId, capabilities, manifest) {
     guardStopToken: null,
     chipCounts: {},
     // Replay (always-on): the attached CyborgHunterReplay instance
-    // (startReplay() attempts it unconditionally at "Start"), its finalized
-    // recording — cached so the download button, the "show as text"
+    // (startReplay() attempts it unconditionally at "Start the demo"), its
+    // finalized recording — cached so the download button, the "show as text"
     // fallback and the hand-off to the analyzer always agree — and whether
     // attaching ever failed, so the files step can say so honestly instead
     // of just silently omitting the file.
@@ -486,8 +486,8 @@ function startTour(participantId, capabilities, manifest) {
   monitor.startSession();
   // Recorder-like bridge for makeLifecycle's optional recorder param.
   // A live proxy rather than passing state.recorder directly: the replay
-  // recorder only attaches inside the "Start" click (startReplay()), which
-  // runs AFTER this lifecycle is constructed — reading state.recorder at
+  // recorder only attaches inside the "Start the demo" click (startReplay()),
+  // which runs AFTER this lifecycle is constructed — reading state.recorder at
   // call time lets the very first trial (step 2) get bracketed too.
   var recorderBridge = {
     startTrial: function (opts) { if (state.recorder) state.recorder.startTrial(opts); },
@@ -678,11 +678,11 @@ function startTour(participantId, capabilities, manifest) {
   // ----- replay (always-on) ------------------------------------------
 
   // Attaches the standalone replay recorder unconditionally, called from the
-  // "Start" click before goTo(1) opens step 2's trial — recorderBridge reads
-  // state.recorder live, so as long as this finishes first, the very first
-  // trial gets bracketed too. The REC pill shows immediately regardless of
-  // whether attach actually succeeds (replay is on by default); a
-  // failure keeps the tour degrading gracefully and marks
+  // "Start the demo" click before goTo(1) opens step 2's trial —
+  // recorderBridge reads state.recorder live, so as long as this finishes
+  // first, the very first trial gets bracketed too. The REC pill shows
+  // immediately regardless of whether attach actually succeeds (replay is on
+  // by default); a failure keeps the tour degrading gracefully and marks
   // state.replayUnavailable so the files step can say so honestly instead
   // of just silently dropping the file.
   function startReplay() {
@@ -1368,8 +1368,9 @@ function startTour(participantId, capabilities, manifest) {
     var primary = e.target.closest('[data-action="primary"]');
     if (primary) {
       var currentStep = STEPS[state.stepIndex];
-      // "Start" is the trigger point for the always-on replay — must run
-      // before goTo(1) below so the first trial (step 2) is bracketed.
+      // "Start the demo" is the trigger point for the always-on replay —
+      // must run before goTo(1) below so the first trial (step 2) is
+      // bracketed.
       if (currentStep.id === 'intro') startReplay();
       if (state.stepIndex < STEPS.length - 1) goTo(state.stepIndex + 1);
       return;

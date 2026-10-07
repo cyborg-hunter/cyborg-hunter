@@ -185,7 +185,7 @@ export async function installFailingFullscreenMock(page) {
 export async function startTour(page) {
   await page.goto('/');
   await page.locator('#card h2').waitFor();
-  await primaryButton(page).click();
+  await page.getByRole('button', { name: 'Start the demo', exact: true }).click();
 }
 
 // Polls a rail lamp (#rail li[data-key]) until it's lit (and, if opts.hard,
