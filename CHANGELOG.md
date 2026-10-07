@@ -184,11 +184,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   Save button (no zip). In Chrome and Edge, "Save all into a folder" writes
   all five into one folder the visitor picks. "Open in the analyzer" hands
   the five files and the page's six fonts to `/analyze/` in the same
-  browser, where they are listed as if dropped and the visitor's replay
-  renders in the tour's typefaces. The hand-off keeps them for ten minutes;
-  `/analyze/` opened from it later says that nothing was handed off. The
-  report the tour used to build at its end, its scoring playground and the
-  scoring step's weight inputs are gone: the scoring step shows the
+  browser, where the five files are listed as if dropped and the visitor's
+  replay renders in the tour's typefaces. The hand-off keeps them for ten
+  minutes; `/analyze/` opened from it later says that nothing was handed
+  off. The report the tour used to build at its end, its scoring playground
+  and the scoring step's weight inputs are gone: the scoring step shows the
   visitor's soft score so far, as the library computes it with the standard
   weights, and the analyzer builds the report and holds the settings that
   apply after collection (its settings panel). The tour has 11 steps.

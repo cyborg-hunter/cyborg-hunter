@@ -1529,25 +1529,28 @@ test('the fonts the tour hands over are not the analyst\'s assets: no hint, no a
   } finally { URL.createObjectURL = saved; }
 });
 
+// The tour's whole hand-off: its five files and the page's six fonts, each
+// marked `handoff` (demo/handoff.js handoffEntries), and what the check reads
+// them as.
+const FILES = [{ path: 'DEMO-ab12.json', kind: 'data' }, { path: 'DEMO-ab12-replay-1.json', kind: 'recording' },
+  { path: 'cyborg-hunter.config.json', kind: 'config' }, { path: 'example-1.json', kind: 'data' }, { path: 'example-2.json', kind: 'data' }];
+const FONTS = HANDOFF_ASSETS.map((path) => ({ path, kind: 'asset' }));
+const handed = (path) => ({ path, file: new File(['x'], path.slice(path.lastIndexOf('/') + 1), { lastModified: 1 }), handoff: true });
+async function handOver(t) {
+  t.page.addFiles(FILES.concat(FONTS).map((f) => handed(f.path)));
+  await until(() => t.sent.length === 1);
+  assert.equal(t.sent[0].files.length, 11, 'the fonts still go to the worker');
+  t.emit({ ...CHECKED, files: FILES.concat(FONTS) });
+  await tick();
+}
+const tableRows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => tr.querySelector('td').textContent);
+const line = () => role('handoff-assets');
+
 // The hand-off's fonts stay in the list the worker reads, so the replay
 // renders in them, but the table and the counts line show only the five
 // files the tour handed over and what the analyst drops. One line under
 // the table says why the fonts are there.
 test('the fonts the tour hands over are neither listed nor counted; a line under the table says they were included', async () => {
-  const handed = (path) => ({ path, file: new File(['x'], path.slice(path.lastIndexOf('/') + 1), { lastModified: 1 }), handoff: true });
-  const FILES = [{ path: 'DEMO-ab12.json', kind: 'data' }, { path: 'DEMO-ab12-replay-1.json', kind: 'recording' },
-    { path: 'cyborg-hunter.config.json', kind: 'config' }, { path: 'example-1.json', kind: 'data' }, { path: 'example-2.json', kind: 'data' }];
-  const FONTS = HANDOFF_ASSETS.map((path) => ({ path, kind: 'asset' }));
-  const tableRows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => tr.querySelector('td').textContent);
-  const line = () => role('handoff-assets');
-  async function handOver(t) {
-    t.page.addFiles(FILES.concat(FONTS).map((f) => handed(f.path)));
-    await until(() => t.sent.length === 1);
-    assert.equal(t.sent[0].files.length, 11, 'the fonts still go to the worker');
-    t.emit({ ...CHECKED, files: FILES.concat(FONTS) });
-    await tick();
-  }
-
   const t = boot();
   assert.equal(line().hidden, true, 'before any hand-off');
   await handOver(t);
@@ -1578,6 +1581,33 @@ test('the fonts the tour hands over are neither listed nor counted; a line under
   s.emit(CHECKED);
   await tick();
   assert.equal(line().hidden, true, 'after the sample');
+});
+
+// With the last listed file removed, only the hand-off's fonts would be
+// left, and they are there for the replay of the files that are gone: the
+// list is empty then, as when the last file of a drop is removed.
+test('removing the five handed-over files one by one empties the list, the fonts with them', async () => {
+  const t = boot();
+  await handOver(t);
+  let left = FILES.slice();
+  for (const f of FILES.slice(0, -1)) {
+    role('file-rows').querySelector('[data-path="' + f.path + '"]').click();
+    left = left.filter((g) => g !== f);
+    await until(() => t.sent.length === 1 + FILES.length - left.length);
+    assert.equal(t.sent.at(-1).files.length, left.length + FONTS.length, 'the fonts go with the files still listed');
+    t.emit({ ...CHECKED, files: left.concat(FONTS) });
+    await tick();
+    assert.deepEqual(tableRows(), left.map((g) => g.path));
+    assert.equal(line().hidden, false);
+  }
+  role('file-rows').querySelector('[data-path="' + left[0].path + '"]').click();
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reset' }, 'nothing listed is left: the page starts over');
+  assert.deepEqual(t.page.state.entries, []);
+  assert.equal(t.page.state.handoffPaths.size, 0);
+  assert.equal(line().hidden, true);
+  assert.equal(role('files-panel').hidden, true);
+  assert.equal(action('run').disabled, true);
 });
 
 // Annotations: the report frame posts each change (its annotation script in

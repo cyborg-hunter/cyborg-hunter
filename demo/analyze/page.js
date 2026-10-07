@@ -621,11 +621,17 @@ export function createPage(root, worker, opts) {
     state.entries.forEach(function (e) { if (e.handoff) state.handoffPaths.add(e.path); });
     return check();
   }
+  // Removing the last file the table lists starts over, as an empty list
+  // does: the hand-off's fonts that may be left are there only for the
+  // replay of files that are gone (renderFiles).
   function removeFile(path) {
     if (busy()) return Promise.resolve();
     state.entries = removeEntry(state.entries, path);
     state.handoffPaths.delete(path);
-    if (!state.entries.length) { reset(); return Promise.resolve(); }
+    var listed = state.checked
+      ? (state.checked.files || []).filter(function (f) { return f.path !== path && !handedOverAsset(f); }).length
+      : state.entries.length;
+    if (!state.entries.length || !listed) { reset(); return Promise.resolve(); }
     return check();
   }
   function loadSample() {
