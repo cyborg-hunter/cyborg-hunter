@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { computeParticipantSummary } from '../../src/cli/analyzers/summary.js';
+import { computeParticipantSummary, countSidebarOpenings, listSidebarOpenings } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExitForTrial } from '../../src/cli/analyzers/edge-exit.js';
 import { decomposeScore, generateTriageReason, rankTriage } from '../../src/cli/analyzers/triage.js';
 import { resolveScoreWeights } from '../../src/cli/analyzers/score-weights.js';
@@ -183,6 +183,44 @@ describe('summary', () => {
     };
     const s = computeParticipantSummary(participant, {});
     assert.equal(s.sidebarEventCount, 2, 'a close between opens starts a new incident');
+  });
+
+  // The report's "Sidebar events" cell lists what the Sidebar tile counts:
+  // one entry per opening, from the same walk.
+  describe('listSidebarOpenings', () => {
+    const logs = {
+      'two cycles, no times': [{ type: 'opened' }, { type: 'closed' }, { type: 'opened' }, { type: 'closed' }],
+      'both detectors at once': [
+        { type: 'opened', method: 'innerWidth_delta', t: 1000 },
+        { type: 'opened', method: 'layout_compression', t: 1000 },
+        { type: 'closed', method: 'innerWidth_delta', t: 5000, duration_ms: 4000 },
+        { type: 'closed', method: 'layout_compression', t: 5000, duration_ms: 4000 },
+      ],
+      'a fast reopen': [
+        { type: 'opened', t: 1000 }, { type: 'closed', t: 1200 }, { type: 'opened', t: 1400 }, { type: 'closed', t: 1600 },
+      ],
+      'still open at the end': [{ type: 'opened', t: 1000 }, { type: 'closed', t: 2000 }, { type: 'opened', t: 3000 }],
+      'out of order, with other entries': [
+        { type: 'closed', t: 9000 }, { type: 'resize', t: 100 }, { type: 'opened', t: 8000 }, null,
+      ],
+    };
+
+    it('one entry per opening, with the event that opened it and the one that closed it', () => {
+      const [only] = listSidebarOpenings(logs['both detectors at once']);
+      assert.equal(listSidebarOpenings(logs['both detectors at once']).length, 1);
+      assert.equal(only.opened.method, 'innerWidth_delta');
+      assert.equal(only.closed.t, 5000);
+      const open = listSidebarOpenings(logs['still open at the end']);
+      assert.deepEqual(open.map((o) => [o.opened.t, o.closed && o.closed.t]), [[1000, 2000], [3000, null]]);
+    });
+
+    it('as many entries as countSidebarOpenings counts, on every log', () => {
+      for (const [name, log] of Object.entries(logs)) {
+        assert.equal(listSidebarOpenings(log).length, countSidebarOpenings(log), name);
+      }
+      assert.deepEqual(Object.values(logs).map(countSidebarOpenings), [2, 1, 2, 2, 1]);
+      assert.deepEqual(listSidebarOpenings(undefined), []);
+    });
   });
 
   it('surfaces participant.honeypot disclosure onto the summary', () => {

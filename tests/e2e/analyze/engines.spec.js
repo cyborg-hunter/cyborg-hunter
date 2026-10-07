@@ -30,7 +30,7 @@ test('the offline single file works from file:// and makes no request at all', a
   await page.goto(url);
   await waitReady(page);
   await page.setInputFiles('[data-role="file-input"]', pilotFiles());
-  await expect(page.locator('[data-role="counts"]')).toContainText('3 data files (3 CSV, 0 JSON');
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 data or replay files (3 CSV, 0 JSON)');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
   await buildReport(page);
   expect(await railOrder(page)).toEqual(PILOT_ORDER);
@@ -41,13 +41,13 @@ test('the offline single file works from file:// and makes no request at all', a
 });
 
 test('the offline single file reads a gzipped recording and plays it; the recorded external image is never requested', async ({ page }) => {
-  // The recording's way in, gunzip included: the check step peeks every JSON
-  // file, the gzipped recordings too (4 files), and the recordings are two
-  // gzip members each. The recording also holds an image from a sentinel
-  // server. The viewer's own policy allows any image; what refuses it is the
-  // page's policy, inherited from the page into the blob: replay host and
-  // from there into the viewer's srcdoc frame. The sentinel is the ground
-  // truth that every engine does inherit it.
+  // The recording's way in, gunzip included: the check step reads every JSON
+  // file, the gzipped recordings too, and suggests the id field from the two
+  // data files only (the recordings are two gzip members each). The recording
+  // also holds an image from a sentinel server. The viewer's own policy allows
+  // any image; what refuses it is the page's policy, inherited from the page
+  // into the blob: replay host and from there into the viewer's srcdoc frame.
+  // The sentinel is the ground truth that every engine does inherit it.
   const sentinel = await startSentinel();
   const cohort = makeReplayCohort(sentinel.url, { gzip: true });
   const url = pathToFileURL(OFFLINE_FILE).href;
@@ -58,8 +58,8 @@ test('the offline single file reads a gzipped recording and plays it; the record
     await waitReady(page);
     await page.setInputFiles('[data-role="file-input"]', cohort.files);
     await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment assets');
-    await expect(page.locator('[data-role="id-reason"]')).toHaveText('4 file(s) inspected');
-    await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
+    await expect(page.locator('[data-role="id-files"]')).toHaveText('2 data files inspected; 2 replay recordings skipped');
+    await expect(page.locator('[data-role="id-field"] option')).toHaveText(['participantId — known name']);
     await buildReport(page);
     const zip = await downloadZip(page);
     expect(zip.names).toContain('replay/DEMO-FIXT.replay.js');

@@ -14,7 +14,7 @@ test('dropped synthetic pilot: same triage order as the sample, zip tree matches
   await waitReady(page);
   await page.setInputFiles('[data-role="file-input"]', pilotFiles());
   await expect(page.locator('section[data-step="check"]')).toBeVisible();
-  await expect(page.locator('[data-role="counts"]')).toContainText('3 data files (3 CSV, 0 JSON');
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 data or replay files (3 CSV, 0 JSON)');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
   await buildReport(page);

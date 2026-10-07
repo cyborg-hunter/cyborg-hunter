@@ -16,6 +16,9 @@
 //     URL answers, so the demo site is assembled before this build starts.
 //   - the analyze page (tests/e2e/analyze, projects analyze-*): served by the
 //     demo site's server (.demo-site/analyze/, built by the assemble step).
+//   - the CLI report's replay viewer (tests/e2e/report, projects report-*):
+//     a report built by bin/cyborg-hunter.js and opened from file://, on
+//     Chromium, Firefox and WebKit; no server of its own.
 
 import { defineConfig, devices } from '@playwright/test';
 
@@ -64,5 +67,10 @@ export default defineConfig({
     { name: 'analyze-chromium', testDir: 'tests/e2e/analyze', use: { ...devices['Desktop Chrome'] } },
     { name: 'analyze-firefox',  testDir: 'tests/e2e/analyze', testMatch: /(engines|policy)\.spec\.js/, use: { ...devices['Desktop Firefox'] } },
     { name: 'analyze-webkit',   testDir: 'tests/e2e/analyze', testMatch: /(engines|policy)\.spec\.js/, use: { ...devices['Desktop Safari'] } },
+    // The CLI report's replay viewer, opened from file:// (no server): it
+    // requests none of a recording's media, on all three engines.
+    { name: 'report-chromium', testDir: 'tests/e2e/report', use: { ...devices['Desktop Chrome'] } },
+    { name: 'report-firefox',  testDir: 'tests/e2e/report', use: { ...devices['Desktop Firefox'] } },
+    { name: 'report-webkit',   testDir: 'tests/e2e/report', use: { ...devices['Desktop Safari'] } },
   ],
 });

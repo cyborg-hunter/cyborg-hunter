@@ -127,6 +127,21 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trial's segment early, under the step's `trialId`. Either way the real
   start then logged a `lifecycle` capture failure. With the one-line setup a
   researcher's own per-trial replay entry without `params` is covered too.
+- Report (CLI and `/analyze/`): the ▸ toggle beside a long paste now shows
+  its full text. Before, a click hid the preview and showed nothing.
+- Report (CLI and `/analyze/`): "… +N more" under a session-level signal
+  (AI extensions, sidebar events, keyboard shortcuts) now opens the rest of
+  the list. Before, it was plain text, and the rest was nowhere in the report.
+- Report (CLI and `/analyze/`): the "Sidebar events" list shows one line per
+  sidebar opening (its width change, its time and how long it stayed open),
+  as many as the Sidebar count above it. Before, it listed every open and
+  close entry of the log, and a sidebar seen by both detectors twice.
+- `/analyze/`: a replay recording among the dropped files no longer empties
+  the participant ID suggestion. The check step skips recordings when it
+  reads the files' columns; before, one recording left no candidate and the
+  page fell back to `participantId`, which is wrong for jsPsych's
+  `subject_ID`. The line beside the field counts the data files read and
+  the recordings skipped.
 
 ### Removed
 - Internal renderer wrappers removed
