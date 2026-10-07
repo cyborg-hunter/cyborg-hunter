@@ -26,10 +26,9 @@ export function formatClock(ms) {
 // keyboard shortcuts). No real trialId collides with 'session' (all are
 // act1-*/act2-*), so the sentinel is safe to reuse as a literal string.
 //
-// The trial/event cells carry their own text as a title: the rail costs the
-// aside's stream ~76px, so demo.css truncates those two columns there rather
-// than breaking them mid-token — the title is what makes the truncation
-// lossless (the wide states show them in full anyway).
+// The trial/event cells carry their own text as a title: demo.css wraps
+// them in floored columns, with overflow hidden only as the backstop for a
+// face wider than the floors, and the title keeps such a cell readable.
 export function renderRowHtml(row) {
   var trial = row.trial || 'session';
   return '<div class="lp-row' + (row.hard ? ' hard' : '') + '" data-trial="' + escHtml(trial) + '">' +
@@ -80,9 +79,8 @@ export function makeLivePane(mount, pid) {
       (activeTrial === 'all') + '" title="' + escHtml(LIVE_PANE.trials.allLabel) + '">' +
       escHtml(LIVE_PANE.trials.allLabel) + '</button>';
     trials.forEach(function (t) {
-      // The label is the step's heading, clamped to two lines in the narrow
-      // aside (demo.css) — so the title carries it whole, plus the trialId
-      // the stream's own trial column shows, which is the one place the two
+      // The label is the step's heading; the title adds the trialId the
+      // stream's own trial column shows, which is the one place the two
       // names are spelled out side by side.
       var tip = t.label === t.id ? t.id : t.label + ' (' + t.id + ')';
       html += '<button class="lp-trial-tab" data-trial-key="' + escHtml(t.id) + '" aria-pressed="' +

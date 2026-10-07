@@ -57,6 +57,11 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   await startTour(page); // lands on step 2 (baseline)
   const participantId = await pid(page);
   expect(participantId).toMatch(/^DEMO-/);
+  // The lamps' intro is one line with the full text as its tooltip. (The
+  // rail's other .sub is the "awaiting your session" note.)
+  const intro = page.locator('[data-role="rail"] .sub:not(.awaiting-note)');
+  await expect(intro).toHaveText(/^A demo instrument: a curated subset of what the library records\.$/);
+  await expect(intro).toHaveAttribute('title', /Idle gaps, window position/);
 
   // ----- Step 2: baseline typing (real per-char typing lights nothing) -----
   await expect(page.locator('.eyebrow')).toContainText('Step 2 of 11');
@@ -148,18 +153,16 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   // carries both its start AND its end.
   await expect(page.locator('#guard-friction-overlay')).toHaveCSS('display', 'none');
 
-  // ----- Step 9: guard debrief — pane promoted into the main column
-  // (item 5: the main column is otherwise near-empty here, task: null) -----
+  // ----- Step 9: the record is under the card here as on every step
   await expect(page.locator('.eyebrow')).toContainText('Step 9 of 11');
   const paneInSlot = page.locator('[data-role="pane-slot"] [data-role="live-pane"]');
   await expect(paneInSlot).toHaveCount(1);
-  await expect(paneInSlot).toHaveClass(/promoted/);
   await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(0);
-  // Reparenting moved the pane's own node, not its content — state.pane's
-  // element references and listeners survive the move: a signal dispatched
-  // while promoted still appends a live row. A session-scoped signal
-  // (keyboard shortcut), not copy/paste — those are trial-scoped and this
-  // step has task: null, no trial open to catch them.
+  await expect(page.locator('[data-role="live-pane"]')).not.toHaveClass(/promoted/);
+  // A signal dispatched on a step with no trial open still appends a live
+  // row. A session-scoped signal (keyboard shortcut), not copy/paste — those
+  // are trial-scoped and this step has task: null, no trial open to catch
+  // them.
   const rowCountBeforeSignal = await page.locator('.lp-row').count();
   await dispatchDevToolsShortcut(page);
   await expect(page.locator('.lp-row')).toHaveCount(rowCountBeforeSignal + 1);
@@ -167,10 +170,8 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 10: signals to scores (first tier vocabulary appears here) -----
   await expect(page.locator('.eyebrow')).toContainText('Step 10 of 11');
-  // Pane demoted back to the instrument column on leaving step 9.
-  await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(1);
-  await expect(page.locator('.instrument [data-role="live-pane"]')).not.toHaveClass(/promoted/);
-  await expect(page.locator('[data-role="pane-slot"] [data-role="live-pane"]')).toHaveCount(0);
+  // The record stays under the card on leaving step 9.
+  await expect(paneInSlot).toHaveCount(1);
   await expect(page.locator('.stepcopy')).toContainText('HARD');
   await primaryButton(page).click();
 
@@ -240,12 +241,12 @@ test('guard-cheat resume route: button unfloats after resume and advances exactl
 });
 
 // ---------------------------------------------------------------------------
-// Step-9 pane promotion (item 5), the OTHER leave direction: the happy-path
-// test above covers forward (9 -> 10); goTo()'s demotePane() is called
-// unconditionally at the top of EVERY navigation, so Back (9 -> 8) must
-// restore the pane to the instrument column too.
+// The record's place under the card, the OTHER leave direction: the
+// happy-path test above covers forward (9 -> 10); Back (9 -> 8) must leave
+// the record under the card too, in the main column, never in the
+// instrument column.
 // ---------------------------------------------------------------------------
-test('step 9: pane promotion also restores on Back to step 8', async ({ page }) => {
+test('step 9: the record stays under the card on Back to step 8', async ({ page }) => {
   await startTour(page); // -> baseline
   await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
@@ -256,9 +257,10 @@ test('step 9: pane promotion also restores on Back to step 8', async ({ page }) 
 
   await backButton(page).click(); // -> guard-cheat (step 8)
   await expect(page.locator('.eyebrow')).toContainText('Step 8 of 11');
-  await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(1);
-  await expect(page.locator('.instrument [data-role="live-pane"]')).not.toHaveClass(/promoted/);
-  await expect(page.locator('[data-role="pane-slot"] [data-role="live-pane"]')).toHaveCount(0);
+  const paneInSlot = page.locator('[data-role="pane-slot"] [data-role="live-pane"]');
+  await expect(paneInSlot).toHaveCount(1);
+  await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(0);
+  await expect(page.locator('[data-role="live-pane"]')).not.toHaveClass(/promoted/);
 });
 
 // ---------------------------------------------------------------------------

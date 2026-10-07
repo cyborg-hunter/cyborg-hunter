@@ -12,12 +12,13 @@ export const POSITIONING =
   "classroom, or standalone), free and inspectable. Use them together: " +
   "platform-level screening plus study-level evidence you can defend in review.";
 
-/** Sidebar rail intro. Demo-instrument framing per G4. */
-export const RAIL_INTRO =
-  "A demo instrument, not part of the product UI. These lamps show a curated " +
-  "subset of what the library records; the full record is in the live session " +
-  "pane. Idle gaps, window position, zoom, DOM mutations, and the extension " +
-  "scan also run in the background, but nothing on this page can trigger them on cue.";
+/** Sidebar rail intro: one line, with the full framing as its tooltip. */
+export const RAIL_INTRO = 'A demo instrument: a curated subset of what the library records.';
+export const RAIL_INTRO_TITLE =
+  'Not part of the product UI. These lamps show a curated subset of what the ' +
+  'library records; the full record is in the live session record under the ' +
+  'card. Idle gaps, window position, zoom, DOM mutations, and the extension ' +
+  'scan also run in the background, but nothing on this page can trigger them on cue.';
 
 export const RAIL_GROUPS = {
   detectors: [
@@ -138,7 +139,7 @@ watch them being recorded, run into the enforcement mode, and end with your
 session's files, one click away from a real report built from them in the
 analyzer. Two instruments on this page are demo-only: the signal lamps on
 the right and the live session record below
-them. The lamps show a curated handful of what cyborg-hunter records; the
+this card. The lamps show a curated handful of what cyborg-hunter records; the
 full list is in docs/signals-reference.md. The recording itself is the
 actual product, behaving exactly as it does in a study.</p>
 <p>The tour runs in four parts: Act 1 (steps 2 through 6) lets you try every
