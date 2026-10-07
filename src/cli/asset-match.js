@@ -3,8 +3,9 @@
 // the URL of every external stylesheet and image; this module matches those
 // URLs against files the researcher supplies (a dropped folder on the analyze
 // page, or `assetsDir` in the CLI config) and inlines what matched into the
-// viewer model: stylesheet text as `css`, images as data: URIs, each image
-// an element attribute shows, once (`model.assets`, see applyAssetMap). One
+// viewer model: stylesheet text as `css`, images as data: URIs, an image that
+// elements show through `src` once (`model.assets`, see applyAssetMap; srcset
+// candidates and CSS url() images stay inline per occurrence). One
 // matcher, one mapping, both paths — and never a fetch, which the page's
 // policy forbids.
 //
