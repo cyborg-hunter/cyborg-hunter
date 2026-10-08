@@ -95,12 +95,15 @@ test('trial ids name the task, not the act, and none is a key the record reserve
   // The record's trial column and its filter tabs show these ids. 'all' and
   // 'session' are the live pane's own filter keys (live-pane.js).
   const ids = STEPS.filter((s) => s.task && s.task.trialId).map((s) => s.task.trialId);
-  assert.deepEqual(ids, ['baseline', 'paste', 'tabaway', 'autotype', 'entry', 'guard']);
+  assert.deepEqual(ids, ['baseline', 'paste', 'tabaway', 'autotype', 'guard-entry', 'guard']);
   assert.equal(new Set(ids).size, ids.length);
   for (const id of ids) {
     assert.doesNotMatch(id, /^act/, id);
     assert.ok(id !== 'all' && id !== 'session', id);
   }
+});
+test('the closing invitation names the one script tag, not code the tour no longer shows', () => {
+  assert.equal(copy.CLOSING_CTA.installInvitation, 'One script tag is the whole integration; the quickstart shows it.');
 });
 test('the link back reads "Go back"; the record has no caption', () => {
   assert.equal(copy.BACK_LABEL, 'Go back');

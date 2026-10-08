@@ -119,6 +119,8 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('#card .stepcopy p')).toHaveCount(3);
   await expect(page.locator('#card .task')).toHaveCount(0);
   await expect(primaryButton(page)).toHaveText('Done');
+  // No panel, but the step's trial is open: the record holds its row.
+  await expect(page.locator('.lp-row[data-trial="tabaway"]').first()).toBeAttached();
   await frozenClock.tabAway(0, 2000);      // flicker: <=3000ms
   await frozenClock.tabAway(20000, 6000);  // mid: >3000ms, <10000ms
   await frozenClock.tabAway(40000, 12000); // long: >=10000ms
@@ -132,6 +134,7 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   // A sidebar opening narrows the page: dropping the width by 580px (over
   // the 100px sidebar gap) lights the sidebar lamp at the monitor's next
   // 2s check and the viewport lamp at the demo's 5s poll (no onSignal event).
+  await expect(railRow(page, 'sidebar')).not.toHaveClass(/lit/);
   await page.setViewportSize({ width: 700, height: 900 });
   await waitForLamp(page, 'sidebar', { timeout: 7000 });
   await waitForLamp(page, 'viewport', { timeout: 7000 });
@@ -695,7 +698,7 @@ test('zero-lamp path: walk past every task, then the guard skip -> the files ste
 // ---------------------------------------------------------------------------
 // 6. Act2-skip path: forced fullscreen failure mid-tour, with real Act 1 data
 // ---------------------------------------------------------------------------
-test('act2-skip path: fullscreen failure falls back, skip lands on "From signals to scores"', async ({ page }) => {
+test('guard-skip path: fullscreen failure falls back, skip lands on "From signals to scores"', async ({ page }) => {
   await installFailingFullscreenMock(page);
   await startTour(page); // -> baseline
   await primaryButton(page).click(); // -> clipboard-cheat

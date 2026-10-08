@@ -197,7 +197,7 @@ screen, word for word. Enter whenever you're ready; nothing is enforced
 until you do.</p>`.trim(),
     task: {
       kind: 'fullscreen-entry',
-      trialId: 'entry',
+      trialId: 'guard-entry',
       fallbackNote:
         'Fullscreen didn’t engage in this browser, so the guarded act ' +
         'can’t run here. Skip ahead: the rest of the tour still works without it.',
@@ -393,8 +393,6 @@ export const CONFIG_CAVEAT =
 export const CLOSING_CTA = {
   primaryLabel: 'Get started in your experiment',
   primaryHref: 'https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/quickstart.md',
-  installInvitation:
-    'The jsPsych wiring you saw at step 2 is the whole integration; the ' +
-    'quickstart walks through it.',
+  installInvitation: 'One script tag is the whole integration; the quickstart shows it.',
   githubHref: 'https://github.com/cyborg-hunter/cyborg-hunter',
 };
