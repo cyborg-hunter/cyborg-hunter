@@ -29,8 +29,8 @@ test('the sample shows the cursor section, the tile, the rail cell and the label
   await expect(section.locator('tr', { hasText: 'maximum deviation from the chord' })).toContainText('0.0 px (n = 2)');
   await expect(section).toContainText('monitor stream, median 60 ms between samples, viewport coordinates');
   await expect(frame.locator('#p-SYN-GENERATED-04 .signal-tile', { hasText: 'Pointer checks' }).locator('.signal-value')).toHaveText('2');
-  // The report's replay is the card beside it on this page.
-  await expect(section).toContainText('The replay card beside this report shows this session.');
+  // The sample has no recordings, so the section points to no replay card.
+  await expect(section).not.toContainText('replay card');
   await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('pointer checks (cursor)');
   await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('the tier is unchanged');
   await expect(page.locator('[data-role="cursor-line"]')).toContainText('Pointer checks: fired in 1 of 1 sessions with device facts (3 recorded without them; 0 without a cursor stream)');

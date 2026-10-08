@@ -1257,10 +1257,11 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
 // features with their n; the stream and its realised interval; the
 // constants that judged it (the values the analysis carries, also written to
 // cursor-limits.json). Numbers only; their meaning is on
-// docs/interpreting-signals.md, which the section links to. It ends with a
-// pointer to the participant's replay: a link to the replay section in the
-// CLI report, a sentence naming the card where the replay is shown outside
-// the report (the analyze page, whose card follows the selected participant).
+// docs/interpreting-signals.md, which the section links to. When the
+// session has a recording, it ends with a pointer to the replay: a link to
+// the replay section in the CLI report, a sentence naming the card where the
+// replay is shown outside the report (the analyze page, whose card follows
+// the selected participant).
 function renderCursorSection(s, participant, replayShownExternally) {
   const ca = s.cursorAnalysis;
   if (!ca) return '';
@@ -1301,9 +1302,12 @@ function renderCursorSection(s, participant, replayShownExternally) {
     </table>
     <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants: ${esc(constants)} (cursor-limits.json); ${docs}.</p>`;
   }
-  const replayLink = replayShownExternally
-    ? `<p class="muted note">The replay card beside this report shows this session.</p>`
-    : (participant && participant.replay && participant.replay.recording ? `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>` : '');
+  // Only a session with a recording gets a pointer to its replay.
+  const hasRecording = !!(participant && participant.replay && participant.replay.recording);
+  const replayLink = !hasRecording ? ''
+    : replayShownExternally
+      ? `<p class="muted note">The replay card beside this report shows this session.</p>`
+      : `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>`;
   return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${body}${replayLink}</div>`;
 }
 

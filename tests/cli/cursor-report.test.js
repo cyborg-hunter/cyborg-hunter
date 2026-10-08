@@ -183,6 +183,15 @@ describe('the HTML report', () => {
     assert.match(outside, /<p class="muted note">The replay card beside this report shows this session\.<\/p><\/div>/);
     assert.doesNotMatch(outside, /open the replay/);
   });
+  it('without a recording, points to no replay, in the report or outside it', async () => {
+    const { summaries, triage } = analyze([human]);
+    const html = await renderIndexHtml(summaries, triage, [human], config, false);
+    const outside = await renderIndexHtml(summaries, triage, [human], config, false, { replayShownExternally: true });
+    for (const page of [html, outside]) {
+      assert.match(page, /Cursor dynamics/);
+      assert.doesNotMatch(page, /open the replay|replay card beside/);
+    }
+  });
   it('prints the constants the analysis judged with, not the defaults', async () => {
     const custom = { ...CURSOR_LIMITS, discontinuityPx: { value: 50, meaning: CURSOR_LIMITS.discontinuityPx.meaning } };
     const summaries = computeSummary([human], config);
