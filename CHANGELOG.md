@@ -133,6 +133,36 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   by hand (advanced-integration.md). The message replaces the default
   text, heading included; the button keeps its label, "Enter fullscreen and
   continue".
+- Report (CLI and `/analyze/`): a "Cursor dynamics" section for each
+  session. It shows three browser-reported checks, each with its count, its
+  denominator and up to ten trial ids: the automation flag set by the
+  browser (`navigator.webdriver`), clicks the page's own scripts dispatched
+  (`isTrusted` false) and trials clicked without pointer movement. It also
+  reports, without a verdict, clicks after a pointer jump and the shape of
+  each movement (duration, path length, displacement, speed, efficiency and
+  deviation, as medians with their n), and links to the page that says what
+  the numbers mean (docs/interpreting-signals.md#cursor-dynamics). With it
+  come a "Pointer checks" tile, a rail cell ("pointer checks: 2 of 3") and
+  its sort option, a clause in the triage reason, sixteen `cursor…` columns
+  at the end of `summary.csv` (no existing header changes), a new file,
+  `cursor-limits.json`, with the constants the section judged with and their
+  meanings, and one line in the run output, "Pointer checks: fired in N of M
+  checkable sessions (…)", which `/analyze/` prints under its results
+  summary. A new `scoreWeights` key, `cursor` (default 0, shown in the
+  analyzer's settings as "pointer checks (cursor)"), adds one point per
+  check that fired, not per event, to the triage score; the tier is
+  unchanged, and the CLI warns when the weight is on and some sessions carry
+  no checks. For the checks the monitor now records the session's device
+  facts (`device: { maxTouchPoints, coarsePointer, webdriver }`), viewport
+  coordinates (`cx`, `cy`) on every mouse sample, and `trusted`, `detail`
+  and `pointerType` on every click, press and release. One trial of 2,000
+  moves grows from 84,878 to 119,978 bytes of JSON, one of 2,000 clicks from
+  86,878 to 217,978; the Qualtrics write still leaves the mouse track out and
+  adds 69 bytes for the device facts, so Qualtrics sessions read "not
+  collected" while the automation flag still comes through. Sessions
+  recorded before 0.14 show the checks as "not recorded" (docs/upgrading.md).
+  The analyzer's sample has a fourth session, SYN-GENERATED-04, whose checks
+  fire.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
@@ -272,6 +302,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   (`replay/<id>.replay.js`), however many elements show it, and the viewer
   puts it back on each element when the replay loads; the recordings
   themselves are unchanged. A `srcset` keeps its images inline.
+- `computeMouseMetrics` (each trial's `mouseMetrics`) measures path length
+  and displacement with the geometry the report's cursor section uses; its
+  outputs are unchanged. Its comment no longer gives bot and human ranges:
+  it says that `pathEfficiency` covers the whole trial (the cursor section's
+  efficiency is per movement) and that direction changes and speed variance
+  depend on the sampling interval.
 
 ### Fixed
 - Live demo: the example participant `example-1.json` (offered on the files

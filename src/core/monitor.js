@@ -402,8 +402,10 @@ export function init(userConfig) {
       // name extract-core's field map expects: mouseTrack → mouseEvents, so a
       // saved report round-trips through extractIntegrityData() without new
       // glue) unless collectForPostHoc.rawMouseTrack is set false, in which
-      // case only the derived mouseMetrics above ship and the {x,y,t,type}
-      // samples never leave the browser. ON by default since 2026-09-02: a
+      // case only the derived mouseMetrics above ship and the samples
+      // ({x, y, cx, cy, t, type}; presses, releases and clicks also carry
+      // trusted, detail and pointerType) never leave the browser. ON by
+      // default since 2026-09-02: a
       // researcher who adds CH to an experiment has already adjudicated
       // collecting behavioural traces, and an off-by-default gate made the
       // report's trajectory panels read "no mouse data" for everyone who

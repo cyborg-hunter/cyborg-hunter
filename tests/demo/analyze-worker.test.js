@@ -71,17 +71,17 @@ test('the worker source reaches no network and no Node API', () => {
   assert.doesNotMatch(workerSrc, NODE_IMPORT);
 });
 
-test('check on the sample finds three participant files and the id field its config names', async () => {
+test('check on the sample finds four participant files and the id field its config names', async () => {
   const w = startWorker();
   w.send({ type: 'check', sample: true });
   const checked = await w.next('checked', 'error');
   assert.equal(checked.type, 'checked', checked.message);
-  assert.deepEqual(checked.counts, { participant: 3, replay: 0, assets: 0, ignored: 0 });
+  assert.deepEqual(checked.counts, { participant: 4, replay: 0, assets: 0, ignored: 0 });
   assert.equal(checked.configFound, true);
   assert.equal(checked.config.participantIdField, 'subject_ID');
   assert.deepEqual(checked.configWarnings, []);
   assert.equal(checked.idSuggestion.suggested, 'subject_ID');
-  assert.equal(checked.sampled, 3);
+  assert.equal(checked.sampled, 4);
 });
 
 // A recording in the drop used to leave no candidate at all: its keys
@@ -109,7 +109,7 @@ test('check skips replay recordings when it suggests the id field: jsPsych CSVs 
   assert.equal(checked.type, 'checked', checked.message);
   assert.equal(checked.idSuggestion.suggested, 'subject_ID');
   assert.deepEqual(checked.idSuggestion.candidates[0], { field: 'subject_ID', reason: 'known name' });
-  assert.equal(checked.sampled, 3);
+  assert.equal(checked.sampled, 4);
   assert.equal(checked.recordings, 1);
 });
 
@@ -146,8 +146,9 @@ test('run on the sample streams a zip of the full report and returns the in-page
   const files = unzipSync(zip);
   for (const f of REPORT_FILES) assert.ok(files[f], f + ' is in the zip');
   for (const f of ['summary.csv', 'triage.md', 'event-log.csv']) assert.equal(done.files[f], strFromU8(files[f]), f);
-  assert.deepEqual(done.participants.map((p) => p.participantId).sort(), ['SYN-CLEAN-01', 'SYN-HARD-03', 'SYN-SOFT-02']);
-  assert.deepEqual(done.triageOrder.slice().sort(), ['SYN-CLEAN-01', 'SYN-HARD-03', 'SYN-SOFT-02']);
+  assert.deepEqual(done.participants.map((p) => p.participantId).sort(), ['SYN-CLEAN-01', 'SYN-GENERATED-04', 'SYN-HARD-03', 'SYN-SOFT-02']);
+  assert.deepEqual(done.triageOrder.slice().sort(), ['SYN-CLEAN-01', 'SYN-GENERATED-04', 'SYN-HARD-03', 'SYN-SOFT-02']);
+  assert.equal(done.cursorLine, 'Pointer checks: fired in 1 of 4 checkable sessions (0 recorded before 0.14, 0 no cursor stream)');
   assert.equal(done.configUsed.participantIdField, 'subject_ID');
   assert.match(done.html, /SYN-HARD-03/);
   const phases = new Set(w.messages.filter((m) => m.type === 'progress').map((m) => m.phase));
@@ -358,7 +359,7 @@ test('done lists each participant\'s tier and triage score, in triage order', as
   w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
   const done = await w.next('done', 'error');
   assert.equal(done.type, 'done', done.message);
-  assert.deepEqual(done.triageRows.map((r) => [r.participantId, r.tier]), [['SYN-HARD-03', 'hard'], ['SYN-SOFT-02', 'soft'], ['SYN-CLEAN-01', 'clean']]);
+  assert.deepEqual(done.triageRows.map((r) => [r.participantId, r.tier]), [['SYN-HARD-03', 'hard'], ['SYN-SOFT-02', 'soft'], ['SYN-CLEAN-01', 'clean'], ['SYN-GENERATED-04', 'clean']]);
   const scores = Object.fromEntries(done.files['summary.csv'].trim().split('\n').slice(1).map((l) => l.split(',')).map((c) => [c[0], Number(c[2])]));
   for (const r of done.triageRows) assert.equal(r.triageScore, scores[r.participantId], r.participantId);
 });
@@ -431,7 +432,7 @@ test('dropped files sent as bytes (a page opened from file:) check and run as Fi
   const viaBytes = await outcome(asBytes);
   assert.deepEqual(viaBytes, await outcome(asFiles));
   assert.equal(viaBytes.checked.idSuggestion.suggested, 'subject_ID', 'the config was read from its bytes');
-  assert.deepEqual(viaBytes.triageOrder, ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01']);
+  assert.deepEqual(viaBytes.triageOrder, ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01', 'SYN-GENERATED-04']);
 });
 
 test('reset lets go of the last run: its replays are no longer served', async () => {

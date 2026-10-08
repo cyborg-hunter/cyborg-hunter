@@ -28,6 +28,8 @@ The **tier** (`HARD` / `soft` / `clean`) is the screening verdict:
 
 A useful mental model: **the tier decides *whether* to review someone, the triage score decides *in what order*, and neither decides *what you conclude*.** For hard flags, read the pasted text in `event-log.csv`; for soft flags, look at the session timeline and trajectories before judging.
 
+**Pointer checks.** Since 0.14 the report's [cursor section](#cursor-dynamics) shows three browser-reported checks per session. The *automation flag set by the browser* is `navigator.webdriver`, which a browser driven through WebDriver sets; the monitor reads it once at session start. *Clicks the page's own scripts dispatched* are recorded clicks whose event the browser marks as untrusted (`isTrusted` false). *Trials clicked without pointer movement* are trials with a pointer click and no recorded movement, away from where the pointer was last seen; touch devices are never judged on it. Each check has innocent causes. A page that dispatches its own clicks (a script that calls `element.click()`, or a page that answers the Enter key by clicking its button) produces untrusted clicks for every participant. A Continue button that appears under a pointer resting since before the trial, and is clicked without a move, produces a trial clicked without pointer movement. Keyboard activation of a focused button (Enter or Space) is recorded as a click with `detail` 0 and counts toward neither click check. None of the three changes the tier. The `cursor` ranking weight in `scoreWeights` (default 0) adds them to the triage score: 0–3, one per check that fired, not per event; the tier is unchanged. Sessions recorded before 0.14 carry no device facts and show the checks as "not recorded" ([upgrading.md](upgrading.md#0140--from-013)).
+
 ## Viewport-width shifts
 
 **What it measures:** the `viewportWidthShifts` signal records changes in the viewport's width, via a ResizeObserver on `<html>` with a 20 px threshold. Since 0.6.1 the events are debounced (250 ms quiet period), so one resize gesture logs one event with the net old→new change.
@@ -73,8 +75,16 @@ Collected-but-unscored signals, and what they're for:
 | Idle gaps | Long pauses have many causes. Context for tab-away patterns. |
 | Mouse metrics | Path efficiency and speed variance support bot detection, but need baselines from your own population. |
 | Zoom changes, window geometry | Environment context for reading the trajectory plots. |
+| Clicks after a pointer jump | A movement that starts far from where the pointer was last seen; agents place the pointer rather than move it, but so does a pointer parked across an unrecorded gap. Count and trial ids, no threshold until a calibration study. |
+| Cursor shape features | Per-movement duration, path, displacement, speed, efficiency and deviation, as medians with n; they depend on the sampling interval and the task, so compare within one study. |
 
 The `honeypot_ai_use` column (if you run the guard-honeypot extension) is three-state: `YES` means the participant ticked the visible bait "I used AI" checkbox, `no` means the bait was shown and left unticked, and empty means the honeypot wasn't active for that participant. Only `YES` is evidence; don't read `no` as exoneration or empty as `no`.
+
+## Cursor dynamics
+
+The report's "Cursor dynamics" section gives each session's numbers and leaves their meaning to this page. The three browser-reported checks are described under [Two scores, three tiers](#two-scores-three-tiers), clicks after a pointer jump and the shape features under [Signals that never score](#signals-that-never-score). The constants behind each count (the 400 ms gap that ends a movement, the 100 px that makes a jump, and the rest) are written with their meanings to `cursor-limits.json` beside the report ([cli-reference.md](cli-reference.md#cursor-limitsjson)).
+
+The shape features come from the bot-detection literature. Chu, Gianvecchio and Wang ("Bot or Human? A Behavior-Based Online Bot Detection System", 2018) split mouse streams into movements at 0.4 s gaps, as the section does, and compared blog visitors with bots the authors configured themselves. Bot point-and-click movements averaged 1,521 px/s against 427 px/s for humans, and efficiency (displacement over path length, 1 for a straight line) was above 0.94 in 59% of bot movements against 29% of human ones. Those figures come from the operating system's pointer events at 125 Hz. The monitor samples at `mouseThrottleMs` (50 ms by default), and a throttled stream joins its samples with straight lines, so it undercounts path length and reads efficiency higher than the same movement recorded at 125 Hz. The published figures are therefore context, not thresholds: they show which direction a difference points, and the section sets no cut-off.
 
 ## Deciding what to do
 

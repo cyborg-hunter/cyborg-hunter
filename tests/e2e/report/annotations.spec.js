@@ -5,7 +5,7 @@
 // selected participant, the exports carry the labels, an import names the
 // ids this report does not have, two tabs keep each other's changes, and a
 // note is kept while it is still being typed. The report is built by
-// bin/cyborg-hunter.js from the synthetic pilot (three participants).
+// bin/cyborg-hunter.js from the synthetic pilot (four participants).
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,19 +28,19 @@ test('a label and a note stay through a reload; the rail badge and the counter f
   await openReport(page);
   const pane = page.locator('#p-SYN-HARD-03');
   const note = pane.getByRole('textbox', { name: 'Note on this participant' });
-  await expect(page.locator('.annot-count')).toHaveText('0 of 3 reviewed');
+  await expect(page.locator('.annot-count')).toHaveText('0 of 4 reviewed');
   await pane.getByRole('button', { name: 'Exclude' }).click();
   await note.fill('answer pasted in trial 2');
   await note.blur();
   await expect(badge(page, 'SYN-HARD-03')).toHaveText('exclude');
-  await expect(page.locator('.annot-count')).toHaveText('1 of 3 reviewed');
+  await expect(page.locator('.annot-count')).toHaveText('1 of 4 reviewed');
   await page.reload();
   await expect(pane.getByRole('button', { name: 'Exclude' })).toHaveAttribute('aria-pressed', 'true');
   await expect(note).toHaveValue('answer pasted in trial 2');
-  await expect(page.locator('.annot-count')).toHaveText('1 of 3 reviewed');
+  await expect(page.locator('.annot-count')).toHaveText('1 of 4 reviewed');
   // The pressed label pressed again: not reviewed, the note kept.
   await pane.getByRole('button', { name: 'Exclude' }).click();
-  await expect(page.locator('.annot-count')).toHaveText('0 of 3 reviewed');
+  await expect(page.locator('.annot-count')).toHaveText('0 of 4 reviewed');
   await expect(badge(page, 'SYN-HARD-03')).toBeHidden();
   await expect(note).toHaveValue('answer pasted in trial 2');
 });
@@ -59,7 +59,8 @@ test('i, e and f label the participant on screen; the CSV and the JSON carry the
   expect(lines[0]).toBe('participantId,tier,triageScore,label,note,annotatedAt,runId');
   // participantId, tier, label and runId of each row (no note holds a comma).
   expect(lines.slice(1).map((l) => { const c = l.split(','); return [c[0], c[1], c[3], c[6]]; })).toEqual([
-    ['SYN-HARD-03', 'hard', 'include', runId], ['SYN-SOFT-02', 'soft', 'flag', runId], ['SYN-CLEAN-01', 'clean', 'include', runId]]);
+    ['SYN-HARD-03', 'hard', 'include', runId], ['SYN-SOFT-02', 'soft', 'flag', runId], ['SYN-CLEAN-01', 'clean', 'include', runId],
+    ['SYN-GENERATED-04', 'clean', 'include', runId]]);
   const [json] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export JSON' }).click()]);
   const data = JSON.parse(readFileSync(await json.path(), 'utf8'));
   expect([data.format, data.runId, Object.keys(data.annotations)]).toEqual(['cyborg-hunter-annotations', runId, ['SYN-SOFT-02']]);
@@ -76,7 +77,7 @@ test('an import applies what this report has and names what it does not', async 
   await page.locator('.annot-bar input[type="file"]').setInputFiles(file);
   await expect(page.locator('.annot-msg')).toHaveText('Imported 1 annotation. Not in this report: SYN-OTHER-99.');
   await expect(badge(page, 'SYN-CLEAN-01')).toHaveText('include');
-  await expect(page.locator('.annot-count')).toHaveText('1 of 3 reviewed');
+  await expect(page.locator('.annot-count')).toHaveText('1 of 4 reviewed');
 });
 
 test('two tabs of the same report keep each other\'s labels', async ({ page, context }) => {
@@ -94,7 +95,7 @@ test('two tabs of the same report keep each other\'s labels', async ({ page, con
     await p.reload();
     await expect(badge(p, 'SYN-HARD-03')).toHaveText('exclude');
     await expect(badge(p, 'SYN-SOFT-02')).toHaveText('flag');
-    await expect(p.locator('.annot-count')).toHaveText('2 of 3 reviewed');
+    await expect(p.locator('.annot-count')).toHaveText('2 of 4 reviewed');
   }
   expect(otherErrors).toEqual([]);
 });

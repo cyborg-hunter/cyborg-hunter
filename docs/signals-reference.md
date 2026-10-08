@@ -14,7 +14,7 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 | Typing speed | Typing | chars/sec from input edit timestamps | Default soft threshold 10 cps |
 | Synthetic insertion | Typing | Text appears without preceding keystrokes | Default 100ms gap |
 | Foreign input | Typing | Typing lands outside the experiment container | All occurrences logged |
-| Mouse track | Mouse | 20Hz throttled `mousemove`/`mousedown`/`mouseup` | Cap of 2000 events per trial |
+| Mouse track | Mouse | `mousemove` sampled at `mouseThrottleMs` (50 ms by default); every `mousedown`/`mouseup`/`click` | Cap of 2000 events per trial. Since 0.14 each sample carries viewport coordinates (`cx`, `cy`) beside the page ones (`x`, `y`) |
 | Mouse metrics | Mouse | Path efficiency, direction changes, speed variance | Computed from ≥3 move events |
 | AI extensions | Browser | DOM scan for known extension content-script selectors | 30s rescan interval |
 | Sidebar gap | Browser | `outerWidth − innerWidth` delta | 100px gap by default |
@@ -24,6 +24,18 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 | Zoom changes | Browser | Inferred from `devicePixelRatio` change | Diagnostic |
 | DOM mutations | Browser | `MutationObserver` for injected custom elements | Skips known-benign extension tags |
 | DevTools open | Browser | Inferred from the DevTools hotkeys above (no separate window-size heuristic) | Recorded under `keyboardShortcuts`; the `devToolsEvents` array is reserved and currently unpopulated |
+
+## Pointer checks
+
+Three browser-reported checks, read by the report's cursor section from what the monitor records. None of them enters the library's soft score or the tier; `scoreWeights.cursor` can add them to the CLI's triage score ([configuration.md](configuration.md#report-score-weights-scoreweights)). What each one means, and its innocent causes: [interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers).
+
+| Check | What is recorded | Since |
+|---|---|---|
+| Automation flag set by the browser | `navigator.webdriver`, read once at `startSession` into the session report's `device` object, beside `maxTouchPoints` and whether `(pointer: coarse)` matches (`coarsePointer`) | 0.14 |
+| Clicks the page's own scripts dispatched | On every recorded `click`, `down` and `up` sample: `trusted` (the event's `isTrusted`), `detail` (0 for keyboard and assistive activation) and `pointerType` when the browser gives one | 0.14 |
+| Trials clicked without pointer movement | Nothing beyond the mouse track: the report counts trials with a pointer click and no `move` sample, using the clicks' `detail` and `pointerType` to tell a pointer click from a keyboard one and the session's `device` to leave touch devices out | 0.14 |
+
+Sessions recorded before 0.14 carry no `device` object and no click provenance, so the report shows all three checks as "not recorded".
 
 ## Two-tier scoring
 
@@ -73,7 +85,7 @@ Numeric defaults that apply across presets unless overridden:
 | `viewportShiftDebounceMs` | 250 | Quiet period before a viewport-width shift is logged — one gesture = one event (added 0.6.1) |
 | `syntheticGapMs` | 100 | Keystroke-to-input time below which an insertion is treated as synthetic |
 | `idleGapMs` | 10000 | Period of input inactivity that counts as idle |
-| `mouseThrottleMs` | 50 | Mouse polling rate (= 20Hz) |
+| `mouseThrottleMs` | 50 | Minimum time between two recorded `mousemove` samples (at most 20 a second by default) |
 | `mouseMaxEvents` | 2000 | Per-trial cap on mouse events captured |
 | `mouseBotMinEvents` | 3 | Minimum events needed to compute mouse metrics |
 | `tabAwayDurationMs` | 3000 | Tab-away durations longer than this add to the soft score (the `strict` preset raises it to 5000) |
@@ -164,4 +176,4 @@ Benign tags (Grammarly, LastPass, 1Password, etc.) are filtered out of the `Muta
 
 - Participant-level `hardTriggered` reads the session's `anyHardTriggered` when available. If no session score was saved, it falls back to the per-trial signals — a participant is hard only if some trial's cumulative `trialSignals.hard.*.sessionTotal` reached that signal's `countThreshold` (a single hit below the threshold is **not** hard). When that data is absent the participant is left un-flagged rather than promoted to hard.
 - Triage soft-flag check uses `(authoritativeSoftScore ?? totalSoftScore) >= threshold`, where `threshold` is an explicit analyst CLI override if set, otherwise the participant's own saved `softScoreThreshold`, otherwise 6.
-- The CLI **triage score** is a separate ranking heuristic (not the library soft score): by default `5 × paste + 5 × copy + 3 × sidebar-open + 1 × tab-away`, where a counted tab-away is one **longer than the participant's tab-away threshold** (3s by default, 5s for the strict preset — the same cutoff the runtime soft-scores against). Under the default weights no hard-trigger term, AI-extension, keyboard-shortcut, layout, zoom, edge-exit, synthetic, or foreign-input bonus contributes to it; `scoreWeights` in the CLI config can weight any of them ([configuration.md → Report-score weights](configuration.md#report-score-weights-scoreweights)). The ranked list is then ordered tier-first (hard → soft → clean), score-desc within tier, so hard-triggered participants lead regardless of score. See [cli-reference.md → Triage scoring](cli-reference.md#triage-scoring).
+- The CLI **triage score** is a separate ranking heuristic (not the library soft score): by default `5 × paste + 5 × copy + 3 × sidebar-open + 1 × tab-away`, where a counted tab-away is one **longer than the participant's tab-away threshold** (3s by default, 5s for the strict preset — the same cutoff the runtime soft-scores against). Under the default weights no hard-trigger term, AI-extension, keyboard-shortcut, layout, zoom, edge-exit, synthetic, or foreign-input bonus, and, since 0.14, `cursor` (the pointer checks), contributes to it; `scoreWeights` in the CLI config can weight any of them ([configuration.md → Report-score weights](configuration.md#report-score-weights-scoreweights)). The ranked list is then ordered tier-first (hard → soft → clean), score-desc within tier, so hard-triggered participants lead regardless of score. See [cli-reference.md → Triage scoring](cli-reference.md#triage-scoring).

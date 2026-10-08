@@ -5,6 +5,32 @@ What each release changes in **collected data**, **configuration** and
 the CLI on data collected with an older version. The complete change list is
 in [CHANGELOG.md](../CHANGELOG.md).
 
+## 0.14.0 — from 0.13
+
+### What changes on re-run over existing data
+
+- **Every session gets a "Cursor dynamics" section**, read from the mouse track the monitor already saved. What it can show depends on the version that recorded the session:
+  - Sessions recorded with 0.7.2–0.7.5 read "not collected (recorded with <version>)" when the raw mouse track was off, the default in those versions; recorded with it on, they get the section with the three checks "not recorded".
+  - Sessions recorded with 0.8–0.13 (and before 0.7.2) get the section with the three checks "not recorded": those versions saved no device facts and no click provenance, so a tap cannot be told from a scripted click.
+  - Sessions recorded with `collectForPostHoc.rawMouseTrack: false`, and Qualtrics sessions, whose payload leaves the mouse track out, read "not collected". Sessions recorded with `signals.mouseTracking: false` save an empty track and read "no cursor stream (no pointer events)".
+- **Rankings are unchanged.** The new `cursor` weight is 0 by default, so tiers, scores and the order of `triage.md` are those 0.13 gave. With a weight above 0, only the sessions that carry pointer checks move, and the CLI warns when some sessions do not.
+
+### What changes for newly collected data
+
+- **The session report carries the device facts**: `device: { maxTouchPoints, coarsePointer, webdriver }`, read once at `startSession`. The cursor section uses them to tell a touch device from a desktop and to show the automation flag set by the browser.
+- **Mouse samples carry viewport coordinates** (`cx`, `cy`) beside the page ones (`x`, `y`), so scrolling no longer looks like a pointer jump.
+- **Clicks, presses and releases carry their provenance**: `trusted` (the event's `isTrusted`), `detail` (0 for keyboard and assistive activation) and `pointerType` when the browser gives one.
+- **Payload size:** one trial of 2,000 mouse moves goes from 84,878 to 119,978 bytes of JSON (+41%), and one of 2,000 clicks from 86,878 to 217,978 bytes. The per-trial cap (`mouseMaxEvents`) is unchanged. The Qualtrics write still leaves the mouse track out and adds 69 bytes for the device facts, so Qualtrics sessions read "not collected" in the cursor section while the automation flag still comes through.
+
+### What changes in the report output
+
+- **A "Cursor dynamics" section** in each session's detail: the three browser-reported checks with counts, denominators and trial ids; clicks after a pointer jump; the shape features with their n; the stream and its median sample interval. What the numbers mean: [interpreting-signals.md](interpreting-signals.md#cursor-dynamics).
+- **A "Pointer checks" tile** in the signal grid, a "pointer checks: n of 3" cell on each rail row with a "Pointer checks" sort option, and a "pointer checks: …" clause in the triage reason when a check fired.
+- **Sixteen `summary.csv` columns**, all named `cursor…`, after `honeypot_ai_report`. No existing header changes ([cli-reference.md](cli-reference.md#summarycsv)).
+- **`cursor-limits.json`**, a new file beside `score-weights.json`: the constants the section judged with and their meanings ([cli-reference.md](cli-reference.md#cursor-limitsjson)).
+- **One line in the run output**, "Pointer checks: fired in N of M checkable sessions (K recorded before 0.14, J no cursor stream)", which `/analyze/` prints under its results summary.
+- **A `scoreWeights` key, `cursor`** (default 0), shown in the analyzer's settings as "pointer checks (cursor)" ([configuration.md](configuration.md#report-score-weights-scoreweights)).
+
 ## 0.7.0 (and the 0.6.2 patch) — from 0.6.1
 
 ### TL;DR

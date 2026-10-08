@@ -1,9 +1,10 @@
 // generate-fixture.mjs — writes the synthetic-pilot example dataset.
 //
 // EVERYTHING HERE IS SYNTHETIC. No participant, real or anonymized, is behind
-// any of these numbers; the three "participants" are hand-authored to
+// any of these numbers; the first three "participants" are hand-authored to
 // illustrate the three triage tiers (clean / soft / HARD) with realistic
-// v0.6.1-shaped data.
+// v0.6.1-shaped data, and the fourth is a generated session that sets off
+// the report's pointer checks.
 //
 // The rows mirror what the cyborg-hunter jsPsych extension actually saves:
 //   - per-row scalars added via jsPsych.data.addProperties() at finalize()
@@ -60,16 +61,22 @@ const SESSION_EPOCH = Date.parse('2026-07-01T12:00:00.000Z');
 
 const iso = (perfMs) => new Date(SESSION_EPOCH + perfMs).toISOString();
 
-// A deterministic little mouse path so trajectory plots have something to draw.
-function mousePath(startT) {
+// A deterministic little mouse path so trajectory plots have something to
+// draw. `seed` varies its amplitude and spacing, so trials differ. Each
+// sample carries viewport coordinates (cx, cy) beside the page ones, and the
+// final press carries what the browser says about its origin.
+function mousePath(startT, seed) {
   const pts = [];
   for (let i = 0; i < 8; i++) {
-    pts.push({
-      x: 200 + i * 90 + (i % 3) * 25,
-      y: 300 + Math.round(60 * Math.sin(i * 1.1)),
-      t: startT + 400 + i * 350,
+    const x = 200 + i * 90 + (i % 3) * 25;
+    const y = 300 + Math.round((40 + 15 * seed) * Math.sin(i * (0.9 + 0.2 * seed)));
+    const sample = {
+      x, y, cx: x, cy: y - 250,
+      t: startT + 400 + i * (300 + 40 * seed),
       type: i === 7 ? 'down' : 'move'
-    });
+    };
+    if (i === 7) Object.assign(sample, { trusted: true, detail: 1, pointerType: 'mouse' });
+    pts.push(sample);
   }
   return pts;
 }
@@ -134,7 +141,10 @@ function buildTrial(pid, idx, sig, session) {
     copyEvents: sig.copyEvents,
     dropEvents: [],
     tabAwayEvents: sig.tabAwayEvents,
-    mouseEvents: mousePath(startTime),
+    // A click-only trial: one click and no pointer movement before it.
+    mouseEvents: sig.clickOnly
+      ? [{ x: 640, y: 420, cx: 640, cy: 170, t: startTime + 900, type: 'click', trusted: true, detail: 1, pointerType: 'mouse' }]
+      : mousePath(startTime, idx),
     editTimestamps: [],                              // keystrokeDynamics off (standard default)
     foreignInputEvents: [],
     syntheticInsertions: [],
@@ -183,6 +193,8 @@ function buildParticipant(pid, trialDefs, sessionExtras) {
     viewportWidthShifts: shifts,
     layoutShifts: shifts,                               // deprecated alias, same content
     zoomChanges: [],
+    // What the browser states about the device, read once at startSession.
+    device: sessionExtras.device || { maxTouchPoints: 0, coarsePointer: false, webdriver: false },
     hardScore,
     softScore: session.softScore,
     softScoreThreshold: SOFT_THRESHOLD,
@@ -224,7 +236,7 @@ function buildParticipant(pid, trialDefs, sessionExtras) {
   return rows;
 }
 
-// ── The three synthetic participants ────────────────────────────────────────
+// ── The four synthetic participants ─────────────────────────────────────────
 
 // SYN-CLEAN-01: nothing to see. One sub-threshold flicker, ordinary typing,
 // one benign window resize (viewport-width shift) mid-session.
@@ -279,6 +291,15 @@ const hard = buildParticipant('SYN-HARD-03', [
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 4.1 }
 ], {});
 
+// SYN-GENERATED-04: a generated session whose browser set its automation
+// flag and whose clicks arrive with no pointer movement, so the sample
+// report shows the cursor checks firing. The id says what it is.
+const generated = buildParticipant('SYN-GENERATED-04', [
+  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.5, clickOnly: true },
+  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.8, clickOnly: true },
+  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.1, clickOnly: true }
+], { device: { maxTouchPoints: 0, coarsePointer: false, webdriver: true } });
+
 // ── Write the files ──────────────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataDir = join(__dirname, 'data');
@@ -287,7 +308,8 @@ mkdirSync(dataDir, { recursive: true });
 for (const [name, rows] of [
   ['sim-SYN-CLEAN-01.csv', clean],
   ['sim-SYN-SOFT-02.csv', soft],
-  ['sim-SYN-HARD-03.csv', hard]
+  ['sim-SYN-HARD-03.csv', hard],
+  ['sim-SYN-GENERATED-04.csv', generated]
 ]) {
   const csv = JSON2CSV(rows);
   writeFileSync(join(dataDir, name), csv);

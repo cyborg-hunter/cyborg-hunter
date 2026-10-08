@@ -37,7 +37,7 @@ test('dropped synthetic pilot: same triage order as the sample, zip tree matches
   await waitReady(page);
   await page.setInputFiles('[data-role="file-input"]', pilotFiles());
   await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
-  await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
+  await expect(page.locator('[data-role="counts"]')).toContainText('4 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
   await buildReport(page);
@@ -47,12 +47,12 @@ test('dropped synthetic pilot: same triage order as the sample, zip tree matches
   try {
     const isText = (n) => /\.(csv|md|json|html|js)$/.test(n);
     expect(zip.names.filter(isText)).toEqual(cli.names.filter(isText));
-    for (const n of ['summary.csv', 'triage.md', 'event-log.csv', 'extensions.csv', 'score-weights.json']) {
+    for (const n of ['summary.csv', 'triage.md', 'event-log.csv', 'extensions.csv', 'score-weights.json', 'cursor-limits.json']) {
       expect(zip.text(n), n).toEqual(cli.text(n));
     }
     const pngs = zip.names.filter((n) => n.endsWith('.png'));
     expect(pngs.length).toBeGreaterThanOrEqual(3);
-    expect(pngs.every((n) => /^images\/(trajectories|session_timeline|typing_profile)_SYN-(HARD-03|SOFT-02|CLEAN-01)\.png$/.test(n))).toBe(true);
+    expect(pngs.every((n) => /^images\/(trajectories|session_timeline|typing_profile)_SYN-(HARD-03|SOFT-02|CLEAN-01|GENERATED-04)\.png$/.test(n))).toBe(true);
     const cliPngs = cli.names.filter((n) => n.endsWith('.png'));
     // With node-canvas on the CLI side the zip's index.html is the CLI-identical render: compare it byte for byte.
     expect(cli.text('index.html')).toMatch(/<code class="mono run-id">[0-9a-f]{16}<\/code>/);
@@ -172,11 +172,11 @@ test('a setting on the results re-analyses in place: no file is read again, and 
   await waitReady(page);
   await loadSample(page);
   await buildReport(page);
-  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 1 soft, 1 clean');
+  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 1 soft, 2 clean');
   // SYN-SOFT-02's saved soft score is 11: a threshold of 12 makes it clean.
   await page.fill('[name="softScoreThreshold"]', '12');
   await page.press('[name="softScoreThreshold"]', 'Tab');
-  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 2 clean', { timeout: 60000 });
+  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 3 clean', { timeout: 60000 });
   await expect(page.locator('section[data-step="results"]')).toBeVisible();
   const zip = await downloadZip(page);
   expect(zip.text('triage.md')).toMatch(/SYN-SOFT-02 \| clean/);
@@ -243,12 +243,12 @@ test('annotations made in the report frame are kept by the page through a re-ana
   const frame = reportFrame(page);
   await frame.locator('#p-SYN-HARD-03').getByRole('button', { name: 'Exclude' }).click();
   await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
-  await expect(frame.locator('.annot-count')).toHaveText('1 of 3 reviewed');
+  await expect(frame.locator('.annot-count')).toHaveText('1 of 4 reviewed');
   // The frame cannot download: its exports are the page's.
   await expect(frame.getByRole('button', { name: 'Export CSV' })).toHaveCount(0);
   await page.fill('[name="softScoreThreshold"]', '12');
   await page.press('[name="softScoreThreshold"]', 'Tab');
-  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 2 clean', { timeout: 60000 });
+  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 3 clean', { timeout: 60000 });
   await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="annotations-csv"]')]);
   expect(readFileSync(await csv.path(), 'utf8').split('\n')[1]).toMatch(/^SYN-HARD-03,hard,[^,]+,exclude,/);

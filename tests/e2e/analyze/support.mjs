@@ -56,7 +56,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(__dirname, '..', '..', '..');
 export const OFFLINE_FILE = join(ROOT, '.demo-site', 'analyze', 'cyborg-hunter-analyze.html');
 export const PILOT_DIR = join(ROOT, 'examples', 'synthetic-pilot');
-export const PILOT_ORDER = ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01'];
+export const PILOT_ORDER = ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01', 'SYN-GENERATED-04'];
 
 export const test = base.extend({
   pageErrors: [async ({ page }, use) => {

@@ -10,13 +10,14 @@ Optional companion deterrence modules ship in the same package (`ch.js` bundles 
 
 ### Example: what a report looks like
 
-The bundled three-participant synthetic dataset (`examples/synthetic-pilot/` — every number hand-authored, no real participant behind any of it) triages like this:
+The bundled four-participant synthetic dataset (`examples/synthetic-pilot/` — every number hand-authored, no real participant behind any of it) triages like this:
 
 | Rank | Participant | Tier | Score | Reason |
 |------|-------------|------|-------|--------|
 | 1 | SYN-HARD-03 | **HARD** | 18 | 2 paste events; 1 copy events; 3 tab-aways ≥10s; 2 flickers ≤3s; fast typing on 1 trials |
 | 2 | SYN-SOFT-02 | soft | 21 | 3 copy events; 1 tab-away ≥10s; 2 tab-aways 3–10s; 1 sidebar event |
 | 3 | SYN-CLEAN-01 | clean | 0 | 1 flicker ≤3s; 1 layout shifts |
+| 4 | SYN-GENERATED-04 | clean | 0 | pointer checks: automation flag; trials clicked without pointer movement 3/3 |
 
 Ranking is **tier-first** (hard-triggered lead, then soft, then clean), score-descending within a tier — rank 1 outranks rank 2 despite the lower score, because hard evidence beats any accumulation of soft evidence. By default the score is `5×paste + 5×copy + 3×sidebar + 1×tab-away` (counting tab-aways longer than the participant's tab-away threshold — 3s by default, 5s for the strict preset); synthetic insertions and fast typing are surfaced in the reason but do not drive the score unless you weight them with `scoreWeights` in the config. See [docs/cli-reference.md → Triage scoring](docs/cli-reference.md#triage-scoring). The HTML report for the same dataset:
 
@@ -33,7 +34,7 @@ Reproduce the table and page yourself: run `cyborg-hunter report` in `examples/s
 - `tools/convert/` — `jspsych-v1-to-v2.mjs`, converts jsPsych `schema_version: 1` recordings to SessionRecording v2 (ships in the npm package)
 - `demo/` — the interactive tour and the browser analyzer (`demo/analyze/`), both deployed to GitHub Pages
 - `tests/`, `docs/` — tests, package docs
-- `examples/synthetic-pilot/` — synthetic three-participant dataset for trying the CLI (see [docs/worked-example.md](docs/worked-example.md))
+- `examples/synthetic-pilot/` — synthetic four-participant dataset for trying the CLI (see [docs/worked-example.md](docs/worked-example.md))
 
 Benchmarking and research tooling live in a separate repository.
 

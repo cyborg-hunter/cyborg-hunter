@@ -1,5 +1,5 @@
 # CLI Reference
-What a successful run looks like — the HTML report for the bundled three-participant synthetic dataset ([worked-example.md](worked-example.md)):
+What a successful run looks like — the HTML report for the bundled four-participant synthetic dataset ([worked-example.md](worked-example.md)):
 
 ![HTML report: tier-sorted participant list on the left; per-signal counts, score breakdown, paste evidence, and typing profile for the selected participant.](assets/report-example.png)
 
@@ -91,6 +91,7 @@ cyborg-hunter-report/
 ├── event-log.csv        # chronological events (copy/paste/drop/synthetic/tabAway)
 ├── extensions.csv       # AI-extension + sidebar detections, one row per participant × detection
 ├── score-weights.json   # the triage-score weights this report used (defaults or scoreWeights)
+├── cursor-limits.json   # the constants the cursor section judged with, and their meanings
 └── images/              # canvas-rendered visuals (skipped if canvas missing)
     ├── trajectories_<participantId>.png      # per-trial mouse paths
     ├── session_timeline_<participantId>.png  # session-wide tab-away / sidebar / guard timeline
@@ -135,6 +136,22 @@ One row per participant:
 | `authoritative_soft_score` | Soft score from `getSessionReport()` (preferred over the per-trial sum) |
 | `honeypot_ai_use` | Three states: `YES` = participant ticked the visible-bait "I used AI" checkbox; `no` = the honeypot was present but the box was left unticked (negative evidence); empty = the honeypot extension wasn't used for this participant at all |
 | `honeypot_ai_report` | Free-text the participant typed into the honeypot's "what did you use?" box (empty if none) |
+| `cursorReason` | Why the session has no cursor analysis: `not collected` (with `(recorded with <version>)` when the data names one), `no cursor stream (touch device)` or `no cursor stream (no pointer events)`; empty when the section ran (since 0.14, like every `cursor…` column) |
+| `cursorChecksRecorded` | How many of the three pointer checks the data supports: 3 (a cursor stream and the session's device facts), 1 (device facts and no cursor stream: the automation flag only), 0 (no device facts: recorded before 0.14) |
+| `cursorFactCount` | Pointer checks that fired, 0–3; empty without device facts |
+| `cursorWebdriver` | `YES` / `no`: the automation flag set by the browser; empty without device facts |
+| `cursorUntrustedClicks` | Clicks the page's own scripts dispatched; empty unless the session has a cursor stream and device facts |
+| `cursorZeroMoveTrials` | Trials clicked without pointer movement, as `count/trials`; empty unless the session has a cursor stream and device facts |
+| `cursorJumpClicks` | Clicks after a pointer jump, as `count/pointer clicks`; reported without a verdict |
+| `cursorCoordinates` | `viewport` (every sample has `cx`, `cy`) or `page` (older data; scrolling can then look like a jump) |
+| `cursorStream` | The stream the section read: `core`, the monitor's mouse track |
+| `cursorSampleIntervalMs` | Median time between consecutive move samples within a trial, in ms; empty when the track has no such pair |
+| `cursorClicks` | Clicks in the mouse track |
+| `cursorMovements` | Movements: runs of move samples, ended by a gap longer than 400 ms or by a click |
+| `cursorMovesPerTrialMedian` | Median number of move samples per trial (depends on the sampling interval) |
+| `cursorEfficiencyMedian` | Median efficiency per movement (displacement over path length, 1 for a straight line), three decimals |
+| `cursorMaxDeviationPxMedian` | Median of each movement's largest distance from the straight line between its ends, in px, one decimal |
+| `cursorCenteredClicks` | Reserved for clicks at the centre of their target, read from a replay recording by a later release; empty |
 | ... | (See the actual file for the full column set; the schema may grow.) |
 
 > Note: the early per-participant columns are camelCase (`totalPasteEvents`, …)
@@ -187,6 +204,20 @@ HTML top bar then also names the changed weights. Use it to check that two
 reports' scores are comparable. Config warnings are printed to the console,
 not written here.
 
+### `cursor-limits.json`
+
+The constants the cursor section judged with, written by every run:
+`{ "cliVersion": "<version>", "recordedWith": "<version>"|null, "limits": { "<constant>": { "value": n, "meaning": "<text>" } }, "sampleIntervalMs": { "core": { "median": ms|null, "n": k } }, "sessions": { "total": n, "checkable": k } }`.
+`cliVersion` is the version of the CLI that holds the constants and
+`recordedWith` the library version the data carries, so a report rebuilt by a
+later CLI shows which constants decided it. Each constant comes with a sentence
+saying what it does (for example, `movementGapMs`, 400: two move samples further
+apart belong to different movements). `sampleIntervalMs` is the median of the
+sessions' own median intervals between move samples, over the `n` sessions
+that have one, and `checkable` counts the sessions with a cursor stream and
+device facts, as the run line does: "Pointer checks: fired in N of M checkable
+sessions (K recorded before 0.14, J no cursor stream)".
+
 ### `event-log.csv`
 
 Every clipboard, drop, synthetic-insertion, and tab-away event in chronological order:
@@ -225,10 +256,11 @@ signals:
 | Sidebar events (open cycles) | `× 3` (uncapped) |
 | Tab-aways longer than the participant's tab-away threshold (medium + long bins; 3s by default, 5s for strict) | `× 1` |
 
-Under the default weights no other signal affects the score. Hard-trigger
-status, AI-extension detections, keyboard shortcuts, layout shifts, zoom
-changes, edge-exit patterns, synthetic insertions, and foreign inputs are all
-still surfaced — in the per-participant detail panes and the one-line triage
+Under the default weights no other signal affects the score; each of them,
+`cursor` (the pointer checks, since 0.14) among them, can be given a weight
+(below). Hard-trigger status, AI-extension detections, keyboard shortcuts,
+layout shifts, zoom changes, edge-exit patterns, synthetic insertions, foreign
+inputs, and the pointer checks are all still surfaced — in the per-participant detail panes and the one-line triage
 reason — but they do not change the number. (Earlier versions added a `+100`
 hard-trigger term and several other bonuses; those were removed.)
 
