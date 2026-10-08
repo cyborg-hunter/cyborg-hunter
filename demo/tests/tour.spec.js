@@ -374,6 +374,51 @@ test('guard-cheat resume route: button unfloats after resume and advances exactl
 });
 
 // ---------------------------------------------------------------------------
+// The guard step has no task box: its copy is what the guard scrambles. The
+// guard takes the page's first .jspsych-content (getJsPsychContent), so the
+// copy carries that class on this step only, and it is the only element
+// that does. The chips sit under the copy, outside it, so they stay
+// legible; "End the guard" is centred under the text. Hiding and then
+// restoring the copy on leave and return is the proof that the guard took
+// the copy.
+// ---------------------------------------------------------------------------
+test('guard step: no task box, the copy is what the guard scrambles, "End the guard" centred under it', async ({ page, fullscreenMock }) => {
+  const stepLabel = page.locator('[data-role="step-label"]');
+  const copy = page.locator('#card .stepcopy');
+  await startTour(page); // -> baseline
+  await walkToGuardEntry(page); // -> guard-entry (step 6)
+  await expect(copy).toHaveCount(1);
+  await expect(page.locator('.jspsych-content')).toHaveCount(0);
+  await page.locator('[data-action="enter-fullscreen"]').click();
+  await expect(stepLabel).toHaveText('Step 7 of 10', { timeout: 5000 });
+
+  await expect(page.locator('#card h2')).toHaveText('Try to break the guard');
+  await expect(page.locator('#card .task')).toHaveCount(0);
+  await expect(page.locator('#card .stepcopy.jspsych-content')).toHaveCount(1);
+  await expect(page.locator('.jspsych-content')).toHaveCount(1);
+  // In this order: the copy, the chips, the button, the row with Back.
+  await expect(page.locator('#card > .stepcopy + [data-role="violation-chips"] + .endguard-row > .endguard'))
+    .toHaveCount(1);
+  const end = page.getByRole('button', { name: 'End the guard', exact: true });
+  const text = await copy.boundingBox();
+  const button = await end.boundingBox();
+  expect(Math.abs((button.x + button.width / 2) - (text.x + text.width / 2))).toBeLessThan(1);
+
+  await fullscreenMock.exit(); // a violation: the guard hides the copy and scrambles its text
+  await expect(page.locator('[data-role="violation-chips"] .chip')).toContainText('not_fullscreen × 1');
+  await expect(copy).toBeHidden();
+  expect(await copy.textContent()).not.toContain('Press Esc');
+  await page.locator('#guard-friction-resume').click(); // back in fullscreen: the copy returns as it was
+  await expect(copy).toBeVisible();
+  await expect(copy.locator('p').first()).toHaveText(/^Tab away\. Press Esc\. Click another window\./);
+
+  await end.click(); // -> guard-debrief (step 8)
+  await expect(stepLabel).toHaveText('Step 8 of 10');
+  await expect(copy).toHaveCount(1);
+  await expect(page.locator('.jspsych-content')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
 // The record's place under the card, the OTHER leave direction: the
 // happy-path test above covers forward (8 -> 9); Back (8 -> 7) must leave
 // the record under the card too, in the main column, never in the
@@ -400,7 +445,7 @@ test('step 8: the record stays under the card on Back to step 7', async ({ page 
 // 10. Fullscreen exit: the files step leaves fullscreen through the
 // plugin's own exitFullscreen(), on the way into "Your files" — no Esc
 // press, no fullscreenMock.exit() call, anywhere in this test. The visitor
-// is fullscreen through the whole guarded act (step 7) and no longer
+// is fullscreen through the whole guarded step (step 7) and no longer
 // fullscreen once the files step shows. Downloading the session file there
 // and checking guardFriction.violations pins the ORDERING the same way the
 // happy-path test pins violation phases above (exitFullscreenIfActive()
@@ -684,7 +729,7 @@ test('step 9 shows the library\'s own soft score from the session so far', async
 // 5. Zero-lamp path: do no task; the files step still offers the files
 // ---------------------------------------------------------------------------
 test('zero-lamp path: walk past every task, then the guard skip -> the files step', async ({ page }) => {
-  await installFailingFullscreenMock(page); // forces the guard-entry fallback (no other skip route out of act 2)
+  await installFailingFullscreenMock(page); // forces the guard-entry fallback (no other skip route past the guard)
   await startTour(page); // -> baseline
   await walkToGuardEntry(page); // -> guard-entry
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 6 of 10'); // sanity: really at the guard's entry
@@ -702,7 +747,7 @@ test('zero-lamp path: walk past every task, then the guard skip -> the files ste
 });
 
 // ---------------------------------------------------------------------------
-// 6. Act2-skip path: forced fullscreen failure mid-tour, with real Act 1 data
+// 6. Guard-skip path: forced fullscreen failure mid-tour, with real data from the earlier steps
 // ---------------------------------------------------------------------------
 test('guard-skip path: fullscreen failure falls back, skip lands on "From signals to scores"', async ({ page }) => {
   await installFailingFullscreenMock(page);
@@ -714,7 +759,7 @@ test('guard-skip path: fullscreen failure falls back, skip lands on "From signal
   await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('.fallback-note')).toBeVisible({ timeout: 3000 });
-  await expect(page.locator('.fallback-note')).toContainText("guarded act can’t run here");
+  await expect(page.locator('.fallback-note')).toContainText("the guard can’t run here");
 
   await page.locator('a[data-key="skipToScores"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 10');

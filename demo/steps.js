@@ -203,7 +203,7 @@ guarded mode (the wording on the page can be customized). Click the button
       kind: 'fullscreen-entry',
       trialId: 'guard-entry',
       fallbackNote:
-        'Fullscreen didn’t engage in this browser, so the guarded act ' +
+        'Fullscreen didn’t engage in this browser, so the guard ' +
         'can’t run here. Skip ahead: the rest of the tour still works without it.',
     },
     primaryLabel: null, // the entry box carries the library's own button
@@ -212,17 +212,17 @@ guarded mode (the wording on the page can be customized). Click the button
     id: 'guard-cheat',
     act: 'act2',
     eyebrow: 'Step 7 of 10',
-    title: 'Try the same tricks',
+    title: 'Try to break the guard',
     body: `
 <p>Tab away. Press Esc. Click another window. Each attempt logs a violation
 and scrambles the task text until you come back; try to read it while
-you're half-out. Pastes still go through and get recorded exactly as in Act
-1: the guard leaves input alone and instead makes <em>leaving</em> costly,
-logging a violation trail each time.</p>
-<p>When you've had enough, the button below ends the guarded act; after
-that, fullscreen is no longer required.</p>`.trim(),
+you're half-out. Pastes still go through and get recorded exactly as in the
+earlier steps: the guard leaves input alone and instead makes
+<em>leaving</em> costly, logging a violation trail each time.</p>
+<p>When you've had enough, the button below ends the guard; after that,
+fullscreen is no longer required.</p>`.trim(),
     task: { kind: 'guard-cheat', trialId: 'guard' },
-    primaryLabel: 'End the guarded act',
+    primaryLabel: 'End the guard',
   },
   {
     id: 'guard-debrief',
@@ -232,9 +232,7 @@ that, fullscreen is no longer required.</p>`.trim(),
     body: `
 <p>The guard is off. Scroll the session record: every violation from the
 last step is there with a type (fullscreen_exit, window_blurred) and a
-timestamp, next to the Act 1 events that went unchallenged. Same tricks,
-two different postures: Act 1 recorded them silently; Act 2 intervened and
-logged each attempt.</p>`.trim(),
+timestamp, next to the other previously recorded events.</p>`.trim(),
     task: null,
     primaryLabel: 'Continue to scoring →',
   },

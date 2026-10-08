@@ -127,6 +127,42 @@ test('the sixth step says what the guard is and names the button the entry page 
   const demo = fs.readFileSync(new URL('../../demo/demo.js', import.meta.url), 'utf8');
   assert.equal(/data-action="enter-fullscreen">([^<]+)<\/button>/.exec(demo)[1], label);
 });
+test('the seventh step asks you to break the guard, and its button ends the guard', () => {
+  const cheat = STEPS[6];
+  assert.equal(cheat.id, 'guard-cheat');
+  assert.equal(cheat.title, 'Try to break the guard');
+  assert.equal(cheat.body.replace(/\s+/g, ' '),
+    '<p>Tab away. Press Esc. Click another window. Each attempt logs a violation and scrambles the task text ' +
+    'until you come back; try to read it while you\'re half-out. Pastes still go through and get recorded ' +
+    'exactly as in the earlier steps: the guard leaves input alone and instead makes <em>leaving</em> costly, ' +
+    'logging a violation trail each time.</p> ' +
+    '<p>When you\'ve had enough, the button below ends the guard; after that, fullscreen is no longer ' +
+    'required.</p>');
+  assert.equal(cheat.task.kind, 'guard-cheat');
+  assert.equal(cheat.primaryLabel, 'End the guard');
+});
+test('the eighth step says where the violations are, in one paragraph', () => {
+  const debrief = STEPS[7];
+  assert.equal(debrief.id, 'guard-debrief');
+  assert.equal(debrief.body.replace(/\s+/g, ' '),
+    '<p>The guard is off. Scroll the session record: every violation from the last step is there with a type ' +
+    '(fullscreen_exit, window_blurred) and a timestamp, next to the other previously recorded events.</p>');
+});
+test('no step, note or fallback message names an act', () => {
+  // \s+, not a space: the copy wraps, and "Act" can end one line and "1"
+  // start the next.
+  const ACT = /\b[Aa]ct\s+[12]\b|guarded\s+act/;
+  for (const s of STEPS) {
+    assert.doesNotMatch([s.title, s.body, JSON.stringify(s.task || {})].join(' '), ACT, s.id);
+  }
+  assert.equal(STEPS[5].task.fallbackNote, 'Fullscreen didn’t engage in this browser, so the guard can’t run ' +
+    'here. Skip ahead: the rest of the tour still works without it.');
+  // The fallback message demo.js shows when a step has no note of its own.
+  const demo = fs.readFileSync(new URL('../../demo/demo.js', import.meta.url), 'utf8');
+  assert.ok(demo.includes('"Fullscreen didn\'t engage in time, so the guard can\'t run in this browser. ' +
+    'Skip ahead; everything else in the tour still works."'));
+  assert.doesNotMatch(demo, ACT);
+});
 test('trial ids name the task, not the act, and none is a key the record reserves', () => {
   // The record's trial column and its filter tabs show these ids. 'all' and
   // 'session' are the live pane's own filter keys (live-pane.js).

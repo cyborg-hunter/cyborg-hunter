@@ -75,7 +75,7 @@ function fullscreenIsActive() {
 // hazard as the plugin's own exitFullscreenFnOf), only when the plugin
 // bundle never loaded — a path the demo already tolerates elsewhere
 // (handleFullscreenEntry). Idempotent: a no-op when not fullscreen, so
-// calling this after act 2 was skipped or the visitor already pressed Esc
+// calling this after the guard was skipped or the visitor already pressed Esc
 // is harmless.
 function exitFullscreenIfActive() {
   if (!fullscreenIsActive()) return;
@@ -498,7 +498,7 @@ function startTour(participantId, capabilities, manifest) {
   // Tab-close hygiene: don't leave the poll running into page teardown.
   window.addEventListener('pagehide', stopLampWiring);
 
-  // Act-2 violations (GuardFriction is a separate global, not part of the
+  // Guard violations (GuardFriction is a separate global, not part of the
   // CyborgHunter monitor). Counts each violation the moment it starts, for
   // an immediately responsive lamp.
   if (window.GuardFriction && typeof window.GuardFriction.onViolation === 'function') {
@@ -506,8 +506,8 @@ function startTour(participantId, capabilities, manifest) {
       // Recorded for the payload's guardFriction.violations[] regardless of
       // lamp-wiring state (see handleTrialReport's comment above — same reasoning).
       state.violations.push(violation);
-      // Violation chips (type × count) live only in the guard-cheat step's
-      // task panel — tally + repaint them only while that step is showing.
+      // Violation chips (type × count) live only on the guard-cheat step,
+      // under its copy — tally + repaint them only while that step is showing.
       var currentTask = STEPS[state.stepIndex].task;
       if (violation.phase === 'start' && currentTask && currentTask.kind === 'guard-cheat') {
         state.chipCounts[violation.reason] = (state.chipCounts[violation.reason] || 0) + 1;
@@ -640,7 +640,7 @@ function startTour(participantId, capabilities, manifest) {
     var note = cardEl.querySelector('.fallback-note');
     if (note) {
       note.textContent = (step.task && step.task.fallbackNote) ||
-        "Fullscreen didn't engage in time, so Act 2's enforcement can't run in this browser. Skip ahead; everything else in the tour still works.";
+        "Fullscreen didn't engage in time, so the guard can't run in this browser. Skip ahead; everything else in the tour still works.";
       note.hidden = false;
     }
     if (!cardEl.querySelector('a[data-key="skipToScores"]')) {
@@ -1170,6 +1170,18 @@ function startTour(participantId, capabilities, manifest) {
     // step's text is the whole task, so there is no panel (and no empty grey
     // box). The step's trial still opens from its trialId in goTo().
     if (task.kind === 'tab-away') return '';
+    // The guard step (step 7) has no panel either: its copy is what the guard
+    // scrambles (renderStep gives it .jspsych-content), so the step adds only
+    // its End button, which doubles as the step's primary action (steps.js
+    // sets primaryLabel for it, but renderStep() suppresses the normal
+    // .btnrow primary for guard-cheat so there's only the one button). The
+    // button sits outside the scramble target, so its legibility never
+    // depends on scramble/blur context; its row is as wide as the text
+    // column, so the button centres under the text (demo.css .endguard-row).
+    if (task.kind === 'guard-cheat') {
+      return '<div class="endguard-row"><button class="endguard" data-action="end-guard">' +
+        tpl(STEPS[state.stepIndex].primaryLabel) + '</button></div>';
+    }
     var parts = [];
     // The text to copy (clipboard-cheat): a bordered block of its own ahead
     // of the panel, so it sits between the step's text and the box it is
@@ -1181,9 +1193,10 @@ function startTour(participantId, capabilities, manifest) {
       );
     }
     // scramble coupling: GuardFriction's obfuscateContent() only touches
-    // getJsPsychContent()'s match (.jspsych-content / .jspsych-display-element
-    // / #jspsych-content) — this class makes every task panel a valid target,
-    // not just Act 2's, so a violation during any step scrambles the task.
+    // getJsPsychContent()'s match (the page's first .jspsych-content, else
+    // .jspsych-display-element / #jspsych-content) — this class makes every
+    // task panel a valid target, so a violation during any step scrambles
+    // the task.
     parts.push('<div class="task jspsych-content">');
     // The actual question text (baseline's `prompt`, clipboard-cheat's
     // `question`) gets the plain bold .question treatment; .rule is
@@ -1204,14 +1217,6 @@ function startTour(participantId, capabilities, manifest) {
       parts.push('<p class="hint">Target pastes: ' + task.targetPastes + '</p>');
     }
     parts.push('</div>');
-    // End-guard button (step 7): a sibling OUTSIDE .jspsych-content — its
-    // legibility can never depend on scramble/blur context — doubling as
-    // this step's primary action (steps.js sets primaryLabel for it, but
-    // renderStep() suppresses the normal .btnrow primary for guard-cheat so
-    // there's only the one button).
-    if (task.kind === 'guard-cheat') {
-      parts.push('<button class="endguard" data-action="end-guard">' + tpl(STEPS[state.stepIndex].primaryLabel) + '</button>');
-    }
     return parts.join('');
   }
 
@@ -1220,14 +1225,20 @@ function startTour(participantId, capabilities, manifest) {
     var html = '';
     html += '<p class="eyebrow" data-role="step-label">' + step.eyebrow + '</p>';
     html += '<h2>' + tpl(step.title) + '</h2>';
-    html += '<div class="stepcopy">' + tpl(step.body) + '</div>';
-    // Violation chips render OUTSIDE the task panel deliberately: the panel
-    // carries .jspsych-content, and GuardFriction's obfuscateContent() walks
-    // and scrambles every text node inside its match — a chip row nested in
-    // there would scramble its own "you triggered X" text the instant it's
-    // written (confirmed while verifying: the chip text came back as
-    // ciphertext). Chips need to stay legible while a violation is live.
-    if (step.task && step.task.kind === 'guard-cheat') {
+    // The guard step has no task panel, so its copy is what the guard
+    // scrambles: GuardFriction's obfuscateContent() takes the page's first
+    // .jspsych-content, and on this step the copy is the only one. Leaving
+    // fullscreen or focus scrambles and hides the paragraphs, as the copy
+    // says.
+    var isGuardStep = !!(step.task && step.task.kind === 'guard-cheat');
+    html += '<div class="stepcopy' + (isGuardStep ? ' jspsych-content' : '') + '">' + tpl(step.body) + '</div>';
+    // Violation chips render under the copy, OUTSIDE it, deliberately:
+    // obfuscateContent() walks and scrambles every text node inside its
+    // match — a chip row nested in there would scramble its own "you
+    // triggered X" text the instant it's written (confirmed while
+    // verifying: the chip text came back as ciphertext). Chips need to stay
+    // legible while a violation is live.
+    if (isGuardStep) {
       html += '<div class="violations" data-role="violation-chips"></div>';
     }
     html += renderTaskPanel(step.task);
@@ -1238,7 +1249,7 @@ function startTour(participantId, capabilities, manifest) {
     html += '<div class="btnrow">';
     if (i > 0) html += '<a href="#" class="skip" data-action="back">' + escHtml(BACK_LABEL) + '</a>';
     // guard-cheat's primary lives on the end-guard button rendered above
-    // (outside the scramble wrapper) instead of here — never both. Steps
+    // (outside the scramble target) instead of here — never both. Steps
     // with primaryLabel: null (guard-entry) render no primary at all; the
     // entry box carries the library's own button.
     if (step.primaryLabel && !(step.task && step.task.kind === 'guard-cheat')) {
@@ -1309,8 +1320,8 @@ function startTour(participantId, capabilities, manifest) {
       // armed guard logs a false 'not_fullscreen' violation (the plugin now
       // refuses that outright — exitFullscreen()'s own guard — but this
       // ordering is the real guarantee, not the refusal). Step 7's copy
-      // already promises fullscreen is no longer required once the guarded
-      // act ends; this makes that literal on the way to the files.
+      // already promises fullscreen is no longer required once the guard
+      // ends; this makes that literal on the way to the files.
       exitFullscreenIfActive();
       // One-way latch (see the docblock at lampWiringActive's declaration):
       // must retire AFTER the sessionReport snapshot above, not before —
