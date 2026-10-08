@@ -87,7 +87,7 @@ test('"Open in the analyzer web app" hands over the five files and the fonts: th
     .toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
   expect(rows.filter(([, kind]) => kind === 'experiment asset')).toEqual([]);
   expect(await assetsChecked(page)).toEqual([...HANDOFF_ASSETS].sort());
-  await expect(page.locator('[data-role="handoff-assets"]')).toHaveText('The demo page\'s fonts were included so the replay renders in them.');
+  await expect(page.locator('[data-role="handoff-assets"]')).toHaveText('(The demo page\'s fonts were included so the replay renders in them.)');
   await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 replay recording');
   await expect(page.locator('[data-role="counts"]')).toContainText('0 experiment assets');

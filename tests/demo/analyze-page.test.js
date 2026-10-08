@@ -86,6 +86,23 @@ test('ready shows the tested cohort size and installs the baked fonts', () => {
   assert.ok([...document.head.querySelectorAll('style')].some((s) => s.textContent === '@font-face{}'));
 });
 
+// The top bar says what the page is and links the offline file; the files
+// step carries no paragraph about the policy (the meta tag above is the policy).
+test('the top bar: the name, the three links, and what the page needs; no policy paragraph', () => {
+  boot();
+  const bar = document.querySelector('.topbar');
+  assert.equal(bar.querySelector('.brand').textContent, 'cyborg-hunter · report generator');
+  assert.deepEqual([...bar.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href'), a.hasAttribute('download')]), [
+    ['live demo', '../', false],
+    ['GitHub', 'https://github.com/cyborg-hunter/cyborg-hunter#readme', false],
+    ['offline version', './cyborg-hunter-analyze.html', true],
+  ]);
+  assert.equal(role('requirements').textContent,
+    'This page needs a 2023-or-later browser. Tested up to 150 participants; for larger cohorts, use the CLI version.');
+  assert.equal(html.includes('Nothing leaves your browser'), false);
+  assert.deepEqual([...document.querySelectorAll('.policy')].map((el) => el.dataset.role), ['size-warning']);
+});
+
 test('sample → check: counts, id candidates (deduplicated), config warnings', async () => {
   const t = boot();
   await toCheck(t);
@@ -1557,7 +1574,7 @@ test('the fonts the tour hands over are neither listed nor counted; a line under
   assert.deepEqual(tableRows(), FILES.map((f) => f.path));
   assert.equal(role('counts').textContent, '3 data files1 replay recording0 experiment assets1 config file');
   assert.equal(line().hidden, false);
-  assert.equal(line().textContent, 'The demo page\'s fonts were included so the replay renders in them.');
+  assert.equal(line().textContent, '(The demo page\'s fonts were included so the replay renders in them.)');
   assert.ok(role('files-panel').contains(line()));
 
   // A stylesheet of the analyst's own is listed and counted; the line stays.

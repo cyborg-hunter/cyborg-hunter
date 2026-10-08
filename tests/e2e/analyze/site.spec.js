@@ -2,12 +2,33 @@
 // The full flow on Chromium: dropped files, the zip tree against the CLI's,
 // the report's own scripts and its selection message, styled replays from a
 // dropped stylesheet with the recorded external image blocked, and the
-// participant switch, and the files the demo hands over. Every test runs
-// under the same request guard as engines.spec.js.
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+// participant switch, and the files the demo hands over; first, the top
+// bar. Every test runs under the same request guard as engines.spec.js.
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { TESTED_PARTICIPANTS } from '../../../demo/analyze/limits.js';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
-  pilotFiles, cliPilotTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT } from './support.mjs';
+  pilotFiles, cliPilotTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
+
+test('the top bar names the page and links the demo, GitHub and the offline file; the files step has no policy paragraph', async ({ page, baseURL }) => {
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  await page.goto('/analyze/');
+  await waitReady(page);
+  const bar = page.locator('.topbar');
+  await expect(bar.locator('.brand')).toHaveText('cyborg-hunter · report generator');
+  expect(await bar.locator('a').evaluateAll((as) => as.map((a) => [a.textContent, a.href, a.hasAttribute('download')]))).toEqual([
+    ['live demo', baseURL + '/', false],
+    ['GitHub', 'https://github.com/cyborg-hunter/cyborg-hunter#readme', false],
+    ['offline version', baseURL + '/analyze/' + basename(OFFLINE_FILE), true],
+  ]);
+  expect(existsSync(OFFLINE_FILE), 'the site serves the file the link names').toBe(true);
+  await expect(page.locator('[data-role="requirements"]')).toHaveText('This page needs a 2023-or-later browser. Tested up to ' +
+    TESTED_PARTICIPANTS + ' participants; for larger cohorts, use the CLI version.');
+  await expect(page.getByText('Nothing leaves your browser')).toHaveCount(0);
+  await expect(page.locator('section[data-step="files"] > .policy')).toHaveCount(0);
+  await assertOnlyAllowed(page, seen, allow);
+});
 
 test('dropped synthetic pilot: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
