@@ -280,7 +280,7 @@ analysis settings and watch the report follow. Or save them and build the
 same report with the command-line tool, the way you would with real study
 data.</p>`.trim(),
     task: { kind: 'downloads', trialId: null },
-    primaryLabel: null, // the step's own action is the panel's "Open in the analyzer"
+    primaryLabel: null, // the step's own action is the panel's "Open in the analyzer web app"
   },
 ];
 
@@ -336,7 +336,7 @@ export const HANDOFF_ASSETS = [
  * store them). `leaveHint` sits under the button: the session lives in this
  * page only. */
 export const HANDOFF = {
-  buttonLabel: 'Open in the analyzer →',
+  buttonLabel: 'Open in the analyzer web app →',
   buttonHint: 'The files below and this page\'s fonts, kept in this browser: nothing is uploaded.',
   failed: 'The files could not be prepared for the analyzer. Save them below ' +
     'and drop them on <a href="analyze/">the analyzer</a> instead.',
@@ -349,7 +349,7 @@ export const HANDOFF = {
  * plain text: the step shows it when the folder could not be written. */
 export const SAVE_TO_FOLDER = {
   buttonLabel: 'Save all into a folder…',
-  hint: 'Chrome and Edge: pick or create an empty folder (inside Downloads, for example); ' +
+  hint: 'Chrome and Edge: inside Downloads, create a folder named cyborg-hunter-demo and pick it; ' +
     'the browser refuses your home folder and system folders.',
   failed: 'The folder could not be written. Save the files one by one below.',
 };
@@ -360,11 +360,11 @@ export const SAVE_TO_FOLDER = {
 export const REPLICATE = {
   sections: [
     { n: 1, heading: 'Save the five files into one empty folder',
-      text: 'Use "Save all into a folder" above (Chrome and Edge; pick or create an empty folder, inside Downloads ' +
-        'for example, since the browser refuses your home folder and system folders), or the Save button of each ' +
-        'file: browsers allow one download per click, so each file has its own. If a session file is blocked, use ' +
-        'its "show as text" link and save the text yourself; for an example file, right-click its Save link and ' +
-        'choose "Save link as".',
+      text: 'Use "Save all into a folder" above (Chrome and Edge; inside Downloads, create a folder named ' +
+        'cyborg-hunter-demo and pick it, since the browser refuses your home folder and system folders), or the ' +
+        'Save button of each file: browsers allow one download per click, so each file has its own. If a session ' +
+        'file is blocked, use its "show as text" link and save the text yourself; for an example file, right-click ' +
+        'its Save link and choose "Save link as".',
       code: null },
     { n: 2, heading: 'Install Node.js if you don’t have it',
       text: 'Node 18 or newer. Check with:',

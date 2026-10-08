@@ -25,7 +25,7 @@ const V2_FIXTURES = resolve(__dirname, '..', '..', 'packages', 'sessionrecording
 const viewerModelFromFixture = (name) =>
   buildViewerModel(JSON.parse(readFileSync(join(V2_FIXTURES, name + '.json'), 'utf8')));
 
-// From the files step: "Open in the analyzer", until the analyze page lists
+// From the files step: "Open in the analyzer web app", until the analyze page lists
 // the five files (the hash dropped once read). The fonts that come with them
 // are in the page's list but not in its table, and a line under the table
 // says they were included. Returns the visitor's id, read on the tour
@@ -74,7 +74,7 @@ async function visitorReplay(page, answer) {
 // recording's stylesheet names them by, so the visitor's replay renders in
 // them.
 // ---------------------------------------------------------------------------
-test('"Open in the analyzer" hands over the five files and the fonts: the files listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
+test('"Open in the analyzer web app" hands over the five files and the fonts: the files listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
   test.setTimeout(120000);
   await fastForwardToFiles(page);
   const allow = siteAllowlist(baseURL).concat([baseURL + '/assets/example-1.json', baseURL + '/assets/example-2.json'],
@@ -388,7 +388,7 @@ test('a data file the hand-off cannot fetch fails the whole hand-off: the visito
 
 // ---------------------------------------------------------------------------
 // Back from the analyzer can restore the tour from the back/forward cache as
-// it was left, with "Open in the analyzer" disabled by the click that left.
+// it was left, with "Open in the analyzer web app" disabled by the click that left.
 // The restore's pageshow (persisted) enables it again. Playwright's Chromium
 // runs without that cache, so the test dispatches the event itself.
 // ---------------------------------------------------------------------------

@@ -238,11 +238,16 @@ test('the walkthrough saves through the folder button or one file per click, not
 });
 // Chrome's folder picker refuses the home folder and folders it treats as
 // system folders ("contains system files"): both texts name a folder it accepts.
+// The page cannot create or name a folder, so both name the one to create.
 test('the folder hint and the walkthrough name a folder the browser accepts', () => {
-  assert.equal(SAVE_TO_FOLDER.hint, 'Chrome and Edge: pick or create an empty folder (inside Downloads, for example); ' +
-    'the browser refuses your home folder and system folders.');
+  assert.equal(SAVE_TO_FOLDER.hint, 'Chrome and Edge: inside Downloads, create a folder named cyborg-hunter-demo ' +
+    'and pick it; the browser refuses your home folder and system folders.');
   const text = REPLICATE.sections[0].text;
-  assert.ok(text.startsWith('Use "Save all into a folder" above (Chrome and Edge; pick or create an empty folder, ' +
-    'inside Downloads for example, since the browser refuses your home folder and system folders), or the Save button ' +
-    'of each file: browsers allow one download per click, so each file has its own. If a session file is blocked'), text);
+  assert.ok(text.startsWith('Use "Save all into a folder" above (Chrome and Edge; inside Downloads, create a folder ' +
+    'named cyborg-hunter-demo and pick it, since the browser refuses your home folder and system folders), or the ' +
+    'Save button of each file: browsers allow one download per click, so each file has its own. If a session file ' +
+    'is blocked'), text);
+});
+test('the hand-off button names the analyzer web app', () => {
+  assert.equal(HANDOFF.buttonLabel, 'Open in the analyzer web app →');
 });

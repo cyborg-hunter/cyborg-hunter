@@ -852,7 +852,7 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // "Open in the analyzer": the files the batches offer and the page's
+  // "Open in the analyzer web app": the files the batches offer and the page's
   // fonts, stored for the analyze page (handoff.js), which this tab then
   // opens. The navigation waits for the write, so no popup blocker is
   // involved, and Back returns to the tour. If a data file cannot be
@@ -1392,7 +1392,7 @@ function startTour(participantId, capabilities, manifest) {
   });
 
   // Back from the analyzer can restore this page from the back/forward cache
-  // as it was left, with "Open in the analyzer" still disabled by the click
+  // as it was left, with "Open in the analyzer web app" still disabled by the click
   // that left it. Enable it again.
   window.addEventListener('pageshow', function (e) {
     if (!e.persisted) return;
