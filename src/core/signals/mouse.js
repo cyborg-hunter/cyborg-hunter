@@ -5,6 +5,8 @@
 // during each trial. The bot metrics (pathEfficiency, directionChanges,
 // speedVariance) are computed at endTrial() time by computeMouseMetrics().
 
+import { pathLength, displacement } from '../../shared/cursor-geometry.js';
+
 /**
  * Attaches trial-scoped mouse tracking listeners.
  * Called from monitor.js at startTrial() time.
@@ -64,11 +66,14 @@ export function attachMouseSignals(ctx) {
 }
 
 /**
- * Computes inline mouse bot metrics from recorded mouse events.
+ * Computes inline mouse metrics from recorded mouse events.
  * Three lightweight O(n) features:
- *   1. pathEfficiency: straight-line distance / total path (bots ≈ 1.0, humans ≈ 0.3-0.7)
- *   2. directionChanges: sign reversals in dx/dy (bots ≈ 0, humans have many)
- *   3. speedVariance: variance of inter-sample speeds (bots have near-zero variance)
+ *   1. pathEfficiency: straight-line distance / total path over the whole
+ *      trial (1 for a straight line). The report's cursor section computes
+ *      the same ratio per movement; the two are labelled apart.
+ *   2. directionChanges: sign reversals in dx/dy. Depends on the sampling
+ *      interval (mouseThrottleMs), so compare only within one setting.
+ *   3. speedVariance: variance of inter-sample speeds. Also interval-dependent.
  *
  * Called from monitor.js at endTrial() time.
  */
@@ -76,7 +81,6 @@ export function computeMouseMetrics(mouseEvents, minEvents) {
   var moveEvents = mouseEvents.filter(function (e) { return e.type === "move"; });
   if (moveEvents.length < minEvents) return null;
 
-  var totalDist = 0;
   var speeds = [];
   var dxSignChanges = 0, dySignChanges = 0;
   var prevDx = 0, prevDy = 0;
@@ -85,7 +89,6 @@ export function computeMouseMetrics(mouseEvents, minEvents) {
     var dx = moveEvents[mi].x - moveEvents[mi - 1].x;
     var dy = moveEvents[mi].y - moveEvents[mi - 1].y;
     var dist = Math.sqrt(dx * dx + dy * dy);
-    totalDist += dist;
 
     // Speed: pixels per millisecond between consecutive samples
     var dt = moveEvents[mi].t - moveEvents[mi - 1].t;
@@ -100,12 +103,8 @@ export function computeMouseMetrics(mouseEvents, minEvents) {
     prevDy = dy;
   }
 
-  var first = moveEvents[0];
-  var last = moveEvents[moveEvents.length - 1];
-  var displacement = Math.sqrt(
-    Math.pow(last.x - first.x, 2) + Math.pow(last.y - first.y, 2)
-  );
-  var pathEfficiency = totalDist > 0 ? Math.round((displacement / totalDist) * 1000) / 1000 : 0;
+  var totalDist = pathLength(moveEvents);
+  var pathEfficiency = totalDist > 0 ? Math.round((displacement(moveEvents) / totalDist) * 1000) / 1000 : 0;
 
   // Speed variance using Welford's online algorithm for numerical stability
   var speedMean = 0, speedM2 = 0;
