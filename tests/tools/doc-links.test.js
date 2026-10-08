@@ -162,6 +162,21 @@ describe('docs/qualtrics.md install snippet', () => {
   });
 });
 
+// The one-line file is the integration a reader meets first: the overview
+// pages show the ch.js tag before they mention the jsPsych extension, which
+// belongs to manual mode and per-trial params.
+describe('the one-line setup comes before the jsPsych extension', () => {
+  for (const file of ['README.md', 'docs/using-cyborg-hunter.md']) {
+    it(file + ' shows dist/ch.js before any jsPsychCyborgHunter', () => {
+      const text = read(file);
+      const tag = text.indexOf('dist/ch.js');
+      const extension = text.indexOf('jsPsychCyborgHunter');
+      assert.ok(tag >= 0, 'no dist/ch.js in ' + file);
+      assert.ok(extension === -1 || tag < extension, 'jsPsychCyborgHunter appears before dist/ch.js in ' + file);
+    });
+  }
+});
+
 // The entry trial's text is an option of the call that builds it: the
 // quickstart shows it on the one-line file's call, the friction section on
 // the guard extension's.

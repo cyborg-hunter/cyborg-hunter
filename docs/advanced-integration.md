@@ -117,7 +117,7 @@ Either way, the navigation away (e.g. `window.location.replace(REDIRECT_URL)`) m
 
 jsPsych extensions only fire for trials whose `extensions: [...]` array lists them. There are two ways to opt in:
 
-**Recommended for most experiments — opt all trials in via a single forEach** (works even with 100+ trials):
+**Every trial — opt all trials in via a single forEach** (works even with 100+ trials):
 
 ```javascript
 // After all timeline.push() calls, just before jsPsych.run:
@@ -142,7 +142,7 @@ If `integritySession` is missing on the last row, `finalize()` either wasn't cal
 
 ### Standalone (non-jsPsych) usage
 
-If your experiment isn't jsPsych, use the library directly:
+If your experiment isn't jsPsych, load `ch.js` instead (`ch-qualtrics.js` on [Qualtrics](qualtrics.md), `ch-labjs.js` on [lab.js](labjs.md)): on a page without a framework, mark trials with `data-ch-trial` or `CyborgHunter.mark()` and save `CyborgHunter.data()` ([Vanilla segmentation reference](#vanilla-segmentation-reference)). To drive the monitor yourself, for example to screen a participant out mid-session with `shouldScreenout()` (under ch.js it always returns `false`), use the library directly:
 
 ```html
 <script src="path/to/cyborg-hunter.min.js"></script>
