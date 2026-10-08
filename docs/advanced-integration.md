@@ -244,12 +244,12 @@ Friction is **off by default**. Enable it with `data-guards="honeypot,friction"`
 
 Enforcement starts at a mark you place:
 
-- **jsPsych:** push `CyborgHunter.frictionEntryTrial()` into the timeline where enforcement should begin. It is a button trial that asks the participant to enter fullscreen (the click is the user gesture fullscreen needs). It uses `jsPsychHtmlButtonResponse`, so load `plugin-html-button-response.js`. Pass `{ message: '<p>…</p>' }` to replace the default text.
+- **jsPsych:** push `CyborgHunter.frictionEntryTrial()` into the timeline where enforcement should begin. It is a button trial that asks the participant to enter fullscreen (the click is the user gesture fullscreen needs). It uses `jsPsychHtmlButtonResponse`, so load `plugin-html-button-response.js`. Pass `{ message: '<p>…</p>' }` to replace the default text, heading included; the button label is fixed ("Enter fullscreen and continue").
 - **Pages without jsPsych:** put `data-ch-friction-start` on a clickable element, or call `CyborgHunter.startFriction()` from a click handler.
 
 Without a mark, friction observes only: it logs violations and shows no curtain.
 
-With the extensions wired by hand ([Manual mode](#manual-mode)), the entry trial is `jsPsychGuardFriction.entryTrial()`. It passes its options to `GuardFriction.createEntryTrial({ message })`, so `message` works the same way:
+`jsPsychGuardFriction.entryTrial({ message })` builds the same trial as `CyborgHunter.frictionEntryTrial()` and takes the same option:
 
 ```javascript
 timeline.push(jsPsychGuardFriction.entryTrial({
@@ -257,8 +257,6 @@ timeline.push(jsPsychGuardFriction.entryTrial({
     '<p>Keep this tab in focus until the end. Click the button below to begin.</p>'
 }));
 ```
-
-The message replaces the whole default text, heading included. The button keeps its label, "Enter fullscreen and continue".
 
 To add your own data to the entry trial, spread its `data` instead of replacing it:
 

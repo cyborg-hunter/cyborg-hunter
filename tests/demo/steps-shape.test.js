@@ -107,7 +107,7 @@ test('the fifth step says what bots leave behind, then lets something else type'
   assert.equal(autotype.task.kind, 'autotype');
   assert.equal(autotype.primaryLabel, 'Continue →');
 });
-test('the sixth step says what the guard is and names the entry page\'s button as the library and the demo label it', () => {
+test('the sixth step says what the guard is and names the button the entry page and the library both show', () => {
   const entry = STEPS[5];
   assert.equal(entry.id, 'guard-entry');
   assert.equal(entry.body.replace(/\s+/g, ' '),

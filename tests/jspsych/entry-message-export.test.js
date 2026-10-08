@@ -41,9 +41,9 @@ describe('GuardFriction.defaultEntryMessage export', () => {
 });
 
 // docs/quickstart.md and docs/advanced-integration.md: `message` replaces the
-// entry page's whole text, heading included, and the button keeps its label.
+// entry page's whole text, heading included, and the button label is fixed.
 describe('createEntryTrial({ message })', () => {
-  it('shows the message in place of the default text; the button label stays', () => {
+  it('shows the message in place of the default text; the button label is fixed', () => {
     // createEntryTrial() reads the button-response plugin global eagerly.
     global.jsPsychHtmlButtonResponse = { name: 'html-button-response' };
     try {
@@ -52,6 +52,8 @@ describe('createEntryTrial({ message })', () => {
       assert.strictEqual(custom.stimulus, message);
       assert.deepStrictEqual(custom.choices, ['Enter fullscreen and continue']);
       assert.strictEqual(window.GuardFriction.createEntryTrial().stimulus, window.GuardFriction.defaultEntryMessage);
+      // The extension's helper, the form docs/advanced-integration.md shows.
+      assert.strictEqual(window.jsPsychGuardFriction.entryTrial({ message }).stimulus, message);
     } finally {
       delete global.jsPsychHtmlButtonResponse;
     }
