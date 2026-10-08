@@ -1,6 +1,6 @@
 // demo/tests/helpers.mjs
 // Shared Playwright fixtures + DOM-automation helpers for tour.spec.js and
-// handoff.spec.js (the 11-step tour), in the patterns proven against
+// handoff.spec.js (the 10-step tour), in the patterns proven against
 // headless Chromium (see each section below for why).
 //
 // Three auto-fixtures apply to every test that imports `test` from this
@@ -207,14 +207,18 @@ export async function waitForLamp(page, key, { hard = false, timeout = 7000 } = 
 // the tour never blocks an advance, so no step's task has to be done on the
 // way. The entry step has no primary button (its box carries the library's
 // own), so the check comes before each click. At most one click per step,
-// and the walk must end on the entry step: a missed entry box fails here,
-// on the step label, not on a click that waits out the test's timeout.
+// and only while a primary button is there to click; the walk must end on
+// the entry step: a missed entry box fails here, on the step label, not on
+// a click that waits out the test's timeout.
 export async function walkToGuardEntry(page) {
   const enter = page.locator('[data-action="enter-fullscreen"]');
-  for (let clicks = 0; clicks < STEPS.length && await enter.count() === 0; clicks++) {
+  for (let clicks = 0;
+    clicks < STEPS.length && await enter.count() === 0 && await primaryButton(page).count() > 0;
+    clicks++) {
     await primaryButton(page).click();
   }
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 11');
+  const entryStep = STEPS.findIndex((s) => s.id === 'guard-entry') + 1;
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step ' + entryStep + ' of ' + STEPS.length);
 }
 
 // Fast path from a fresh welcome screen to the last step, "Your files":
@@ -227,13 +231,13 @@ export async function fastForwardToFiles(page, answer = 'a city in Australia') {
   await startTour(page); // -> baseline (step 2)
   await typeRealistically(page.locator('#card textarea'), answer);
   await primaryButton(page).click(); // -> clipboard-cheat (step 3)
-  await walkToGuardEntry(page); // -> guard-entry (step 7)
+  await walkToGuardEntry(page); // -> guard-entry (step 6)
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 }); // guard-cheat
-  await page.locator('.endguard').click(); // -> guard-debrief (step 9)
-  await primaryButton(page).click(); // -> signals-to-scores (step 10)
-  await primaryButton(page).click(); // -> your files (step 11)
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 11 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 }); // guard-cheat
+  await page.locator('.endguard').click(); // -> guard-debrief (step 8)
+  await primaryButton(page).click(); // -> signals-to-scores (step 9)
+  await primaryButton(page).click(); // -> your files (step 10)
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 10');
 }
 
 export function primaryButton(page) {

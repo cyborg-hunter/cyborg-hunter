@@ -138,7 +138,7 @@ textarea{min-height:74px;}
 input[type="text"]{max-width:440px;}
 textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-offset:-1px;}
 
-/* Step 6 autotype: field visually "disables" while characters are inserted
+/* Step 5 autotype: field visually "disables" while characters are inserted
  * programmatically (the real disabled/readonly state is set in JS — this
  * just matches the visual language a disabled control already has). */
 .autotype-field.busy{background:var(--panel);color:var(--dim);cursor:not-allowed;}
@@ -183,11 +183,11 @@ body[data-view="intro"] .btnrow .btn{display:block;margin:28px auto 0;font-size:
 .skip{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
 .skip:hover{color:var(--ink);}
 
-/* Guard entry screen (step 7): the library's own entry message, rendered
+/* Guard entry screen (step 6): the library's own entry message, rendered
  * verbatim, in a recessed inset matching .task. */
 .entrybox{background:var(--ground);border-radius:0;padding:22px 24px;margin:0 0 18px;}
 
-/* End-guard button (step 8): rendered as a sibling OUTSIDE the scramble
+/* End-guard button (step 7): rendered as a sibling OUTSIDE the scramble
  * wrapper, so its legibility can never depend on panel/blur context — a
  * standalone rule rather than composing with .btn keeps that true even if
  * .btn's cascade changes later. */
@@ -308,7 +308,7 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 
 /* Four columns, floored rather than purely fractional: the event column has
  * to hold `synthetic_insertion` (135px at 11.8px mono) and the trial column
- * `act1-autotype` (92px), and neither has a break opportunity — an underscore
+ * `autotype` (57px), and neither has a break opportunity — an underscore
  * isn't one — so an fr track too narrow for them spills its text into the
  * next column instead of wrapping. minmax(0,…) on detail, not a bare fr: an
  * `auto`-floored fr track grows to its widest word. Sized so .lp-detail

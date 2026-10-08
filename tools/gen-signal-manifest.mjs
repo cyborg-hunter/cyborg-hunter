@@ -15,7 +15,7 @@ import { PRESETS, DEFAULT_THRESHOLDS } from '../src/shared/constants.js';
 //   controls — its paste hard-count threshold and its effective tab-away and
 //              typing-speed cutoffs
 //   scoring  — its soft-scoring map (verbatim from constants.js) +
-//              softScoreThreshold. Step 10's library snippet reads
+//              softScoreThreshold. Step 9's library snippet reads
 //              presets.standard.scoring.soft from here.
 // Emitted here so the demo never hand-mirrors weights: this generator is the
 // single source, and the manifest test pins every value against constants.js.
@@ -85,7 +85,7 @@ export function buildManifest(presetName = 'standard') {
       }
     },
     // Both presets, always emitted regardless of the top-level `preset`, and
-    // pinned to constants.js by the manifest test. Step 10's snippet reads
+    // pinned to constants.js by the manifest test. Step 9's snippet reads
     // presets.standard.scoring.soft.
     presets: {
       standard: buildPresetEntry('standard'),

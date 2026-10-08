@@ -23,8 +23,8 @@ export function formatClock(ms) {
 // Pure row builder (unit-tested without a DOM). data-trial carries the
 // filter key the rail matches against — the trialId when one exists, or the
 // 'session' sentinel for trial-less rows (viewport shifts, session-scoped
-// keyboard shortcuts). No real trialId collides with 'session' (all are
-// act1-*/act2-*), so the sentinel is safe to reuse as a literal string.
+// keyboard shortcuts). No real trialId is 'session' or 'all' (steps-shape
+// test checks it), so the sentinel is safe to reuse as a literal string.
 //
 // The trial/event cells carry their own text as a title: demo.css wraps
 // them in floored columns, with overflow hidden only as the backstop for a

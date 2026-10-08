@@ -1,8 +1,8 @@
 // tests/demo/steps-shape.test.js
-// Structural contract the engine relies on: 11 steps, known ids in order,
+// Structural contract the engine relies on: 10 steps, known ids in order,
 // every step has eyebrow/title/body and its eyebrow (the card's step label)
 // is its count against the total and nothing else, no tier vocabulary before
-// step 10, the lamps panel's layout, and the last step's files and the fonts
+// step 9, the lamps panel's layout, and the last step's files and the fonts
 // its hand-off carries.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,12 +11,12 @@ import * as copy from '../../demo/steps.js';
 import { STEPS, RAIL_GROUPS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
 import { renderRail } from '../../demo/rail.js';
 
-const IDS = ['intro','baseline','clipboard-cheat','tab-away','browser-rearrange',
+const IDS = ['intro','baseline','clipboard-cheat','tab-away',
   'autotype','guard-entry','guard-cheat','guard-debrief',
   'signals-to-scores','your-files'];
 
 test('step map', () => {
-  assert.equal(STEPS.length, 11);
+  assert.equal(STEPS.length, 10);
   assert.deepEqual(STEPS.map(s => s.id), IDS);
   for (const s of STEPS) { assert.ok(s.eyebrow && s.title && s.body, s.id); }
   STEPS.forEach((s, i) => assert.equal(s.eyebrow, 'Step ' + (i + 1) + ' of ' + STEPS.length, s.id));
@@ -72,16 +72,46 @@ test('the third step asks how your day is and offers an assistant\'s answer to c
   assert.equal(cheat.task.providedAnswer, 'Great question! 😊 Honestly? My day has been a rich tapestry of moments ' +
     '— both big and small — that have reminded me what it truly means to be human. It\'s not just a day — it\'s a journey.');
 });
+test('the fourth step covers leaving the tab and opening a sidebar, in three paragraphs, and ends with "Done"', () => {
+  const tabAway = STEPS[3];
+  assert.equal(tabAway.id, 'tab-away');
+  assert.equal(tabAway.body.replace(/\s+/g, ' '),
+    '<p>Another typical trace left by participants using AI assistance is the repeated opening and closing of ' +
+    'the current tab, to fetch an answer from an AI assistant located in a browser sidebar or a different window. ' +
+    'For this reason, cyborg-hunter tracks each time the user leaves the current tab. We distinguish three types ' +
+    'of tab-away events: a flicker (under 3 seconds), a short absence (3–10 seconds), and a long one (over 10 ' +
+    'seconds). Flickers are less suspicious because they might simply be the result of a notification or a stray ' +
+    'click. Longer absences, especially if they occur at critical moments of the experiment when the user is ' +
+    'supposed to find the answer to a non-trivial question, are more suspicious.</p> ' +
+    '<p>Another suspicious sign is the presence of browser sidebars, which participants can tuck out to the side ' +
+    'of the window in order to consult an AI assistant. cyborg-hunter also tracks when participants open a ' +
+    'sidebar.</p> ' +
+    '<p>To test these features, you can try it yourself: move to a different tab for different durations and ' +
+    'come back, and/or open a sidebar.</p>');
+  assert.equal(tabAway.task.kind, 'tab-away');
+  assert.equal(tabAway.primaryLabel, 'Done');
+});
+test('trial ids name the task, not the act, and none is a key the record reserves', () => {
+  // The record's trial column and its filter tabs show these ids. 'all' and
+  // 'session' are the live pane's own filter keys (live-pane.js).
+  const ids = STEPS.filter((s) => s.task && s.task.trialId).map((s) => s.task.trialId);
+  assert.deepEqual(ids, ['baseline', 'paste', 'tabaway', 'autotype', 'entry', 'guard']);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const id of ids) {
+    assert.doesNotMatch(id, /^act/, id);
+    assert.ok(id !== 'all' && id !== 'session', id);
+  }
+});
 test('the link back reads "Go back"; the record has no caption', () => {
   assert.equal(copy.BACK_LABEL, 'Go back');
   assert.ok(!('caption' in copy.LIVE_PANE), 'LIVE_PANE.caption is still there');
   assert.doesNotMatch(JSON.stringify(copy.LIVE_PANE), /accumulates into/);
 });
-test('no tier vocabulary in steps 2-9', () => {
-  // Steps 2-9 only: step 1 may NAME the product ("triage report") without narrating scores.
-  const before = STEPS.slice(1, 9).map(s => [s.title, s.body, JSON.stringify(s.task || {})].join(' ')).join(' ');
+test('no tier vocabulary in steps 2-8', () => {
+  // Steps 2-8 only: step 1 may NAME the product ("triage report") without narrating scores.
+  const before = STEPS.slice(1, 8).map(s => [s.title, s.body, JSON.stringify(s.task || {})].join(' ')).join(' ');
   for (const word of ['HARD', 'SOFT', 'CLEAN', 'tier', 'triage', 'preset']) {
-    assert.ok(!before.includes(word), `"${word}" leaked before step 10`);
+    assert.ok(!before.includes(word), `"${word}" leaked before step 9`);
   }
 });
 test('the lamps panel is the title and the lamps: no intro copy, heads Guard and Recording only', () => {

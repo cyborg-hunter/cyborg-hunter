@@ -96,7 +96,7 @@ function exitFullscreenIfActive() {
   }
 }
 
-// Step 7's 1.5s fullscreen-entry race. Calls OUR OWN requestFullscreen() —
+// Step 6's 1.5s fullscreen-entry race. Calls OUR OWN requestFullscreen() —
 // not GuardFriction.requestFullscreen(), which fires the request and
 // swallows any promise rejection — so we get a real
 // promise to race against a timeout and the 'fullscreenchange' event.
@@ -199,7 +199,7 @@ var RAIL_LABELS = {};
 // Tab label + run order per trial: the step's own heading — the
 // human-readable name the visitor read while running that trial ("Now cheat
 // with the clipboard") — NOT the trialId the stream's trial column prints
-// ('act1-paste'), and not task.kind's slug either. Titles for trial-owning
+// ('paste'), and not task.kind's slug either. Titles for trial-owning
 // steps carry no {{placeholders}}, so they need no tpl() pass here (which
 // module scope couldn't reach anyway).
 var TRIAL_TABS = [];  // [{ id, label }] in STEPS order
@@ -302,7 +302,7 @@ function startTour(participantId, capabilities, manifest) {
   var lampWiringActive = false;
   var lampWiringRetired = false;
   var sessionPollId = null;
-  // Step 6 (autotype)'s char-by-char animation runs its own setInterval,
+  // Step 5 (autotype)'s char-by-char animation runs its own setInterval,
   // outside the library entirely — tracked here so goTo() can cancel a
   // still-running animation on navigation (Back/Continue are both valid
   // mid-animation, per "advance is always available"), instead of leaving it
@@ -651,7 +651,7 @@ function startTour(participantId, capabilities, manifest) {
     }
   }
 
-  // Drives step 7's fullscreen-entry race. A guard API absence (bundle
+  // Drives step 6's fullscreen-entry race. A guard API absence (bundle
   // failed to load) is treated the same as a failed race — fallback + skip,
   // never a throw — since advancing into guard-cheat with no guard running
   // would silently pretend enforcement is active when it isn't.
@@ -1068,7 +1068,7 @@ function startTour(participantId, capabilities, manifest) {
     }, null, 2);
   }
 
-  // Step 10's scoring panel: the visitor's soft score so far (filled in by
+  // Step 9's scoring panel: the visitor's soft score so far (filled in by
   // fillLiveScore(), which reads the monitor), the note on what the
   // analyzer's settings panel changes afterwards, and the two
   // config-as-source snippets above. This function only builds the static
@@ -1087,11 +1087,11 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // Step 10: fills the panel's one text node, [data-role="live-score"],
+  // Step 9: fills the panel's one text node, [data-role="live-score"],
   // with the soft score so far: the library's own number from
   // monitor.getSessionReport() (the standard preset this session runs
   // under), checked against the manifest's threshold for that preset.
-  // Called fresh from goTo() every time step 10 renders, so a return visit
+  // Called fresh from goTo() every time step 9 renders, so a return visit
   // shows the score as it stands then.
   function fillLiveScore(manifest) {
     var scoreEl = cardEl.querySelector('[data-role="live-score"]');
@@ -1101,7 +1101,7 @@ function startTour(participantId, capabilities, manifest) {
       (session.softScore || 0) + ' (flags at ' + manifest.signals.softScoreThreshold + ' or above).';
   }
 
-  // Step 7's guard entry: the library's own entry message rendered VERBATIM
+  // Step 6's guard entry: the library's own entry message rendered VERBATIM
   // (truth-by-construction — never a drifting copy of it), with its own
   // button wired to the existing fullscreen-entry flow. Not wrapped in
   // .jspsych-content: the guard curtain never scrambles this step (it isn't
@@ -1116,7 +1116,7 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // ----- Step 6: autotype ------------------------------------------------
+  // ----- Step 5: autotype ------------------------------------------------
   // Drives synthetic insertion + fast typing FOR REAL, not just visually.
   // src/core/signals/typing.js flags an 'input' event as synthetic when it
   // carries inputType 'insertText' and arrives more than syntheticGapMs
@@ -1166,6 +1166,10 @@ function startTour(participantId, capabilities, manifest) {
     if (!task) return '';
     if (task.kind === 'downloads') return renderDownloadsPanel(task);
     if (task.kind === 'fullscreen-entry') return renderGuardEntryPanel();
+    // Leaving the tab and opening a sidebar happen outside the page: the
+    // step's text is the whole task, so there is no panel (and no empty grey
+    // box). The step's trial still opens from its trialId in goTo().
+    if (task.kind === 'tab-away') return '';
     var parts = [];
     // The text to copy (clipboard-cheat): a bordered block of its own ahead
     // of the panel, so it sits between the step's text and the box it is
@@ -1200,7 +1204,7 @@ function startTour(participantId, capabilities, manifest) {
       parts.push('<p class="hint">Target pastes: ' + task.targetPastes + '</p>');
     }
     parts.push('</div>');
-    // End-guard button (step 8): a sibling OUTSIDE .jspsych-content — its
+    // End-guard button (step 7): a sibling OUTSIDE .jspsych-content — its
     // legibility can never depend on scramble/blur context — doubling as
     // this step's primary action (steps.js sets primaryLabel for it, but
     // renderStep() suppresses the normal .btnrow primary for guard-cheat so
@@ -1304,7 +1308,7 @@ function startTour(participantId, capabilities, manifest) {
       // AFTER finalizeGuard() deliberately: exiting fullscreen under an
       // armed guard logs a false 'not_fullscreen' violation (the plugin now
       // refuses that outright — exitFullscreen()'s own guard — but this
-      // ordering is the real guarantee, not the refusal). Step 8's copy
+      // ordering is the real guarantee, not the refusal). Step 7's copy
       // already promises fullscreen is no longer required once the guarded
       // act ends; this makes that literal on the way to the files.
       exitFullscreenIfActive();

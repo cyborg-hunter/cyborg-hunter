@@ -185,22 +185,20 @@ async function main() {
     await dispatchPaste('#card textarea', ANSWER);
     await clickPrimary();                         // → step 4 (tab-away)
     await waitForStep(4);
-    // Steps 4-6 are optional tasks; advancing without performing them is a
+    // Steps 4 and 5 are optional tasks; advancing without performing them is a
     // supported path and brackets each step's replay segment all the same.
-    await clickPrimary();                         // → step 5 (rearrange)
+    await clickPrimary();                         // → step 5 (autotype)
     await waitForStep(5);
-    await clickPrimary();                         // → step 6 (autotype)
+    await clickPrimary();                         // → step 6 (guard-entry)
     await waitForStep(6);
-    await clickPrimary();                         // → step 7 (guard-entry)
-    await waitForStep(7);
     await page.locator('[data-action="enter-fullscreen"]').click();
-    await waitForStep(8);                         // guard-cheat (fullscreen mock succeeded)
-    await page.locator('.endguard').click();      // → step 9, ended clean (no violation)
+    await waitForStep(7);                         // guard-cheat (fullscreen mock succeeded)
+    await page.locator('.endguard').click();      // → step 8, ended clean (no violation)
+    await waitForStep(8);
+    await clickPrimary();                         // → step 9 (signals-to-scores)
     await waitForStep(9);
-    await clickPrimary();                         // → step 10 (signals-to-scores)
+    await clickPrimary();                         // → step 10 (your files)
     await waitForStep(10);
-    await clickPrimary();                         // → step 11 (your files)
-    await waitForStep(11);
     await page.locator('[data-action="download"][data-key="replay"]').waitFor({ timeout: 10000 });
 
     // ── capture the replay download only ────────────────────────────────────

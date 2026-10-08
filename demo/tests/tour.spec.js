@@ -1,5 +1,5 @@
 // demo/tests/tour.spec.js
-// Playwright E2E suite for the live demo tour (11 steps; the hand-off to
+// Playwright E2E suite for the live demo tour (10 steps; the hand-off to
 // the analyzer and the visitor's replay there are in handoff.spec.js).
 // Runs against the ASSEMBLED site (.demo-site/, see playwright.config.js +
 // tools/assemble-demo-site.mjs) so demo/index.html's ./dist/... relative
@@ -40,7 +40,7 @@ import {
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
 import { VERSION } from '../../src/shared/constants.js';
-import { HANDOFF, SAVE_TO_FOLDER } from '../steps.js';
+import { HANDOFF, SAVE_TO_FOLDER, STEPS } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
@@ -54,9 +54,9 @@ const ANSWER_START = 'Great question!';
 const AUTOTYPE_TEXT = 'No one is typing this. It is being inserted.';
 
 // ---------------------------------------------------------------------------
-// 1. Happy path: all 11 steps in order
+// 1. Happy path: all 10 steps in order
 // ---------------------------------------------------------------------------
-test('happy path: all 11 steps, welcome through your files', async ({ page, frozenClock, fullscreenMock }) => {
+test('happy path: all 10 steps, welcome through your files', async ({ page, frozenClock, fullscreenMock }) => {
   test.setTimeout(90000);
 
   // ----- Step 1: intro -----
@@ -69,14 +69,14 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('#rail .check li:not([data-key])')).toHaveText(['Guard', 'Recording']);
 
   // ----- Step 2: baseline typing (real per-char typing lights nothing) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
   await expect(page.locator('#rail .check')).toHaveClass(/awaiting/); // still inert
   await typeRealistically(page.locator('#card textarea'), 'a city in Australia');
   await expect(page.locator('#rail .check')).toHaveClass(/awaiting/); // still inert after typing
   await primaryButton(page).click();
 
   // ----- Step 3: clipboard cheat (copy the question, paste the answer x2) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 3 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 3 of 10');
   await expect(page.locator('#card .task .question')).toHaveText('How is your day today?');
   // The text to copy is a bordered block of its own between the step's text
   // and the task panel (outside the grey panel), its hint on a line under it.
@@ -112,29 +112,34 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('.lp-row.hard')).toContainText(ANSWER_START);
   await primaryButton(page).click();
 
-  // ----- Step 4: tab-away, three bins (frozen clock for exact durations) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 4 of 11');
+  // ----- Step 4: tab-away, three bins (frozen clock for exact durations), then a sidebar -----
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 4 of 10');
+  // The step's text is its whole task: three paragraphs, no task panel, and
+  // the button reads "Done".
+  await expect(page.locator('#card .stepcopy p')).toHaveCount(3);
+  await expect(page.locator('#card .task')).toHaveCount(0);
+  await expect(primaryButton(page)).toHaveText('Done');
   await frozenClock.tabAway(0, 2000);      // flicker: <=3000ms
   await frozenClock.tabAway(20000, 6000);  // mid: >3000ms, <10000ms
   await frozenClock.tabAway(40000, 12000); // long: >=10000ms
   // Freezing performance.now() never unfreezes itself — harmless for every
-  // earlier step, but step 6 below needs REAL elapsed time between edit
+  // earlier step, but step 5 below needs REAL elapsed time between edit
   // timestamps for computeTypingSpeed() to see a nonzero span.
   await frozenClock.unfreeze();
   await expect(railRow(page, 'tabAwayFlicker')).toHaveClass(/lit/);
   await expect(railRow(page, 'tabAwayMid')).toHaveClass(/lit/);
   await expect(railRow(page, 'tabAwayLong')).toHaveClass(/lit/);
-  await primaryButton(page).click();
-
-  // ----- Step 5: rearrange (viewport resize -> viewport lamp; poll-based, no onSignal event) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 5 of 11');
+  // A sidebar opening narrows the page: dropping the width by 580px (over
+  // the 100px sidebar gap) lights the sidebar lamp at the monitor's next
+  // 2s check and the viewport lamp at the demo's 5s poll (no onSignal event).
   await page.setViewportSize({ width: 700, height: 900 });
+  await waitForLamp(page, 'sidebar', { timeout: 7000 });
   await waitForLamp(page, 'viewport', { timeout: 7000 });
   await page.setViewportSize({ width: 1280, height: 900 });
   await primaryButton(page).click();
 
-  // ----- Step 6: autotype (real synthetic insertion, no keydown behind it) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 6 of 11');
+  // ----- Step 5: autotype (real synthetic insertion, no keydown behind it) -----
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 5 of 10');
   const autotypeButton = page.locator('[data-role="autotype-button"]');
   await autotypeButton.click();
   await expect(autotypeButton).toBeDisabled();
@@ -144,14 +149,14 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('[data-role="autotype-field"]')).toHaveValue(AUTOTYPE_TEXT);
   await primaryButton(page).click();
 
-  // ----- Step 7: guard entry (library's own entry screen, verbatim) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 11');
+  // ----- Step 6: guard entry (library's own entry screen, verbatim) -----
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 6 of 10');
   await expect(page.locator('.entrybox')).toContainText('Fullscreen mode required');
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'act2');
 
-  // ----- Step 8: guard-cheat. A bare synthetic 'blur' dispatch does NOT
+  // ----- Step 7: guard-cheat. A bare synthetic 'blur' dispatch does NOT
   // trigger a violation (verified live: GuardFriction's check() reads real
   // document.hasFocus(), unaffected by a synthetic event) — the fullscreen
   // mock's exit() (the Esc-exit path) is the proven, working mechanism. -----
@@ -170,12 +175,12 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   await expect(endGuard).toHaveClass(/floating/);
   await endGuard.click(); // straight through the curtain — the no-trap click
   // finalizeGuard's stop() ended the violation cleanly: overlay hidden, and
-  // the violation record (asserted on the downloaded file at step 11)
+  // the violation record (asserted on the downloaded file at step 10)
   // carries both its start AND its end.
   await expect(page.locator('#guard-friction-overlay')).toHaveCSS('display', 'none');
 
-  // ----- Step 9: the record is under the card here as on every step
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 11');
+  // ----- Step 8: the record is under the card here as on every step
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 10');
   const paneInSlot = page.locator('[data-role="pane-slot"] [data-role="live-pane"]');
   await expect(paneInSlot).toHaveCount(1);
   await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(0);
@@ -189,15 +194,15 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('.lp-row')).toHaveCount(rowCountBeforeSignal + 1);
   await primaryButton(page).click();
 
-  // ----- Step 10: signals to scores (first tier vocabulary appears here) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 11');
-  // The record stays under the card on leaving step 9.
+  // ----- Step 9: signals to scores (first tier vocabulary appears here) -----
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 10');
+  // The record stays under the card on leaving step 8.
   await expect(paneInSlot).toHaveCount(1);
   await expect(page.locator('.stepcopy')).toContainText('HARD');
   await primaryButton(page).click();
 
-  // ----- Step 11: your files (the hand-off to the analyzer: handoff.spec.js) -----
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 11 of 11');
+  // ----- Step 10: your files (the hand-off to the analyzer: handoff.spec.js) -----
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 10');
   await expect(page.locator('#card h2')).toHaveText('Your files');
   const participantId = await pid(page);
   expect(participantId).toMatch(/^DEMO-[a-z0-9]{4}$/);
@@ -249,13 +254,13 @@ test('top bar: the title, then the REC cue; the card label says the step only', 
   await expect(bar.locator('.brand')).toHaveText('cyborg-hunter · live demo');
   await expect(page.locator('#pid, #progress')).toHaveCount(0);
   await expect(page.locator('#rec')).toBeHidden();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 1 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 1 of 10');
 
   await page.getByRole('button', { name: 'Start the demo', exact: true }).click(); // -> baseline (step 2)
   await expect(page.locator('#rec')).toBeVisible();
   await expect(page.locator('#rec')).toHaveText('REC replay');
   expect(await bar.evaluate((el) => Array.from(el.children, (c) => c.className))).toEqual(['brand', 'rec']);
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'act1');
 });
 
@@ -282,7 +287,7 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
   expect(Math.round(button.y - (last.y + last.height))).toBe(28);
 
   await start.click(); // -> baseline (step 2): the tour's own button again
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
   await expect(primaryButton(page)).toHaveCSS('font-size', '15px');
   await expect(primaryButton(page)).toHaveCSS('padding', '10px 22px');
 });
@@ -307,24 +312,28 @@ test('second step: the question and a box, no code; no step has a task label or 
   await expect(page.locator('#card .task textarea')).toHaveCount(1);
   await expect(page.locator('#card .code-tab, #card [data-role="code-pane"], #card pre')).toHaveCount(0);
 
-  // Steps 2 to 7 with the primary button alone (as walkToGuardEntry, with
+  // Steps 2 to 6 with the primary button alone (as walkToGuardEntry, with
   // the checks at each step), then the guard's own buttons, then the
-  // primary again.
+  // primary again. A missing entry box fails on the step label below.
   const enter = page.locator('[data-action="enter-fullscreen"]');
-  while (await enter.count() === 0) {
+  const entryStep = STEPS.findIndex((s) => s.id === 'guard-entry') + 1;
+  for (let clicks = 0;
+    clicks < STEPS.length && await enter.count() === 0 && await primaryButton(page).count() > 0;
+    clicks++) {
     await noLabelNoLinkAhead();
     await primaryButton(page).click();
   }
-  await noLabelNoLinkAhead(); // step 7, the guard's entry
+  await expect(stepLabel).toHaveText('Step ' + entryStep + ' of ' + STEPS.length);
+  await noLabelNoLinkAhead(); // step 6, the guard's entry
   await enter.click();
-  await expect(stepLabel).toHaveText('Step 8 of 11', { timeout: 5000 });
+  await expect(stepLabel).toHaveText('Step 7 of 10', { timeout: 5000 });
   await noLabelNoLinkAhead();
-  await page.locator('.endguard').click(); // -> step 9
+  await page.locator('.endguard').click(); // -> step 8
   await noLabelNoLinkAhead();
-  await primaryButton(page).click(); // -> step 10
+  await primaryButton(page).click(); // -> step 9
   await noLabelNoLinkAhead();
-  await primaryButton(page).click(); // -> step 11, your files
-  await expect(stepLabel).toHaveText('Step 11 of 11');
+  await primaryButton(page).click(); // -> step 10, your files
+  await expect(stepLabel).toHaveText('Step 10 of 10');
   await expect(page.locator('#card .task')).toHaveCount(1);
   await noLabelNoLinkAhead();
 });
@@ -338,7 +347,7 @@ test('guard-cheat resume route: button unfloats after resume and advances exactl
   await startTour(page); // -> baseline
   await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 });
 
   await fullscreenMock.exit(); // violation starts -> button floats above the overlay
   await expect(page.locator('.endguard')).toHaveClass(/floating/);
@@ -348,30 +357,30 @@ test('guard-cheat resume route: button unfloats after resume and advances exactl
   // The button unfloated back into its in-card spot...
   await expect(page.locator('#card .endguard')).toBeVisible();
   await expect(page.locator('.endguard')).not.toHaveClass(/floating/);
-  // ...and clicking it advances EXACTLY one step. Landing on step 10 here
+  // ...and clicking it advances EXACTLY one step. Landing on step 9 here
   // would mean the float-time direct listener survived the unfloat and
   // double-fired the advance alongside the card's delegated handler.
   await page.locator('.endguard').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 10');
 });
 
 // ---------------------------------------------------------------------------
 // The record's place under the card, the OTHER leave direction: the
-// happy-path test above covers forward (9 -> 10); Back (9 -> 8) must leave
+// happy-path test above covers forward (8 -> 9); Back (8 -> 7) must leave
 // the record under the card too, in the main column, never in the
 // instrument column.
 // ---------------------------------------------------------------------------
-test('step 9: the record stays under the card on Back to step 8', async ({ page }) => {
+test('step 8: the record stays under the card on Back to step 7', async ({ page }) => {
   await startTour(page); // -> baseline
   await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
-  await page.locator('.endguard').click(); // -> guard-debrief (step 9)
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 });
+  await page.locator('.endguard').click(); // -> guard-debrief (step 8)
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 10');
   await expect(page.locator('[data-role="pane-slot"] [data-role="live-pane"]')).toHaveCount(1);
 
-  await backButton(page).click(); // -> guard-cheat (step 8)
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11');
+  await backButton(page).click(); // -> guard-cheat (step 7)
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10');
   const paneInSlot = page.locator('[data-role="pane-slot"] [data-role="live-pane"]');
   await expect(paneInSlot).toHaveCount(1);
   await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(0);
@@ -382,7 +391,7 @@ test('step 9: the record stays under the card on Back to step 8', async ({ page 
 // 10. Fullscreen exit: the files step leaves fullscreen through the
 // plugin's own exitFullscreen(), on the way into "Your files" — no Esc
 // press, no fullscreenMock.exit() call, anywhere in this test. The visitor
-// is fullscreen through the whole guarded act (step 8) and no longer
+// is fullscreen through the whole guarded act (step 7) and no longer
 // fullscreen once the files step shows. Downloading the session file there
 // and checking guardFriction.violations pins the ORDERING the same way the
 // happy-path test pins violation phases above (exitFullscreenIfActive()
@@ -394,14 +403,14 @@ test('step 9: the record stays under the card on Back to step 8', async ({ page 
 test('the files step leaves fullscreen via the plugin, with no false violation left behind', async ({ page }) => {
   test.setTimeout(60000);
   await startTour(page); // -> baseline
-  await walkToGuardEntry(page); // -> guard-entry (step 7)
+  await walkToGuardEntry(page); // -> guard-entry (step 6)
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 });
   expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true);
 
-  await page.locator('.endguard').click(); // -> guard-debrief (step 9), violation-free
-  await primaryButton(page).click(); // -> signals-to-scores (step 10)
-  await primaryButton(page).click(); // -> your files (step 11)
+  await page.locator('.endguard').click(); // -> guard-debrief (step 8), violation-free
+  await primaryButton(page).click(); // -> signals-to-scores (step 9)
+  await primaryButton(page).click(); // -> your files (step 10)
   await expect(page.locator('#card h2')).toHaveText('Your files');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
 
@@ -601,7 +610,6 @@ test('live pane: row count strictly grows across acts; raw-JSON tab shows partic
   const c2 = await rowCount();
   expect(c2).toBeGreaterThan(c1);
 
-  await primaryButton(page).click(); // -> rearrange
   await primaryButton(page).click(); // -> autotype
   await page.locator('[data-role="autotype-button"]').click();
   await expect(page.locator('[data-role="autotype-button"]')).toHaveText('Typed ✓', { timeout: 5000 });
@@ -639,11 +647,11 @@ test('XSS paste: a hostile <script> string is escaped in the live pane, never ex
 });
 
 // ---------------------------------------------------------------------------
-// 4. Step 10's live score: the library's own soft score for the visitor's
+// 4. Step 9's live score: the library's own soft score for the visitor's
 // session so far, under the standard weights, and a note on the analyzer's
 // settings panel.
 // ---------------------------------------------------------------------------
-test('step 10 shows the library\'s own soft score from the session so far', async ({ page }) => {
+test('step 9 shows the library\'s own soft score from the session so far', async ({ page }) => {
   test.setTimeout(60000);
   await startTour(page); // -> baseline
   await typeRealistically(page.locator('#card textarea'), 'a city in Australia');
@@ -652,9 +660,9 @@ test('step 10 shows the library\'s own soft score from the session so far', asyn
   await dispatchPaste(page, '#card textarea', ANSWER); // 1 paste — below the hard threshold (2), stays out of HARD
   await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 });
   await page.locator('.endguard').click(); // -> guard-debrief
-  await primaryButton(page).click(); // -> signals-to-scores (step 10)
+  await primaryButton(page).click(); // -> signals-to-scores (step 9)
   // No inputs: the score is the library's own, with the standard weights
   // (one copy hit × weight 2 = 2, under the threshold of 6).
   await expect(page.locator('[data-weight-key]')).toHaveCount(0);
@@ -670,14 +678,14 @@ test('zero-lamp path: walk past every task, then the guard skip -> the files ste
   await installFailingFullscreenMock(page); // forces the guard-entry fallback (no other skip route out of act 2)
   await startTour(page); // -> baseline
   await walkToGuardEntry(page); // -> guard-entry
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 11'); // sanity: really at the guard's entry
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 6 of 10'); // sanity: really at the guard's entry
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('.fallback-note')).toBeVisible({ timeout: 3000 });
 
   const skipLink = page.locator('a[data-key="skipToScores"]');
   await expect(skipLink).toBeVisible();
   await skipLink.click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 10');
   await primaryButton(page).click(); // -> your files
 
   await expect(page.locator('#card h2')).toHaveText('Your files');
@@ -700,12 +708,12 @@ test('act2-skip path: fullscreen failure falls back, skip lands on "From signals
   await expect(page.locator('.fallback-note')).toContainText("guarded act can’t run here");
 
   await page.locator('a[data-key="skipToScores"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 10');
   await expect(page.locator('#card h2')).toHaveText('From signals to scores');
   await expect(page.locator('.cols')).not.toHaveClass(/\bfull\b/);
 
   await primaryButton(page).click(); // -> your files
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 11 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 10');
   // The rail retires here, so the step takes the full width.
   await expect(page.locator('.cols')).toHaveClass(/\bfull\b/);
   await expect(page.locator('.instrument')).not.toBeVisible();
@@ -713,7 +721,7 @@ test('act2-skip path: fullscreen failure falls back, skip lands on "From signals
   // The rail's retirement is one-way (demo.js, lampWiringRetired): it stays
   // hidden on Back, and the full width follows it.
   await backButton(page).click(); // -> signals-to-scores
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 11');
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 10');
   await expect(page.locator('#rail')).toBeHidden();
   await expect(page.locator('.cols')).toHaveClass(/\bfull\b/);
 });
@@ -740,16 +748,16 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   // substrings case-insensitively — 'All' also matches "Answer a question
   // normALLy". The label text itself is asserted wholesale below.
   const allTab = page.locator('[data-role="lp-trials"] [data-trial-key="all"]');
-  const pasteTab = page.locator('[data-role="lp-trials"] [data-trial-key="act1-paste"]');
+  const pasteTab = page.locator('[data-role="lp-trials"] [data-trial-key="paste"]');
   // Labels are each step's own heading — the name the visitor read while
   // running that trial (STEPS[i].title) — not the trialId the stream's trial
-  // column prints ('act1-paste', asserted below) and not task.kind's slug.
+  // column prints ('paste', asserted below) and not task.kind's slug.
   // Order is RUN order (TRIAL_TABS, demo.js), not visit order; walking
   // forward, as below, the two agree.
   await expect(rail).toHaveText(['All', 'Answer a question normally', 'Now cheat with the clipboard']);
   // The heading is truthfully what step 3 showed, and the tooltip pairs it
   // with the id, the one place both names appear together.
-  await expect(pasteTab).toHaveAttribute('title', 'Now cheat with the clipboard (act1-paste)');
+  await expect(pasteTab).toHaveAttribute('title', 'Now cheat with the clipboard (paste)');
   await expect(page.locator('#card h2')).toHaveText('Now cheat with the clipboard'); // same string, live on the card
   await expect(allTab).toHaveAttribute('aria-pressed', 'true'); // All is the default
 
@@ -759,22 +767,22 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   const visibleTrials = await page.locator('.lp-row:not(.lp-off)')
     .evaluateAll((rows) => rows.map((r) => r.dataset.trial));
   expect(visibleTrials.length).toBeGreaterThan(0);
-  expect(visibleTrials.every((t) => t === 'act1-paste')).toBe(true);
+  expect(visibleTrials.every((t) => t === 'paste')).toBe(true);
   // Baseline's rows are hidden, not gone — the stream is append-only, so
   // they're still in the DOM under lp-off.
-  await expect(page.locator('.lp-row[data-trial="act1-baseline"]').first()).toHaveClass(/lp-off/);
+  await expect(page.locator('.lp-row[data-trial="baseline"]').first()).toHaveClass(/lp-off/);
 
   await allTab.click();
   await expect(page.locator('.lp-row:not(.lp-off)')).toHaveCount(totalRows); // full count back
 
-  // -> your files (step 11), walking past the remaining tasks — freeze() runs
+  // -> your files (step 10), walking past the remaining tasks — freeze() runs
   // on entry (goTo()'s last-step block), while addRow/setPayload stay frozen.
-  await walkToGuardEntry(page); // -> guard-entry (step 7)
+  await walkToGuardEntry(page); // -> guard-entry (step 6)
   await page.locator('[data-action="enter-fullscreen"]').click();
-  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
-  await page.locator('.endguard').click(); // -> guard-debrief (step 9)
-  await primaryButton(page).click(); // -> signals-to-scores (step 10)
-  await primaryButton(page).click(); // -> your files (step 11)
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 });
+  await page.locator('.endguard').click(); // -> guard-debrief (step 8)
+  await primaryButton(page).click(); // -> signals-to-scores (step 9)
+  await primaryButton(page).click(); // -> your files (step 10)
   await expect(page.locator('#card h2')).toHaveText('Your files');
 
   const frozenTotal = await page.locator('.lp-row').count();
@@ -782,7 +790,7 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   const frozenVisibleTrials = await page.locator('.lp-row:not(.lp-off)')
     .evaluateAll((rows) => rows.map((r) => r.dataset.trial));
   expect(frozenVisibleTrials.length).toBeGreaterThan(0);
-  expect(frozenVisibleTrials.every((t) => t === 'act1-paste')).toBe(true);
+  expect(frozenVisibleTrials.every((t) => t === 'paste')).toBe(true);
   await allTab.click();
   await expect(page.locator('.lp-row:not(.lp-off)')).toHaveCount(frozenTotal); // full count back, even frozen
 });

@@ -41,7 +41,7 @@ export const LIVE_PANE = {
 };
 
 /**
- * Step-10 scoring panel (demo.js's renderScoringPanel/fillLiveScore):
+ * Step-9 scoring panel (demo.js's renderScoringPanel/fillLiveScore):
  * the visitor's soft score so far, as the library itself computes it under
  * the standard weights, a note on what the analyzer's settings panel changes
  * afterwards, and two config-as-source snippets. The copy lives here; the
@@ -59,7 +59,7 @@ export const SCORING_PANEL = {
 };
 
 /**
- * The 11-step script. Advance is never blocked; every task is an invitation.
+ * The 10-step script. Advance is never blocked; every task is an invitation.
  * act: intro | act1 | act2 | bridge | finale, set on body[data-view] for the
  * CSS and never shown. eyebrow: the card's step label, the step count only.
  */
@@ -67,7 +67,7 @@ export const STEPS = [
   {
     id: 'intro',
     act: 'intro',
-    eyebrow: 'Step 1 of 11',
+    eyebrow: 'Step 1 of 10',
     title: 'What this is',
     body: `
 <p>cyborg-hunter is an open-source toolkit for online behavioral research:
@@ -91,7 +91,7 @@ server.</p>`.trim(),
   {
     id: 'baseline',
     act: 'act1',
-    eyebrow: 'Step 2 of 11',
+    eyebrow: 'Step 2 of 10',
     title: 'Answer a question normally',
     body: `
 <p>First, answer the question below the way you normally would. This
@@ -100,7 +100,7 @@ and not much else. Watch the lamps on the right as you type; the session
 record under this card lists each event the moment it happens.</p>`.trim(),
     task: {
       kind: 'type-answer',
-      trialId: 'act1-baseline',
+      trialId: 'baseline',
       prompt: 'How is your day today?',
     },
     primaryLabel: 'Answered →',
@@ -108,7 +108,7 @@ record under this card lists each event the moment it happens.</p>`.trim(),
   {
     id: 'clipboard-cheat',
     act: 'act1',
-    eyebrow: 'Step 3 of 11',
+    eyebrow: 'Step 3 of 10',
     title: 'Now cheat with the clipboard',
     body: `
 <p>Suppose you don't know the answer and an AI does. Play that participant:
@@ -120,7 +120,7 @@ text itself, verbatim. A reviewer sees exactly what was pasted, down to
 the words.</p>`.trim(),
     task: {
       kind: 'copy-paste',
-      trialId: 'act1-paste',
+      trialId: 'paste',
       question: 'How is your day today?',
       providedAnswer: 'Great question! 😊 Honestly? My day has been a rich tapestry of moments ' +
         '— both big and small — that have reminded me what it truly means to be human. ' +
@@ -132,41 +132,34 @@ the words.</p>`.trim(),
   {
     id: 'tab-away',
     act: 'act1',
-    eyebrow: 'Step 4 of 11',
+    eyebrow: 'Step 4 of 10',
     title: 'Leave the tab, three ways',
     body: `
-<p>Imagine an AI app open in another window. Switch away and come back
-three times: a flicker (under 3 seconds), a short absence (3–10 seconds),
-and a long one (over 10 seconds). Each lights a different lamp.</p>
-<p>The bins encode how the duration reads. A flicker is usually nothing: a
-notification, a stray click. Three to ten seconds is enough to read
-something elsewhere. Past ten seconds is enough to switch windows, paste a
-question, wait for an answer, and come back, which is why long absences
-carry the most weight. The record keeps the exact duration and timestamps
-of each absence either way.</p>`.trim(),
-    task: { kind: 'tab-away', trialId: 'act1-tabaway' },
-    primaryLabel: 'Back for good →',
-  },
-  {
-    id: 'browser-rearrange',
-    act: 'act1',
-    eyebrow: 'Step 5 of 11',
-    title: 'Dock an AI beside the task',
-    body: `
-<p>The modern cheat doesn't always leave the tab. Browsers now ship AI
-sidebars (Gemini, Copilot, the Edge panel) that dock next to the page,
-reading it while the participant works. Docking one changes the window's
-geometry, and geometry is recorded: open a sidebar, split the window, or
-resize it, and watch the record.</p>
-<p>Resizing never ends the session. The layout adapts and recording
-continues, whatever shape the window takes.</p>`.trim(),
-    task: { kind: 'sidebar-resize', trialId: 'act1-sidebar' },
-    primaryLabel: 'Done rearranging →',
+<p>Another typical trace left by participants using AI assistance is the
+repeated opening and closing of the current tab, to fetch an answer from an
+AI assistant located in a browser sidebar or a different window. For this
+reason, cyborg-hunter tracks each time the user leaves the current tab. We
+distinguish three types of tab-away events: a flicker (under 3 seconds), a
+short absence (3–10 seconds), and a long one (over 10 seconds). Flickers are
+less suspicious because they might simply be the result of a notification or
+a stray click. Longer absences, especially if they occur at critical moments
+of the experiment when the user is supposed to find the answer to a
+non-trivial question, are more suspicious.</p>
+<p>Another suspicious sign is the presence of browser sidebars, which
+participants can tuck out to the side of the window in order to consult an
+AI assistant. cyborg-hunter also tracks when participants open a
+sidebar.</p>
+<p>To test these features, you can try it yourself: move to a different tab
+for different durations and come back, and/or open a sidebar.</p>`.trim(),
+    // No task panel for this kind (demo.js renderTaskPanel): the text is the
+    // task. The trialId still brackets the step in the record.
+    task: { kind: 'tab-away', trialId: 'tabaway' },
+    primaryLabel: 'Done',
   },
   {
     id: 'autotype',
     act: 'act1',
-    eyebrow: 'Step 6 of 11',
+    eyebrow: 'Step 5 of 10',
     title: 'Let something else type',
     body: `
 <p>Press the button and watch the field fill itself: text appearing with no
@@ -180,7 +173,7 @@ caveat the docs carry too: these are signals for a human reviewer to weigh,
 not automatic verdicts.</p>`.trim(),
     task: {
       kind: 'autotype',
-      trialId: 'act1-autotype',
+      trialId: 'autotype',
       autotypeText: 'No one is typing this. It is being inserted.',
       buttonLabel: 'Type it for me',
       busyLabel: 'Typing…',
@@ -191,7 +184,7 @@ not automatic verdicts.</p>`.trim(),
   {
     id: 'guard-entry',
     act: 'act2',
-    eyebrow: 'Step 7 of 11',
+    eyebrow: 'Step 6 of 10',
     title: 'The other approach: prevention',
     body: `
 <p>Everything so far was detection: record quietly, report later. The guard
@@ -204,7 +197,7 @@ screen, word for word. Enter whenever you're ready; nothing is enforced
 until you do.</p>`.trim(),
     task: {
       kind: 'fullscreen-entry',
-      trialId: 'act2-entry',
+      trialId: 'entry',
       fallbackNote:
         'Fullscreen didn’t engage in this browser, so the guarded act ' +
         'can’t run here. Skip ahead: the rest of the tour still works without it.',
@@ -214,7 +207,7 @@ until you do.</p>`.trim(),
   {
     id: 'guard-cheat',
     act: 'act2',
-    eyebrow: 'Step 8 of 11',
+    eyebrow: 'Step 7 of 10',
     title: 'Try the same tricks',
     body: `
 <p>Tab away. Press Esc. Click another window. Each attempt logs a violation
@@ -224,13 +217,13 @@ you're half-out. Pastes still go through and get recorded exactly as in Act
 logging a violation trail each time.</p>
 <p>When you've had enough, the button below ends the guarded act; after
 that, fullscreen is no longer required.</p>`.trim(),
-    task: { kind: 'guard-cheat', trialId: 'act2-cheat' },
+    task: { kind: 'guard-cheat', trialId: 'guard' },
     primaryLabel: 'End the guarded act',
   },
   {
     id: 'guard-debrief',
     act: 'act2',
-    eyebrow: 'Step 9 of 11',
+    eyebrow: 'Step 8 of 10',
     title: 'What enforcement left behind',
     body: `
 <p>The guard is off. Scroll the session record: every violation from the
@@ -244,7 +237,7 @@ logged each attempt.</p>`.trim(),
   {
     id: 'signals-to-scores',
     act: 'bridge',
-    eyebrow: 'Step 10 of 11',
+    eyebrow: 'Step 9 of 10',
     title: 'From signals to scores',
     body: `
 <p>Everything you triggered is now rows in a session file. The library
@@ -274,7 +267,7 @@ show up in the row's reason text instead, next to whatever did.</p>`.trim(),
   {
     id: 'your-files',
     act: 'finale',
-    eyebrow: 'Step 11 of 11',
+    eyebrow: 'Step 10 of 10',
     title: 'Your files',
     body: `
 <p>Your session is now three files: the session data, the replay recording
