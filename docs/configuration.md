@@ -271,7 +271,7 @@ With the one-line setup, set the monitor's options in `window.CyborgHunterConfig
 <script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
 ```
 
-Under ch.js, `CyborgHunter.init()` logs an error and returns a monitor that records nothing.
+With the one-line setup, `CyborgHunter.init()` logs an error and returns a monitor that records nothing.
 
 **Manual mode.** When using `CyborgHunter.init()` directly (not through the jsPsych extension), pass config inline:
 

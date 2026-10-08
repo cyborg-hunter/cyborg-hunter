@@ -177,8 +177,8 @@ describe('the one-line setup comes before the jsPsych extension', () => {
   }
 });
 
-// Under the one-line file the monitor's options go in
-// window.CyborgHunterConfig; CyborgHunter.init() there logs an error and
+// With the one-line setup the monitor's options go in
+// window.CyborgHunterConfig, and CyborgHunter.init() logs an error and
 // records nothing, so the pages that show how to set options show the
 // CyborgHunterConfig form before manual mode's init() call.
 describe('monitor options: CyborgHunterConfig comes before CyborgHunter.init()', () => {

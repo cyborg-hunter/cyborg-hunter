@@ -246,8 +246,8 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   own server) before manual mode's wiring, which is labelled as such.
   configuration.md and signals-reference.md set the monitor's options in
   `window.CyborgHunterConfig`, with `CyborgHunter.init()` shown as manual
-  mode's form: under ch.js, `init()` logs an error and returns a monitor
-  that records nothing.
+  mode's form: with the one-line setup, `init()` logs an error and returns
+  a monitor that records nothing.
 - CSV files (`summary.csv`, `event-log.csv`, `extensions.csv`, and the
   annotations' Export CSV in the report and on `/analyze/`): a text cell
   that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written
