@@ -275,10 +275,10 @@ test('top bar: the title, then the REC cue; the card label says the step only', 
 
 // ---------------------------------------------------------------------------
 // The first step: two paragraphs that name no act, then one button, "Start
-// the demo", larger than the tour's other buttons and centred 28px under the
-// text. The size and the centring are the first step's only.
+// the demo", centred 28px under the text. Every step's primary button has
+// the same size and centring, with the Back link beneath it.
 // ---------------------------------------------------------------------------
-test('first step: two paragraphs, then a large "Start the demo" centred under them', async ({ page }) => {
+test('first step: two paragraphs, then a large "Start the demo" centred under them; the next step\'s button matches', async ({ page }) => {
   await page.goto('/');
   await page.locator('#card h2').waitFor();
   const paragraphs = page.locator('#card .stepcopy p');
@@ -295,10 +295,16 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
   expect(Math.abs((button.x + button.width / 2) - (text.x + text.width / 2))).toBeLessThan(1);
   expect(Math.round(button.y - (last.y + last.height))).toBe(28);
 
-  await start.click(); // -> baseline (step 2): the tour's own button again
+  await start.click(); // -> baseline (step 2): the same size, centred, Back beneath
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
-  await expect(primaryButton(page)).toHaveCSS('font-size', '15px');
-  await expect(primaryButton(page)).toHaveCSS('padding', '10px 22px');
+  const next = primaryButton(page);
+  await expect(next).toHaveCSS('font-size', '17px');
+  await expect(next).toHaveCSS('padding', '14px 28px');
+  const copy = await page.locator('#card .stepcopy').boundingBox();
+  const nextBox = await next.boundingBox();
+  expect(Math.abs((nextBox.x + nextBox.width / 2) - (copy.x + copy.width / 2))).toBeLessThan(1);
+  const back = await page.locator('#card [data-action="back"]').boundingBox();
+  expect(back.y).toBeGreaterThan(nextBox.y + nextBox.height);
 });
 
 // ---------------------------------------------------------------------------

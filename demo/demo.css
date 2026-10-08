@@ -155,7 +155,14 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 /* ---------------------------------------------------------------------
  * Buttons
  * --------------------------------------------------------------------- */
-.btnrow{display:flex;gap:14px;align-items:center;margin-top:20px;flex-wrap:wrap;}
+/* Every step's button row: the primary action centred under the text column
+ * (.stepcopy's 60ch), larger, with the Back link beneath it. The row is a
+ * column, so the link, first in the markup, can come last; its top margin
+ * collapses with the text's to leave 28px between them. The autotype and
+ * fullscreen-entry rows share the class and centre the same way. */
+.btnrow{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:28px;max-width:60ch;}
+.btnrow .btn{font-size:17px;padding:14px 28px;}
+.btnrow .skip{order:1;}
 /* font-family AFTER font:inherit: the download buttons sit inside the mono
  * .file card and would otherwise inherit its monospace. */
 .btn{font:inherit;font-family:var(--ff-recursive);font-weight:600;padding:10px 22px;border-radius:4px;
@@ -166,13 +173,6 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 .btn:disabled{background:var(--line);color:var(--dim);cursor:not-allowed;}
 .btn:focus-visible, button:focus-visible, a:focus-visible{
   outline:2px solid var(--ink);outline-offset:2px;}
-/* The first step's one button, "Start the demo": larger, and centred under
- * the text. Its row is a plain block as wide as the text column (.stepcopy's
- * 60ch), so the auto margins centre the button on the text, and its top
- * margin collapses with the text's to leave 28px between them. */
-body[data-view="intro"] .btnrow{display:block;max-width:60ch;}
-body[data-view="intro"] .btnrow .btn{display:block;margin:28px auto 0;font-size:17px;padding:14px 28px;}
-
 .secondary{margin-top:14px;font-size:13.5px;}
 .secondary a{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
 
