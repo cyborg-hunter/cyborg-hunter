@@ -39,6 +39,7 @@
 // mock's exit() (the Esc-exit path), used below.
 
 import { test as base, expect } from '@playwright/test';
+import { STEPS } from '../steps.js';
 
 async function installFrozenClock(page) {
   await page.addInitScript(() => {
@@ -205,10 +206,15 @@ export async function waitForLamp(page, key, { hard = false, timeout = 7000 } = 
 // Walks forward to the guard's entry step with the primary button alone:
 // the tour never blocks an advance, so no step's task has to be done on the
 // way. The entry step has no primary button (its box carries the library's
-// own), so the check comes before each click.
+// own), so the check comes before each click. At most one click per step,
+// and the walk must end on the entry step: a missed entry box fails here,
+// on the step label, not on a click that waits out the test's timeout.
 export async function walkToGuardEntry(page) {
   const enter = page.locator('[data-action="enter-fullscreen"]');
-  while (await enter.count() === 0) await primaryButton(page).click();
+  for (let clicks = 0; clicks < STEPS.length && await enter.count() === 0; clicks++) {
+    await primaryButton(page).click();
+  }
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 11');
 }
 
 // Fast path from a fresh welcome screen to the last step, "Your files":

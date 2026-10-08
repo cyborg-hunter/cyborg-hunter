@@ -37,10 +37,6 @@ export const RAIL_GROUPS = {
 export const LIVE_PANE = {
   title: 'Live session record',
   tabs: { stream: 'signal stream', json: 'raw JSON' },
-  caption:
-    'Every row accumulates into {{pid}}.json, the file you download at the ' +
-    'end and feed to the CLI. The stream is the demo\'s live view; the JSON ' +
-    'is the product\'s actual file.',
   trials: { allLabel: 'All', sessionLabel: 'session', groupLabel: 'Filter the stream by trial' },
 };
 
@@ -91,7 +87,6 @@ server.</p>`.trim(),
     positioning: true,
     task: null,
     primaryLabel: 'Start the demo',
-    secondary: null,
   },
   {
     id: 'baseline',
@@ -109,7 +104,6 @@ record under this card lists each event the moment it happens.</p>`.trim(),
       prompt: 'How is your day today?',
     },
     primaryLabel: 'Answered →',
-    secondary: null,
   },
   {
     id: 'clipboard-cheat',
@@ -127,12 +121,13 @@ the words.</p>`.trim(),
     task: {
       kind: 'copy-paste',
       trialId: 'act1-paste',
-      question: 'What is the capital of Australia?',
-      providedAnswer: 'Canberra',
+      question: 'How is your day today?',
+      providedAnswer: 'Great question! 😊 Honestly? My day has been a rich tapestry of moments ' +
+        '— both big and small — that have reminded me what it truly means to be human. ' +
+        'It\'s not just a day — it\'s a journey.',
       targetPastes: 2,
     },
     primaryLabel: 'Pasted twice →',
-    secondary: null,
   },
   {
     id: 'tab-away',
@@ -151,7 +146,6 @@ carry the most weight. The record keeps the exact duration and timestamps
 of each absence either way.</p>`.trim(),
     task: { kind: 'tab-away', trialId: 'act1-tabaway' },
     primaryLabel: 'Back for good →',
-    secondary: null,
   },
   {
     id: 'browser-rearrange',
@@ -168,7 +162,6 @@ resize it, and watch the record.</p>
 continues, whatever shape the window takes.</p>`.trim(),
     task: { kind: 'sidebar-resize', trialId: 'act1-sidebar' },
     primaryLabel: 'Done rearranging →',
-    secondary: null,
   },
   {
     id: 'autotype',
@@ -194,7 +187,6 @@ not automatic verdicts.</p>`.trim(),
       doneLabel: 'Typed ✓',
     },
     primaryLabel: 'Continue →',
-    secondary: null,
   },
   {
     id: 'guard-entry',
@@ -218,7 +210,6 @@ until you do.</p>`.trim(),
         'can’t run here. Skip ahead: the rest of the tour still works without it.',
     },
     primaryLabel: null, // the entry box carries the library's own button
-    secondary: null,
   },
   {
     id: 'guard-cheat',
@@ -235,7 +226,6 @@ logging a violation trail each time.</p>
 that, fullscreen is no longer required.</p>`.trim(),
     task: { kind: 'guard-cheat', trialId: 'act2-cheat' },
     primaryLabel: 'End the guarded act',
-    secondary: null,
   },
   {
     id: 'guard-debrief',
@@ -250,7 +240,6 @@ two different postures: Act 1 recorded them silently; Act 2 intervened and
 logged each attempt.</p>`.trim(),
     task: null,
     primaryLabel: 'Continue to scoring →',
-    secondary: null,
   },
   {
     id: 'signals-to-scores',
@@ -281,7 +270,6 @@ detected AI extension, and an edge exit do not add to this score; they
 show up in the row's reason text instead, next to whatever did.</p>`.trim(),
     task: null,
     primaryLabel: 'See your files →',
-    secondary: null,
   },
   {
     id: 'your-files',
@@ -298,9 +286,11 @@ same report with the command-line tool, the way you would with real study
 data.</p>`.trim(),
     task: { kind: 'downloads', trialId: null },
     primaryLabel: null, // the step's own action is the panel's "Open in the analyzer"
-    secondary: null,
   },
 ];
+
+/** The link back to the previous step, on every step but the first. */
+export const BACK_LABEL = 'Go back';
 
 /** The last step's files, in two download batches (a Save button per file,
  * and one "Save all into a folder" for all five where the browser has a

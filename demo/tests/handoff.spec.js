@@ -139,8 +139,8 @@ for (const [how, answer] of [
 
 // ---------------------------------------------------------------------------
 // Replay viewer: keycast overlay (walkthrough item 8) + DOM-tier
-// reconstruction (walkthrough item 12's regression pin). Types the real
-// answer ('Canberra') at baseline so trial 0's recording carries real
+// reconstruction (walkthrough item 12's regression pin). Types an answer
+// ('Canberra') at baseline so trial 0's recording carries real
 // keydown/keyup events (keys:'full' is the recorder default) AND a real
 // input value to reconstruct, then presses play over that segment in the
 // replay viewer's own mount and checks a keycast chip appears.

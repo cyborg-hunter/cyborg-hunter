@@ -39,7 +39,7 @@ export function renderRowHtml(row) {
     '</div>';
 }
 
-export function makeLivePane(mount, pid) {
+export function makeLivePane(mount) {
   var frozen = false, count = 0, currentTab = 'stream';
   // Rail state: `trials` is the ordered list of real-trial tabs (never
   // includes 'all' or 'session'); `sessionTab` is null until the first
@@ -61,8 +61,7 @@ export function makeLivePane(mount, pid) {
     '<div class="lp-stream" data-role="lp-stream"><div class="lp-cols">' +
     '<span>time</span><span>trial</span><span>event</span><span>detail</span></div></div>' +
     '<pre class="lp-json" data-role="lp-json" hidden></pre>' +
-    '</div></div>' +
-    '<p class="lp-caption">' + escHtml(LIVE_PANE.caption.replace('{{pid}}', pid)) + '</p>';
+    '</div></div>';
   var bodyEl = mount.querySelector('.lp-body');
   var trialsEl = mount.querySelector('[data-role="lp-trials"]');
   var streamEl = mount.querySelector('[data-role="lp-stream"]');

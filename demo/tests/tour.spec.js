@@ -45,7 +45,12 @@ import { HANDOFF, SAVE_TO_FOLDER } from '../steps.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
 
-const ANSWER = 'Canberra';
+// Step 3's text to copy: an assistant's answer to "How is your day today?".
+const ANSWER = 'Great question! 😊 Honestly? My day has been a rich tapestry of moments — both big and small — ' +
+  'that have reminded me what it truly means to be human. It\'s not just a day — it\'s a journey.';
+// The record cuts a pasted text at 28 characters (demo.js paneRow), so its
+// rows carry only the answer's first words.
+const ANSWER_START = 'Great question!';
 const AUTOTYPE_TEXT = 'No one is typing this. It is being inserted.';
 
 // ---------------------------------------------------------------------------
@@ -72,11 +77,27 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 3: clipboard cheat (copy the question, paste the answer x2) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 3 of 11');
+  await expect(page.locator('#card .task .question')).toHaveText('How is your day today?');
+  // The text to copy is a bordered block of its own between the step's text
+  // and the task panel (outside the grey panel), its hint on a line under it.
+  const offered = page.locator('#card .answerchip code');
+  await expect(offered).toHaveText(ANSWER);
+  await expect(page.locator('#card .task .answerchip')).toHaveCount(0);
+  await expect(page.locator('#card > .stepcopy + .answerchip + .task')).toHaveCount(1);
+  const hint = page.locator('#card .answerchip .hint');
+  await expect(hint).toHaveText('copy this, then paste it below');
+  const offeredBox = await offered.boundingBox();
+  expect((await hint.boundingBox()).y).toBeGreaterThanOrEqual(offeredBox.y + offeredBox.height);
+  // Every step after the first offers the one link back, "Go back"; the
+  // record under the card has no caption.
+  await expect(backButton(page)).toHaveText('Go back');
+  await expect(page.locator('[data-role="live-pane"] .lp-caption')).toHaveCount(0);
+  const offeredText = await offered.textContent();
   await dispatchCopy(page);
-  await dispatchPaste(page, '#card textarea', ANSWER);
+  await dispatchPaste(page, '#card textarea', offeredText);
   await expect(railRow(page, 'paste')).toHaveClass(/lit/);
   await expect(railRow(page, 'paste')).not.toHaveClass(/hardlit/); // 1st paste: below the hard threshold (2)
-  await dispatchPaste(page, '#card textarea', ANSWER);
+  await dispatchPaste(page, '#card textarea', offeredText);
   await expect(railRow(page, 'paste')).toHaveClass(/hardlit/); // 2nd paste crosses it
   await expect(railRow(page, 'paste').locator('.n')).toHaveText('2');
   // Only the paste that CROSSES the hard threshold is flagged hard in the
@@ -85,10 +106,10 @@ test('happy path: all 11 steps, welcome through your files', async ({ page, froz
   // both paste rows carry the pasted text regardless.
   const pasteRows = page.locator('.lp-row', { has: page.locator('.lp-event', { hasText: 'paste' }) });
   await expect(pasteRows).toHaveCount(2);
-  await expect(pasteRows.nth(0)).toContainText(ANSWER);
-  await expect(pasteRows.nth(1)).toContainText(ANSWER);
+  await expect(pasteRows.nth(0)).toContainText(ANSWER_START);
+  await expect(pasteRows.nth(1)).toContainText(ANSWER_START);
   await expect(page.locator('.lp-row.hard')).toHaveCount(1);
-  await expect(page.locator('.lp-row.hard')).toContainText(ANSWER);
+  await expect(page.locator('.lp-row.hard')).toContainText(ANSWER_START);
   await primaryButton(page).click();
 
   // ----- Step 4: tab-away, three bins (frozen clock for exact durations) -----
@@ -274,7 +295,6 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
 // others (renderDownloadsPanel), so the walk goes all the way.
 // ---------------------------------------------------------------------------
 test('second step: the question and a box, no code; no step has a task label or a link ahead', async ({ page }) => {
-  test.setTimeout(30000);
   const stepLabel = page.locator('[data-role="step-label"]');
   async function noLabelNoLinkAhead() {
     await expect(page.locator('#card .task .label')).toHaveCount(0);

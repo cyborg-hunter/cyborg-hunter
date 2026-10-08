@@ -60,7 +60,7 @@ test('typefaces mirror the report roles', () => {
     body: 'Recursive', '.stepcard h1': 'Space Grotesk', '.topbar .brand': 'Space Grotesk',
     '.eyebrow': 'Sofia Sans', '.card h3': 'Sofia Sans', '.replicate h3': 'Sofia Sans',
     '.batch-heading': 'Sofia Sans', '.filetext-dialog h3': 'Sofia Sans', '.lp-cols': 'Sofia Sans',
-    '.hint': 'Tomorrow', '.rule': 'Tomorrow', '.lp-caption': 'Recursive', '.file small': 'Recursive',
+    '.hint': 'Tomorrow', '.rule': 'Tomorrow', '.file small': 'Recursive',
     '.check li .n': 'Sora', '.rec': 'Sora', '.chip': 'Sora',
     '.btn': 'Recursive', '.lp-tab': 'Recursive',
     '.lp-t': 'ui-monospace', '.lp-stream': 'ui-monospace', 'pre': 'ui-monospace',
@@ -95,6 +95,17 @@ test('the lamps sit a gap under the rail title; group heads are styled as .hint 
 
 test('no code tabs and no task label are styled', () => {
   assert.doesNotMatch(css, /\.code-tab|\.task \.label/);
+});
+
+test('the record has no caption to style', () => {
+  assert.doesNotMatch(css, /\.lp-caption/);
+});
+
+// Its place (between the step's text and the task panel) and the hint under
+// the text are checked in the browser (tour.spec.js).
+test('the text to copy keeps its own border, with the hint on a line of its own', () => {
+  assert.equal(lastProp(rules, '.answerchip', 'box-shadow'), 'inset 0 0 0 1px var(--line)');
+  assert.equal(lastProp(rules, '.answerchip .hint', 'display'), 'block');
 });
 
 test('no promoted state remains: the wide stream rules are unconditional', () => {

@@ -124,11 +124,12 @@ code, pre{font-family:var(--mono);}
 .task{background:var(--ground);border-radius:0;padding:22px 24px;margin:0 0 18px;}
 .question{font-size:17px;font-weight:600;margin:0 0 16px;}
 
-.answerchip{display:flex;align-items:center;gap:10px;background:var(--panel);
-  border-radius:4px;box-shadow:inset 0 0 0 1px var(--line);padding:10px 14px;
-  margin:0 0 16px;max-width:340px;}
-.answerchip code{font-family:var(--mono);font-size:14px;}
-.answerchip .hint{margin-left:auto;}
+/* The text to copy (step 3): a bordered block of its own between the step's
+ * text and the task panel, as wide as the text, the hint on a line under it. */
+.answerchip{background:var(--panel);border-radius:4px;box-shadow:inset 0 0 0 1px var(--line);
+  padding:12px 14px;margin:0 0 18px;max-width:60ch;}
+.answerchip code{font-family:var(--mono);font-size:14px;line-height:1.5;}
+.answerchip .hint{display:block;margin-top:8px;}
 
 textarea, input[type="text"]{width:100%;font:inherit;padding:10px 12px;
   border:1px solid var(--line);border-radius:4px;background:var(--panel);
@@ -182,11 +183,11 @@ body[data-view="intro"] .btnrow .btn{display:block;margin:28px auto 0;font-size:
 .skip{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
 .skip:hover{color:var(--ink);}
 
-/* Guard entry screen (step 8): the library's own entry message, rendered
+/* Guard entry screen (step 7): the library's own entry message, rendered
  * verbatim, in a recessed inset matching .task. */
 .entrybox{background:var(--ground);border-radius:0;padding:22px 24px;margin:0 0 18px;}
 
-/* End-guard button (step 9): rendered as a sibling OUTSIDE the scramble
+/* End-guard button (step 8): rendered as a sibling OUTSIDE the scramble
  * wrapper, so its legibility can never depend on panel/blur context — a
  * standalone rule rather than composing with .btn keeps that true even if
  * .btn's cascade changes later. */
@@ -348,9 +349,6 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 /* Same 560px cap as the signal stream: both views scroll at one height. */
 .lp-json{background:none;color:var(--ink);margin:0;padding:0;border-radius:0;
   max-height:560px;overflow:auto;font:11.8px/1.6 var(--mono);}
-
-.lp-caption{font-family:var(--ff-recursive);margin:10px 0 0;font-size:11.5px;color:var(--dim);line-height:1.5;}
-.lp-caption code{font-family:var(--mono);font-size:11px;}
 
 /* ---------------------------------------------------------------------
  * Files step (the last one) — the hand-off to the analyzer and the line

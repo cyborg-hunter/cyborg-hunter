@@ -62,8 +62,20 @@ test('the second step asks how your day is, in one paragraph, with no code under
     assert.doesNotMatch(s.body, /Below the task|This page drives/, s.id);
   }
 });
-test('no step links ahead of the tour', () => {
-  for (const s of STEPS) assert.equal(s.secondary, null, s.id);
+test('no step links ahead of the tour: no step carries a secondary field', () => {
+  for (const s of STEPS) assert.ok(!('secondary' in s), s.id);
+});
+test('the third step asks how your day is and offers an assistant\'s answer to copy', () => {
+  const cheat = STEPS[2];
+  assert.equal(cheat.id, 'clipboard-cheat');
+  assert.equal(cheat.task.question, 'How is your day today?');
+  assert.equal(cheat.task.providedAnswer, 'Great question! 😊 Honestly? My day has been a rich tapestry of moments ' +
+    '— both big and small — that have reminded me what it truly means to be human. It\'s not just a day — it\'s a journey.');
+});
+test('the link back reads "Go back"; the record has no caption', () => {
+  assert.equal(copy.BACK_LABEL, 'Go back');
+  assert.ok(!('caption' in copy.LIVE_PANE), 'LIVE_PANE.caption is still there');
+  assert.doesNotMatch(JSON.stringify(copy.LIVE_PANE), /accumulates into/);
 });
 test('no tier vocabulary in steps 2-9', () => {
   // Steps 2-9 only: step 1 may NAME the product ("triage report") without narrating scores.

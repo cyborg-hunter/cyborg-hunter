@@ -18,7 +18,7 @@
 
 import {
   STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS,
-  DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE, SCORING_PANEL, SAVE_TO_FOLDER
+  DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE, SCORING_PANEL, SAVE_TO_FOLDER, BACK_LABEL
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
@@ -96,7 +96,7 @@ function exitFullscreenIfActive() {
   }
 }
 
-// Step 8's 1.5s fullscreen-entry race. Calls OUR OWN requestFullscreen() —
+// Step 7's 1.5s fullscreen-entry race. Calls OUR OWN requestFullscreen() —
 // not GuardFriction.requestFullscreen(), which fires the request and
 // swallows any promise rejection — so we get a real
 // promise to race against a timeout and the 'fullscreenchange' event.
@@ -259,7 +259,7 @@ function startTour(participantId, capabilities, manifest) {
   // class="card"), permanent markup under the step card in index.html's
   // [data-role="pane-slot"]; it stays there on every step.
   var paneEl = document.querySelector('[data-role="live-pane"]');
-  state.pane = makeLivePane(paneEl, participantId);
+  state.pane = makeLivePane(paneEl);
   state.t0 = performance.now();
 
   // opts.final is the download seam's flag ONLY (buildDownloadFile passes
@@ -651,7 +651,7 @@ function startTour(participantId, capabilities, manifest) {
     }
   }
 
-  // Drives step 8's fullscreen-entry race. A guard API absence (bundle
+  // Drives step 7's fullscreen-entry race. A guard API absence (bundle
   // failed to load) is treated the same as a failed race — fallback + skip,
   // never a throw — since advancing into guard-cheat with no guard running
   // would silently pretend enforcement is active when it isn't.
@@ -1101,7 +1101,7 @@ function startTour(participantId, capabilities, manifest) {
       (session.softScore || 0) + ' (flags at ' + manifest.signals.softScoreThreshold + ' or above).';
   }
 
-  // Step 8's guard entry: the library's own entry message rendered VERBATIM
+  // Step 7's guard entry: the library's own entry message rendered VERBATIM
   // (truth-by-construction — never a drifting copy of it), with its own
   // button wired to the existing fullscreen-entry flow. Not wrapped in
   // .jspsych-content: the guard curtain never scrambles this step (it isn't
@@ -1166,22 +1166,26 @@ function startTour(participantId, capabilities, manifest) {
     if (!task) return '';
     if (task.kind === 'downloads') return renderDownloadsPanel(task);
     if (task.kind === 'fullscreen-entry') return renderGuardEntryPanel();
-    // scramble coupling: GuardFriction's obfuscateContent() only touches
-    // getJsPsychContent()'s match (.jspsych-content / .jspsych-display-element
-    // / #jspsych-content) — this class makes every task panel a valid target,
-    // not just Act 2's, so a violation during any step scrambles the task.
-    var parts = ['<div class="task jspsych-content">'];
-    // The actual question text (baseline's `prompt`, clipboard-cheat's
-    // `question`) gets the plain bold .question treatment; .rule is
-    // reserved for callout-style copy (the guard's fallback-note).
-    var questionText = task.prompt || task.question;
-    if (questionText) parts.push('<p class="question">' + tpl(questionText) + '</p>');
+    var parts = [];
+    // The text to copy (clipboard-cheat): a bordered block of its own ahead
+    // of the panel, so it sits between the step's text and the box it is
+    // pasted into, outside the grey panel.
     if (task.kind === 'copy-paste') {
       parts.push(
         '<div class="answerchip"><code>' + escHtml(task.providedAnswer) + '</code>' +
         '<span class="hint">copy this, then paste it below</span></div>'
       );
     }
+    // scramble coupling: GuardFriction's obfuscateContent() only touches
+    // getJsPsychContent()'s match (.jspsych-content / .jspsych-display-element
+    // / #jspsych-content) — this class makes every task panel a valid target,
+    // not just Act 2's, so a violation during any step scrambles the task.
+    parts.push('<div class="task jspsych-content">');
+    // The actual question text (baseline's `prompt`, clipboard-cheat's
+    // `question`) gets the plain bold .question treatment; .rule is
+    // reserved for callout-style copy (the guard's fallback-note).
+    var questionText = task.prompt || task.question;
+    if (questionText) parts.push('<p class="question">' + tpl(questionText) + '</p>');
     if (task.kind === 'type-answer' || task.kind === 'copy-paste') {
       parts.push('<textarea rows="3" placeholder="Type your answer here"></textarea>');
     }
@@ -1196,7 +1200,7 @@ function startTour(participantId, capabilities, manifest) {
       parts.push('<p class="hint">Target pastes: ' + task.targetPastes + '</p>');
     }
     parts.push('</div>');
-    // End-guard button (step 9): a sibling OUTSIDE .jspsych-content — its
+    // End-guard button (step 8): a sibling OUTSIDE .jspsych-content — its
     // legibility can never depend on scramble/blur context — doubling as
     // this step's primary action (steps.js sets primaryLabel for it, but
     // renderStep() suppresses the normal .btnrow primary for guard-cheat so
@@ -1205,16 +1209,6 @@ function startTour(participantId, capabilities, manifest) {
       parts.push('<button class="endguard" data-action="end-guard">' + tpl(STEPS[state.stepIndex].primaryLabel) + '</button>');
     }
     return parts.join('');
-  }
-
-  function renderSecondary(step) {
-    if (!step.secondary) return '';
-    return step.secondary.map(function (s) {
-      if (s.kind === 'link') {
-        return '<a href="#" class="skip" data-key="' + s.key + '">' + s.label + '</a>';
-      }
-      return '';
-    }).join(' ');
   }
 
   function renderStep(i) {
@@ -1238,7 +1232,7 @@ function startTour(participantId, capabilities, manifest) {
     // panel.
     if (step.id === 'signals-to-scores') html += renderScoringPanel(manifest);
     html += '<div class="btnrow">';
-    if (i > 0) html += '<a href="#" class="skip" data-action="back">Back</a>';
+    if (i > 0) html += '<a href="#" class="skip" data-action="back">' + escHtml(BACK_LABEL) + '</a>';
     // guard-cheat's primary lives on the end-guard button rendered above
     // (outside the scramble wrapper) instead of here — never both. Steps
     // with primaryLabel: null (guard-entry) render no primary at all; the
@@ -1247,8 +1241,6 @@ function startTour(participantId, capabilities, manifest) {
       html += '<button class="btn" data-action="primary">' + tpl(step.primaryLabel) + '</button>';
     }
     html += '</div>';
-    var secondary = renderSecondary(step);
-    if (secondary) html += '<p class="secondary">' + secondary + '</p>';
     cardEl.innerHTML = html;
   }
 
