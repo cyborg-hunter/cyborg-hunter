@@ -120,7 +120,7 @@ other producers and converts jsPsych `schema_version: 1` recordings on the
 way in ([docs/v2-player-migration.md](docs/v2-player-migration.md)).
 Releases before 0.8.0 recorded the earlier v1 shape.
 
-With the one-line setup, add `data-replay` to the tag and save `CyborgHunter.replay()` in your save code ([details](docs/advanced-integration.md#replay-with-the-one-liner)):
+With the one-line setup, replay is `data-replay` on the tag, and the experiment's save code saves what `CyborgHunter.replay()` returns ([details](docs/advanced-integration.md#replay-with-the-one-liner)):
 
 ```html
 <script src="https://unpkg.com/cyborg-hunter/dist/ch.js" data-replay="dom"></script>
@@ -132,7 +132,7 @@ timeline.push({
   type: jsPsychPipe,
   action: 'save',
   experiment_id: EXPERIMENT_ID,
-  filename: participantId + '-replay-' + Date.now() + '.json',   // your variable holding the ID ch.js records
+  filename: participantId + '-replay-' + Date.now() + '.json',   // the experiment's variable holding the ID ch.js records
   data_string: () => JSON.stringify(CyborgHunter.replay())
 });
 ```
@@ -197,7 +197,7 @@ Three presets: `permissive` / `standard` (default) / `strict`. Per-signal thresh
 
 Tab-aways are captured session-wide, not just during trials: since 0.6.1 the session report keeps a timestamped `tabAwayEvents[]` for every tab-away — including those during consent, tutorial, or study phases — so session timelines can place them. Data saved with older versions keeps only durations (`tabAwaySums`) for off-trial events; the timeline footer counts those as unplaceable. (0.6.1 also renames the `layoutShifts` signal to `viewportWidthShifts` — it measures viewport-width changes, not Web-Vitals CLS — keeping the old key as a deprecated alias.)
 
-The **guards** (`data-guards` on the tag: the honeypot is on by default, friction is opt-in) add: fullscreen / sidebar / focus enforcement (with content-scrambling overlay on violation), AI refusal notices in the DOM, and honeypot fields (hidden + visible bait) that catch sidebar-LLMs and agentic browsers (Browser Use, Operator, Computer Use). The visible bait writes `ai_use` / `ai_report` columns into your saved data, and the report surfaces them in `summary.csv` as `honeypot_ai_use` / `honeypot_ai_report` (plus a "self-reported AI use" note in the triage reason).
+The **guards** (`data-guards` on the tag: the honeypot is on by default, friction is opt-in) add: fullscreen / sidebar / focus enforcement (with content-scrambling overlay on violation), AI refusal notices in the DOM, and honeypot fields (hidden + visible bait) that catch sidebar-LLMs and agentic browsers (Browser Use, Operator, Computer Use). The visible bait writes `ai_use` / `ai_report` columns into the experiment's saved data, and the report surfaces them in `summary.csv` as `honeypot_ai_use` / `honeypot_ai_report` (plus a "self-reported AI use" note in the triage reason).
 
 ## What it doesn't detect
 

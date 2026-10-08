@@ -88,5 +88,5 @@ One caveat specific to this fixture: the timelines print "perfNow→session-rel 
 
 ## Next
 
-- Point the same config at your own data directory, with `participantIdField` set to the column your data holds the ID in (`participantId` under the one-line setup; this dataset uses `subject_ID`): [quickstart § 5](quickstart.md#5-generate-the-report).
+- The same config reads a study's own data directory, with `participantIdField` set to the column that holds the ID (`participantId` under the one-line setup; this dataset uses `subject_ID`): [quickstart § 5](quickstart.md#5-generate-the-report).
 - Before making exclusion decisions, read [interpreting-signals.md](interpreting-signals.md).

@@ -142,7 +142,7 @@ If `integritySession` is missing on the last row, `finalize()` either wasn't cal
 
 ### Standalone (non-jsPsych) usage
 
-If your experiment isn't jsPsych, load `ch.js` instead (`ch-qualtrics.js` on [Qualtrics](qualtrics.md), `ch-labjs.js` on [lab.js](labjs.md)): on a page without a framework, mark trials with `data-ch-trial` or `CyborgHunter.mark()` and save `CyborgHunter.data()` ([Vanilla segmentation reference](#vanilla-segmentation-reference)). To drive the monitor yourself, for example to screen a participant out mid-session with `shouldScreenout()` (under ch.js it always returns `false`), use the library directly:
+An experiment that isn't jsPsych loads `ch.js` as well (`ch-qualtrics.js` on [Qualtrics](qualtrics.md), `ch-labjs.js` on [lab.js](labjs.md)): on a page without a framework, trials are marked with `data-ch-trial` or `CyborgHunter.mark()`, and the experiment saves `CyborgHunter.data()` ([Vanilla segmentation reference](#vanilla-segmentation-reference)). Code that drives the monitor itself, for example to screen a participant out mid-session with `shouldScreenout()` (with the one-line setup it always returns `false`), uses the library directly:
 
 ```html
 <script src="path/to/cyborg-hunter.min.js"></script>
