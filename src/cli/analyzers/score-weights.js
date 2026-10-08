@@ -37,9 +37,18 @@ export const SCORE_SIGNALS = [
   // Edge exits are computed per trial by edge-exit.js and summed on the
   // triage row; they are not a summary field.
   { key: 'edgeExits',      weight: 0, count: (s, edgeExitCount) => edgeExitCount || 0 },
+  // The report's pointer checks (analyzers/cursor.js): one per check that
+  // fired (0–3), not per event. Ranks within a tier like every key here.
+  { key: 'cursor',         weight: 0, count: s => (s.cursorAnalysis && typeof s.cursorAnalysis.factCount === 'number') ? s.cursorAnalysis.factCount : 0,
+    label: 'pointer checks', hint: 'ranking weight; the tier is unchanged. 0–3, one per check that fired, not per event.' },
 ];
 
 const KEYS = SCORE_SIGNALS.map(s => s.key);
+
+// Display names for keys whose config name is not what a reader meets on
+// the page: the breakdown, formulaText and the settings panel print these.
+export const SIGNAL_LABELS = Object.fromEntries(SCORE_SIGNALS.filter(s => s.label).map(s => [s.key, `${s.label} (${s.key})`]));
+const labelOf = (k) => SIGNAL_LABELS[k] || k;
 
 export const DEFAULT_SCORE_WEIGHTS = Object.fromEntries(SCORE_SIGNALS.map(s => [s.key, s.weight]));
 
@@ -125,7 +134,7 @@ export const DEFAULT_RESOLVED_WEIGHTS = resolveScoreWeights(null).weights;
 // Callers keep their own verbatim wording for the default weights.
 export function formulaText(weights, times = '×') {
   return KEYS.filter(k => weights[k].weight !== 0)
-    .map(k => `${weights[k].weight}${times}${k}${weights[k].max != null ? ` (max ${weights[k].max})` : ''}`)
+    .map(k => `${weights[k].weight}${times}${labelOf(k)}${weights[k].max != null ? ` (max ${weights[k].max})` : ''}`)
     .join(' + ') || '0';
 }
 

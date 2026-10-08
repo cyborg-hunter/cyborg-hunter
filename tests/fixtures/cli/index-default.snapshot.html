@@ -228,6 +228,13 @@
     .signal-value { font-family: var(--ff-sora); font-size: 18px; font-weight: 700; line-height: 1; }
     .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
 
+    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-checks cell. */
+    .cursor-table { border-collapse: collapse; margin: 6px 0; }
+    .cursor-table caption { text-align: left; font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
+    .cursor-table th { text-align: left; font-weight: normal; padding: 2px 10px 2px 0; }
+    .cursor-table tr.fired th { font-weight: 600; }
+    .cursor-cell { font-family: var(--ff-tomorrow); font-size: 11px; color: var(--dim); }
+
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
        proportional to each term's share of the total. */
@@ -439,6 +446,7 @@
       <select name="sort">
         <option value="tier" selected>Tier (hard first)</option>
         <option value="score">Score &darr;</option>
+        <option value="cursor">Pointer checks &darr;</option>
         <option value="id">ID</option>
       </select>
     </label>
@@ -450,6 +458,7 @@
        data-sanitized="DEMO-FIXT"
        data-tier="hard"
        data-score="11"
+       data-cursor="-1"
        data-reason="2 paste events; 1 tab-away ≥10s">
     <div class="cohort-row-top">
       <span class="tier-dot" data-tier="hard"></span>
@@ -458,6 +467,7 @@
     </div>
     <div class="cohort-row-bot">
       <span class="reason-excerpt">2 paste events; 1 tab-away ≥10s</span>
+      <span class="cursor-cell">pointer checks: not recorded</span>
       <span class="tier-badge" data-tier="hard">HARD</span>
     </div>
   </div>
@@ -594,6 +604,13 @@
         <span class="signal-label">Edge exits</span>
       </div>
     
+      <div class="signal-tile tone-zero"
+           role="listitem"
+           title="Browser-reported checks that fired (automation flag, clicks the page dispatched, trials clicked without pointer movement); 0–3">
+        <span class="signal-value">0</span>
+        <span class="signal-label">Pointer checks</span>
+      </div>
+    
   </div>
     <div class="score-breakdown">
     <span class="score-term">
@@ -624,6 +641,26 @@
     </div></div>
   
     <p class="muted note">Visual renderers not available (install the canvas package).</p>
+    <div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4><p class="muted note">device facts and click provenance not recorded (library before 0.14); taps and scripted clicks cannot be told apart, so the checks are not recorded.</p>
+    <table class="cursor-table"><caption>browser-reported checks</caption>
+      <tr class=""><th>automation flag set by the browser</th><td>not recorded</td></tr>
+      <tr class=""><th>clicks the page’s own scripts dispatched</th><td>not recorded</td></tr>
+      <tr class=""><th>trials clicked without pointer movement</th><td>not recorded</td></tr>
+    </table>
+    <table class="cursor-table"><caption>reported, no verdict</caption>
+      <tr><th>clicks after a pointer jump</th><td>1 of 7 (act1-paste)</td></tr>
+      <tr><th>movement duration</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>path length</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>displacement</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>mean speed</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>efficiency (per movement)</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>maximum deviation from the chord</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>moves per trial</th><td>1.0 <span class="muted">(n = 6)</span></td></tr>
+      <tr><th>movements per trial</th><td>2.0 <span class="muted">(n = 6)</span></td></tr>
+      <tr><th>keyboard-activated clicks</th><td>0</td></tr>
+      <tr><th>movements · clicks · capped trials</th><td>13 · 7 · 0</td></tr>
+    </table>
+    <p class="muted note">monitor stream, median 3321 ms between samples, page coordinates (scrolling can look like a jump); scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants in cursor-limits.json; <a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>.</p></div>
     <div class="image-block replay-block">
       <h4 class="section-heading">Session replay</h4>
       <p class="replay-note">No replay artifact (recording was not enabled for this session).</p>
@@ -859,12 +896,18 @@
       // --- Sort ---
       const sortEl = document.querySelector('.sort-wrap select');
       sortEl.addEventListener('change', () => {
-        const key = sortEl.value;  // 'score' | 'id' | 'tier'
+        const key = sortEl.value;  // 'score' | 'cursor' | 'id' | 'tier'
         const tierRank = { hard: 0, soft: 1, clean: 2 };
         const parent = rows[0]?.parentNode;
         if (!parent) return;
         const sorted = [...rows].sort((a, b) => {
           if (key === 'score') return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          // 'cursor': fired checks desc (not recorded = -1 and null rows last), then score desc.
+          if (key === 'cursor') {
+            const dc = parseInt(b.dataset.cursor, 10) - parseInt(a.dataset.cursor, 10);
+            if (dc !== 0) return dc;
+            return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          }
           if (key === 'id')    return a.dataset.pid.localeCompare(b.dataset.pid);
           // 'tier': hard first, then soft, then clean; within tier, score desc.
           const dt = tierRank[a.dataset.tier] - tierRank[b.dataset.tier];

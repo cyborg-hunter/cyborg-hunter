@@ -28,7 +28,7 @@ describe('score-weights: defaults', () => {
     assert.deepEqual(SCORE_SIGNALS.map(s => s.key), [
       'paste', 'copy', 'sidebar', 'tabaway', 'tabawayLong', 'tabawayMedium', 'flicker',
       'drop', 'fastTyping', 'synthetic', 'foreignInput', 'aiExtensions', 'kbShortcuts',
-      'viewportShifts', 'zoom', 'edgeExits',
+      'viewportShifts', 'zoom', 'edgeExits', 'cursor',
     ]);
   });
 });

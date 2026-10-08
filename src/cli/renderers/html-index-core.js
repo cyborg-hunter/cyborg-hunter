@@ -22,7 +22,7 @@
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';
 import { listSidebarOpenings } from '../analyzers/summary.js';
-import { resolveScoreWeights, customWeightsText, formatScore } from '../analyzers/score-weights.js';
+import { resolveScoreWeights, customWeightsText, formatScore, SIGNAL_LABELS } from '../analyzers/score-weights.js';
 import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
@@ -350,6 +350,13 @@ ${fontFaceCss}    :root {
     .signal-tile.tone-zero     { color: #b8b1a0; border-color: #ebe6d8; background: transparent; }
     .signal-value { font-family: var(--ff-sora); font-size: 18px; font-weight: 700; line-height: 1; }
     .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
+
+    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-checks cell. */
+    .cursor-table { border-collapse: collapse; margin: 6px 0; }
+    .cursor-table caption { text-align: left; font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
+    .cursor-table th { text-align: left; font-weight: normal; padding: 2px 10px 2px 0; }
+    .cursor-table tr.fired th { font-weight: 600; }
+    .cursor-cell { font-family: var(--ff-tomorrow); font-size: 11px; color: var(--dim); }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -779,12 +786,18 @@ ${fontFaceCss}    :root {
       // --- Sort ---
       const sortEl = document.querySelector('.sort-wrap select');
       sortEl.addEventListener('change', () => {
-        const key = sortEl.value;  // 'score' | 'id' | 'tier'
+        const key = sortEl.value;  // 'score' | 'cursor' | 'id' | 'tier'
         const tierRank = { hard: 0, soft: 1, clean: 2 };
         const parent = rows[0]?.parentNode;
         if (!parent) return;
         const sorted = [...rows].sort((a, b) => {
           if (key === 'score') return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          // 'cursor': fired checks desc (not recorded = -1 and null rows last), then score desc.
+          if (key === 'cursor') {
+            const dc = parseInt(b.dataset.cursor, 10) - parseInt(a.dataset.cursor, 10);
+            if (dc !== 0) return dc;
+            return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          }
           if (key === 'id')    return a.dataset.pid.localeCompare(b.dataset.pid);
           // 'tier': hard first, then soft, then clean; within tier, score desc.
           const dt = tierRank[a.dataset.tier] - tierRank[b.dataset.tier];
@@ -943,10 +956,11 @@ const SIGNALS = [
   { key: 'layoutShiftCount',         label: 'Viewport shifts', tone: 'muted',    hint: 'Viewport-width change events (recorded as layoutShifts before 0.6.1)' },
   { key: 'zoomChangeCount',          label: 'Zoom changes',    tone: 'muted',    hint: 'Browser zoom level changed during task' },
   { key: 'devToolsEventCount',       label: 'DevTools',        tone: 'muted',    hint: 'Reserved (always 0) — DevTools opens are counted under Kb shortcuts' },
-  { key: 'edgeExitCount',            label: 'Edge exits',      tone: 'muted',    hint: 'Mouse exited window through a screen edge' }
+  { key: 'edgeExitCount',            label: 'Edge exits',      tone: 'muted',    hint: 'Mouse exited window through a screen edge' },
+  { key: 'cursorFactCount',          label: 'Pointer checks',  tone: 'warn',     hint: 'Browser-reported checks that fired (automation flag, clicks the page dispatched, trials clicked without pointer movement); 0–3' }
 ];
 
-// Renders all 16 SIGNALS as a colour-coded tile grid. Every signal renders
+// Renders all 17 SIGNALS as a colour-coded tile grid. Every signal renders
 // (hits AND misses) so the layout is stable across participants — only firing
 // signals light up. Misses share the same footprint as hits, in the muted
 // "tone-zero" style. Cleans show all-zero, suspicious shows a few lit cells.
@@ -958,6 +972,7 @@ function renderSignalGrid(summary, triageRow) {
     let v;
     if (sig.key === 'aiExtensionsCount')   v = aiExt;
     else if (sig.key === 'edgeExitCount')  v = edgeExits;
+    else if (sig.key === 'cursorFactCount') v = summary.cursorAnalysis?.factCount ?? 0;
     else                                   v = summary[sig.key] ?? 0;
     return { ...sig, value: Number(v) || 0 };
   });
@@ -995,6 +1010,7 @@ function renderCohortList(triage, cohortCounts) {
       <select name="sort">
         <option value="tier" selected>Tier (hard first)</option>
         <option value="score">Score &darr;</option>
+        <option value="cursor">Pointer checks &darr;</option>
         <option value="id">ID</option>
       </select>
     </label>
@@ -1021,6 +1037,8 @@ function renderCohortList(triage, cohortCounts) {
 //   data-score:     numeric score (defaulted to 0 if null/undefined)
 //   data-reason:    pre-lowercased reason string (search reads this so the
 //                   handler doesn't need to lowercase per keystroke)
+//   data-cursor:    pointer checks that fired, 0–3; -1 when the data carries
+//                   no checks (the 'cursor' sort puts those rows last)
 function renderCohortRow(t) {
   const tier = tierOf(t);
   const pid = String(t.participantId || '');
@@ -1030,10 +1048,17 @@ function renderCohortRow(t) {
   // data may slip an empty string through; normalise to 'clean' for display.
   const reason = String(t.reason || 'clean');
   const reasonLower = reason.toLowerCase();
+  const ca = t.summary && t.summary.cursorAnalysis;
+  // data-cursor: fired checks 0–3; -1 when the data carries no checks (sorts last).
+  const cursorCount = ca && typeof ca.factCount === 'number' ? ca.factCount : -1;
+  const cursorCell = !ca ? '' : ca.state !== 'ok' && ca.factCount == null ? '&mdash;'
+    : ca.checksRecorded === 0 ? 'pointer checks: not recorded'
+    : `pointer checks: ${ca.factCount} of 3`;
   return `<div class="cohort-row" data-pid="${esc(pid)}"
        data-sanitized="${esc(sanitized)}"
        data-tier="${tier}"
        data-score="${score}"
+       data-cursor="${cursorCount}"
        data-reason="${esc(reasonLower)}">
     <div class="cohort-row-top">
       <span class="tier-dot" data-tier="${tier}"></span>
@@ -1042,6 +1067,7 @@ function renderCohortRow(t) {
     </div>
     <div class="cohort-row-bot">
       <span class="reason-excerpt">${esc(reason)}</span>
+      <span class="cursor-cell">${cursorCell}</span>
       <span class="tier-badge" data-tier="${tier}">${tier === 'clean' ? 'clean' : tier.toUpperCase()}</span>
     </div>
   </div>`;
@@ -1110,6 +1136,7 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     ${renderSessionBlock(s, participant)}
     ${renderPasteEvidence(participant)}
     ${imagesHtml}
+    ${renderCursorSection(s, participant, replayShownExternally)}
     ${renderReplaySection(participant, sanitized, replayShownExternally)}
   </section>`;
 }
@@ -1161,7 +1188,8 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
     // absent unless an asset map was applied, so the markup is otherwise unchanged.
     const assetNote = replay.assetNote ? `
       <p class="replay-note">${esc(replay.assetNote)}</p>` : '';
-    return `<div class="image-block replay-block" data-pid="${esc(participant.participantId)}"
+    // The id is the target of the cursor section's "open the replay" link.
+    return `<div class="image-block replay-block" id="replay-${esc(sanitized)}" data-pid="${esc(participant.participantId)}"
          data-replay-src="${esc(assetPath)}">
       <h4 class="section-heading">Session replay <span class="replay-note">(${esc(tier)} tier)</span></h4>${assetNote}
       <div class="replay-mount">
@@ -1204,6 +1232,51 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
       <h4 class="section-heading">Session replay</h4>
       <p class="replay-note">No replay artifact (recording was not enabled for this session).</p>
     </div>`;
+}
+
+// The "Cursor dynamics" section: the three browser-reported checks with
+// their counts, denominators and trial ids; the reported rule; the shape
+// features with their n; the stream and its realised interval; the file
+// that holds the constants. Numbers only; their meaning is on
+// docs/interpreting-signals.md, which the section links to.
+function renderCursorSection(s, participant, replayShownExternally) {
+  const ca = s.cursorAnalysis;
+  if (!ca) return '';
+  const ids = (x) => x.trialIds && x.trialIds.length ? ` (${esc(x.trialIds.join(', '))}${x.count > x.trialIds.length ? `, +${x.count - x.trialIds.length} more` : ''})` : '';
+  const ofN = (x) => `${x.count} of ${x.of}${ids(x)}`;
+  const check = (label, c, body) => `<tr class="${c && typeof c === 'object' && c.fired ? 'fired' : ''}"><th>${label}</th><td>${c === 'not recorded' ? 'not recorded' : body(c)}</td></tr>`;
+  const num = (v, unit, digits) => v == null ? '—' : `${digits == null ? v : v.toFixed(digits)}${unit}`;
+  const feat = (label, f, unit = '', digits) => `<tr><th>${label}</th><td>${num(f.median, unit, digits)} <span class="muted">(n = ${f.n})</span></td></tr>`;
+  const docs = `<a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>`;
+  let body;
+  if (ca.state !== 'ok') {
+    body = `<p class="muted note">${esc(ca.cursorReason)}.${ca.checks.webdriver && ca.checks.webdriver.fired ? ' The browser set its automation flag.' : ''}</p>`;
+  } else {
+    const c = ca.cursor;
+    const recordedNote = ca.checksRecorded === 0 ? `<p class="muted note">device facts and click provenance not recorded (library before 0.14); taps and scripted clicks cannot be told apart, so the checks are not recorded.</p>` : '';
+    body = `${recordedNote}
+    <table class="cursor-table"><caption>browser-reported checks</caption>
+      ${check('automation flag set by the browser', ca.checks.webdriver, (w) => w.fired ? 'yes' : 'no')}
+      ${check('clicks the page’s own scripts dispatched', ca.checks.untrustedClicks, ofN)}
+      ${check('trials clicked without pointer movement', ca.checks.zeroMoveTrials, ofN)}
+    </table>
+    <table class="cursor-table"><caption>reported, no verdict</caption>
+      <tr><th>clicks after a pointer jump</th><td>${ofN(c.rules.jumpClicks)}</td></tr>
+      ${feat('movement duration', c.features.durationMs, ' ms', 0)}
+      ${feat('path length', c.features.pathPx, ' px', 0)}
+      ${feat('displacement', c.features.displacementPx, ' px', 0)}
+      ${feat('mean speed', c.features.speedPxS, ' px/s', 0)}
+      ${feat('efficiency (per movement)', c.features.efficiency, '', 3)}
+      ${feat('maximum deviation from the chord', c.features.maxDeviationPx, ' px', 1)}
+      ${feat('moves per trial', c.features.movesPerTrial, '', 1)}
+      ${feat('movements per trial', c.features.movementsPerTrial, '', 1)}
+      <tr><th>keyboard-activated clicks</th><td>${c.features.keyboardClicks}</td></tr>
+      <tr><th>movements · clicks · capped trials</th><td>${c.movements} · ${c.clicks} · ${c.cappedTrials}</td></tr>
+    </table>
+    <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants in cursor-limits.json; ${docs}.</p>`;
+  }
+  const replayLink = replayShownExternally ? '' : (participant && participant.replay && participant.replay.recording ? `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>` : '');
+  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${body}${replayLink}</div>`;
 }
 
 // Renders the participant's screenout reason as a left-bordered pull-quote.
@@ -1335,7 +1408,7 @@ function renderScoreBreakdown(t, config) {
 
   const termHtml = terms.map(([label, n]) =>
     `<span class="score-term">
-       <span class="label">${label}</span>
+       <span class="label">${SIGNAL_LABELS[label] || label}</span>
        <span class="mono contrib">+${formatScore(n)}</span>
        <span class="bar" style="width:${barFor(n)}px"></span>
      </span>`
