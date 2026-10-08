@@ -16,14 +16,16 @@ function median(values) {
 }
 
 // recordedWith: the library version the data carries (null when it has none).
-export function buildCursorLimitsJson(recordedWith, results) {
+// limits: the limits object the results were judged with (shaped like
+// CURSOR_LIMITS, the default); the file writes it as given.
+export function buildCursorLimitsJson(recordedWith, results, limits = CURSOR_LIMITS) {
   const intervals = results.map(r => r.cursor && r.cursor.sampleIntervalMs).filter(v => typeof v === 'number');
   // Checkable as the run line counts it: a cursor stream and a device object.
   const checkable = results.filter(r => r.state === 'ok' && r.checksRecorded > 0).length;
   return JSON.stringify({
     cliVersion: VERSION,
     recordedWith,
-    limits: CURSOR_LIMITS,
+    limits,
     sampleIntervalMs: { core: { median: median(intervals), n: intervals.length } },
     sessions: { total: results.length, checkable }
   }, null, 2) + '\n';

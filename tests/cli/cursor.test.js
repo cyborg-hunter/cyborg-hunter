@@ -162,6 +162,30 @@ describe('checks', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0)), trial('q2', [ck(405, 302, 20)], { startTime: 6100 })]));
     assert.equal(r.checks.zeroMoveTrials.count, 0);
   });
+  it('a touch tap is its own kind: counted, never a pointer click, so a trial tapped with no moves does not fire', () => {
+    // A touchscreen laptop: touch points, but a fine primary pointer, so the
+    // session is judged as a desktop. Its one click is a tap with no move.
+    const laptop = { maxTouchPoints: 10, coarsePointer: false, webdriver: false };
+    const r = analyzeCursorForParticipant(participant([trial('q1', [ck(300, 200, 40, { pointerType: 'touch' })])], laptop));
+    assert.equal(r.state, 'ok');
+    assert.deepEqual(r.checks.zeroMoveTrials, { count: 0, of: 1, trialIds: [], trials: 0, fired: false });
+    assert.equal(r.factCount, 0);
+    assert.equal(r.cursor.features.touchClicks, 1);
+    assert.equal(r.cursor.features.keyboardClicks, 0);
+    assert.equal(r.cursor.rules.jumpClicks.of, 0);          // not in the jump rule's denominator
+    assert.equal(r.checks.untrustedClicks.of, 1);           // still one of the session's clicks
+    assert.equal(r.cursor.clicks, 1);
+    // The same click from a mouse fires.
+    const mouse = analyzeCursorForParticipant(participant([trial('q1', [ck(300, 200, 40)])], laptop));
+    assert.equal(mouse.checks.zeroMoveTrials.count, 1);
+    assert.equal(mouse.cursor.features.touchClicks, 0);
+  });
+  it('an untrusted or keyboard click stays so whatever its pointerType', () => {
+    const r = analyzeCursorForParticipant(participant([trial('q1', [...path(100, 100, 400, 300, 0), ck(400, 300, 900, { trusted: false, pointerType: 'touch' }), ck(400, 300, 950, { detail: 0, pointerType: 'touch' })])]));
+    assert.equal(r.checks.untrustedClicks.count, 1);
+    assert.equal(r.cursor.features.keyboardClicks, 1);
+    assert.equal(r.cursor.features.touchClicks, 0);
+  });
   it('a desktop agent that moves once per click is not a touch device', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', [mv(50, 60, 5), ck(50, 60, 6)]), trial('q2', [mv(500, 600, 5), ck(500, 600, 6)], { startTime: 7000 })]));
     assert.equal(r.state, 'ok');
@@ -238,8 +262,23 @@ describe('features', () => {
 
 describe('analyzeCursor', () => {
   it('returns one result per participant in order', () => {
-    const out = analyzeCursor([participant([trial('q1', path(0, 0, 100, 100, 0))], desktop, { participantId: 'A' }), participant([trial('q1', [])], desktop, { participantId: 'B' })], {});
+    const out = analyzeCursor([participant([trial('q1', path(0, 0, 100, 100, 0))], desktop, { participantId: 'A' }), participant([trial('q1', [])], desktop, { participantId: 'B' })]);
     assert.deepEqual(out.map(r => [r.participantId, r.state]), [['A', 'ok'], ['B', 'no cursor stream (no pointer events)']]);
+  });
+  it('judges with the limits object it is given, and each result carries the values it judged with', () => {
+    // A movement that starts 70 px from the last click: no jump at the
+    // default 100 px, a jump at 50 px.
+    const trials = [trial('q1', [...path(100, 100, 300, 100, 0), mv(370, 100, 1200), mv(375, 100, 1250), ck(375, 100, 1290)])];
+    const custom = { ...CURSOR_LIMITS, discontinuityPx: { value: 50, meaning: CURSOR_LIMITS.discontinuityPx.meaning } };
+    const [byDefault] = analyzeCursor([participant(trials)]);
+    const [byCustom] = analyzeCursor([participant(trials)], custom);
+    assert.equal(byDefault.cursor.rules.jumpClicks.count, 0);
+    assert.equal(byCustom.cursor.rules.jumpClicks.count, 1);
+    assert.equal(byDefault.limits.discontinuityPx, 100);
+    assert.equal(byCustom.limits.discontinuityPx, 50);
+    assert.deepEqual(Object.keys(byCustom.limits), Object.keys(CURSOR_LIMITS));
+    // A session with no cursor stream carries them too.
+    assert.equal(analyzeCursorForParticipant(participant([trial('q1', [])]), custom).limits.discontinuityPx, 50);
   });
   it('every limit has a value and a meaning', () => {
     for (const [k, v] of Object.entries(CURSOR_LIMITS)) {

@@ -54,8 +54,10 @@ export function attachMouseSignals(ctx) {
     // Each click also carries what the browser says about its origin:
     // isTrusted is false for clicks the page's own scripts dispatched; detail
     // is 0 for keyboard and assistive activation; pointerType names the
-    // device when the event has one. The report reads these to tell a
-    // pointer click from a scripted or a keyboard one.
+    // device when the event has one. The report reads them in that order:
+    // trusted false is a click the page's own scripts dispatched; else
+    // detail 0 is keyboard activation; else pointerType "touch" is a touch
+    // tap; any other click is a pointer click.
     function mouseEventHandler(type) {
       return function (e) {
         if (trialData.mouseEvents.length >= mouseMaxEvents) return;

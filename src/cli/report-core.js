@@ -103,8 +103,10 @@ export async function buildReport(participants, config, deps) {
   }
   const summaries = computeSummary(scoredParticipants, config);
   // The cursor section (analyzers/cursor.js) rides on each summary so the
-  // triage reason, the CSV, the rail and the score term read one object.
-  const cursors = analyzeCursor(scoredParticipants, config);
+  // triage reason, the CSV, the rail and the score term read one object. It
+  // judges with the default constants (CURSOR_LIMITS); no config key changes
+  // them.
+  const cursors = analyzeCursor(scoredParticipants);
   summaries.forEach((s, i) => { s.cursorAnalysis = cursors[i]; });
   const edgeExits = detectEdgeExits(scoredParticipants, config);
   const triage = rankTriage(summaries, edgeExits, config);

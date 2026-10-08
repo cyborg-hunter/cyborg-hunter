@@ -5,7 +5,7 @@ import { SCORE_SIGNALS, resolveScoreWeights, formulaText, SIGNAL_LABELS } from '
 import { generateTriageReason, rankTriage } from '../../src/cli/analyzers/triage.js';
 import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
-import { analyzeCursor } from '../../src/cli/analyzers/cursor.js';
+import { analyzeCursor, CURSOR_LIMITS } from '../../src/cli/analyzers/cursor.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
 import { buildCursorLimitsJson } from '../../src/cli/renderers/cursor-limits-core.js';
@@ -35,7 +35,7 @@ const touchFlag = base('TOUCHFLAG', [[mv(5, 5, 0), ck(5, 5, 10)]], { maxTouchPoi
 
 function analyze(participants, cfg = config) {
   const summaries = computeSummary(participants, cfg);
-  const cursors = analyzeCursor(participants, cfg);
+  const cursors = analyzeCursor(participants);
   summaries.forEach((s, i) => { s.cursorAnalysis = cursors[i]; });
   const edgeExits = detectEdgeExits(participants, cfg);
   const triage = rankTriage(summaries, edgeExits, cfg);
@@ -109,6 +109,18 @@ describe('cursor-limits.json', () => {
     assert.equal(j.limits.discontinuityPx.value, 100);
     assert.ok(j.limits.discontinuityPx.meaning.length > 20);
     assert.equal(typeof j.sampleIntervalMs.core.median, 'number');
+  });
+  it('records the limits object the results were judged with', () => {
+    const custom = { ...CURSOR_LIMITS, discontinuityPx: { value: 50, meaning: CURSOR_LIMITS.discontinuityPx.meaning } };
+    // q2's movement starts 70 px from q1's click, 1 s later: a click after
+    // a pointer jump at 50 px, not at the default 100 px.
+    const near = base('NEAR', [[mv(100, 100, 0), mv(140, 100, 50), ck(140, 100, 60)], [mv(210, 100, 5), mv(215, 100, 50), ck(215, 100, 60)]], desktop);
+    const byDefault = analyzeCursor([near]);
+    const byCustom = analyzeCursor([near], custom);
+    assert.equal(byDefault[0].cursor.rules.jumpClicks.count, 0);
+    assert.equal(byCustom[0].cursor.rules.jumpClicks.count, 1);
+    assert.deepEqual(JSON.parse(buildCursorLimitsJson('0.14.0', byCustom, custom)).limits, custom);
+    assert.deepEqual(JSON.parse(buildCursorLimitsJson('0.14.0', byDefault)).limits, CURSOR_LIMITS);
   });
 });
 

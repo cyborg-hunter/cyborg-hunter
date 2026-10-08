@@ -26,7 +26,7 @@ function build() {
   const p = extractIntegrityData(raw, config);
   const summaries = computeSummary([p], config);
   // As report-core.js does: the cursor section rides on the summary.
-  summaries[0].cursorAnalysis = analyzeCursor([p], config)[0];
+  summaries[0].cursorAnalysis = analyzeCursor([p])[0];
   const edgeExits = detectEdgeExits([p], config);
   const triage = rankTriage(summaries, edgeExits, config);
   return { summaries, triage, participants: [p], config };

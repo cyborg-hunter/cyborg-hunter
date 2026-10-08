@@ -16,7 +16,7 @@ import { pathLength, displacement, maxDeviation } from '../../shared/cursor-geom
 
 export const CURSOR_LIMITS = {
   movementGapMs:     { value: 400,  meaning: 'Two move samples more than this many milliseconds apart belong to different movements; a click ends the movement it follows.' },
-  staleGapMs:        { value: 2000, meaning: 'When nothing is recorded for longer than this (between trials, or during a tab-away), the last known pointer position is forgotten.' },
+  staleGapMs:        { value: 2000, meaning: 'When nothing is recorded for longer than this many milliseconds between trials, the last known pointer position is forgotten; a tab-away forgets it at once.' },
   samePositionPx:    { value: 20,   meaning: 'A click within this many pixels of the last known position was made without moving, and is not a trial clicked without pointer movement.' },
   discontinuityPx:   { value: 100,  meaning: 'A movement ending in a click that starts at least this many pixels from the last known position is a click after a pointer jump.' },
   minSamplesForShape:{ value: 2,    meaning: 'A movement needs at least this many move samples to contribute to the shape features.' }
@@ -25,9 +25,12 @@ export const CURSOR_LIMITS = {
 const NOT_RECORDED = 'not recorded';
 const MAX_IDS = 10;
 
-function limitsOf(config) {
+// The values of a limits object shaped like CURSOR_LIMITS ({ name: { value,
+// meaning } }), by name: what the analysis judges with, and what each result
+// carries so the section can print the constants that judged it.
+function valuesOf(limits) {
   const out = {};
-  for (const [k, v] of Object.entries(CURSOR_LIMITS)) out[k] = (config && config.cursorLimits && typeof config.cursorLimits[k] === 'number') ? config.cursorLimits[k] : v.value;
+  for (const k of Object.keys(CURSOR_LIMITS)) out[k] = limits[k].value;
   return out;
 }
 
@@ -76,12 +79,17 @@ function coordinateMode(trials) {
 }
 const pos = (e, mode) => mode === 'viewport' ? { x: e.cx, y: e.cy } : { x: e.x, y: e.y };
 
-// A click's kind from what the browser recorded about it. Older data has no
+// A click's kind from what the browser recorded about it, in this order:
+// trusted false is a click the page's own scripts dispatched; else detail 0
+// is keyboard activation; else pointerType 'touch' is a touch tap (counted,
+// never a pointer click, so it neither fires the zero-move check nor counts
+// in the jump rule); any other click is a pointer click. Older data has no
 // provenance: every click is then a pointer click for the rules, and the
 // checks are not recorded.
 function clickKind(e) {
   if (e.trusted === false) return 'untrusted';
   if (e.detail === 0) return 'keyboard';
+  if (e.pointerType === 'touch') return 'touch';
   return 'pointer';
 }
 
@@ -90,8 +98,10 @@ function versionNote(trials) {
   return v ? ` (recorded with ${v})` : '';
 }
 
-export function analyzeCursorForParticipant(participant, config) {
-  const L = limitsOf(config);
+// limits: an object shaped like CURSOR_LIMITS (the lab's bench passes its
+// own; the report passes nothing and gets the defaults).
+export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS) {
+  const L = valuesOf(limits);
   const trials = participant.trials || [];
   const device = participant.session && participant.session.device && typeof participant.session.device === 'object' ? participant.session.device : null;
   const recorded = !!device;
@@ -112,7 +122,8 @@ export function analyzeCursorForParticipant(participant, config) {
       : { webdriver, untrustedClicks: NOT_RECORDED, zeroMoveTrials: NOT_RECORDED },
     factCount: recorded ? (device.webdriver === true ? 1 : 0) : null,
     cursor: null,
-    cursorReason: null
+    cursorReason: null,
+    limits: L
   };
 
   const hasTrack = trials.some(t => Array.isArray(t.mouseEvents));
@@ -132,7 +143,7 @@ export function analyzeCursorForParticipant(participant, config) {
   const untrusted = { count: 0, of: 0, trialIds: [], trials: 0 };
   const zeroMove = { count: 0, of: 0, trialIds: [], trials: 0 };
   const jump = { count: 0, of: 0, trialIds: [], trials: 0 };
-  let keyboardClicks = 0, movementsTotal = 0, clicksTotal = 0, cappedTrials = 0;
+  let keyboardClicks = 0, touchClicks = 0, movementsTotal = 0, clicksTotal = 0, cappedTrials = 0;
   const f = { durationMs: [], pathPx: [], displacementPx: [], speedPxS: [], efficiency: [], maxDeviationPx: [] };
   const movesPerTrial = [], movementsPerTrial = [], gaps = [];
   let prevEnd = null;
@@ -180,6 +191,7 @@ export function analyzeCursorForParticipant(participant, config) {
         cp = pos(m.click, mode);
         if (kind === 'untrusted') { untrusted.count++; untrustedHere = true; if (!untrusted.trialIds.includes(t.trialId)) untrusted.trialIds.push(t.trialId); }
         else if (kind === 'keyboard') keyboardClicks++;
+        else if (kind === 'touch') touchClicks++;
         else {
           pointerClicksHere++;
           const startP = pos(first, mode);
@@ -216,7 +228,7 @@ export function analyzeCursorForParticipant(participant, config) {
       features: {
         durationMs: stat(f.durationMs), pathPx: stat(f.pathPx), displacementPx: stat(f.displacementPx),
         speedPxS: stat(f.speedPxS), efficiency: stat(f.efficiency), maxDeviationPx: stat(f.maxDeviationPx),
-        movesPerTrial: stat(movesPerTrial), movementsPerTrial: stat(movementsPerTrial), keyboardClicks
+        movesPerTrial: stat(movesPerTrial), movementsPerTrial: stat(movementsPerTrial), keyboardClicks, touchClicks
       },
       movements: movementsTotal, clicks: clicksTotal, cappedTrials, trials: trials.length
     }
@@ -224,7 +236,7 @@ export function analyzeCursorForParticipant(participant, config) {
 }
 
 // One result per participant, in order (the shape report-core attaches to
-// each summary). `config.cursorLimits` may override a constant by name.
-export function analyzeCursor(participants, config) {
-  return participants.map(p => analyzeCursorForParticipant(p, config));
+// each summary), all judged with one limits object shaped like CURSOR_LIMITS.
+export function analyzeCursor(participants, limits = CURSOR_LIMITS) {
+  return participants.map(p => analyzeCursorForParticipant(p, limits));
 }
