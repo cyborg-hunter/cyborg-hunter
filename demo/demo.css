@@ -222,6 +222,8 @@ pre code{background:none;padding:0;}
  * Guard visuals — violation chips + scramble banner.
  * --------------------------------------------------------------------- */
 .violations{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
+/* No chips yet: the row takes no space, so it adds no gap above the button. */
+.violations:empty{display:none;}
 /* Square tags, like the report's tier badges. */
 .chip{font-family:var(--ff-sora);font-size:12px;padding:4px 10px;border-radius:0;
   box-shadow:inset 0 0 0 1px var(--line);color:var(--dim);}

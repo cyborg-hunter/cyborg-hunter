@@ -231,7 +231,7 @@ fullscreen is no longer required.</p>`.trim(),
     title: 'What enforcement left behind',
     body: `
 <p>The guard is off. Scroll the session record: every violation from the
-last step is there with a type (fullscreen_exit, window_blurred) and a
+last step is there with a type (not_fullscreen, window_blurred) and a
 timestamp, next to the other previously recorded events.</p>`.trim(),
     task: null,
     primaryLabel: 'Continue to scoring →',

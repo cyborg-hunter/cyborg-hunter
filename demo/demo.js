@@ -220,7 +220,7 @@ function startTour(participantId, capabilities, manifest) {
     lampCounts: {},
     violations: [],
     trialReports: [],
-    // Guard act: the token GuardFriction.start() returns — needed by
+    // Guard: the token GuardFriction.start() returns — needed by
     // stop() — and per-reason violation tallies for the guard-cheat step's
     // chip row.
     guardStopToken: null,
@@ -528,7 +528,7 @@ function startTour(participantId, capabilities, manifest) {
     });
   }
 
-  // ----- guard act -------------------------------------------------
+  // ----- guard -----------------------------------------------------
 
   // Standalone GuardFriction.start() — not the jsPsych entryTrial() helper,
   // since this demo never spins up a jsPsych instance. Only called after
@@ -574,7 +574,7 @@ function startTour(participantId, capabilities, manifest) {
   // ----- No-trap guarantee -----------------------------------------------
   // The End button must stay REACHABLE while the guard's violation overlay
   // is up — a visitor who exits fullscreen and refuses to re-enter must
-  // still be able to end the act. GuardFriction's overlay is a fixed
+  // still be able to end the guard. GuardFriction's overlay is a fixed
   // inset-0 curtain at z-index 2147483647 (int max) appended to
   // document.body at the first violation; it paints over and
   // pointer-intercepts everything beneath it, including the in-card
@@ -595,7 +595,7 @@ function startTour(participantId, capabilities, manifest) {
   function onEndGuardClick() {
     // finalizeGuard → GuardFriction.stop(): ends any active violation
     // (emitting its phase:'end', which unfloats via the handler below) and
-    // hides the overlay — so ending the act mid-violation is clean.
+    // hides the overlay — so ending the guard mid-violation is clean.
     finalizeGuard();
     goTo(state.stepIndex + 1);
   }

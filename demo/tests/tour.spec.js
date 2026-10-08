@@ -177,7 +177,7 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   // the End button is lifted above it (.floating — reparented to <body>
   // after the overlay at equal z-index; demo.js floatEndGuard). It must be
   // visible, enabled, AND actually clickable with NO resume first — a
-  // visitor who refuses to re-enter fullscreen can still end the act.
+  // visitor who refuses to re-enter fullscreen can still end the guard.
   const endGuard = page.locator('.endguard');
   await expect(endGuard).toBeVisible();
   await expect(endGuard).toBeEnabled();
@@ -349,7 +349,7 @@ test('second step: the question and a box, no code; no step has a task label or 
 
 // ---------------------------------------------------------------------------
 // Guard-cheat, resume-then-click route: the classic path (re-enter
-// fullscreen via the overlay's own resume button, THEN end the act) must
+// fullscreen via the overlay's own resume button, THEN end the guard) must
 // also keep working after the no-trap float/unfloat mechanics.
 // ---------------------------------------------------------------------------
 test('guard-cheat resume route: button unfloats after resume and advances exactly one step', async ({ page, fullscreenMock }) => {
@@ -363,7 +363,8 @@ test('guard-cheat resume route: button unfloats after resume and advances exactl
   await page.locator('#guard-friction-resume').click(); // re-enter fullscreen -> violation ends
   await expect(page.locator('#guard-friction-overlay')).toHaveCSS('display', 'none');
 
-  // The button unfloated back into its in-card spot...
+  // The button unfloated back into its in-card spot, its row under the copy...
+  await expect(page.locator('#card .endguard-row > .endguard')).toHaveCount(1);
   await expect(page.locator('#card .endguard')).toBeVisible();
   await expect(page.locator('.endguard')).not.toHaveClass(/floating/);
   // ...and clicking it advances EXACTLY one step. Landing on step 9 here

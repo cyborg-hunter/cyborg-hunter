@@ -146,7 +146,7 @@ test('the eighth step says where the violations are, in one paragraph', () => {
   assert.equal(debrief.id, 'guard-debrief');
   assert.equal(debrief.body.replace(/\s+/g, ' '),
     '<p>The guard is off. Scroll the session record: every violation from the last step is there with a type ' +
-    '(fullscreen_exit, window_blurred) and a timestamp, next to the other previously recorded events.</p>');
+    '(not_fullscreen, window_blurred) and a timestamp, next to the other previously recorded events.</p>');
 });
 test('no step, note or fallback message names an act', () => {
   // \s+, not a space: the copy wraps, and "Act" can end one line and "1"
