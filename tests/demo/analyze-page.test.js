@@ -51,8 +51,8 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
   files: [{ path: 'a.csv', kind: 'data' }, { path: 'b.csv', kind: 'data' }, { path: 'c.json', kind: 'data' }, { path: 'cyborg-hunter.config.json', kind: 'config' }],
   configPath: 'cyborg-hunter.config.json' };
 // CHECKED.config with the settings panel's keys at their defaults: what a run sends.
-const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null, phaseScope: null,
-  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false, trajectoryDisplayOrder: 'rule' };
+const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null,
+  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
@@ -1010,6 +1010,14 @@ const setField = (name, value) => {
   if (el.type === 'checkbox') el.checked = value; else el.value = value;
   form.dispatchEvent(new win.Event('change', { bubbles: true }));
 };
+// A weight input has no name, only its signal's key.
+const setWeight = (key, value) => {
+  const form = role('settings-form');
+  form.querySelector('[data-weight="' + key + '"]').value = value;
+  form.dispatchEvent(new win.Event('change', { bubbles: true }));
+};
+const weightInput = (key) => role('settings-form').querySelector('[data-weight="' + key + '"]');
+const thresholdInput = () => role('settings-form').elements.namedItem('softScoreThreshold');
 const downloads = () => [...document.querySelectorAll('[data-action="download"], [data-action="download-zip"]')];
 
 test('the settings show from the first check on, and a run sends their config', async () => {
@@ -1020,20 +1028,61 @@ test('the settings show from the first check on, and a run sends their config', 
   assert.equal(role('settings-form').querySelector('fieldset > legend').textContent, 'Settings');
   assert.ok(role('id-field').closest('label'), 'the id field has its label');
   setField('softScoreThreshold', '4');
-  setField('phaseInclude', 'game, practice');
+  setWeight('paste', '9');
   assert.equal(t.sent.length, 1, 'no run before Build');
   action('run').click();
   await tick();
   assert.deepEqual(t.sent[1].config.scoring, { softScoreThreshold: 4 });
-  assert.deepEqual(t.sent[1].config.phaseScope, { include: ['game', 'practice'] });
+  assert.deepEqual(t.sent[1].config.scoreWeights, { paste: 9 });
+});
+
+test('the threshold says what it is for, the weights are open under their sentence, and no field sets a phase or the trajectory order', async () => {
+  const t = boot();
+  await toCheck(t);
+  const form = role('settings-form');
+  const line = thresholdInput().closest('p');
+  const hint = thresholdInput().closest('label').nextElementSibling;
+  assert.equal(hint.parentElement, line, 'on the field\'s own line, after it');
+  assert.equal(hint.className, 'hint');
+  assert.equal(hint.textContent, 'The score at or above which a participant is flagged as suspicious in the triage list.');
+  const details = form.querySelector('details');
+  assert.equal(details.hasAttribute('open'), true, 'open until the analyst closes it');
+  assert.equal(details.querySelector('summary').textContent,
+    'Score weights: choose how much importance to give to each of the potential signals in estimating the participant\'s suspiciousness score.');
+  for (const name of ['phaseInclude', 'phaseExclude', 'trajectoryDisplayOrder']) assert.equal(form.elements.namedItem(name), null, name);
+  assert.equal(role('phase-hint'), null);
+});
+
+// The phase scope and the trajectory order are the CLI's: a dropped config
+// that sets them keeps them through the analyst's changes, into the run and
+// the export, though the panel shows neither.
+test('a dropped config\'s phase scope and trajectory order reach the run and the export through a change to the panel', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId', phaseScope: { exclude: ['practice'] }, trajectoryDisplayOrder: 'time' } });
+  await tick();
+  setField('softScoreThreshold', '4');
+  action('run').click();
+  await tick();
+  const sent = t.sent.at(-1);
+  assert.equal(sent.type, 'run');
+  assert.deepEqual([sent.config.scoring, sent.config.phaseScope, sent.config.trajectoryDisplayOrder],
+    [{ softScoreThreshold: 4 }, { exclude: ['practice'] }, 'time']);
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    action('export-config').click();
+    assert.deepEqual(JSON.parse(await made.at(-1).text()), { scoring: { softScoreThreshold: 4 }, phaseScope: { exclude: ['practice'] },
+      trajectoryDisplayOrder: 'time', participantIdField: 'subject_ID' });
+  } finally { URL.createObjectURL = saved; }
 });
 
 // Every drop checks the whole list again, and each check returns the merged
 // config: the panel is written from it only when its values differ from the
 // ones it was last written from, so a drop of more data keeps what the
 // analyst set. A replacement after the first check says so under the list.
-const weightInput = (key) => role('settings-form').querySelector('[data-weight="' + key + '"]');
-const thresholdInput = () => role('settings-form').elements.namedItem('softScoreThreshold');
 const checkNotes = () => [...role('check-warnings').children].map((li) => li.textContent);
 
 test('a drop keeps the analyst\'s settings unless its config differs, and a replacement says so', async () => {
@@ -1454,24 +1503,6 @@ describe('a re-analysis keeps the analyst\'s place', () => {
     assert.equal(replaySelect().value, 'B');
     assert.equal(action('load-replay').disabled, false);
   });
-});
-
-// Phase scope reads a trial without a phase as "default" (the worker lists
-// it among the phases): the hint says so.
-test('the phase hint lists the phases the run found, and what "default" stands for', async () => {
-  const t = boot();
-  await toCheck(t);
-  assert.equal(role('phase-hint').textContent, '');
-  action('run').click();
-  await tick();
-  t.emit({ ...DONE, phases: ['main', 'warmup'] });
-  await tick();
-  assert.equal(role('phase-hint').textContent, 'Phases in the data: main, warmup');
-  setField('softScoreThreshold', '2');
-  await tick();
-  t.emit({ ...DONE, phases: ['default', 'main'] });
-  await tick();
-  assert.equal(role('phase-hint').textContent, 'Phases in the data: default, main (default: the trials with no phase)');
 });
 
 test('Export config on the results writes the settings, not the config the run sent the worker', async () => {

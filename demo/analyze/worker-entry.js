@@ -225,9 +225,8 @@ async function renderRun(state, config) {
     }) });
 }
 
-// The trial phases in the data, for the settings panel's phase-scope hint,
-// named as phase scope names them: a trial without a phase is 'default'
-// (src/cli/analyzers/phase-scope.js).
+// The trial phases in the data (done.phases), named as phase scope names
+// them: a trial without a phase is 'default' (src/cli/analyzers/phase-scope.js).
 function phasesOf(participants) {
   var seen = Object.create(null), out = [];
   participants.forEach(function (p) {

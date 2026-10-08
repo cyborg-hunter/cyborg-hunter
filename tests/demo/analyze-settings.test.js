@@ -18,12 +18,29 @@ test('the panel\'s keys round-trip through a config unchanged', () => {
   }
 });
 
-test('an empty threshold takes the saved ones, an empty scope scores every phase', () => {
-  const base = merged({ scoring: { softScoreThreshold: 5 }, phaseScope: { include: ['game'] } });
-  const s = { ...settingsFromConfig(base), softScoreThreshold: null, phaseInclude: [], phaseExclude: [] };
-  const c = configFromSettings(base, s);
+test('an empty threshold takes the saved ones', () => {
+  const base = merged({ scoring: { softScoreThreshold: 5 } });
+  const c = configFromSettings(base, { ...settingsFromConfig(base), softScoreThreshold: null });
   assert.equal(c.scoring, null);
-  assert.equal(c.phaseScope, null);
+});
+
+// The phase scope and the trajectory order are the CLI's: the panel neither
+// shows nor edits them, and a config that sets them keeps them through a
+// change to the panel and into the export.
+test('the panel holds neither the phase scope nor the trajectory order', () => {
+  const s = settingsFromConfig(merged({ phaseScope: { include: ['game'], exclude: ['practice'] }, trajectoryDisplayOrder: 'time' }));
+  for (const k of ['phaseInclude', 'phaseExclude', 'phaseScope', 'trajectoryDisplayOrder']) assert.equal(k in s, false, k);
+});
+
+test('a config\'s phase scope and trajectory order survive a change to the panel and reach the export', () => {
+  const base = merged({ phaseScope: { exclude: ['practice'] }, trajectoryDisplayOrder: 'time' });
+  // Values the analyst set in the panel, which say nothing of either key.
+  const panel = { ...settingsFromConfig(merged(undefined)), softScoreThreshold: 4, scoreWeights: { paste: 9 } };
+  const c = configFromSettings(base, panel);
+  assert.deepEqual(c.phaseScope, { exclude: ['practice'] });
+  assert.equal(c.trajectoryDisplayOrder, 'time');
+  assert.deepEqual(exportConfig(c, { participantIdField: 'subject_ID' }), { scoreWeights: { paste: 9 }, scoring: { softScoreThreshold: 4 },
+    phaseScope: { exclude: ['practice'] }, trajectoryDisplayOrder: 'time', participantIdField: 'subject_ID' });
 });
 
 // The page compares the settings a config stands for, not how the file
@@ -36,6 +53,10 @@ test('settingsKey reads the weights as the panel shows them: key order, a bare n
   assert.equal(key({ scoreWeights: { paste: pasteDefault } }), key({}), 'an explicit default');
   assert.notEqual(key({ scoreWeights: { paste: { weight: pasteDefault, max: 2 } } }), key({}), 'a cap differs');
   assert.notEqual(key({ scoring: { softScoreThreshold: 4 } }), key({}), 'a threshold differs');
+  // The panel does not show these: a config that differs only in them puts
+  // the same values in it.
+  assert.equal(key({ phaseScope: { exclude: ['practice'] } }), key({}), 'a phase scope');
+  assert.equal(key({ trajectoryDisplayOrder: 'time' }), key({}), 'a trajectory order');
 });
 
 test('the id, integrity and session-report fields are the ones that read the files again', () => {

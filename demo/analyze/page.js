@@ -531,7 +531,6 @@ export function createPage(root, worker, opts) {
       });
     }
     replayCard.setParticipants(done.participants);
-    settingsPanel.setPhases(done.phases);
     reportFirstSelection = true;
     reportReopened = cardOnReopen;
     reportPosted = false;
