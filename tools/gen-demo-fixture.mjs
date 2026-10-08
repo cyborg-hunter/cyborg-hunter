@@ -22,8 +22,8 @@
 //   node tools/gen-demo-fixture.mjs
 // It assembles .demo-site/ (the same artifact Pages CI + the Playwright suite
 // use), serves it, walks the full tour (baseline typing + two pastes → advance
-// through the optional tasks → a clean, violation-free pass through the guarded
-// act → your files), captures the replay download via the browser's own
+// through the optional tasks → a clean, violation-free pass through the
+// guard → your files), captures the replay download via the browser's own
 // download event, rewrites the random per-session pid to the stable DEMO-FIXT,
 // and overwrites the committed replay file.
 //
@@ -56,13 +56,17 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
+import { STEPS } from '../demo/steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const FIXTURE_DIR = join(ROOT, 'tests', 'fixtures', 'demo');
 const PORT = 8188;
 const BASE = `http://localhost:${PORT}`;
-const ANSWER = 'Canberra';
+// The baseline step's typed answer to "How is your day today?", and the
+// assistant's answer the clipboard step offers to copy and paste.
+const TYPED_ANSWER = 'Pretty good, thanks.';
+const ANSWER = STEPS.find((s) => s.id === 'clipboard-cheat').task.providedAnswer;
 
 // The existing committed replay filename's epoch. Pinning recording_started_at
 // to this keeps the fixture a single, same-named, in-place overwrite.
@@ -82,7 +86,7 @@ function resolvePlaywright() {
 }
 
 // The fullscreen mock helpers.mjs installs: headless Chromium's real
-// Fullscreen API needs a user gesture and is unreliable, so the guarded act's
+// Fullscreen API needs a user gesture and is unreliable, so the guard's
 // enter-fullscreen step is faked to SUCCEED (no violation — the exit path is
 // never called). Same script as demo/tests/helpers.mjs installFullscreenMock.
 function fullscreenMockInit() {
@@ -174,7 +178,7 @@ async function main() {
     // Real per-character typing on the clean baseline (never .value=/fill(),
     // which the library flags as synthetic insertion).
     await page.locator('#card textarea').click();
-    await page.locator('#card textarea').pressSequentially('a city in Australia', { delay: 150 });
+    await page.locator('#card textarea').pressSequentially(TYPED_ANSWER, { delay: 150 });
     await clickPrimary();                         // → step 3 (clipboard cheat)
     await waitForStep(3);
 

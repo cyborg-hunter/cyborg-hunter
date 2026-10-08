@@ -36,12 +36,13 @@ Two files are frozen and one is regenerable:
 - `cyborg-hunter.config.json`: the config the demo hands out verbatim
   (`{ dataDir, filePattern, participantIdField }`). It carries no participant id.
 
-The replay and the session are NOT a 1:1 trial mapping — the recorder and the
-integrity monitor bracket trials under different schemes, so the replay (8
-segments: the five act-1 tasks, the two act-2 steps, and a trailing implicit
-`__session__`) does not line up trial-for-trial with the session's six. `ingest`
-attaches the replay by `participant_id` alone, which is all the fixture relies
-on.
+The replay and the session are NOT a 1:1 trial mapping — they come from two
+runs of the tour, and the recorder and the integrity monitor bracket trials
+under different schemes, so the replay (7 segments: the ten-step tour's six
+trials `baseline`, `paste`, `tabaway`, `autotype`, `guard-entry` and `guard`,
+and a trailing implicit `__session__`) does not line up trial-for-trial with
+the session's six (an earlier tour's `act1-*`/`act2-*` ids). `ingest` attaches
+the replay by `participant_id` alone, which is all the fixture relies on.
 
 ## Session profile (frozen — what's in DEMO-FIXT.json)
 
@@ -123,4 +124,4 @@ rewritten to the new capture's numbers. If the payload assembler
 tests' assertions to fit a broken fixture.
 
 First captured 2026-07-29 (session + v1 replay); replay regenerated 2026-08-12
-(v2).
+(v2) and 2026-10-07 (the ten-step tour).
