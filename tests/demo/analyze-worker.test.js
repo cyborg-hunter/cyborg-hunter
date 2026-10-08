@@ -310,10 +310,13 @@ test('reanalyze under the same config gives the first report again, file for fil
   w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
   const first = await w.next('done', 'error');
   assert.equal(first.type, 'done', first.message);
+  // The page reads no phases from a run, so the result carries none.
+  assert.equal(Object.hasOwn(first, 'phases'), false);
   const zip1 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
   w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'participantId' });
   const second = await w.next('done', 'error');
   assert.equal(second.type, 'done', second.message);
+  assert.equal(Object.hasOwn(second, 'phases'), false);
   const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
   assert.deepEqual(Object.keys(zip2).sort(), Object.keys(zip1).sort());
   assert.ok(zip1['replay/DEMO-FIXT.replay.js'], 'the replay pass ran');
