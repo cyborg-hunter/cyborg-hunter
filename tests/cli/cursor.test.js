@@ -90,16 +90,16 @@ describe('states', () => {
 });
 
 describe('the checks of a session with no cursor stream', () => {
-  const zero = { count: 0, of: 0, trialIds: [], fired: false };
+  const zero = { count: 0, of: 0, trialIds: [], trials: 0, fired: false };
   const states = [
     ['not collected', [trial('q1', undefined, { mouseEvents: undefined })]],
     ['no cursor stream (no pointer events)', [trial('q1', [])]]
   ];
   for (const [state, trials] of states) {
-    it(`${state}, with a device object: every check is an object`, () => {
+    it(`${state}, with a device object: every check is an object, and only the automation flag is recorded`, () => {
       const r = analyzeCursorForParticipant(participant(trials));
       assert.equal(r.state, state);
-      assert.equal(r.checksRecorded, 3);
+      assert.equal(r.checksRecorded, 1);
       assert.deepEqual(r.checks, { webdriver: { fired: false }, untrustedClicks: zero, zeroMoveTrials: zero });
       assert.equal(r.factCount, 0);
     });
@@ -112,10 +112,10 @@ describe('the checks of a session with no cursor stream', () => {
     });
   }
   // Only the device object can say a session is a touch device, so this state has no case without one.
-  it('no cursor stream (touch device): every check is an object', () => {
+  it('no cursor stream (touch device): every check is an object, and only the automation flag is recorded', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', [mv(5, 5, 0), ck(5, 5, 10)])], { maxTouchPoints: 5, coarsePointer: true, webdriver: false }));
     assert.equal(r.state, 'no cursor stream (touch device)');
-    assert.equal(r.checksRecorded, 3);
+    assert.equal(r.checksRecorded, 1);
     assert.deepEqual(r.checks, { webdriver: { fired: false }, untrustedClicks: zero, zeroMoveTrials: zero });
     assert.equal(r.factCount, 0);
   });
@@ -131,7 +131,7 @@ describe('checks', () => {
   });
   it('clicks the page dispatched are counted whatever their detail', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', [...path(100, 100, 400, 300, 0), ck(400, 300, 900, { trusted: false, detail: 0 })])]));
-    assert.deepEqual(r.checks.untrustedClicks, { count: 1, of: 2, trialIds: ['q1'], fired: true });
+    assert.deepEqual(r.checks.untrustedClicks, { count: 1, of: 2, trialIds: ['q1'], trials: 1, fired: true });
     assert.equal(r.factCount, 1);
   });
   it('a keyboard-activated click is counted as such and never fires', () => {
@@ -141,7 +141,22 @@ describe('checks', () => {
   });
   it('a trial clicked with no movement fires, with its id', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0)), trial('q2', [ck(50, 700, 20)], { startTime: 7000 })]));
-    assert.deepEqual(r.checks.zeroMoveTrials, { count: 1, of: 2, trialIds: ['q2'], fired: true });
+    assert.deepEqual(r.checks.zeroMoveTrials, { count: 1, of: 2, trialIds: ['q2'], trials: 1, fired: true });
+  });
+  it('counts the trials involved before the ten-id cap, and clicks apart from trials', () => {
+    // Eleven trials, each one click with no move 150 px from the last: every
+    // trial is clicked without pointer movement, and every click after the
+    // first follows a pointer jump.
+    const eleven = Array.from({ length: 11 }, (_, i) => trial('q' + (i + 1), [ck(100 + i * 150, 300, 20)], { startTime: 1000 + i * 6000 }));
+    const r = analyzeCursorForParticipant(participant(eleven));
+    assert.equal(r.checks.zeroMoveTrials.count, 11);
+    assert.equal(r.checks.zeroMoveTrials.trials, 11);
+    assert.equal(r.checks.zeroMoveTrials.trialIds.length, 10);
+    assert.deepEqual({ ...r.cursor.rules.jumpClicks, trialIds: r.cursor.rules.jumpClicks.trialIds.length }, { count: 10, of: 11, trialIds: 10, trials: 10 });
+    assert.equal(r.cursor.trials, 11);
+    // Two clicks the page dispatched in one trial: two clicks, one trial.
+    const two = analyzeCursorForParticipant(participant([trial('q1', [...path(100, 100, 400, 300, 0), ck(400, 300, 900, { trusted: false }), ck(400, 300, 950, { trusted: false })])]));
+    assert.deepEqual(two.checks.untrustedClicks, { count: 2, of: 3, trialIds: ['q1'], trials: 1, fired: true });
   });
   it('a click at the last known position does not count as a zero-move trial', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0)), trial('q2', [ck(405, 302, 20)], { startTime: 6100 })]));

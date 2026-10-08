@@ -97,12 +97,16 @@ export function analyzeCursorForParticipant(participant, config) {
   const recorded = !!device;
   const webdriver = recorded ? { fired: device.webdriver === true } : NOT_RECORDED;
   // With a device object every check is an object, in every state; without
-  // one all three are not recorded.
-  const zeroCount = () => ({ count: 0, of: 0, trialIds: [], fired: false });
+  // one all three are not recorded. `trials` counts the trials involved
+  // before the ten-id cap (a count of clicks can exceed it).
+  const zeroCount = () => ({ count: 0, of: 0, trialIds: [], trials: 0, fired: false });
 
+  // checksRecorded: 3 when the stream is there and a device object exists;
+  // 1 in a state with no cursor stream (only the automation flag can run);
+  // 0 without a device object.
   const base = {
     participantId: participant.participantId,
-    checksRecorded: recorded ? 3 : 0,
+    checksRecorded: recorded ? 1 : 0,
     checks: recorded
       ? { webdriver, untrustedClicks: zeroCount(), zeroMoveTrials: zeroCount() }
       : { webdriver, untrustedClicks: NOT_RECORDED, zeroMoveTrials: NOT_RECORDED },
@@ -125,9 +129,9 @@ export function analyzeCursorForParticipant(participant, config) {
   const forget = () => { last.valid = false; };
   const see = (p) => { last.x = p.x; last.y = p.y; last.valid = true; };
 
-  const untrusted = { count: 0, of: 0, trialIds: [] };
-  const zeroMove = { count: 0, of: 0, trialIds: [] };
-  const jump = { count: 0, of: 0, trialIds: [] };
+  const untrusted = { count: 0, of: 0, trialIds: [], trials: 0 };
+  const zeroMove = { count: 0, of: 0, trialIds: [], trials: 0 };
+  const jump = { count: 0, of: 0, trialIds: [], trials: 0 };
   let keyboardClicks = 0, movementsTotal = 0, clicksTotal = 0, cappedTrials = 0;
   const f = { durationMs: [], pathPx: [], displacementPx: [], speedPxS: [], efficiency: [], maxDeviationPx: [] };
   const movesPerTrial = [], movementsPerTrial = [], gaps = [];
@@ -151,7 +155,7 @@ export function analyzeCursorForParticipant(participant, config) {
     movementsTotal += movements.length;
     for (let i = 1; i < moves.length; i++) { const d = moves[i].t - moves[i - 1].t; if (d > 0) gaps.push(d); }
 
-    let pointerClicksHere = 0, unexplainedPointerClick = false;
+    let pointerClicksHere = 0, unexplainedPointerClick = false, untrustedHere = false, jumpHere = false;
     let cp;
     for (const m of movements) {
       const first = m.samples[0] || m.click;
@@ -174,13 +178,13 @@ export function analyzeCursorForParticipant(participant, config) {
         clicksTotal++;
         const kind = clickKind(m.click);
         cp = pos(m.click, mode);
-        if (kind === 'untrusted') { untrusted.count++; if (!untrusted.trialIds.includes(t.trialId)) untrusted.trialIds.push(t.trialId); }
+        if (kind === 'untrusted') { untrusted.count++; untrustedHere = true; if (!untrusted.trialIds.includes(t.trialId)) untrusted.trialIds.push(t.trialId); }
         else if (kind === 'keyboard') keyboardClicks++;
         else {
           pointerClicksHere++;
           const startP = pos(first, mode);
           jump.of++;
-          if (last.valid && dist(startP, last) >= L.discontinuityPx) { jump.count++; if (!jump.trialIds.includes(t.trialId)) jump.trialIds.push(t.trialId); }
+          if (last.valid && dist(startP, last) >= L.discontinuityPx) { jump.count++; jumpHere = true; if (!jump.trialIds.includes(t.trialId)) jump.trialIds.push(t.trialId); }
           if (moves.length === 0 && !(last.valid && dist(cp, last) <= L.samePositionPx)) unexplainedPointerClick = true;
         }
         untrusted.of++;
@@ -191,28 +195,30 @@ export function analyzeCursorForParticipant(participant, config) {
     // A tab-away after the trial's last movement (or in a trial with none)
     // forgets the position too.
     if (tabIdx < tabAways.length) forget();
-    if (moves.length === 0 && pointerClicksHere > 0 && unexplainedPointerClick) { zeroMove.count++; zeroMove.trialIds.push(t.trialId); }
+    if (moves.length === 0 && pointerClicksHere > 0 && unexplainedPointerClick) { zeroMove.count++; zeroMove.trials++; zeroMove.trialIds.push(t.trialId); }
+    if (untrustedHere) untrusted.trials++;
+    if (jumpHere) jump.trials++;
   }
 
   const cap = (ids) => ids.slice(0, MAX_IDS);
   const checks = recorded ? {
     webdriver,
-    untrustedClicks: { count: untrusted.count, of: untrusted.of, trialIds: cap(untrusted.trialIds), fired: untrusted.count > 0 },
-    zeroMoveTrials: { count: zeroMove.count, of: zeroMove.of, trialIds: cap(zeroMove.trialIds), fired: zeroMove.count > 0 }
+    untrustedClicks: { count: untrusted.count, of: untrusted.of, trialIds: cap(untrusted.trialIds), trials: untrusted.trials, fired: untrusted.count > 0 },
+    zeroMoveTrials: { count: zeroMove.count, of: zeroMove.of, trialIds: cap(zeroMove.trialIds), trials: zeroMove.trials, fired: zeroMove.count > 0 }
   } : base.checks;
   const factCount = recorded ? [checks.webdriver.fired, checks.untrustedClicks.fired, checks.zeroMoveTrials.fired].filter(Boolean).length : null;
 
   return {
-    ...base, state: 'ok', checks, factCount,
+    ...base, state: 'ok', checksRecorded: recorded ? 3 : 0, checks, factCount,
     cursor: {
       stream: 'core', sampleIntervalMs: median(gaps), coordinates: mode,
-      rules: { jumpClicks: { count: jump.count, of: jump.of, trialIds: cap(jump.trialIds) }, centeredClicks: null },
+      rules: { jumpClicks: { count: jump.count, of: jump.of, trialIds: cap(jump.trialIds), trials: jump.trials }, centeredClicks: null },
       features: {
         durationMs: stat(f.durationMs), pathPx: stat(f.pathPx), displacementPx: stat(f.displacementPx),
         speedPxS: stat(f.speedPxS), efficiency: stat(f.efficiency), maxDeviationPx: stat(f.maxDeviationPx),
         movesPerTrial: stat(movesPerTrial), movementsPerTrial: stat(movementsPerTrial), keyboardClicks
       },
-      movements: movementsTotal, clicks: clicksTotal, cappedTrials
+      movements: movementsTotal, clicks: clicksTotal, cappedTrials, trials: trials.length
     }
   };
 }

@@ -137,8 +137,8 @@ export async function buildReport(participants, config, deps) {
   const sw = buildScoreWeightsJson(config);
   sink('score-weights.json', sw.text);
   log(`  score-weights.json — ${sw.isDefault ? 'default' : 'custom'} weights`);
-  const libraryVersion = participants.map(p => (p.trials || []).map(t => t.libraryVersion).find(Boolean)).find(Boolean) || null;
-  sink('cursor-limits.json', buildCursorLimitsJson(libraryVersion, cursors));
+  const recordedWith = participants.map(p => (p.trials || []).map(t => t.libraryVersion).find(Boolean)).find(Boolean) || null;
+  sink('cursor-limits.json', buildCursorLimitsJson(recordedWith, cursors));
   log(`  cursor-limits.json — the constants the cursor section used`);
   sink('triage.md', buildTriageMd(triage, config));
   log(`  triage.md — ranked list`);
@@ -152,10 +152,14 @@ export async function buildReport(participants, config, deps) {
   // The pointer checks over the cohort: the run line (returned as cursorLine
   // for the analyze page, whose worker does not wire log) and, when the
   // cursor weight is on but some sessions carry no checks, the warning.
-  const checkable = cursors.filter(c => c.checksRecorded > 0).length;
-  const fired = cursors.filter(c => typeof c.factCount === 'number' && c.factCount > 0).length;
-  const before014 = cursors.filter(c => c.checksRecorded === 0 && c.state !== 'not collected' && !c.state.startsWith('no cursor stream')).length;
-  const noStream = cursors.filter(c => c.state === 'not collected' || c.state.startsWith('no cursor stream')).length;
+  // The three numbers partition the cohort: checkable (a cursor stream and a
+  // device object), recorded before 0.14 (a stream, no device object), and
+  // no cursor stream (every other state). Fired counts checkable sessions.
+  const checkableSet = cursors.filter(c => c.state === 'ok' && c.checksRecorded > 0);
+  const checkable = checkableSet.length;
+  const fired = checkableSet.filter(c => c.factCount > 0).length;
+  const before014 = cursors.filter(c => c.state === 'ok' && c.checksRecorded === 0).length;
+  const noStream = cursors.filter(c => c.state !== 'ok').length;
   const cursorLine = `Pointer checks: fired in ${fired} of ${checkable} checkable sessions (${before014} recorded before 0.14, ${noStream} no cursor stream)`;
   log(`  ${cursorLine}`);
   if (scoreWeights.weights.cursor.weight > 0 && checkable < cursors.length) {

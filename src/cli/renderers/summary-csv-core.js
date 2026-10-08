@@ -52,12 +52,14 @@ const COLUMNS = [
   // The cursor section (analyzers/cursor.js). Headers are fixed here once;
   // '' means "no value" (a null session, a check not recorded, a value with
   // no n). cursorCenteredClicks is filled by the replay tier; '' until then.
+  // A session with no cursor stream records only the automation flag, so its
+  // other two checks are '' like the cursor block.
   ['cursorReason', (s) => s.cursorAnalysis?.cursorReason ?? ''],
   ['cursorChecksRecorded', (s) => s.cursorAnalysis ? s.cursorAnalysis.checksRecorded : ''],
   ['cursorFactCount', (s) => typeof s.cursorAnalysis?.factCount === 'number' ? s.cursorAnalysis.factCount : ''],
   ['cursorWebdriver', (s) => { const c = s.cursorAnalysis?.checks?.webdriver; return c && typeof c === 'object' ? (c.fired ? 'YES' : 'no') : ''; }],
-  ['cursorUntrustedClicks', (s) => { const c = s.cursorAnalysis?.checks?.untrustedClicks; return c && typeof c === 'object' ? c.count : ''; }],
-  ['cursorZeroMoveTrials', (s) => { const c = s.cursorAnalysis?.checks?.zeroMoveTrials; return c && typeof c === 'object' ? `${c.count}/${c.of}` : ''; }],
+  ['cursorUntrustedClicks', (s) => { const c = s.cursorAnalysis?.checks?.untrustedClicks; return c && typeof c === 'object' && s.cursorAnalysis.state === 'ok' ? c.count : ''; }],
+  ['cursorZeroMoveTrials', (s) => { const c = s.cursorAnalysis?.checks?.zeroMoveTrials; return c && typeof c === 'object' && s.cursorAnalysis.state === 'ok' ? `${c.count}/${c.of}` : ''; }],
   ['cursorJumpClicks', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.jumpClicks; return r ? `${r.count}/${r.of}` : ''; }],
   ['cursorCoordinates', (s) => s.cursorAnalysis?.cursor?.coordinates ?? ''],
   ['cursorStream', (s) => s.cursorAnalysis?.cursor?.stream ?? ''],

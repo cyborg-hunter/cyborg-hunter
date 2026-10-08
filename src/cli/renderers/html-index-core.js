@@ -957,8 +957,18 @@ const SIGNALS = [
   { key: 'zoomChangeCount',          label: 'Zoom changes',    tone: 'muted',    hint: 'Browser zoom level changed during task' },
   { key: 'devToolsEventCount',       label: 'DevTools',        tone: 'muted',    hint: 'Reserved (always 0) — DevTools opens are counted under Kb shortcuts' },
   { key: 'edgeExitCount',            label: 'Edge exits',      tone: 'muted',    hint: 'Mouse exited window through a screen edge' },
-  { key: 'cursorFactCount',          label: 'Pointer checks',  tone: 'warn',     hint: 'Browser-reported checks that fired (automation flag, clicks the page dispatched, trials clicked without pointer movement); 0–3' }
+  { key: 'cursorFactCount',          label: 'Pointer checks',  tone: 'warn',     hint: 'Browser-reported checks that fired (automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement); 0–3' }
 ];
+
+// The pointer checks that fired, as the tile, the rail and its sort read
+// them: the fired count when the session has a cursor stream and a device
+// object; 1 for a session with no cursor stream whose automation flag fired
+// (the one check it can run); null otherwise (nothing checkable).
+function pointerChecksFired(ca) {
+  if (!ca) return null;
+  if (ca.state === 'ok') return ca.checksRecorded > 0 ? ca.factCount : null;
+  return ca.checks.webdriver && ca.checks.webdriver.fired ? 1 : null;
+}
 
 // Renders all 17 SIGNALS as a colour-coded tile grid. Every signal renders
 // (hits AND misses) so the layout is stable across participants — only firing
@@ -972,7 +982,7 @@ function renderSignalGrid(summary, triageRow) {
     let v;
     if (sig.key === 'aiExtensionsCount')   v = aiExt;
     else if (sig.key === 'edgeExitCount')  v = edgeExits;
-    else if (sig.key === 'cursorFactCount') v = summary.cursorAnalysis?.factCount ?? 0;
+    else if (sig.key === 'cursorFactCount') v = pointerChecksFired(summary.cursorAnalysis) ?? 0;
     else                                   v = summary[sig.key] ?? 0;
     return { ...sig, value: Number(v) || 0 };
   });
@@ -1037,8 +1047,9 @@ function renderCohortList(triage, cohortCounts) {
 //   data-score:     numeric score (defaulted to 0 if null/undefined)
 //   data-reason:    pre-lowercased reason string (search reads this so the
 //                   handler doesn't need to lowercase per keystroke)
-//   data-cursor:    pointer checks that fired, 0–3; -1 when the data carries
-//                   no checks (the 'cursor' sort puts those rows last)
+//   data-cursor:    pointer checks that fired, 0–3 (pointerChecksFired); -1
+//                   when nothing is checkable (the 'cursor' sort puts those
+//                   rows last)
 function renderCohortRow(t) {
   const tier = tierOf(t);
   const pid = String(t.participantId || '');
@@ -1049,11 +1060,15 @@ function renderCohortRow(t) {
   const reason = String(t.reason || 'clean');
   const reasonLower = reason.toLowerCase();
   const ca = t.summary && t.summary.cursorAnalysis;
-  // data-cursor: fired checks 0–3; -1 when the data carries no checks (sorts last).
-  const cursorCount = ca && typeof ca.factCount === 'number' ? ca.factCount : -1;
-  const cursorCell = !ca ? '' : ca.state !== 'ok' && ca.factCount == null ? '&mdash;'
-    : ca.checksRecorded === 0 ? 'pointer checks: not recorded'
-    : `pointer checks: ${ca.factCount} of 3`;
+  // data-cursor: fired checks 0–3; -1 when nothing is checkable (sorts last).
+  const cursorCount = pointerChecksFired(ca) ?? -1;
+  // The cell: "n of 3" with a stream and a device object; "not recorded"
+  // with a stream and none; a dash with no stream, unless the automation
+  // flag fired.
+  const cursorCell = !ca ? ''
+    : ca.state === 'ok' ? (ca.checksRecorded === 0 ? 'pointer checks: not recorded' : `pointer checks: ${ca.factCount} of 3`)
+    : ca.checks.webdriver && ca.checks.webdriver.fired ? 'pointer checks: automation flag'
+    : '&mdash;';
   return `<div class="cohort-row" data-pid="${esc(pid)}"
        data-sanitized="${esc(sanitized)}"
        data-tier="${tier}"
@@ -1242,7 +1257,9 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
 function renderCursorSection(s, participant, replayShownExternally) {
   const ca = s.cursorAnalysis;
   if (!ca) return '';
-  const ids = (x) => x.trialIds && x.trialIds.length ? ` (${esc(x.trialIds.join(', '))}${x.count > x.trialIds.length ? `, +${x.count - x.trialIds.length} more` : ''})` : '';
+  // "+n more" counts trials (x.trials: the trials involved before the
+  // ten-id cap), never clicks.
+  const ids = (x) => x.trialIds && x.trialIds.length ? ` (${esc(x.trialIds.join(', '))}${x.trials > x.trialIds.length ? `, +${x.trials - x.trialIds.length} more` : ''})` : '';
   const ofN = (x) => `${x.count} of ${x.of}${ids(x)}`;
   const check = (label, c, body) => `<tr class="${c && typeof c === 'object' && c.fired ? 'fired' : ''}"><th>${label}</th><td>${c === 'not recorded' ? 'not recorded' : body(c)}</td></tr>`;
   const num = (v, unit, digits) => v == null ? '—' : `${digits == null ? v : v.toFixed(digits)}${unit}`;
@@ -1270,8 +1287,9 @@ function renderCursorSection(s, participant, replayShownExternally) {
       ${feat('maximum deviation from the chord', c.features.maxDeviationPx, ' px', 1)}
       ${feat('moves per trial', c.features.movesPerTrial, '', 1)}
       ${feat('movements per trial', c.features.movementsPerTrial, '', 1)}
-      <tr><th>keyboard-activated clicks</th><td>${c.features.keyboardClicks}</td></tr>
-      <tr><th>movements · clicks · capped trials</th><td>${c.movements} · ${c.clicks} · ${c.cappedTrials}</td></tr>
+      <tr><th>keyboard-activated clicks</th><td>${c.features.keyboardClicks} of ${c.clicks} clicks</td></tr>
+      <tr><th>movements · clicks</th><td>${c.movements} · ${c.clicks}</td></tr>
+      <tr><th>capped trials</th><td>${c.cappedTrials} of ${c.trials} trials</td></tr>
     </table>
     <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants in cursor-limits.json; ${docs}.</p>`;
   }

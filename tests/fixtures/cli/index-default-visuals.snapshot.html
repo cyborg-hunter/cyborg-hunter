@@ -606,7 +606,7 @@
     
       <div class="signal-tile tone-zero"
            role="listitem"
-           title="Browser-reported checks that fired (automation flag, clicks the page dispatched, trials clicked without pointer movement); 0–3">
+           title="Browser-reported checks that fired (automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement); 0–3">
         <span class="signal-value">0</span>
         <span class="signal-label">Pointer checks</span>
       </div>
@@ -678,8 +678,9 @@
       <tr><th>maximum deviation from the chord</th><td>— <span class="muted">(n = 0)</span></td></tr>
       <tr><th>moves per trial</th><td>1.0 <span class="muted">(n = 6)</span></td></tr>
       <tr><th>movements per trial</th><td>2.0 <span class="muted">(n = 6)</span></td></tr>
-      <tr><th>keyboard-activated clicks</th><td>0</td></tr>
-      <tr><th>movements · clicks · capped trials</th><td>13 · 7 · 0</td></tr>
+      <tr><th>keyboard-activated clicks</th><td>0 of 7 clicks</td></tr>
+      <tr><th>movements · clicks</th><td>13 · 7</td></tr>
+      <tr><th>capped trials</th><td>0 of 6 trials</td></tr>
     </table>
     <p class="muted note">monitor stream, median 3321 ms between samples, page coordinates (scrolling can look like a jump); scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants in cursor-limits.json; <a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>.</p></div>
     <div class="image-block replay-block">
