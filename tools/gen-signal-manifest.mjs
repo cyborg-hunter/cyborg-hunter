@@ -11,30 +11,6 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { PRESETS, DEFAULT_THRESHOLDS } from '../src/shared/constants.js';
 
-// One preset's entry in the manifest's presets block:
-//   controls — its paste hard-count threshold and its effective tab-away and
-//              typing-speed cutoffs
-//   scoring  — its soft-scoring map (verbatim from constants.js) +
-//              softScoreThreshold. Step 9's library snippet reads
-//              presets.standard.scoring.soft from here.
-// Emitted here so the demo never hand-mirrors weights: this generator is the
-// single source, and the manifest test pins every value against constants.js.
-function buildPresetEntry(name) {
-  const preset = PRESETS[name];
-  const thresholds = { ...DEFAULT_THRESHOLDS, ...(preset.thresholds || {}) };
-  return {
-    controls: {
-      pasteHardCount: preset.scoring.hard?.paste?.countThreshold,
-      tabAwayCutoffMs: thresholds.tabAwayDurationMs,
-      typingSpeedCps: thresholds.typingSpeedCps
-    },
-    scoring: {
-      soft: preset.scoring.soft,
-      softScoreThreshold: preset.scoring.softScoreThreshold
-    }
-  };
-}
-
 // Builds the manifest for a given preset. Merge order matches
 // src/core/monitor.js: DEFAULT_THRESHOLDS, then the preset's own overrides.
 export function buildManifest(presetName = 'standard') {
@@ -84,12 +60,13 @@ export function buildManifest(presetName = 'standard') {
         gracePeriodTrials: preset.screenout?.gracePeriodTrials
       }
     },
-    // Both presets, always emitted regardless of the top-level `preset`, and
-    // pinned to constants.js by the manifest test. Step 9's snippet reads
-    // presets.standard.scoring.soft.
+    // The standard preset's soft-scoring map, verbatim from constants.js and
+    // always emitted regardless of the top-level `preset`: step 9's snippet
+    // reads presets.standard.scoring.soft. Emitted here so the demo never
+    // hand-mirrors weights: this generator is the single source, and the
+    // manifest test checks the map against constants.js.
     presets: {
-      standard: buildPresetEntry('standard'),
-      strict: buildPresetEntry('strict')
+      standard: { scoring: { soft: PRESETS.standard.scoring.soft } }
     }
   };
 }

@@ -1,7 +1,7 @@
 // tools/gen-example-fixtures.mjs
 //
 // Hand-authored-by-construction example participants for the demo's last
-// step (spec §7.2): "example-1" (HARD-leaning) and "example-2" (CLEAN) come
+// step: "example-1" (HARD-leaning) and "example-2" (CLEAN) come
 // with the visitor's own files, so the report built from them never looks
 // empty. Deterministic: a seeded mulberry32 PRNG plus a fixed EPOCH decide
 // every value — no Date.now(), no Math.random() — so regenerating these

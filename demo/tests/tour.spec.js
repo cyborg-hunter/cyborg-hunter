@@ -19,7 +19,7 @@
 //      full-viewport curtain at int-max z-index that pointer-intercepts
 //      everything beneath it — which originally trapped the in-card
 //      .endguard button behind the overlay's resume flow. The demo now
-//      counters this (spec §6 step 9's no-trap guarantee) by lifting the
+//      counters this (its no-trap guarantee) by lifting the
 //      button above the overlay while a violation is active (demo.js's
 //      floatEndGuard). The happy path clicks .endguard DURING the active
 //      violation — no resume first — and a dedicated test covers the
@@ -173,7 +173,7 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('[data-role="violation-chips"] .chip')).toContainText('not_fullscreen × 1');
   await expect(railRow(page, 'guardViolations')).toHaveClass(/hardlit/);
   await expect(page.locator('#guard-friction-overlay')).toHaveCSS('display', 'flex');
-  // No-trap guarantee (spec §6 step 9): while the violation overlay is up,
+  // No-trap guarantee: while the violation overlay is up,
   // the End button is lifted above it (.floating — reparented to <body>
   // after the overlay at equal z-index; demo.js floatEndGuard). It must be
   // visible, enabled, AND actually clickable with NO resume first — a

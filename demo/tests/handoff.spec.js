@@ -138,21 +138,21 @@ for (const [how, answer] of [
 }
 
 // ---------------------------------------------------------------------------
-// Replay viewer: keycast overlay (walkthrough item 8) + DOM-tier
-// reconstruction (walkthrough item 12's regression pin). Types an answer
+// Replay viewer: keycast overlay + DOM-tier reconstruction (a regression
+// check). Types an answer
 // ('Canberra') at baseline so trial 0's recording carries real
 // keydown/keyup events (keys:'full' is the recorder default) AND a real
 // input value to reconstruct, then presses play over that segment in the
 // replay viewer's own mount and checks a keycast chip appears.
 //
-// History: item 8(b) found that DOM-tier input-value playback did NOT land
+// History: DOM-tier input-value playback once did NOT land
 // visibly in the demo's own replay — the report iframe is sandbox=
 // "allow-scripts" (deliberately opaque-origin), and nesting the replay's
 // OWN reconstruction iframe (sandbox="allow-same-origin") inside that forced
 // it opaque too (a double-sandbox intersection), so contentDocument access
-// failed and the reconstruction froze at the first frame. Item 8 shipped
-// keycast as the workaround (drawn in the OUTER document, unaffected).
-// Item 12 fixes the root cause: the replay now mounts in its OWN same-origin
+// failed and the reconstruction froze at the first frame. Keycast shipped
+// first as the workaround (drawn in the OUTER document, unaffected).
+// The fix for the root cause: the replay now mounts in its OWN same-origin
 // viewer-host iframe (.replay-host-frame), a SIBLING of the report iframe
 // rather than nested inside it, so its inner reconstruction frame
 // (.replay-frame) is only one sandbox deep and stays same-origin. The
@@ -172,7 +172,7 @@ test('replay: keycast overlay shows a chip during typed playback; DOM-tier recon
   await expect(hostMount.locator('.replay-keycast .replay-key-chip').first()).toBeVisible({ timeout: 5000 });
   await hostMount.locator('.replay-play').click(); // stop
 
-  // Regression pin (item 12): seek past the typed segment (seek() clamps to
+  // Regression check: seek past the typed segment (seek() clamps to
   // the trial's own duration, so an overshoot lands exactly at its end) and
   // read the reconstructed field one level deeper, inside the DOM-tier
   // reconstruction iframe itself — this is what came back blank before the
@@ -201,7 +201,7 @@ test('replay: keycast overlay shows a chip during typed playback; DOM-tier recon
 });
 
 // ---------------------------------------------------------------------------
-// Replay viewer: self-explanatory buffer-cap note (walkthrough item 9).
+// Replay viewer: self-explanatory buffer-cap note.
 // The demo's own recording never crosses the cap, so this mounts the v2
 // `truncated` fixture (a `recording.capture_stopped` event that states its
 // own cap, limit_events: 12) through the same direct-mount path as the
@@ -231,8 +231,8 @@ test('replay: buffer-cap note explains itself when captureStopped is set', async
 });
 
 // ---------------------------------------------------------------------------
-// Replay viewer: continuous whole-session playback, default ON
-// (walkthrough item 10). The v2 `segment-bounds` fixture has two short
+// Replay viewer: continuous whole-session playback, default ON.
+// The v2 `segment-bounds` fixture has two short
 // segments (480ms, 400ms), so a play from segment 1 reaches segment 2 well
 // inside the timeout. Mounted in the analyzer's same-origin viewer host,
 // where DOM-tier reconstruction works (the opaque report iframe would freeze

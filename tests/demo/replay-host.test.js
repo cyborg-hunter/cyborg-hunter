@@ -1,6 +1,6 @@
 // tests/demo/replay-host.test.js
-// DOM-free unit tests for replay-host.js's pure HTML-building step
-// (walkthrough item 12). teardownReplayHost is DOM-dependent and gets its
+// DOM-free unit tests for replay-host.js's pure HTML-building step.
+// teardownReplayHost is DOM-dependent and gets its
 // coverage from the analyze page's tests (tests/demo/analyze-page.test.js,
 // tests/e2e/analyze/site.spec.js) — this file only exercises
 // buildReplayHostHtml's escaping, since a broken escape there is a
@@ -11,7 +11,7 @@ import { buildReplayHostHtml } from '../../demo/replay-host.js';
 import { inlineSafeJson, inlineSafeSrc } from '../../src/shared/inline-safe.js';
 import { REPLAY_STYLES_CSS } from '../../src/cli/renderers/replay-styles.js';
 
-// The model shape is a v2 VIEWER MODEL (design §9): `segments`, not `trials`.
+// The model shape is a v2 VIEWER MODEL: `segments`, not `trials`.
 // The demo host is the demo-regeneration path's
 // consumer, and it must not be pinned against a shape buildViewerModel
 // no longer produces.
