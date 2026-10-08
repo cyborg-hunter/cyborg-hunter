@@ -165,6 +165,12 @@ describe('the last known position', () => {
     assert.equal(zeroMoves([{ startRel_ms: 1000, duration_ms: 300 }]), 1);   // the position was forgotten, so the click is unexplained
     assert.equal(zeroMoves([]), 0);
   });
+  it('is forgotten at a tab-away before a later movement in the same trial', () => {
+    // A click at (120, 100), then a movement that starts about 613 px away at 2000 ms.
+    const jumps = (tabAwayEvents) => analyzeCursorForParticipant(participant([trial('q1', [ck(120, 100, 140), mv(700, 300, 2000), mv(705, 300, 2050), ck(705, 300, 2090)], { tabAwayEvents })])).cursor.rules.jumpClicks.count;
+    assert.equal(jumps([{ startRel_ms: 1500, duration_ms: 300 }]), 0);   // the position was forgotten before the movement
+    assert.equal(jumps([]), 1);
+  });
   it('is forgotten at every trial boundary when samples have no viewport coordinates', () => {
     const noCx = (e) => { const { cx, cy, ...rest } = e; return rest; };
     const r = analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0).map(noCx)), trial('q2', [noCx(ck(405, 302, 20))], { startTime: 6100 })]));
