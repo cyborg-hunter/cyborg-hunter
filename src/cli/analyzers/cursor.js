@@ -96,11 +96,16 @@ export function analyzeCursorForParticipant(participant, config) {
   const device = participant.session && participant.session.device && typeof participant.session.device === 'object' ? participant.session.device : null;
   const recorded = !!device;
   const webdriver = recorded ? { fired: device.webdriver === true } : NOT_RECORDED;
+  // With a device object every check is an object, in every state; without
+  // one all three are not recorded.
+  const zeroCount = () => ({ count: 0, of: 0, trialIds: [], fired: false });
 
   const base = {
     participantId: participant.participantId,
     checksRecorded: recorded ? 3 : 0,
-    checks: { webdriver, untrustedClicks: NOT_RECORDED, zeroMoveTrials: NOT_RECORDED },
+    checks: recorded
+      ? { webdriver, untrustedClicks: zeroCount(), zeroMoveTrials: zeroCount() }
+      : { webdriver, untrustedClicks: NOT_RECORDED, zeroMoveTrials: NOT_RECORDED },
     factCount: recorded ? (device.webdriver === true ? 1 : 0) : null,
     cursor: null,
     cursorReason: null
@@ -109,11 +114,11 @@ export function analyzeCursorForParticipant(participant, config) {
   const hasTrack = trials.some(t => Array.isArray(t.mouseEvents));
   if (!hasTrack) return { ...base, state: 'not collected', cursorReason: 'not collected' + versionNote(trials) };
   if (device && device.maxTouchPoints > 0 && device.coarsePointer === true) {
-    return { ...base, state: 'no cursor stream (touch device)', cursorReason: 'no cursor stream (touch device)',
-      checks: { ...base.checks, untrustedClicks: { count: 0, of: 0, trialIds: [], fired: false }, zeroMoveTrials: { count: 0, of: 0, trialIds: [], fired: false } } };
+    return { ...base, state: 'no cursor stream (touch device)', cursorReason: 'no cursor stream (touch device)' };
   }
-  const anyEvents = trials.some(t => (t.mouseEvents || []).length > 0);
-  if (!anyEvents) return { ...base, state: 'no cursor stream (no pointer events)', cursorReason: 'no cursor stream (no pointer events)' };
+  // Presses and releases alone (down, up) are not a cursor stream.
+  const anyPointerEvents = trials.some(t => (t.mouseEvents || []).some(e => e.type === 'move' || e.type === 'click'));
+  if (!anyPointerEvents) return { ...base, state: 'no cursor stream (no pointer events)', cursorReason: 'no cursor stream (no pointer events)' };
 
   const mode = coordinateMode(trials);
   const last = { x: 0, y: 0, valid: false };
@@ -183,6 +188,9 @@ export function analyzeCursorForParticipant(participant, config) {
       for (const s of m.samples) see(pos(s, mode));
       if (m.click) see(cp);
     }
+    // A tab-away after the trial's last movement (or in a trial with none)
+    // forgets the position too.
+    if (tabIdx < tabAways.length) forget();
     if (moves.length === 0 && pointerClicksHere > 0 && unexplainedPointerClick) { zeroMove.count++; zeroMove.trialIds.push(t.trialId); }
   }
 

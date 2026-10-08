@@ -65,6 +65,11 @@ describe('states', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', [])]));
     assert.equal(r.state, 'no cursor stream (no pointer events)');
   });
+  it('trials with only button presses and releases have no pointer events', () => {
+    const r = analyzeCursorForParticipant(participant([trial('q1', [{ x: 5, y: 5, cx: 5, cy: 5, t: 0, type: 'down' }, { x: 5, y: 5, cx: 5, cy: 5, t: 8, type: 'up' }])]));
+    assert.equal(r.state, 'no cursor stream (no pointer events)');
+    assert.equal(r.cursor, null);
+  });
   it('the automation flag fires on a null session too', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', [])], { ...desktop, webdriver: true }));
     assert.equal(r.checks.webdriver.fired, true);
@@ -81,6 +86,38 @@ describe('states', () => {
     assert.equal(r.factCount, null);
     assert.equal(r.cursor.coordinates, 'page');
     assert.equal(r.cursor.rules.jumpClicks.of, 1);
+  });
+});
+
+describe('the checks of a session with no cursor stream', () => {
+  const zero = { count: 0, of: 0, trialIds: [], fired: false };
+  const states = [
+    ['not collected', [trial('q1', undefined, { mouseEvents: undefined })]],
+    ['no cursor stream (no pointer events)', [trial('q1', [])]]
+  ];
+  for (const [state, trials] of states) {
+    it(`${state}, with a device object: every check is an object`, () => {
+      const r = analyzeCursorForParticipant(participant(trials));
+      assert.equal(r.state, state);
+      assert.equal(r.checksRecorded, 3);
+      assert.deepEqual(r.checks, { webdriver: { fired: false }, untrustedClicks: zero, zeroMoveTrials: zero });
+      assert.equal(r.factCount, 0);
+    });
+    it(`${state}, without a device object: every check is not recorded`, () => {
+      const r = analyzeCursorForParticipant(participant(trials, null));
+      assert.equal(r.state, state);
+      assert.equal(r.checksRecorded, 0);
+      assert.deepEqual(r.checks, { webdriver: 'not recorded', untrustedClicks: 'not recorded', zeroMoveTrials: 'not recorded' });
+      assert.equal(r.factCount, null);
+    });
+  }
+  // Only the device object can say a session is a touch device, so this state has no case without one.
+  it('no cursor stream (touch device): every check is an object', () => {
+    const r = analyzeCursorForParticipant(participant([trial('q1', [mv(5, 5, 0), ck(5, 5, 10)])], { maxTouchPoints: 5, coarsePointer: true, webdriver: false }));
+    assert.equal(r.state, 'no cursor stream (touch device)');
+    assert.equal(r.checksRecorded, 3);
+    assert.deepEqual(r.checks, { webdriver: { fired: false }, untrustedClicks: zero, zeroMoveTrials: zero });
+    assert.equal(r.factCount, 0);
   });
 });
 
@@ -122,10 +159,11 @@ describe('the last known position', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0), { duration_ms: 1000 }), trial('q2', [ck(405, 302, 20)], { startTime: 1000 + 1000 + 2001 })]));
     assert.equal(r.checks.zeroMoveTrials.count, 1);   // the position was stale, so the click is unexplained
   });
-  it('is forgotten at a tab-away', () => {
-    const t = trial('q1', [...path(100, 100, 400, 300, 0), ck(402, 301, 2000)], { tabAwayEvents: [{ startRel_ms: 1500, duration_ms: 300 }] });
-    const r = analyzeCursorForParticipant(participant([t]));
-    assert.equal(r.cursor.rules.jumpClicks.of, 2);
+  it('is forgotten at a tab-away after the trial\'s last click', () => {
+    // q1 ends on a click at (400, 300); q2, 100 ms later, is a lone click 2 px from it.
+    const zeroMoves = (tabAwayEvents) => analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0), { tabAwayEvents }), trial('q2', [ck(402, 301, 20)], { startTime: 6100 })])).checks.zeroMoveTrials.count;
+    assert.equal(zeroMoves([{ startRel_ms: 1000, duration_ms: 300 }]), 1);   // the position was forgotten, so the click is unexplained
+    assert.equal(zeroMoves([]), 0);
   });
   it('is forgotten at every trial boundary when samples have no viewport coordinates', () => {
     const noCx = (e) => { const { cx, cy, ...rest } = e; return rest; };
