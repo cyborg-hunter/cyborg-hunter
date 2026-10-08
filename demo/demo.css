@@ -219,7 +219,7 @@ pre{background:var(--code-bg);color:var(--code-ink);padding:14px 16px;
 pre code{background:none;padding:0;}
 
 /* ---------------------------------------------------------------------
- * Guard visuals — violation chips + scramble banner.
+ * Guard visuals — violation chips.
  * --------------------------------------------------------------------- */
 .violations{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
 /* No chips yet: the row takes no space, so it adds no gap above the button. */
@@ -228,12 +228,6 @@ pre code{background:none;padding:0;}
 .chip{font-family:var(--ff-sora);font-size:12px;padding:4px 10px;border-radius:0;
   box-shadow:inset 0 0 0 1px var(--line);color:var(--dim);}
 .chip.hot{background:var(--hard-bg);color:var(--hard);box-shadow:none;}
-
-.scramble{position:relative;user-select:none;}
-.scramble .content{filter:blur(6px);opacity:.7;}
-.scramble .banner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
-.scramble .banner span{background:var(--hard);color:#fff;font:700 12px/1 var(--ff-sora);
-  letter-spacing:.12em;padding:8px 14px;border-radius:0;}
 
 /* ---------------------------------------------------------------------
  * Instrument column — the rail card alone, short enough to stick. .card is

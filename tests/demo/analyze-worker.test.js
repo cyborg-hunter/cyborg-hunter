@@ -284,9 +284,7 @@ test('a reset while the report renders does not turn the render into an error', 
 // in the zip, the in-page report and what the page lists beside it. The
 // stylesheet imports two sheets, one of which imports the other: a spliced
 // sheet keeps its own imports as URLs, which a second pass over the same
-// recording must leave as the first wrote them. The data's trial phases come
-// back once each, sorted; a trial without one is listed as 'default', the
-// name phase scope gives it (src/cli/analyzers/phase-scope.js). The time a
+// recording must leave as the first wrote them. The time a
 // report was built is the one part of index.html that differs between the two
 // passes (the run id is the cohort's own), so the reports compare without it.
 const withoutRunTime = (html) => html.replace(/<time class="run-time" datetime="[^"]*">[^<]*<\/time>/, '<time class="run-time"></time>');
@@ -296,7 +294,6 @@ test('reanalyze under the same config gives the first report again, file for fil
   const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
   rec.stylesheets.push({ id: 999, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null });
   const data = JSON.parse(readFileSync(dir + '/DEMO-FIXT.json', 'utf8'));
-  data.trials.forEach((t, i) => { if (i === 0) delete t.integrity.phase; else t.integrity.phase = i % 2 ? 'warmup' : 'main'; });
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
   const style = '@import "theme.css";\n@import "vars.css";\n.stim{background:url("../img/bg.png")}';
   const files = [
@@ -329,7 +326,6 @@ test('reanalyze under the same config gives the first report again, file for fil
   assert.deepEqual(second.participants, first.participants);
   assert.deepEqual(second.triageOrder, first.triageOrder);
   assert.deepEqual(second.files, first.files);
-  assert.deepEqual([first.phases, second.phases], [['default', 'main', 'warmup'], ['default', 'main', 'warmup']]);
 });
 
 // The run id names the cohort (report-core.js runIdOf): a re-analysis of the

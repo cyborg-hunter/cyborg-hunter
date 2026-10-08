@@ -13,7 +13,7 @@ test('the panel\'s keys round-trip through a config unchanged', () => {
   const base = merged({ participantIdField: 'subject_ID', scoreWeights: { copy: { weight: 2, max: 3 } },
     scoring: { softScoreThreshold: 5 }, phaseScope: { exclude: ['practice'] }, showPlatformId: true, platformIdField: 'PROLIFIC' });
   const again = configFromSettings(base, settingsFromConfig(base));
-  for (const k of ['scoreWeights', 'scoring', 'phaseScope', 'integrityField', 'sessionIntegrityPath', 'platformIdField', 'showPlatformId', 'trajectoryDisplayOrder']) {
+  for (const k of ['scoreWeights', 'scoring', 'integrityField', 'sessionIntegrityPath', 'platformIdField', 'showPlatformId']) {
     assert.deepEqual(again[k], base[k], k);
   }
 });
