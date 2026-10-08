@@ -143,6 +143,9 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 5: autotype (real synthetic insertion, no keydown behind it) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 5 of 10');
+  // Bots first, then the button: three paragraphs.
+  await expect(page.locator('#card .stepcopy p')).toHaveCount(3);
+  await expect(page.locator('#card .stepcopy p').first()).toHaveText(/^Another class of cheaters cyborg-hunter can help detect is automated bots/);
   const autotypeButton = page.locator('[data-role="autotype-button"]');
   await autotypeButton.click();
   await expect(autotypeButton).toBeDisabled();

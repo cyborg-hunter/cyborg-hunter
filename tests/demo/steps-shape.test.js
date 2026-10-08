@@ -91,6 +91,22 @@ test('the fourth step covers leaving the tab and opening a sidebar, in three par
   assert.equal(tabAway.task.kind, 'tab-away');
   assert.equal(tabAway.primaryLabel, 'Done');
 });
+test('the fifth step says what bots leave behind, then lets something else type', () => {
+  const autotype = STEPS[4];
+  assert.equal(autotype.id, 'autotype');
+  assert.equal(autotype.body.replace(/\s+/g, ' '),
+    '<p>Another class of cheaters cyborg-hunter can help detect is automated bots, which take the experiment ' +
+    'autonomously without human intervention, aided or not by a language model for their answers. These bots ' +
+    'also leave characteristic traces in the data. One of them is text insertion.</p> ' +
+    '<p>Press the button and watch the field fill itself: text appearing with no keystrokes behind it. ' +
+    'Automation, scripts, and agentic tools all write into a page this way, so the library flags it immediately ' +
+    'as synthetic insertion. Typing speed is also computed per trial; sustained rates above {{typingSpeed.cps}} ' +
+    'characters per second get their own flag when the trial closes.</p> ' +
+    '<p>Dictation and some accessibility tools can produce similar patterns, a caveat the docs carry too: these ' +
+    'are signals for a human reviewer to weigh, not automatic verdicts.</p>');
+  assert.equal(autotype.task.kind, 'autotype');
+  assert.equal(autotype.primaryLabel, 'Continue →');
+});
 test('trial ids name the task, not the act, and none is a key the record reserves', () => {
   // The record's trial column and its filter tabs show these ids. 'all' and
   // 'session' are the live pane's own filter keys (live-pane.js).

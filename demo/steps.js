@@ -162,6 +162,10 @@ for different durations and come back, and/or open a sidebar.</p>`.trim(),
     eyebrow: 'Step 5 of 10',
     title: 'Let something else type',
     body: `
+<p>Another class of cheaters cyborg-hunter can help detect is automated bots,
+which take the experiment autonomously without human intervention, aided or
+not by a language model for their answers. These bots also leave
+characteristic traces in the data. One of them is text insertion.</p>
 <p>Press the button and watch the field fill itself: text appearing with no
 keystrokes behind it. Automation, scripts, and agentic tools all write into
 a page this way, so the library flags it immediately as synthetic
