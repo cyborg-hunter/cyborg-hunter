@@ -17,7 +17,7 @@ The bundled four-participant synthetic dataset (`examples/synthetic-pilot/` — 
 | 1 | SYN-HARD-03 | **HARD** | 18 | 2 paste events; 1 copy events; 3 tab-aways ≥10s; 2 flickers ≤3s; fast typing on 1 trials |
 | 2 | SYN-SOFT-02 | soft | 21 | 3 copy events; 1 tab-away ≥10s; 2 tab-aways 3–10s; 1 sidebar event |
 | 3 | SYN-CLEAN-01 | clean | 0 | 1 flicker ≤3s; 1 layout shifts |
-| 4 | SYN-GENERATED-04 | clean | 0 | pointer checks: automation flag; trials clicked without pointer movement 3/3 |
+| 4 | SYN-GENERATED-04 | clean | 0 | pointer checks: automation flag; trials clicked without pointer movement 1/3 |
 
 Ranking is **tier-first** (hard-triggered lead, then soft, then clean), score-descending within a tier — rank 1 outranks rank 2 despite the lower score, because hard evidence beats any accumulation of soft evidence. By default the score is `5×paste + 5×copy + 3×sidebar + 1×tab-away` (counting tab-aways longer than the participant's tab-away threshold — 3s by default, 5s for the strict preset); synthetic insertions and fast typing are surfaced in the reason but do not drive the score unless you weight them with `scoreWeights` in the config. See [docs/cli-reference.md → Triage scoring](docs/cli-reference.md#triage-scoring). The HTML report for the same dataset:
 

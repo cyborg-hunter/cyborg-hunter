@@ -164,8 +164,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   collected" while the automation flag still comes through. Sessions
   recorded before 0.14 show the checks as "not recorded" (docs/upgrading.md).
   The analyzer's sample has a fourth session, SYN-GENERATED-04, recorded as
-  0.14.0 data, whose checks fire; its three other sessions keep their 0.6.1
-  shape and show the checks as not recorded.
+  0.14.0 data: two of its checks fire (the automation flag, and one trial
+  clicked without pointer movement), and its two other trials move in
+  straight lines before they click (efficiency 1.000, deviation 0.0, n = 2).
+  Its three other sessions keep their 0.6.1 shape and show the checks as not
+  recorded.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded

@@ -83,6 +83,22 @@ function mousePath(startT, seed) {
   return pts;
 }
 
+// A scripted straight path in the 0.14 sample shape: four move samples 60 ms
+// apart, in equal steps along a straight line (efficiency 1, no deviation),
+// then a trusted pointer click on the last one. Viewport coordinates (cx, cy)
+// start at `from` and advance by `step`; the page sits scrolled 250 px down,
+// as in the click-only trial, so the page y is cy + 250.
+function scriptedPath(startT, from, step) {
+  const pts = [];
+  for (let i = 0; i < 4; i++) {
+    const cx = from.x + i * step.x, cy = from.y + i * step.y;
+    pts.push({ x: cx, y: cy + 250, cx, cy, t: startT + 600 + i * 60, type: 'move' });
+  }
+  const last = pts[pts.length - 1];
+  pts.push({ x: last.x, y: last.y, cx: last.cx, cy: last.cy, t: last.t + 60, type: 'click', trusted: true, detail: 1, pointerType: 'mouse' });
+  return pts;
+}
+
 // Builds one trial's `integrity` object the way endTrial() shapes it.
 // `sig` carries this trial's raw events; session totals accumulate outside.
 // `version` is the library version the trial is stamped with, `seedBase`
@@ -146,10 +162,13 @@ function buildTrial(pid, idx, sig, session, version, seedBase) {
     dropEvents: [],
     tabAwayEvents: sig.tabAwayEvents,
     // A click-only trial (0.14 shape): one click, with its viewport
-    // coordinates and provenance, and no pointer movement before it.
+    // coordinates and provenance, and no pointer movement before it. A
+    // scripted trial: a straight path ending in a click (scriptedPath).
     mouseEvents: sig.clickOnly
       ? [{ x: 640, y: 420, cx: 640, cy: 170, t: startTime + 900, type: 'click', trusted: true, detail: 1, pointerType: 'mouse' }]
-      : mousePath(startTime, seedBase + idx),
+      : sig.scriptedPath
+        ? scriptedPath(startTime, sig.scriptedPath.from, sig.scriptedPath.step)
+        : mousePath(startTime, seedBase + idx),
     editTimestamps: [],                              // keystrokeDynamics off (standard default)
     foreignInputEvents: [],
     syntheticInsertions: [],
@@ -305,13 +324,17 @@ const hard = buildParticipant('SYN-HARD-03', [
 ], { participantIndex: 2 });
 
 // SYN-GENERATED-04: a generated session whose browser set its automation
-// flag and whose clicks arrive with no pointer movement, so the sample
-// report shows the cursor checks firing. The id says what it is. Shaped like
-// 0.14.0 data (device facts, click provenance), so its checks are recorded;
-// the three sessions above are 0.6.1 data, whose checks are not.
+// flag. Two of its trials move in a straight line, in equal steps 60 ms
+// apart, before they click; the third is clicked with no pointer movement.
+// So the sample report shows two checks firing (the automation flag and one
+// trial clicked without pointer movement) beside the shape of a scripted
+// cursor (efficiency 1, no deviation). The id says what it is. Shaped like
+// 0.14.0 data (device facts, viewport coordinates, click provenance), so its
+// checks are recorded; the three sessions above are 0.6.1 data, whose checks
+// are not.
 const generated = buildParticipant('SYN-GENERATED-04', [
-  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.5, clickOnly: true },
-  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.8, clickOnly: true },
+  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.5, scriptedPath: { from: { x: 300, y: 200 }, step: { x: 100, y: 50 } } },
+  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.8, scriptedPath: { from: { x: 260, y: 420 }, step: { x: 120, y: -80 } } },
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.1, clickOnly: true }
 ], { participantIndex: 3, version: GENERATED_VERSION, device: { maxTouchPoints: 0, coarsePointer: false, webdriver: true } });
 
