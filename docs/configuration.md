@@ -257,7 +257,23 @@ CLI flags override config-file values. Unknown flags now exit with an error rath
 
 ## Browser library config
 
-When using `CyborgHunter.init()` directly (not through the jsPsych extension), pass config inline:
+With the one-line setup, set the monitor's options in `window.CyborgHunterConfig`, in a script above the ch.js tag. ch.js passes them to its monitor as is ([Configuration beyond data-*](advanced-integration.md#configuration-beyond-data-)):
+
+```html
+<script>
+  window.CyborgHunterConfig = {
+    preset: 'standard',
+    thresholds: { typingSpeedCps: 12 },                       // override one threshold
+    scoring: { hard: { paste: { countThreshold: 3 } } },      // override scoring
+    signals: { keystrokeDynamics: false }                     // turn one signal off
+  };
+</script>
+<script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
+```
+
+Under ch.js, `CyborgHunter.init()` logs an error and returns a monitor that records nothing.
+
+**Manual mode.** When using `CyborgHunter.init()` directly (not through the jsPsych extension), pass config inline:
 
 ```javascript
 const monitor = CyborgHunter.init({

@@ -177,6 +177,22 @@ describe('the one-line setup comes before the jsPsych extension', () => {
   }
 });
 
+// Under the one-line file the monitor's options go in
+// window.CyborgHunterConfig; CyborgHunter.init() there logs an error and
+// records nothing, so the pages that show how to set options show the
+// CyborgHunterConfig form before manual mode's init() call.
+describe('monitor options: CyborgHunterConfig comes before CyborgHunter.init()', () => {
+  for (const file of ['docs/configuration.md', 'docs/signals-reference.md']) {
+    it(file + ' shows window.CyborgHunterConfig before any CyborgHunter.init(', () => {
+      const text = read(file);
+      const config = text.indexOf('window.CyborgHunterConfig');
+      const init = text.indexOf('CyborgHunter.init(');
+      assert.ok(config >= 0, 'no window.CyborgHunterConfig in ' + file);
+      assert.ok(init === -1 || config < init, 'CyborgHunter.init( appears before window.CyborgHunterConfig in ' + file);
+    });
+  }
+});
+
 // The entry trial's text is an option of the call that builds it: the
 // quickstart shows it on the one-line file's call, the friction section on
 // the guard extension's.

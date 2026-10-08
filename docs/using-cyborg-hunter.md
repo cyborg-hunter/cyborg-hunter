@@ -131,8 +131,9 @@ rec.destroy();
   requires less. This mirrors the core library's
   GDPR-cautious stance (`keystrokeDynamics` off by default).
 - Clipboard events record lengths only **by default**. Setting
-  `clipboardContent: true` makes the replay stream record the clipboard
-  text and HTML too (redacted fields and password inputs excepted).
+  `clipboardContent: true` (manual mode) makes the replay stream record
+  the clipboard text and HTML too (redacted fields and password inputs
+  excepted).
   CH-core's own paste/drop content capture is a separate switch,
   `collectForPostHoc.pasteDropContent`.
 - Raw mouse coordinates (`mouseTrack`, the per-sample {x, y, t} trace the
