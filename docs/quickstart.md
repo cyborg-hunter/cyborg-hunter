@@ -88,6 +88,15 @@ Attributes on the ch.js tag:
 
 Friction needs a start mark as well as `data-guards="honeypot,friction"` ([Friction](advanced-integration.md#friction)). Anything else, such as monitor options or the replay recorder's DataPipe save, goes in `window.CyborgHunterConfig` ([Configuration beyond data-*](advanced-integration.md#configuration-beyond-data-)).
 
+On jsPsych, friction's start mark is the entry trial, `CyborgHunter.frictionEntryTrial()`: a page that asks the participant to enter fullscreen. To word that page yourself, pass your HTML as `message`:
+
+```javascript
+timeline.push(CyborgHunter.frictionEntryTrial({
+  message: '<h2>This study runs in fullscreen</h2>' +
+    '<p>Keep this tab in focus until the end. Click the button below to begin.</p>'
+}));
+```
+
 ## 3. Smoke-test with `data-debug`
 
 While piloting, add `data-debug` to the tag:

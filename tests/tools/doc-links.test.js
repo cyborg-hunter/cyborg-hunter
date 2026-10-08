@@ -161,3 +161,18 @@ describe('docs/qualtrics.md install snippet', () => {
     assert.ok(tags[0].includes('data-qualtrics-survey-id="${e://Field/SurveyID}"'), tags[0]);
   });
 });
+
+// The entry trial's text is an option of the call that builds it: the
+// quickstart shows it on the one-line file's call, the friction section on
+// the guard extension's (which hands it to GuardFriction.createEntryTrial).
+describe('the friction entry trial\'s message option is documented', () => {
+  it('docs/quickstart.md passes a message to CyborgHunter.frictionEntryTrial()', () => {
+    assert.match(read('docs/quickstart.md'), /CyborgHunter\.frictionEntryTrial\(\{\s*message:/);
+  });
+
+  it('docs/advanced-integration.md passes a message to the guard extension\'s entry trial', () => {
+    const doc = read('docs/advanced-integration.md');
+    assert.match(doc, /jsPsychGuardFriction\.entryTrial\(\{\s*message:/);
+    assert.match(doc, /GuardFriction\.createEntryTrial\(\{\s*message/);
+  });
+});

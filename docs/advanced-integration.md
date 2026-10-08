@@ -249,6 +249,17 @@ Enforcement starts at a mark you place:
 
 Without a mark, friction observes only: it logs violations and shows no curtain.
 
+With the extensions wired by hand ([Manual mode](#manual-mode)), the entry trial is `jsPsychGuardFriction.entryTrial()`. It passes its options to `GuardFriction.createEntryTrial({ message })`, so `message` works the same way:
+
+```javascript
+timeline.push(jsPsychGuardFriction.entryTrial({
+  message: '<h2>This study runs in fullscreen</h2>' +
+    '<p>Keep this tab in focus until the end. Click the button below to begin.</p>'
+}));
+```
+
+The message replaces the whole default text, heading included. The button keeps its label, "Enter fullscreen and continue".
+
 To add your own data to the entry trial, spread its `data` instead of replacing it:
 
 ```javascript

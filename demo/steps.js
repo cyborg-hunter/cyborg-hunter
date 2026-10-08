@@ -191,14 +191,14 @@ not automatic verdicts.</p>`.trim(),
     eyebrow: 'Step 6 of 10',
     title: 'The other approach: prevention',
     body: `
-<p>Everything so far was detection: record quietly, report later. The guard
-is the complementary mode: it makes cheating costly while the task runs.
-Under the guard, the study requires fullscreen and focus; leaving either
+<p>On top of means to track down signals, cyborg-hunter also ships with a
+guard that is designed to make it harder for participants to cheat. Under
+the guard, the study requires fullscreen and focus; leaving either
 scrambles the on-screen text until you return, and every violation is
 logged with its type and timestamp.</p>
-<p>Participants meet it as the box below, the library's actual entry
-screen, word for word. Enter whenever you're ready; nothing is enforced
-until you do.</p>`.trim(),
+<p>Participants are prompted by a page like the one below to enter the
+guarded mode (the wording on the page can be customized). Click the button
+"Enter fullscreen and continue" to trigger the guard yourself.</p>`.trim(),
     task: {
       kind: 'fullscreen-entry',
       trialId: 'guard-entry',

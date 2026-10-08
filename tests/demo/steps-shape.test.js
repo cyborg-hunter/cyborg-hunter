@@ -107,6 +107,26 @@ test('the fifth step says what bots leave behind, then lets something else type'
   assert.equal(autotype.task.kind, 'autotype');
   assert.equal(autotype.primaryLabel, 'Continue →');
 });
+test('the sixth step says what the guard is and names the entry page\'s button as the library and the demo label it', () => {
+  const entry = STEPS[5];
+  assert.equal(entry.id, 'guard-entry');
+  assert.equal(entry.body.replace(/\s+/g, ' '),
+    '<p>On top of means to track down signals, cyborg-hunter also ships with a guard that is designed to make it ' +
+    'harder for participants to cheat. Under the guard, the study requires fullscreen and focus; leaving either ' +
+    'scrambles the on-screen text until you return, and every violation is logged with its type and ' +
+    'timestamp.</p> ' +
+    '<p>Participants are prompted by a page like the one below to enter the guarded mode (the wording on the page ' +
+    'can be customized). Click the button "Enter fullscreen and continue" to trigger the guard yourself.</p>');
+  assert.equal(entry.task.kind, 'fullscreen-entry');
+  assert.equal(entry.primaryLabel, null);
+  // The button the paragraph names: the entry trial's only choice in the
+  // library, and the label of the demo's copy of that page.
+  const label = /Click the button "([^"]+)"/.exec(entry.body.replace(/\s+/g, ' '))[1];
+  const friction = fs.readFileSync(new URL('../../src/jspsych/extension-guard-friction.js', import.meta.url), 'utf8');
+  assert.deepEqual([...friction.matchAll(/choices: \['([^']+)'\]/g)].map((m) => m[1]), [label]);
+  const demo = fs.readFileSync(new URL('../../demo/demo.js', import.meta.url), 'utf8');
+  assert.equal(/data-action="enter-fullscreen">([^<]+)<\/button>/.exec(demo)[1], label);
+});
 test('trial ids name the task, not the act, and none is a key the record reserves', () => {
   // The record's trial column and its filter tabs show these ids. 'all' and
   // 'session' are the live pane's own filter keys (live-pane.js).

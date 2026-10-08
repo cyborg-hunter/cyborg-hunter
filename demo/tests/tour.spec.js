@@ -157,6 +157,9 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 6: guard entry (library's own entry screen, verbatim) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 6 of 10');
+  // What the guard is, then the page and the button that starts it.
+  await expect(page.locator('#card .stepcopy p')).toHaveCount(2);
+  await expect(page.locator('#card .stepcopy p').first()).toHaveText(/^On top of means to track down signals/);
   await expect(page.locator('.entrybox')).toContainText('Fullscreen mode required');
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10');
