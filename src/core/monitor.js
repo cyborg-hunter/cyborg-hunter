@@ -16,6 +16,24 @@ import { attachTypingSignals, attachForeignInputSignals, computeTypingSpeed } fr
 import { attachBrowserSignals, attachElementTrace } from './signals/browser.js';
 import { injectDecoy, removeDecoyElement, resetDecoyState } from './signals/dom-protection.js';
 
+// What the browser states about the device and the session, read once at
+// startSession and carried on the session report: the report's cursor
+// section uses them to tell a touch device from a desktop (taps produce one
+// synthetic mouse move per click) and to show the automation flag a
+// WebDriver-controlled browser sets. Each fact is null when the browser
+// cannot answer, never a guess.
+export function readDeviceFacts() {
+  var nav = typeof navigator !== "undefined" ? navigator : null;
+  var facts = { maxTouchPoints: null, coarsePointer: null, webdriver: null };
+  if (!nav) return facts;
+  facts.maxTouchPoints = typeof nav.maxTouchPoints === "number" ? nav.maxTouchPoints : 0;
+  facts.webdriver = nav.webdriver === true;
+  try {
+    facts.coarsePointer = typeof matchMedia === "function" ? matchMedia("(pointer: coarse)").matches === true : null;
+  } catch (e) { facts.coarsePointer = null; }
+  return facts;
+}
+
 let _activeInstance = null; // Track for idempotent init
 
 /**
@@ -165,6 +183,7 @@ export function init(userConfig) {
     viewportWidthShifts: _viewportWidthShifts,
     layoutShifts: _viewportWidthShifts,
     zoomChanges: [],
+    device: null,
     hardScore: {}, softScore: 0, trialsCompleted: 0
   };
   var trialData = null;
@@ -243,6 +262,7 @@ export function init(userConfig) {
   var monitor = {
     startSession: function () {
       transition("session");
+      sessionData.device = readDeviceFacts();
       var ctx = buildSessionCtx();
       attachBrowserSignals(ctx);
       attachFocusSignals(ctx);

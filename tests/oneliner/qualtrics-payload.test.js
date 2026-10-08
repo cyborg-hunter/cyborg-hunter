@@ -483,6 +483,22 @@ describe('the cap', () => {
       assert.strictEqual(JSON.stringify(b), before);
     }
   });
+
+  it('a trial of 2,000 clicks with provenance fields stays within the cap', () => {
+    const events = Array.from({ length: 2000 }, (_, i) => ({
+      x: 100 + i, y: 200, cx: 100 + i, cy: 50, t: i * 50, type: 'click', trusted: true, detail: 1, pointerType: 'mouse'
+    }));
+    const b = blob({ pages: 1, mouse: 2000 });
+    const plain = build(b, MAX_CHARS);
+    b.trials[0].integrity.mouseTrack = events;
+    const out = build(b, MAX_CHARS);
+    assert.strictEqual(out.level, 0);
+    assert.strictEqual(out.chars, bytes(out.json));
+    assert.ok(out.chars <= MAX_CHARS, String(out.chars));
+    assert.strictEqual(JSON.parse(out.json).cyborgHunterError, undefined);
+    // The summary leaves the mouse track out, so the new fields add nothing.
+    assert.strictEqual(out.json, plain.json);
+  });
 });
 
 // The result at a ladder level: built with the smallest cap that level

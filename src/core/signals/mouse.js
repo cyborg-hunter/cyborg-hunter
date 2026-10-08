@@ -1,5 +1,5 @@
 // src/core/signals/mouse.js
-// Mouse tracking (20Hz throttled) and bot metrics computation.
+// Mouse tracking (throttled to thresholds.mouseThrottleMs) and bot metrics computation.
 //
 // Trial-scoped: mousemove, click, mousedown, mouseup events are recorded
 // during each trial. The bot metrics (pathEfficiency, directionChanges,
@@ -37,6 +37,7 @@ export function attachMouseSignals(ctx) {
       lastMoveTime = now;
       trialData.mouseEvents.push({
         x: Math.round(e.pageX), y: Math.round(e.pageY),
+        cx: Math.round(e.clientX), cy: Math.round(e.clientY),
         t: Math.round(now - trialStartTime), type: "move"
       });
     }, { passive: true });
@@ -50,13 +51,23 @@ export function attachMouseSignals(ctx) {
     // then belongs to the trial it ended (the next trial's listener is not
     // called for it); and a handler that stops the event's propagation no
     // longer hides it.
+    // Each click also carries what the browser says about its origin:
+    // isTrusted is false for clicks the page's own scripts dispatched; detail
+    // is 0 for keyboard and assistive activation; pointerType names the
+    // device when the event has one. The report reads these to tell a
+    // pointer click from a scripted or a keyboard one.
     function mouseEventHandler(type) {
       return function (e) {
         if (trialData.mouseEvents.length >= mouseMaxEvents) return;
-        trialData.mouseEvents.push({
+        var sample = {
           x: Math.round(e.pageX), y: Math.round(e.pageY),
-          t: Math.round(performance.now() - trialStartTime), type: type
-        });
+          cx: Math.round(e.clientX), cy: Math.round(e.clientY),
+          t: Math.round(performance.now() - trialStartTime), type: type,
+          trusted: e.isTrusted === true,
+          detail: typeof e.detail === "number" ? e.detail : 0
+        };
+        if (typeof e.pointerType === "string") sample.pointerType = e.pointerType;
+        trialData.mouseEvents.push(sample);
       };
     }
     ctx.addTrialListener(window, "click", mouseEventHandler("click"), { passive: true, capture: true });
