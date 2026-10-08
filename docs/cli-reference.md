@@ -147,7 +147,7 @@ One row per participant:
 | `cursorStream` | The stream the section read: `core`, the monitor's mouse track |
 | `cursorSampleIntervalMs` | Median time between consecutive move samples within a trial, in ms; empty when the track has no such pair |
 | `cursorClicks` | Clicks in the mouse track |
-| `cursorMovements` | Movements: runs of move samples, ended by a gap longer than 400 ms or by a click |
+| `cursorMovements` | Movements: runs of move samples, ended by a gap longer than 400 ms or by a click; a click with no move before it counts as a movement of its own |
 | `cursorMovesPerTrialMedian` | Median number of move samples per trial (depends on the sampling interval) |
 | `cursorEfficiencyMedian` | Median efficiency per movement (displacement over path length, 1 for a straight line), three decimals |
 | `cursorMaxDeviationPxMedian` | Median of each movement's largest distance from the straight line between its ends, in px, one decimal |
@@ -207,16 +207,22 @@ not written here.
 ### `cursor-limits.json`
 
 The constants the cursor section judged with, written by every run:
-`{ "cliVersion": "<version>", "recordedWith": "<version>"|null, "limits": { "<constant>": { "value": n, "meaning": "<text>" } }, "sampleIntervalMs": { "core": { "median": ms|null, "n": k } }, "sessions": { "total": n, "checkable": k } }`.
+`{ "cliVersion": "<version>", "recordedWith": "<version>, …"|null, "limits": { "<constant>": { "value": n, "meaning": "<text>" } }, "sampleIntervalMs": { "core": { "median": ms|null, "n": k } }, "sessions": { "total": n, "withDeviceFacts": k } }`.
 `cliVersion` is the version of the CLI that holds the constants and
-`recordedWith` the library version the data carries, so a report rebuilt by a
-later CLI shows which constants decided it. Each constant comes with a sentence
-saying what it does (for example, `movementGapMs`, 400: two move samples further
-apart belong to different movements). `sampleIntervalMs` is the median of the
-sessions' own median intervals between move samples, over the `n` sessions
-that have one, and `checkable` counts the sessions with a cursor stream and
-device facts, as the run line does: "Pointer checks: fired in N of M checkable
-sessions (K recorded before 0.14, J no cursor stream)".
+`recordedWith` the library versions the data carries, each once, in version
+order and joined by ", " (`"0.6.1, 0.14.0"`; null when the data names none),
+so a report rebuilt by a later CLI shows which constants decided it. Each
+constant comes with a sentence saying what it does (for example,
+`movementGapMs`, 400: two move samples further apart belong to different
+movements); the cursor section prints the same values on its stream line.
+`sampleIntervalMs` is the median of the sessions' own median intervals between
+move samples, over the `n` sessions that have one, and `withDeviceFacts`
+counts the sessions with device facts, as the run line does: "Pointer checks:
+fired in N of M sessions with device facts (K recorded without them; J without
+a cursor stream)". N counts the sessions where any check fired, M those with
+device facts and K the rest; J counts the sessions with no cursor stream, which
+overlap the others (a session with device facts and no stream still reports the
+automation flag).
 
 ### `event-log.csv`
 

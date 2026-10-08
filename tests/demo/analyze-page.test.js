@@ -54,7 +54,7 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
 const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null,
   integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
-  cursorLine: 'Pointer checks: fired in 1 of 2 checkable sessions (0 recorded before 0.14, 0 no cursor stream)',
+  cursorLine: 'Pointer checks: fired in 1 of 2 sessions with device facts (0 recorded without them; 0 without a cursor stream)',
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
 

@@ -139,7 +139,11 @@ export async function buildReport(participants, config, deps) {
   const sw = buildScoreWeightsJson(config);
   sink('score-weights.json', sw.text);
   log(`  score-weights.json — ${sw.isDefault ? 'default' : 'custom'} weights`);
-  const recordedWith = participants.map(p => (p.trials || []).map(t => t.libraryVersion).find(Boolean)).find(Boolean) || null;
+  // recordedWith: every library version the data names, once each, in
+  // version order (0.6.1 before 0.14.0), joined by ", "; null when none.
+  const versions = new Set();
+  for (const p of participants) for (const t of p.trials || []) if (typeof t.libraryVersion === 'string' && t.libraryVersion) versions.add(t.libraryVersion);
+  const recordedWith = versions.size ? [...versions].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).join(', ') : null;
   sink('cursor-limits.json', buildCursorLimitsJson(recordedWith, cursors));
   log(`  cursor-limits.json — the constants the cursor section used`);
   sink('triage.md', buildTriageMd(triage, config));
@@ -153,19 +157,21 @@ export async function buildReport(participants, config, deps) {
 
   // The pointer checks over the cohort: the run line (returned as cursorLine
   // for the analyze page, whose worker does not wire log) and, when the
-  // cursor weight is on but some sessions carry no checks, the warning.
-  // The three numbers partition the cohort: checkable (a cursor stream and a
-  // device object), recorded before 0.14 (a stream, no device object), and
-  // no cursor stream (every other state). Fired counts checkable sessions.
-  const checkableSet = cursors.filter(c => c.state === 'ok' && c.checksRecorded > 0);
-  const checkable = checkableSet.length;
-  const fired = checkableSet.filter(c => c.factCount > 0).length;
-  const before014 = cursors.filter(c => c.state === 'ok' && c.checksRecorded === 0).length;
+  // cursor weight is on but some sessions carry no device facts, the warning.
+  // withDevice: sessions with device facts (at least the automation flag is
+  // recorded); fired: sessions with any check that fired, in any state;
+  // withoutDevice: the rest of the cohort; noStream: sessions with no cursor
+  // stream, which overlap the other counts and are stated apart.
+  const total = cursors.length;
+  const withDevice = cursors.filter(c => c.checksRecorded >= 1).length;
+  const fired = cursors.filter(c => c.factCount > 0).length;
+  const withoutDevice = total - withDevice;
   const noStream = cursors.filter(c => c.state !== 'ok').length;
-  const cursorLine = `Pointer checks: fired in ${fired} of ${checkable} checkable sessions (${before014} recorded before 0.14, ${noStream} no cursor stream)`;
+  const cursorLine = `Pointer checks: fired in ${fired} of ${withDevice} sessions with device facts (${withoutDevice} recorded without them; ${noStream} without a cursor stream)`;
   log(`  ${cursorLine}`);
-  if (scoreWeights.weights.cursor.weight > 0 && checkable < cursors.length) {
-    warn(`[cyborg-hunter] scoreWeights.cursor is ${scoreWeights.weights.cursor.weight}; ${checkable} of ${cursors.length} sessions carry pointer checks (${before014} recorded before 0.14, ${noStream} without a cursor stream): the weight ranks only those.`);
+  const cursorWeight = scoreWeights.weights.cursor.weight;
+  if (cursorWeight > 0 && withDevice < total) {
+    warn(`[cyborg-hunter] scoreWeights.cursor is ${cursorWeight}; ${withDevice} of ${total} sessions carry device facts (the rest were recorded before 0.14): the weight ranks only those.`);
   }
 
   // Plots, through the injected canvas: one PNG per participant from each of

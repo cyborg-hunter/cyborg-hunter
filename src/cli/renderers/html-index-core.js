@@ -957,7 +957,7 @@ const SIGNALS = [
   { key: 'zoomChangeCount',          label: 'Zoom changes',    tone: 'muted',    hint: 'Browser zoom level changed during task' },
   { key: 'devToolsEventCount',       label: 'DevTools',        tone: 'muted',    hint: 'Reserved (always 0) — DevTools opens are counted under Kb shortcuts' },
   { key: 'edgeExitCount',            label: 'Edge exits',      tone: 'muted',    hint: 'Mouse exited window through a screen edge' },
-  { key: 'cursorFactCount',          label: 'Pointer checks',  tone: 'warn',     hint: 'Browser-reported checks that fired (automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement); 0–3' }
+  { key: 'cursorFactCount',          label: 'Pointer checks',  tone: 'warn',     hint: 'Browser-reported checks that fired (automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement); 0–3; — when the data carries no device facts' }
 ];
 
 // The pointer checks that fired, as the tile, the rail and its sort read
@@ -974,25 +974,28 @@ function pointerChecksFired(ca) {
 // (hits AND misses) so the layout is stable across participants — only firing
 // signals light up. Misses share the same footprint as hits, in the muted
 // "tone-zero" style. Cleans show all-zero, suspicious shows a few lit cells.
+// A value is a count, or a string shown as is in the tone-zero style: the
+// pointer-checks tile reads "—" when the data carries no device facts.
 function renderSignalGrid(summary, triageRow) {
   const aiExt = summary.aiExtensionCount ?? (summary.aiExtensionsFound || summary.extensionsDetected || []).length;
   const edgeExits = triageRow?.edgeExitCount ?? 0;
+  const ca = summary.cursorAnalysis;
 
   const tiles = SIGNALS.map(sig => {
     let v;
     if (sig.key === 'aiExtensionsCount')   v = aiExt;
     else if (sig.key === 'edgeExitCount')  v = edgeExits;
-    else if (sig.key === 'cursorFactCount') v = pointerChecksFired(summary.cursorAnalysis) ?? 0;
+    else if (sig.key === 'cursorFactCount') v = ca && ca.checksRecorded === 0 ? '—' : (pointerChecksFired(ca) ?? 0);
     else                                   v = summary[sig.key] ?? 0;
-    return { ...sig, value: Number(v) || 0 };
+    return { ...sig, value: typeof v === 'string' ? v : (Number(v) || 0) };
   });
 
   return `<div class="signal-grid" role="list">
     ${tiles.map(t => `
-      <div class="signal-tile ${t.value > 0 ? 'tone-' + t.tone : 'tone-zero'}"
+      <div class="signal-tile ${typeof t.value === 'number' && t.value > 0 ? 'tone-' + t.tone : 'tone-zero'}"
            role="listitem"
            title="${esc(t.hint)}">
-        <span class="signal-value">${t.value}</span>
+        <span class="signal-value">${esc(String(t.value))}</span>
         <span class="signal-label">${esc(t.label)}</span>
       </div>
     `).join('')}
@@ -1251,9 +1254,13 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
 
 // The "Cursor dynamics" section: the three browser-reported checks with
 // their counts, denominators and trial ids; the reported rule; the shape
-// features with their n; the stream and its realised interval; the file
-// that holds the constants. Numbers only; their meaning is on
-// docs/interpreting-signals.md, which the section links to.
+// features with their n; the stream and its realised interval; the
+// constants that judged it (the values the analysis carries, also written to
+// cursor-limits.json). Numbers only; their meaning is on
+// docs/interpreting-signals.md, which the section links to. It ends with a
+// pointer to the participant's replay: a link to the replay section in the
+// CLI report, a sentence naming the card where the replay is shown outside
+// the report (the analyze page, whose card follows the selected participant).
 function renderCursorSection(s, participant, replayShownExternally) {
   const ca = s.cursorAnalysis;
   if (!ca) return '';
@@ -1265,6 +1272,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
   const num = (v, unit, digits) => v == null ? '—' : `${digits == null ? v : v.toFixed(digits)}${unit}`;
   const feat = (label, f, unit = '', digits) => `<tr><th>${label}</th><td>${num(f.median, unit, digits)} <span class="muted">(n = ${f.n})</span></td></tr>`;
   const docs = `<a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>`;
+  const constants = Object.entries(ca.limits).map(([name, value]) => `${name} ${value}`).join(', ');
   let body;
   if (ca.state !== 'ok') {
     body = `<p class="muted note">${esc(ca.cursorReason)}.${ca.checks.webdriver && ca.checks.webdriver.fired ? ' The browser set its automation flag.' : ''}</p>`;
@@ -1291,9 +1299,11 @@ function renderCursorSection(s, participant, replayShownExternally) {
       <tr><th>movements · clicks</th><td>${c.movements} · ${c.clicks}</td></tr>
       <tr><th>capped trials</th><td>${c.cappedTrials} of ${c.trials} trials</td></tr>
     </table>
-    <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants in cursor-limits.json; ${docs}.</p>`;
+    <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants: ${esc(constants)} (cursor-limits.json); ${docs}.</p>`;
   }
-  const replayLink = replayShownExternally ? '' : (participant && participant.replay && participant.replay.recording ? `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>` : '');
+  const replayLink = replayShownExternally
+    ? `<p class="muted note">The replay card beside this report shows this session.</p>`
+    : (participant && participant.replay && participant.replay.recording ? `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>` : '');
   return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${body}${replayLink}</div>`;
 }
 

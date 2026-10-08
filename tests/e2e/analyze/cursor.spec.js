@@ -19,12 +19,15 @@ test('the sample shows the cursor section, the tile, the rail cell and the label
   await expect(frame.locator('option[value="cursor"]')).toHaveText(/Pointer checks/);
   await expect(frame.locator('.cohort-row[data-pid="SYN-GENERATED-04"] .cursor-cell')).toHaveText('pointer checks: 2 of 3');
   await expect(frame.locator('.cohort-row[data-pid="SYN-CLEAN-01"] .cursor-cell')).toHaveText('pointer checks: not recorded');
+  await expect(frame.locator('#p-SYN-CLEAN-01 .signal-tile', { hasText: 'Pointer checks' }).locator('.signal-value')).toHaveText('—');
   await frame.locator('.cohort-row[data-pid="SYN-GENERATED-04"]').click();
   await expect(frame.locator('#p-SYN-GENERATED-04 .cursor-section')).toContainText('automation flag set by the browser');
-  await expect(frame.locator('#p-SYN-GENERATED-04 .signal-tile', { hasText: 'Pointer checks' })).toContainText('2');
+  await expect(frame.locator('#p-SYN-GENERATED-04 .signal-tile', { hasText: 'Pointer checks' }).locator('.signal-value')).toHaveText('2');
+  // The report's replay is the card beside it on this page.
+  await expect(frame.locator('#p-SYN-GENERATED-04 .cursor-section')).toContainText('The replay card beside this report shows this session.');
   await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('pointer checks (cursor)');
   await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('the tier is unchanged');
-  await expect(page.locator('[data-role="cursor-line"]')).toContainText('Pointer checks: fired in 1 of 1 checkable sessions (3 recorded before 0.14, 0 no cursor stream)');
+  await expect(page.locator('[data-role="cursor-line"]')).toContainText('Pointer checks: fired in 1 of 1 sessions with device facts (3 recorded without them; 0 without a cursor stream)');
   await assertOnlyAllowed(page, seen, allow);
 });
 

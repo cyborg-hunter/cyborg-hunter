@@ -12,6 +12,9 @@ import { buildCursorLimitsJson } from '../../src/cli/renderers/cursor-limits-cor
 import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import { buildReport, REPORT_FILES } from '../../src/cli/report-core.js';
 import { VERSION } from '../../src/shared/constants.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 const mv = (x, y, t) => ({ x, y, cx: x, cy: y, t, type: 'move' });
 const ck = (x, y, t, extra = {}) => ({ x, y, cx: x, cy: y, t, type: 'click', trusted: true, detail: 1, pointerType: 'mouse', ...extra });
@@ -138,9 +141,9 @@ describe('the HTML report', () => {
     assert.match(html, /trials clicked without pointer movement[\s\S]{0,80}1 of 2 \(q2\)/);
     assert.match(html, /clicks after a pointer jump/);
     assert.match(html, /median \d+ ms between samples/);
-    assert.match(html, /cursor-limits\.json/);
+    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 100, minSamplesForShape 2 \(cursor-limits\.json\)/);
     assert.match(html, /Pointer checks<\/span>/);     // the tile label
-    assert.match(html, /title="Browser-reported checks that fired \(automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement\); 0–3"/);
+    assert.match(html, /title="Browser-reported checks that fired \(automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement\); 0–3; — when the data carries no device facts"/);
     assert.match(html, /keyboard-activated clicks<\/th><td>0 of 2 clicks</);
     assert.match(html, /capped trials<\/th><td>0 of 2 trials</);
   });
@@ -175,8 +178,30 @@ describe('the HTML report', () => {
     const html = await renderIndexHtml(summaries, triage, [withReplay], config, false);
     assert.match(html, /<a href="#replay-HUMAN">open the replay<\/a>/);
     assert.match(html, /<div class="image-block replay-block" id="replay-HUMAN"/);
+    assert.doesNotMatch(html, /replay card/);
     const outside = await renderIndexHtml(summaries, triage, [withReplay], config, false, { replayShownExternally: true });
+    assert.match(outside, /<p class="muted note">The replay card beside this report shows this session\.<\/p><\/div>/);
     assert.doesNotMatch(outside, /open the replay/);
+  });
+  it('prints the constants the analysis judged with, not the defaults', async () => {
+    const custom = { ...CURSOR_LIMITS, discontinuityPx: { value: 50, meaning: CURSOR_LIMITS.discontinuityPx.meaning } };
+    const summaries = computeSummary([human], config);
+    summaries[0].cursorAnalysis = analyzeCursor([human], custom)[0];
+    const triage = rankTriage(summaries, detectEdgeExits([human], config), config);
+    const html = await renderIndexHtml(summaries, triage, [human], config, false);
+    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 50, minSamplesForShape 2 \(cursor-limits\.json\)/);
+  });
+  it('the tile of a session recorded before 0.14 reads "—" in the tone-zero style', async () => {
+    // The demo fixture: 0.7.2 data with a mouse track and no device facts.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const raw = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));
+    const fixt = extractIntegrityData(raw, config);
+    const { summaries, triage } = analyze([fixt]);
+    assert.equal(summaries[0].cursorAnalysis.checksRecorded, 0);
+    const html = await renderIndexHtml(summaries, triage, [fixt], config, false);
+    assert.match(html, /<div class="signal-tile tone-zero"\s*role="listitem"\s*title="[^"]*; — when the data carries no device facts">\s*<span class="signal-value">—<\/span>\s*<span class="signal-label">Pointer checks/);
+    // The rest of the grid still reads counts (the fixture pasted twice).
+    assert.match(html, /<span class="signal-value">2<\/span>\s*<span class="signal-label">Paste/);
   });
 });
 
@@ -188,18 +213,43 @@ describe('buildReport', () => {
       sink: (p, body) => { files[p] = body; }, log: (l) => logs.push(l), warn: (w) => warns.push(w)
     });
     assert.ok(files['cursor-limits.json']);
-    assert.ok(logs.some(l => /Pointer checks: fired in 0 of 1 checkable sessions \(1 recorded before 0\.14, 0 no cursor stream\)/.test(l)), logs.join('\n'));
-    assert.ok(warns.some(w => /scoreWeights\.cursor is 1; 1 of 2 sessions carry pointer checks/.test(w)), warns.join('\n'));
+    assert.ok(logs.includes('  Pointer checks: fired in 0 of 1 sessions with device facts (1 recorded without them; 0 without a cursor stream)'), logs.join('\n'));
+    assert.ok(warns.includes('[cyborg-hunter] scoreWeights.cursor is 1; 1 of 2 sessions carry device facts (the rest were recorded before 0.14): the weight ranks only those.'), warns.join('\n'));
   });
-  it('the run line and the warning partition the cohort: checkable, recorded before 0.14, no cursor stream', async () => {
-    const logs = []; const warns = [];
+  it('the run line counts the sessions with device facts, those that fired in any state, and those without a cursor stream', async () => {
+    // HUMAN and DRIVER have a stream and device facts; OLD has neither device
+    // facts nor provenance; TOUCH and TOUCHFLAG have device facts and no
+    // cursor stream, and TOUCHFLAG's automation flag fired.
+    const logs = []; const warns = []; const files = {};
     const built = await buildReport([human, driver, old, touch, touchFlag], { ...config, scoreWeights: { cursor: 1 } }, {
-      sink: () => {}, log: (l) => logs.push(l), warn: (w) => warns.push(w)
+      sink: (p, body) => { files[p] = body; }, log: (l) => logs.push(l), warn: (w) => warns.push(w)
     });
-    const line = 'Pointer checks: fired in 1 of 2 checkable sessions (1 recorded before 0.14, 2 no cursor stream)';
+    const line = 'Pointer checks: fired in 2 of 4 sessions with device facts (1 recorded without them; 2 without a cursor stream)';
     assert.equal(built.cursorLine, line);
     assert.ok(logs.includes('  ' + line), logs.join('\n'));
-    assert.ok(warns.includes('[cyborg-hunter] scoreWeights.cursor is 1; 2 of 5 sessions carry pointer checks (1 recorded before 0.14, 2 without a cursor stream): the weight ranks only those.'), warns.join('\n'));
+    assert.ok(warns.includes('[cyborg-hunter] scoreWeights.cursor is 1; 4 of 5 sessions carry device facts (the rest were recorded before 0.14): the weight ranks only those.'), warns.join('\n'));
+    // The file counts what the line counts.
+    assert.deepEqual(JSON.parse(files['cursor-limits.json']).sessions, { total: 5, withDeviceFacts: 4 });
+  });
+  it('no warning when every session carries device facts, or at weight 0', async () => {
+    const warnsOf = async (participants, cfg) => {
+      const warns = [];
+      await buildReport(participants, cfg, { sink: () => {}, warn: (w) => warns.push(w) });
+      return warns.filter(w => /scoreWeights\.cursor/.test(w));
+    };
+    assert.deepEqual(await warnsOf([human, driver, touchFlag], { ...config, scoreWeights: { cursor: 1 } }), []);
+    assert.deepEqual(await warnsOf([human, old], config), []);
+  });
+  it('cursor-limits.json names every library version the data carries, in version order', async () => {
+    const at = (p, version) => ({ ...p, trials: p.trials.map(t => ({ ...t, libraryVersion: version })) });
+    const recordedWith = async (participants) => {
+      const files = {};
+      await buildReport(participants, config, { sink: (p, body) => { files[p] = body; } });
+      return JSON.parse(files['cursor-limits.json']).recordedWith;
+    };
+    assert.equal(await recordedWith([human, at(old, '0.6.1'), at(driver, '0.14.0')]), '0.6.1, 0.14.0');
+    assert.equal(await recordedWith([human]), '0.14.0');
+    assert.equal(await recordedWith([at(human, undefined)]), null);
   });
 });
 
