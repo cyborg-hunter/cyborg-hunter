@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import {
   test, expect,
   dispatchPaste, dispatchCopy, dispatchDevToolsShortcut, typeRealistically,
-  startTour, waitForLamp, fastForwardToFiles,
+  startTour, waitForLamp, fastForwardToFiles, walkToGuardEntry,
   installFailingFullscreenMock,
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
@@ -267,13 +267,56 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
 });
 
 // ---------------------------------------------------------------------------
+// The second step asks its question in one paragraph and a panel: the
+// question and a box, with no code under it. From there to the files, no
+// task panel carries a label and no step offers a link ahead of the tour
+// (Back is the only link). The files step's panel is built apart from the
+// others (renderDownloadsPanel), so the walk goes all the way.
+// ---------------------------------------------------------------------------
+test('second step: the question and a box, no code; no step has a task label or a link ahead', async ({ page }) => {
+  test.setTimeout(30000);
+  const stepLabel = page.locator('[data-role="step-label"]');
+  async function noLabelNoLinkAhead() {
+    await expect(page.locator('#card .task .label')).toHaveCount(0);
+    await expect(page.locator('#card a.skip:not([data-action="back"])')).toHaveCount(0);
+  }
+
+  await startTour(page); // -> baseline (step 2)
+  await expect(page.locator('#card .stepcopy p')).toHaveCount(1);
+  await expect(page.locator('#card .task .question')).toHaveText('How is your day today?');
+  await expect(page.locator('#card .task textarea')).toHaveCount(1);
+  await expect(page.locator('#card .code-tab, #card [data-role="code-pane"], #card pre')).toHaveCount(0);
+
+  // Steps 2 to 7 with the primary button alone (as walkToGuardEntry, with
+  // the checks at each step), then the guard's own buttons, then the
+  // primary again.
+  const enter = page.locator('[data-action="enter-fullscreen"]');
+  while (await enter.count() === 0) {
+    await noLabelNoLinkAhead();
+    await primaryButton(page).click();
+  }
+  await noLabelNoLinkAhead(); // step 7, the guard's entry
+  await enter.click();
+  await expect(stepLabel).toHaveText('Step 8 of 11', { timeout: 5000 });
+  await noLabelNoLinkAhead();
+  await page.locator('.endguard').click(); // -> step 9
+  await noLabelNoLinkAhead();
+  await primaryButton(page).click(); // -> step 10
+  await noLabelNoLinkAhead();
+  await primaryButton(page).click(); // -> step 11, your files
+  await expect(stepLabel).toHaveText('Step 11 of 11');
+  await expect(page.locator('#card .task')).toHaveCount(1);
+  await noLabelNoLinkAhead();
+});
+
+// ---------------------------------------------------------------------------
 // Guard-cheat, resume-then-click route: the classic path (re-enter
 // fullscreen via the overlay's own resume button, THEN end the act) must
 // also keep working after the no-trap float/unfloat mechanics.
 // ---------------------------------------------------------------------------
 test('guard-cheat resume route: button unfloats after resume and advances exactly one step', async ({ page, fullscreenMock }) => {
   await startTour(page); // -> baseline
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry
+  await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
 
@@ -300,7 +343,7 @@ test('guard-cheat resume route: button unfloats after resume and advances exactl
 // ---------------------------------------------------------------------------
 test('step 9: the record stays under the card on Back to step 8', async ({ page }) => {
   await startTour(page); // -> baseline
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry
+  await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
   await page.locator('.endguard').click(); // -> guard-debrief (step 9)
@@ -331,7 +374,7 @@ test('step 9: the record stays under the card on Back to step 8', async ({ page 
 test('the files step leaves fullscreen via the plugin, with no false violation left behind', async ({ page }) => {
   test.setTimeout(60000);
   await startTour(page); // -> baseline
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry (step 7)
+  await walkToGuardEntry(page); // -> guard-entry (step 7)
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
   expect(await page.evaluate(() => !!document.fullscreenElement)).toBe(true);
@@ -587,7 +630,7 @@ test('step 10 shows the library\'s own soft score from the session so far', asyn
   await primaryButton(page).click(); // -> clipboard-cheat
   await dispatchCopy(page); // 1 copy event
   await dispatchPaste(page, '#card textarea', ANSWER); // 1 paste — below the hard threshold (2), stays out of HARD
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry
+  await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
   await page.locator('.endguard').click(); // -> guard-debrief
@@ -601,13 +644,13 @@ test('step 10 shows the library\'s own soft score from the session so far', asyn
 });
 
 // ---------------------------------------------------------------------------
-// 5. Zero-lamp path: skip everything; the files step still offers the files
+// 5. Zero-lamp path: do no task; the files step still offers the files
 // ---------------------------------------------------------------------------
-test('zero-lamp path: skip everything via .skip links + guard skip -> the files step', async ({ page }) => {
+test('zero-lamp path: walk past every task, then the guard skip -> the files step', async ({ page }) => {
   await installFailingFullscreenMock(page); // forces the guard-entry fallback (no other skip route out of act 2)
   await startTour(page); // -> baseline
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry
-  await expect(page.locator('a[data-key="skipToGuardedAct"]')).toHaveCount(0); // sanity: really at act 2 now
+  await walkToGuardEntry(page); // -> guard-entry
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 11'); // sanity: really at the guard's entry
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('.fallback-note')).toBeVisible({ timeout: 3000 });
 
@@ -631,7 +674,7 @@ test('act2-skip path: fullscreen failure falls back, skip lands on "From signals
   await dispatchPaste(page, '#card textarea', ANSWER);
   await dispatchPaste(page, '#card textarea', ANSWER); // >=1 lamp lit: not the zero-lamp path
 
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry
+  await walkToGuardEntry(page); // -> guard-entry
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('.fallback-note')).toBeVisible({ timeout: 3000 });
   await expect(page.locator('.fallback-note')).toContainText("guarded act can’t run here");
@@ -681,8 +724,8 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   // Labels are each step's own heading — the name the visitor read while
   // running that trial (STEPS[i].title) — not the trialId the stream's trial
   // column prints ('act1-paste', asserted below) and not task.kind's slug.
-  // Order is RUN order, not visit order: it matters once the guard-entry skip
-  // link is used below, which never visits tab-away/rearrange/autotype.
+  // Order is RUN order (TRIAL_TABS, demo.js), not visit order; walking
+  // forward, as below, the two agree.
   await expect(rail).toHaveText(['All', 'Answer a question normally', 'Now cheat with the clipboard']);
   // The heading is truthfully what step 3 showed, and the tooltip pairs it
   // with the id, the one place both names appear together.
@@ -704,9 +747,9 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   await allTab.click();
   await expect(page.locator('.lp-row:not(.lp-off)')).toHaveCount(totalRows); // full count back
 
-  // -> your files (step 11), via the guard-entry skip route — freeze() runs
+  // -> your files (step 11), walking past the remaining tasks — freeze() runs
   // on entry (goTo()'s last-step block), while addRow/setPayload stay frozen.
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry (step 7)
+  await walkToGuardEntry(page); // -> guard-entry (step 7)
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 });
   await page.locator('.endguard').click(); // -> guard-debrief (step 9)

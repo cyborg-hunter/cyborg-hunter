@@ -122,8 +122,6 @@ code, pre{font-family:var(--mono);}
  * Task panel — recessed ground-colored inset, no border.
  * --------------------------------------------------------------------- */
 .task{background:var(--ground);border-radius:0;padding:22px 24px;margin:0 0 18px;}
-.task .label{font-family:var(--ff-sofia);font-size:11px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--dim);margin:0 0 14px;}
 .question{font-size:17px;font-weight:600;margin:0 0 16px;}
 
 .answerchip{display:flex;align-items:center;gap:10px;background:var(--panel);
@@ -208,23 +206,13 @@ body[data-view="intro"] .btnrow .btn{display:block;margin:28px auto 0;font-size:
   box-shadow:0 6px 24px rgba(0,0,0,.45);}
 
 /* ---------------------------------------------------------------------
- * Code blocks — step-2 integration tabs + REPLICATE walkthrough snippets.
+ * Code blocks — the scoring step's config snippets + REPLICATE walkthrough
+ * snippets.
  * .lp-json (below) is a <pre> too and overrides this via higher specificity.
  * --------------------------------------------------------------------- */
 pre{background:var(--code-bg);color:var(--code-ink);padding:14px 16px;
   border-radius:0;overflow-x:auto;font:12.5px/1.5 var(--mono);margin:0 0 18px;}
 pre code{background:none;padding:0;}
-
-/* Segmented control, as the report's filter chips: joined, outer corners
- * 4px, ink active state, no weight change on toggle (a joined control would
- * visibly jump). Two tabs only, so no wrapping. */
-.code-tabs{display:flex;gap:0;margin:2px 0 10px;}
-.code-tab{font:12px var(--ff-recursive);padding:4px 12px;border:1px solid var(--line);border-radius:0;
-  margin-left:-1px;background:var(--panel);color:var(--ink);cursor:pointer;}
-.code-tab:first-child{border-radius:4px 0 0 4px;margin-left:0;}
-.code-tab:last-child{border-radius:0 4px 4px 0;}
-.code-tab.active{background:var(--ink);color:var(--panel);border-color:var(--ink);
-  position:relative;z-index:1;}
 
 /* ---------------------------------------------------------------------
  * Act 2 guard visuals — violation chips + scramble banner.
@@ -283,7 +271,9 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 
 /* Live session record (live-pane.js): pill tabs + stream/raw-JSON views. */
 .lp-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px;}
-/* Segmented, as .code-tabs above. */
+/* Segmented control, as the report's filter chips: joined, outer corners
+ * 4px, ink active state, no weight change on toggle (a joined control would
+ * visibly jump). */
 .lp-tabs{display:flex;gap:0;}
 .lp-tab{font:12px var(--ff-recursive);padding:4px 8px;border:1px solid var(--line);border-radius:0;
   margin-left:-1px;background:var(--panel);color:var(--ink);cursor:pointer;white-space:nowrap;}

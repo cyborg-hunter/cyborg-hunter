@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as copy from '../../demo/steps.js';
-import { STEPS, RAIL_GROUPS, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
+import { STEPS, RAIL_GROUPS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
 import { renderRail } from '../../demo/rail.js';
 
 const IDS = ['intro','baseline','clipboard-cheat','tab-away','browser-rearrange',
@@ -25,7 +25,7 @@ test('no step label names an act', () => {
   // The act lives in each step's `act` field (body[data-view], for the CSS);
   // the labels a visitor reads never say it.
   for (const s of STEPS) {
-    const labels = [s.eyebrow, s.primaryLabel || ''].concat((s.secondary || []).map((x) => x.label));
+    const labels = [s.eyebrow, s.primaryLabel || ''];
     for (const label of labels) assert.doesNotMatch(label, /\bAct\b/, s.id + ': ' + label);
   }
 });
@@ -48,6 +48,22 @@ test('the first step says what the demo is for, in two paragraphs, and starts wi
   assert.equal((body.match(/<p>/g) || []).length, 2);
   assert.doesNotMatch(body, /\bAct\b/);
   assert.equal(intro.primaryLabel, 'Start the demo');
+});
+test('the second step asks how your day is, in one paragraph, with no code under it', () => {
+  const baseline = STEPS[1];
+  assert.equal(baseline.id, 'baseline');
+  assert.equal(baseline.body.replace(/\s+/g, ' '), '<p>First, answer the question below the way you normally would. ' +
+    'This serves as a baseline: an honest answer produces keystrokes at a human rhythm and not much else. Watch the ' +
+    'lamps on the right as you type; the session record under this card lists each event the moment it happens.</p>');
+  assert.equal(baseline.task.prompt, 'How is your day today?');
+  assert.ok(!('CODE_TABS' in copy), 'CODE_TABS is still exported');
+  for (const s of STEPS) {
+    assert.ok(!s.showCodeTabs, s.id + ' shows code tabs');
+    assert.doesNotMatch(s.body, /Below the task|This page drives/, s.id);
+  }
+});
+test('no step links ahead of the tour', () => {
+  for (const s of STEPS) assert.equal(s.secondary, null, s.id);
 });
 test('no tier vocabulary in steps 2-9', () => {
   // Steps 2-9 only: step 1 may NAME the product ("triage report") without narrating scores.
@@ -80,7 +96,6 @@ test('rail has three tab-away bins', () => {
   for (const k of ['tabAwayFlicker', 'tabAwayMid', 'tabAwayLong']) assert.ok(keys.includes(k), k);
 });
 test('exports the engine consumes exist', () => {
-  assert.ok(CODE_TABS.jspsych && CODE_TABS.plainjs);
   assert.ok(Array.isArray(REPLICATE.sections) && REPLICATE.sections.length >= 3);
 });
 test('the last step offers five files in two batches: the session built here, the examples the site serves', () => {

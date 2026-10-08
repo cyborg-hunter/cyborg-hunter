@@ -202,17 +202,26 @@ export async function waitForLamp(page, key, { hard = false, timeout = 7000 } = 
   }, [key, hard], { timeout });
 }
 
+// Walks forward to the guard's entry step with the primary button alone:
+// the tour never blocks an advance, so no step's task has to be done on the
+// way. The entry step has no primary button (its box carries the library's
+// own), so the check comes before each click.
+export async function walkToGuardEntry(page) {
+  const enter = page.locator('[data-action="enter-fullscreen"]');
+  while (await enter.count() === 0) await primaryButton(page).click();
+}
+
 // Fast path from a fresh welcome screen to the last step, "Your files":
 // baseline (`answer` typed with real keystrokes, so the replay has a typed
-// segment) -> clipboard-cheat -> skip to the guarded act -> enter fullscreen
-// (default succeeding mock) -> end the guard at once (no violation) ->
-// debrief -> signals-to-scores -> your files. For tests that need SOME
-// session data and the files step without walking every act-1 step.
+// segment) -> clipboard-cheat -> walk to the guard's entry -> enter
+// fullscreen (default succeeding mock) -> end the guard at once (no
+// violation) -> debrief -> signals-to-scores -> your files. For tests that
+// need SOME session data and the files step without doing every step's task.
 export async function fastForwardToFiles(page, answer = 'a city in Australia') {
   await startTour(page); // -> baseline (step 2)
   await typeRealistically(page.locator('#card textarea'), answer);
   await primaryButton(page).click(); // -> clipboard-cheat (step 3)
-  await page.locator('a[data-key="skipToGuardedAct"]').click(); // -> guard-entry (step 7)
+  await walkToGuardEntry(page); // -> guard-entry (step 7)
   await page.locator('[data-action="enter-fullscreen"]').click();
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 11', { timeout: 5000 }); // guard-cheat
   await page.locator('.endguard').click(); // -> guard-debrief (step 9)

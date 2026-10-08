@@ -44,49 +44,6 @@ export const LIVE_PANE = {
   trials: { allLabel: 'All', sessionLabel: 'session', groupLabel: 'Filter the stream by trial' },
 };
 
-/** Step-2 integration code box: what this question looks like in your code. */
-export const CODE_TABS = {
-  defaultTab: 'jspsych',
-  caption:
-    'This page drives the same monitor through the plain-JS API. Most ' +
-    'experiments use the jsPsych extension instead; both produce the same record.',
-  jspsych: {
-    label: 'jsPsych',
-    code:
-`// your trial, as you'd write it anyway
-const trial = {
-  type: jsPsychSurveyText,
-  questions: [{ prompt: 'What is the capital of Australia?' }],
-};
-
-// the cyborg-hunter wrap-around
-const jsPsych = initJsPsych({
-  extensions: [{ type: jsPsychCyborgHunter,
-    params: { participantId: subject.id, preset: 'standard' } }],
-  on_finish: () => {
-    jsPsych.extensions['cyborg-hunter'].finalize();
-    jsPsych.data.get().localSave('csv', 'data.csv');
-  },
-});
-trial.extensions = [{ type: jsPsychCyborgHunter }];
-jsPsych.run([trial]);`,
-  },
-  plainjs: {
-    label: 'plain JS',
-    code:
-`// your trial, built with your own JS however you like
-showQuestion('What is the capital of Australia?');   // your code
-
-CyborgHunter.init({ participantId: subject.id, preset: 'standard' });
-CyborgHunter.startTrial('q1');   // 'q1' is your label for this trial
-// participant answers
-CyborgHunter.endTrial();         // seal q1's integrity record
-
-const payload = CyborgHunter.getSessionReport();
-// one JSON file per participant → the CLI builds the report`,
-  },
-};
-
 /**
  * Step-10 scoring panel (demo.js's renderScoringPanel/fillLiveScore):
  * the visitor's soft score so far, as the library itself computes it under
@@ -142,20 +99,17 @@ server.</p>`.trim(),
     eyebrow: 'Step 2 of 11',
     title: 'Answer a question normally',
     body: `
-<p>Type your answer to the question below the way you normally would. This
-is the baseline: an honest answer produces keystrokes at a human rhythm and
-not much else. Watch the lamps on the right as you type; the session record
-under this card lists each event the moment it happens.</p>
-<p>Below the task: what this exact question looks like in an experiment's
-source code, with the cyborg-hunter wiring around it.</p>`.trim(),
+<p>First, answer the question below the way you normally would. This
+serves as a baseline: an honest answer produces keystrokes at a human rhythm
+and not much else. Watch the lamps on the right as you type; the session
+record under this card lists each event the moment it happens.</p>`.trim(),
     task: {
       kind: 'type-answer',
       trialId: 'act1-baseline',
-      prompt: 'What is the capital of Australia?',
+      prompt: 'How is your day today?',
     },
-    showCodeTabs: true,
     primaryLabel: 'Answered →',
-    secondary: [{ kind: 'link', key: 'skipToGuardedAct', label: 'Skip to the guarded act' }],
+    secondary: null,
   },
   {
     id: 'clipboard-cheat',
@@ -178,7 +132,7 @@ the words.</p>`.trim(),
       targetPastes: 2,
     },
     primaryLabel: 'Pasted twice →',
-    secondary: [{ kind: 'link', key: 'skipToGuardedAct', label: 'Skip to the guarded act' }],
+    secondary: null,
   },
   {
     id: 'tab-away',
@@ -197,7 +151,7 @@ carry the most weight. The record keeps the exact duration and timestamps
 of each absence either way.</p>`.trim(),
     task: { kind: 'tab-away', trialId: 'act1-tabaway' },
     primaryLabel: 'Back for good →',
-    secondary: [{ kind: 'link', key: 'skipToGuardedAct', label: 'Skip to the guarded act' }],
+    secondary: null,
   },
   {
     id: 'browser-rearrange',
@@ -214,7 +168,7 @@ resize it, and watch the record.</p>
 continues, whatever shape the window takes.</p>`.trim(),
     task: { kind: 'sidebar-resize', trialId: 'act1-sidebar' },
     primaryLabel: 'Done rearranging →',
-    secondary: [{ kind: 'link', key: 'skipToGuardedAct', label: 'Skip to the guarded act' }],
+    secondary: null,
   },
   {
     id: 'autotype',
@@ -240,7 +194,7 @@ not automatic verdicts.</p>`.trim(),
       doneLabel: 'Typed ✓',
     },
     primaryLabel: 'Continue →',
-    secondary: [{ kind: 'link', key: 'skipToGuardedAct', label: 'Skip to the guarded act' }],
+    secondary: null,
   },
   {
     id: 'guard-entry',

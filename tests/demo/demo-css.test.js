@@ -58,11 +58,11 @@ test('tokens follow the report palette; the serif is gone', () => {
 test('typefaces mirror the report roles', () => {
   const EXPECT = {
     body: 'Recursive', '.stepcard h1': 'Space Grotesk', '.topbar .brand': 'Space Grotesk',
-    '.eyebrow': 'Sofia Sans', '.card h3': 'Sofia Sans', '.task .label': 'Sofia Sans', '.replicate h3': 'Sofia Sans',
+    '.eyebrow': 'Sofia Sans', '.card h3': 'Sofia Sans', '.replicate h3': 'Sofia Sans',
     '.batch-heading': 'Sofia Sans', '.filetext-dialog h3': 'Sofia Sans', '.lp-cols': 'Sofia Sans',
     '.hint': 'Tomorrow', '.rule': 'Tomorrow', '.lp-caption': 'Recursive', '.file small': 'Recursive',
     '.check li .n': 'Sora', '.rec': 'Sora', '.chip': 'Sora',
-    '.btn': 'Recursive', '.code-tab': 'Recursive', '.lp-tab': 'Recursive',
+    '.btn': 'Recursive', '.lp-tab': 'Recursive',
     '.lp-t': 'ui-monospace', '.lp-stream': 'ui-monospace', 'pre': 'ui-monospace',
   };
   for (const [sel, want] of Object.entries(EXPECT)) assert.equal(faceOf(sel), want, sel);
@@ -72,8 +72,8 @@ test('shapes follow the report idioms', () => {
   const EXPECT = [
     ['.stepcard', 'border-radius', '0'], ['.card', 'border-radius', '0'], ['.task', 'border-radius', '0'],
     ['.btn', 'border-radius', '4px'], ['.btn:hover', 'background', '#2b2b2b'],
-    ['.chip', 'border-radius', '0'], ['.code-tabs', 'gap', '0'], ['.lp-tabs', 'gap', '0'],
-    ['.code-tab.active', 'background', 'var(--ink)'], ['.lp-tab.active', 'background', 'var(--ink)'],
+    ['.chip', 'border-radius', '0'], ['.lp-tabs', 'gap', '0'],
+    ['.lp-tab.active', 'background', 'var(--ink)'],
     ['.topbar', 'border-bottom', '3px double var(--ink)'],
     ['.lp-trial-tab[aria-pressed="true"]', 'box-shadow', 'inset 0 0 0 2px var(--ink)'],
   ];
@@ -81,7 +81,7 @@ test('shapes follow the report idioms', () => {
 });
 
 test('active tabs keep their weight (no width jump in a joined control)', () => {
-  for (const sel of ['.code-tab.active', '.lp-tab.active', '.lp-trial-tab[aria-pressed="true"]']) {
+  for (const sel of ['.lp-tab.active', '.lp-trial-tab[aria-pressed="true"]']) {
     assert.equal(lastProp(rules, sel, 'font-weight'), null, sel);
   }
 });
@@ -91,6 +91,10 @@ test('the lamps sit a gap under the rail title; group heads are styled as .hint 
   // a head's padding used to give.
   assert.equal(lastProp(rules, '.check', 'margin'), '10px 0 0');
   assert.doesNotMatch(css, /grouphead/);
+});
+
+test('no code tabs and no task label are styled', () => {
+  assert.doesNotMatch(css, /\.code-tab|\.task \.label/);
 });
 
 test('no promoted state remains: the wide stream rules are unconditional', () => {

@@ -17,7 +17,7 @@
 // the last step (your files).
 
 import {
-  STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS, CODE_TABS,
+  STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS,
   DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE, SCORING_PANEL, SAVE_TO_FOLDER
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
@@ -728,10 +728,6 @@ function startTour(participantId, capabilities, manifest) {
     return substitute(str, manifest.signals, version);
   }
 
-  function guardedActIndex() {
-    return STEPS.findIndex(function (s) { return s.act === 'act2'; });
-  }
-
   function scoresIndex() {
     return STEPS.findIndex(function (s) { return s.id === 'signals-to-scores'; });
   }
@@ -1003,7 +999,7 @@ function startTour(participantId, capabilities, manifest) {
     // getJsPsychContent()'s match, so this class keeps the downloads panel a
     // valid scramble target too (moot in practice: guard is long stopped by
     // this step, but the class is applied uniformly regardless of step).
-    var parts = ['<div class="task jspsych-content">', '<p class="label">' + task.kind + '</p>'];
+    var parts = ['<div class="task jspsych-content">'];
     parts.push(
       '<div class="handoff"><button class="btn" data-action="open-analyzer">' + escHtml(HANDOFF.buttonLabel) + '</button>' +
       '<span class="hint">' + escHtml(HANDOFF.buttonHint) + '</span></div>' +
@@ -1032,22 +1028,6 @@ function startTour(participantId, capabilities, manifest) {
     parts.push(renderReplicateSection());
     parts.push(renderClosingCta());
     return parts.join('');
-  }
-
-  // Step 2's "what this looks like in your code" split (CODE_TABS): two
-  // pill tabs, same active/hidden pattern as live-pane.js's stream/JSON tabs.
-  function renderCodeTabs() {
-    var order = ['jspsych', 'plainjs'];
-    var html = '<p class="hint">' + escHtml(CODE_TABS.caption) + '</p>';
-    html += '<div class="code-tabs">' + order.map(function (key) {
-      var active = key === CODE_TABS.defaultTab ? ' active' : '';
-      return '<button class="code-tab' + active + '" data-tab="' + key + '">' + escHtml(CODE_TABS[key].label) + '</button>';
-    }).join('') + '</div>';
-    html += order.map(function (key) {
-      var hidden = key === CODE_TABS.defaultTab ? '' : ' hidden';
-      return '<pre data-role="code-pane" data-tab="' + key + '"' + hidden + '><code>' + escHtml(CODE_TABS[key].code) + '</code></pre>';
-    }).join('');
-    return html;
   }
 
   // Config-as-source snippets: both built from the manifest's real values,
@@ -1190,7 +1170,7 @@ function startTour(participantId, capabilities, manifest) {
     // getJsPsychContent()'s match (.jspsych-content / .jspsych-display-element
     // / #jspsych-content) — this class makes every task panel a valid target,
     // not just Act 2's, so a violation during any step scrambles the task.
-    var parts = ['<div class="task jspsych-content">', '<p class="label">' + task.kind + '</p>'];
+    var parts = ['<div class="task jspsych-content">'];
     // The actual question text (baseline's `prompt`, clipboard-cheat's
     // `question`) gets the plain bold .question treatment; .rule is
     // reserved for callout-style copy (the guard's fallback-note).
@@ -1253,7 +1233,6 @@ function startTour(participantId, capabilities, manifest) {
       html += '<div class="violations" data-role="violation-chips"></div>';
     }
     html += renderTaskPanel(step.task);
-    if (step.showCodeTabs) html += renderCodeTabs();
     // The scoring step: the soft score so far + config-as-source snippets.
     // task: null for this step, so this is a sibling of the (empty) task
     // panel.
@@ -1350,13 +1329,6 @@ function startTour(participantId, capabilities, manifest) {
   }
 
   cardEl.addEventListener('click', function (e) {
-    var codeTabBtn = e.target.closest('.code-tab');
-    if (codeTabBtn) {
-      var tabKey = codeTabBtn.dataset.tab;
-      cardEl.querySelectorAll('.code-tab').forEach(function (b) { b.classList.toggle('active', b === codeTabBtn); });
-      cardEl.querySelectorAll('[data-role="code-pane"]').forEach(function (p) { p.hidden = p.dataset.tab !== tabKey; });
-      return;
-    }
     var back = e.target.closest('[data-action="back"]');
     if (back) { e.preventDefault(); goTo(state.stepIndex - 1); return; }
     var autotypeBtn = e.target.closest('[data-action="autotype"]');
@@ -1408,8 +1380,7 @@ function startTour(participantId, capabilities, manifest) {
     var link = e.target.closest('a[data-key]');
     if (link) {
       e.preventDefault();
-      if (link.dataset.key === 'skipToGuardedAct') goTo(guardedActIndex());
-      else if (link.dataset.key === 'skipToScores') goTo(scoresIndex());
+      if (link.dataset.key === 'skipToScores') goTo(scoresIndex());
     }
   });
 
