@@ -1,9 +1,10 @@
 // tests/e2e/analyze/cursor.spec.js
 // The pointer checks on the analyze page, over the sample: its generated
-// session (SYN-GENERATED-04, automation flag set, clicks with no pointer
-// movement) shows the cursor section, the tile, the rail cell and the run
-// sentence, and the settings row holds the labelled weight; a weight of 1
-// moves that session up within its tier and 0 puts it back. Every test runs
+// session (SYN-GENERATED-04, 0.14-shaped, automation flag set, clicks with
+// no pointer movement) shows the cursor section, the tile, the rail cell and
+// the run sentence, while the three 0.6.1 sessions read "not recorded"; the
+// settings row holds the labelled weight; a weight of 1 moves the generated
+// session up within its tier and 0 puts it back. Every test runs
 // under the request guard of engines.spec.js.
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame } from './support.mjs';
 
@@ -17,12 +18,13 @@ test('the sample shows the cursor section, the tile, the rail cell and the label
   const frame = reportFrame(page);
   await expect(frame.locator('option[value="cursor"]')).toHaveText(/Pointer checks/);
   await expect(frame.locator('.cohort-row[data-pid="SYN-GENERATED-04"] .cursor-cell')).toHaveText('pointer checks: 2 of 3');
+  await expect(frame.locator('.cohort-row[data-pid="SYN-CLEAN-01"] .cursor-cell')).toHaveText('pointer checks: not recorded');
   await frame.locator('.cohort-row[data-pid="SYN-GENERATED-04"]').click();
   await expect(frame.locator('#p-SYN-GENERATED-04 .cursor-section')).toContainText('automation flag set by the browser');
   await expect(frame.locator('#p-SYN-GENERATED-04 .signal-tile', { hasText: 'Pointer checks' })).toContainText('2');
   await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('pointer checks (cursor)');
   await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('the tier is unchanged');
-  await expect(page.locator('[data-role="cursor-line"]')).toContainText('Pointer checks: fired in 1 of 4 checkable sessions');
+  await expect(page.locator('[data-role="cursor-line"]')).toContainText('Pointer checks: fired in 1 of 1 checkable sessions (3 recorded before 0.14, 0 no cursor stream)');
   await assertOnlyAllowed(page, seen, allow);
 });
 

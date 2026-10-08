@@ -1,6 +1,6 @@
 # Worked example: the synthetic-pilot dataset
 
-The repo bundles a four-participant synthetic dataset at [`examples/synthetic-pilot/`](../examples/synthetic-pilot/) — one participant per triage tier, plus a generated session that sets off the pointer checks — so you can run the full pipeline and practice reading its outputs before your own data is on the line. Each section below walks one output in reading order (the triage table, the event log, the summary CSV, the plots), and the dataset is built so the classic misreadings each show up once: a hard-flagged participant who ranks above a higher-scoring soft one, two different scores that are easy to conflate, and a clean participant whose reason column is not empty. Every number is hand-authored by `generate-fixture.mjs`; **no real participant, anonymized or otherwise, is behind any of it**. The files are shaped exactly like what the jsPsych extension saves with v0.6.1 (per-trial `integrity` cells, `integritySession` + `integrityScore` on the last row), plus the fields 0.14 adds for the cursor section (the session's device facts, viewport coordinates on each mouse sample, the provenance of each click), so the CLI treats them like real data.
+The repo bundles a four-participant synthetic dataset at [`examples/synthetic-pilot/`](../examples/synthetic-pilot/) — one participant per triage tier, plus a generated session that sets off the pointer checks — so you can run the full pipeline and practice reading its outputs before your own data is on the line. Each section below walks one output in reading order (the triage table, the event log, the summary CSV, the plots), and the dataset is built so the classic misreadings each show up once: a hard-flagged participant who ranks above a higher-scoring soft one, two different scores that are easy to conflate, and a clean participant whose reason column is not empty. Every number is hand-authored by `generate-fixture.mjs`; **no real participant, anonymized or otherwise, is behind any of it**. The files are shaped exactly like what the jsPsych extension saves (per-trial `integrity` cells, `integritySession` + `integrityScore` on the last row): with v0.6.1 for the three tier sessions, and with 0.14.0 for the generated one, which adds the session's device facts and the viewport coordinates and provenance of each click. The CLI treats them like real data.
 
 ## Run it
 
@@ -72,15 +72,16 @@ One row per participant, every signal a column. The columns to look at first:
 | `totalTabAways` (long/medium/flicker) | 1 (0/0/1) | 3 (1/2/0) | 5 (3/0/2) | 0 (0/0/0) |
 | `sidebar_event_count` | 0 | 1 | 0 | 0 |
 | `layout_shift_count` | 1 | 0 | 0 | 0 |
-| `cursorChecksRecorded` / `cursorFactCount` | 3 / 0 | 3 / 0 | 3 / 0 | 3 / 2 |
-| `cursorWebdriver` | no | no | no | YES |
-| `cursorZeroMoveTrials` | 0/6 | 0/6 | 0/6 | 3/3 |
-| `cursorClicks` / `cursorMovements` | 0 / 24 | 0 / 24 | 0 / 24 | 3 / 3 |
-| `cursorMovesPerTrialMedian` | 7 | 7 | 7 | 0 |
+| `cursorChecksRecorded` / `cursorFactCount` | 0 / (empty) | 0 / (empty) | 0 / (empty) | 3 / 2 |
+| `cursorWebdriver` | (empty) | (empty) | (empty) | YES |
+| `cursorZeroMoveTrials` | (empty) | (empty) | (empty) | 3/3 |
+| `cursorClicks` / `cursorMovements` | 0 / 6 | 0 / 6 | 0 / 6 | 3 / 3 |
+| `cursorSampleIntervalMs` | 287.5 | 300 | 312.5 | (empty) |
+| `cursorEfficiencyMedian` | 0.898 | 0.900 | 0.883 | (empty) |
 
 `authoritative_soft_score` is the library's own accumulated soft score, read from the saved session report. SYN-SOFT-02 sits at 11 against the standard threshold of 6, hence the soft flag. Note SYN-HARD-03 is *also* over the soft threshold (7 ≥ 6); the hard tier simply takes precedence. Columns are documented field-by-field in [cli-reference.md](cli-reference.md#summarycsv).
 
-The `cursor…` columns (since 0.14) carry the cursor section's numbers. All four sessions carry the device facts, so `cursorChecksRecorded` is 3 for each. SYN-GENERATED-04's `cursorFactCount` of 2 is the automation flag (`cursorWebdriver` YES) and its three trials clicked without pointer movement (`cursorZeroMoveTrials` 3/3); its three clicks are its only movements, and its `cursorMovesPerTrialMedian` of 0 is what clicks with no movement look like. The hand-authored sessions end each trial's path with a press rather than a click, so they have no clicks to judge, and none of their checks fires. The run output sums the checks up in one line: "Pointer checks: fired in 1 of 4 checkable sessions (0 recorded before 0.14, 0 no cursor stream)".
+The `cursor…` columns (since 0.14) carry the cursor section's numbers. The three tier sessions are 0.6.1 data: they carry no device facts and no click provenance, so `cursorChecksRecorded` is 0 and the three checks are empty, as on any session recorded before 0.14 (the report's rail reads "pointer checks: not recorded"). Their movements are still measured, one per trial, sampled about 300 ms apart. SYN-GENERATED-04 is 0.14.0 data: its `cursorFactCount` of 2 is the automation flag (`cursorWebdriver` YES) and its three trials clicked without pointer movement (`cursorZeroMoveTrials` 3/3); its three clicks are its only movements, so it has no interval or efficiency to report. The run output sums the checks up in one line: "Pointer checks: fired in 1 of 1 checkable sessions (3 recorded before 0.14, 0 no cursor stream)".
 
 ## The images
 

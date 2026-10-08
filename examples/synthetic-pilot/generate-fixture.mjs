@@ -3,8 +3,8 @@
 // EVERYTHING HERE IS SYNTHETIC. No participant, real or anonymized, is behind
 // any of these numbers; the first three "participants" are hand-authored to
 // illustrate the three triage tiers (clean / soft / HARD) with realistic
-// v0.6.1-shaped data, and the fourth is a generated session that sets off
-// the report's pointer checks.
+// v0.6.1-shaped data, and the fourth is a generated session, shaped like
+// 0.14.0 data, that sets off the report's pointer checks.
 //
 // The rows mirror what the cyborg-hunter jsPsych extension actually saves:
 //   - per-row scalars added via jsPsych.data.addProperties() at finalize()
@@ -52,6 +52,9 @@ function JSON2CSV(objArray) {
 
 // ── Shared constants (standard preset, v0.6.1) ──────────────────────────────
 const VERSION = '0.6.1';
+// The generated session's version: from 0.14 the session report carries the
+// device facts, and mouse samples carry viewport coordinates and provenance.
+const GENERATED_VERSION = '0.14.0';
 const PRESET = 'standard';
 const SOFT_THRESHOLD = 6;          // standard softScoreThreshold
 const TAB_CUTOFF_MS = 3000;        // standard tabAwayDurationMs
@@ -62,28 +65,29 @@ const SESSION_EPOCH = Date.parse('2026-07-01T12:00:00.000Z');
 const iso = (perfMs) => new Date(SESSION_EPOCH + perfMs).toISOString();
 
 // A deterministic little mouse path so trajectory plots have something to
-// draw. `seed` varies its amplitude and spacing, so trials differ. Each
-// sample carries viewport coordinates (cx, cy) beside the page ones, and the
-// final press carries what the browser says about its origin.
+// draw, in the 0.6.1 sample shape ({x, y, t, type}, page coordinates).
+// `seed` (participant index * 7 + trial index) varies the amplitude, the
+// frequency and the spacing, so every trial of every session differs; the
+// spacing stays between 250 and 350 ms, under the report's 400 ms gap that
+// ends a movement, so each trial's path is one movement.
 function mousePath(startT, seed) {
   const pts = [];
   for (let i = 0; i < 8; i++) {
-    const x = 200 + i * 90 + (i % 3) * 25;
-    const y = 300 + Math.round((40 + 15 * seed) * Math.sin(i * (0.9 + 0.2 * seed)));
-    const sample = {
-      x, y, cx: x, cy: y - 250,
-      t: startT + 400 + i * (300 + 40 * seed),
+    pts.push({
+      x: 200 + i * 90 + (i % 3) * 25,
+      y: 300 + Math.round((40 + 15 * (seed % 4)) * Math.sin(i * (0.9 + 0.1 * (seed % 3)))),
+      t: startT + 400 + i * (250 + (seed % 5) * 25),
       type: i === 7 ? 'down' : 'move'
-    };
-    if (i === 7) Object.assign(sample, { trusted: true, detail: 1, pointerType: 'mouse' });
-    pts.push(sample);
+    });
   }
   return pts;
 }
 
 // Builds one trial's `integrity` object the way endTrial() shapes it.
 // `sig` carries this trial's raw events; session totals accumulate outside.
-function buildTrial(pid, idx, sig, session) {
+// `version` is the library version the trial is stamped with, `seedBase`
+// the participant's offset into the path seeds.
+function buildTrial(pid, idx, sig, session, version, seedBase) {
   const startTime = 20000 + idx * 30000;
   const duration = 9000 + (idx * 1700) % 8000;
 
@@ -132,7 +136,7 @@ function buildTrial(pid, idx, sig, session) {
     trialId: 't' + (idx + 1),
     phase: 'test',
     participantId: pid,
-    libraryVersion: VERSION,
+    libraryVersion: version,
     startTime,
     duration_ms: duration,
     timestamp: iso(startTime + duration),           // 0.6.1: wall-clock stamp
@@ -141,10 +145,11 @@ function buildTrial(pid, idx, sig, session) {
     copyEvents: sig.copyEvents,
     dropEvents: [],
     tabAwayEvents: sig.tabAwayEvents,
-    // A click-only trial: one click and no pointer movement before it.
+    // A click-only trial (0.14 shape): one click, with its viewport
+    // coordinates and provenance, and no pointer movement before it.
     mouseEvents: sig.clickOnly
       ? [{ x: 640, y: 420, cx: 640, cy: 170, t: startTime + 900, type: 'click', trusted: true, detail: 1, pointerType: 'mouse' }]
-      : mousePath(startTime, idx),
+      : mousePath(startTime, seedBase + idx),
     editTimestamps: [],                              // keystrokeDynamics off (standard default)
     foreignInputEvents: [],
     syntheticInsertions: [],
@@ -156,7 +161,12 @@ function buildTrial(pid, idx, sig, session) {
 }
 
 // Assembles one participant's CSV rows from trial definitions + session extras.
+// sessionExtras.participantIndex offsets the path seeds; sessionExtras.version
+// (VERSION by default) stamps the rows; sessionExtras.device, given only for
+// 0.14-shaped data, is the session report's device facts.
 function buildParticipant(pid, trialDefs, sessionExtras) {
+  const version = sessionExtras.version || VERSION;
+  const seedBase = (sessionExtras.participantIndex || 0) * 7;
   const session = { pasteCount: 0, copyCount: 0, softScore: 0, charsPerSec: [], tabAwayEvents: [], tabAwaySums: [] };
   // Off-trial tab-aways (consent, tutorial, ...) land ONLY in the session
   // record — that is the 0.6.1 session-level tabAwayEvents feature.
@@ -165,7 +175,7 @@ function buildParticipant(pid, trialDefs, sessionExtras) {
     session.tabAwayEvents.push(stamped);
     session.tabAwaySums.push(stamped.duration_ms);
   }
-  const trials = trialDefs.map((sig, i) => buildTrial(pid, i, sig, session));
+  const trials = trialDefs.map((sig, i) => buildTrial(pid, i, sig, session, version, seedBase));
   session.tabAwayEvents.sort((a, b) => a.start - b.start);
 
   const anyHard = session.pasteCount >= 2;
@@ -193,8 +203,9 @@ function buildParticipant(pid, trialDefs, sessionExtras) {
     viewportWidthShifts: shifts,
     layoutShifts: shifts,                               // deprecated alias, same content
     zoomChanges: [],
-    // What the browser states about the device, read once at startSession.
-    device: sessionExtras.device || { maxTouchPoints: 0, coarsePointer: false, webdriver: false },
+    // What the browser states about the device, read once at startSession
+    // (0.14 and later; 0.6.1 sessions have no device key).
+    ...(sessionExtras.device ? { device: sessionExtras.device } : {}),
     hardScore,
     softScore: session.softScore,
     softScoreThreshold: SOFT_THRESHOLD,
@@ -205,7 +216,7 @@ function buildParticipant(pid, trialDefs, sessionExtras) {
       participantId: pid,
       thresholds: { tabAwayDurationMs: TAB_CUTOFF_MS, typingSpeedCps: TYPING_CPS }
     },
-    libraryVersion: VERSION
+    libraryVersion: version
   };
 
   const integrityScore = {
@@ -228,7 +239,7 @@ function buildParticipant(pid, trialDefs, sessionExtras) {
     integrityDropCount: 0,
     integrityAnyHardTriggered: anyHard,
     integritySoftScore: session.softScore,
-    cyborgHunterVersion: VERSION
+    cyborgHunterVersion: version
   });
 
   const rows = trials.map((integrity, i) => ({ ...scalars(i), integrity }));
@@ -248,6 +259,7 @@ const clean = buildParticipant('SYN-CLEAN-01', [
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 4.9 },
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 3.5 }
 ], {
+  participantIndex: 0,
   viewportWidthShifts: [{ oldWidth: 1440, newWidth: 1280, delta: -160, t: 95000 }]
 });
 
@@ -262,6 +274,7 @@ const soft = buildParticipant('SYN-SOFT-02', [
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [{ start: 145000, duration_ms: 8000, type: 'tabHidden' }], charsPerSec: 5.4 },
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 4.7 }
 ], {
+  participantIndex: 1,
   offTrialTabAways: [{ start: 4200, duration_ms: 6400, type: 'tabHidden' }],
   sidebarEvents: [
     { type: 'opened', method: 'innerWidth_delta', deltaIW: 340, innerWidth: 1100, baselineIW: 1440, t: 110500 },
@@ -289,16 +302,18 @@ const hard = buildParticipant('SYN-HARD-03', [
     charsPerSec: null
   },
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 4.1 }
-], {});
+], { participantIndex: 2 });
 
 // SYN-GENERATED-04: a generated session whose browser set its automation
 // flag and whose clicks arrive with no pointer movement, so the sample
-// report shows the cursor checks firing. The id says what it is.
+// report shows the cursor checks firing. The id says what it is. Shaped like
+// 0.14.0 data (device facts, click provenance), so its checks are recorded;
+// the three sessions above are 0.6.1 data, whose checks are not.
 const generated = buildParticipant('SYN-GENERATED-04', [
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.5, clickOnly: true },
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.8, clickOnly: true },
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.1, clickOnly: true }
-], { device: { maxTouchPoints: 0, coarsePointer: false, webdriver: true } });
+], { participantIndex: 3, version: GENERATED_VERSION, device: { maxTouchPoints: 0, coarsePointer: false, webdriver: true } });
 
 // ── Write the files ──────────────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -161,8 +161,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   adds 69 bytes for the device facts, so Qualtrics sessions read "not
   collected" while the automation flag still comes through. Sessions
   recorded before 0.14 show the checks as "not recorded" (docs/upgrading.md).
-  The analyzer's sample has a fourth session, SYN-GENERATED-04, whose checks
-  fire.
+  The analyzer's sample has a fourth session, SYN-GENERATED-04, recorded as
+  0.14.0 data, whose checks fire; its three other sessions keep their 0.6.1
+  shape and show the checks as not recorded.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
