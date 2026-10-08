@@ -19,7 +19,7 @@ in [CHANGELOG.md](../CHANGELOG.md).
 
 - **The session report carries the device facts**: `device: { maxTouchPoints, coarsePointer, webdriver }`, read once at `startSession`. The cursor section uses them to tell a touch device from a desktop and to show the automation flag set by the browser.
 - **Mouse samples carry viewport coordinates** (`cx`, `cy`) beside the page ones (`x`, `y`), so scrolling no longer looks like a pointer jump.
-- **Clicks, presses and releases carry their provenance**: `trusted` (the event's `isTrusted`), `detail` (0 for keyboard and assistive activation) and `pointerType` when the browser gives one.
+- **Clicks, presses and releases carry their provenance**: `trusted` (the event's `isTrusted`), `detail` (0 for keyboard and assistive activation) and `pointerType` when the browser gives one. The report reads them in that order, so a trusted click with `detail` above 0 and `pointerType` `touch` is a touch tap, counted apart from pointer clicks.
 - **Payload size:** one trial of 2,000 mouse moves goes from 84,878 to 119,978 bytes of JSON (+41%), and one of 2,000 clicks from 86,878 to 217,978 bytes. The per-trial cap (`mouseMaxEvents`) is unchanged. The Qualtrics write still leaves the mouse track out and adds 69 bytes for the device facts, so Qualtrics sessions read "not collected" in the cursor section while the automation flag still comes through.
 
 ### What changes in the report output
