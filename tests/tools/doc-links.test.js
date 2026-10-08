@@ -171,6 +171,6 @@ describe('the friction entry trial\'s message option is documented', () => {
   });
 
   it('docs/advanced-integration.md passes a message to the guard extension\'s entry trial', () => {
-    assert.match(read('docs/advanced-integration.md'), /jsPsychGuardFriction\.entryTrial\(\{\s*message/);
+    assert.match(read('docs/advanced-integration.md'), /jsPsychGuardFriction\.entryTrial\(\{\s*message:/);
   });
 });
