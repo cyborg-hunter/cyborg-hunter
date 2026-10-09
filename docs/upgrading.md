@@ -9,11 +9,11 @@ in [CHANGELOG.md](../CHANGELOG.md).
 
 ### What changes on re-run over existing data
 
-- **Every session gets a "Cursor dynamics" section**, read from the mouse track the monitor already saved. What it can show depends on the version that recorded the session:
+- **Every session gets a "Cursor dynamics" section**, read from the mouse track the monitor already saved: the pointer verdict (clean, suspicious, highly suspicious, or not assessed with the reason) and the tells behind it. A session recorded before 0.14 is not assessed; what the section shows depends on the version that recorded it:
   - Sessions recorded with 0.7.2–0.7.5 read "not collected (recorded with <version>)" when the raw mouse track was off, the default in those versions; recorded with it on, they get the section with the three checks "not recorded".
   - Sessions recorded with 0.8–0.13 (and before 0.7.2) get the section with the three checks "not recorded": those versions saved no device facts and no click provenance, so a tap cannot be told from a scripted click.
   - Sessions recorded with `collectForPostHoc.rawMouseTrack: false`, and Qualtrics sessions, whose payload leaves the mouse track out, read "not collected". Sessions recorded with `signals.mouseTracking: false` save an empty track and read "no cursor stream (no pointer events)".
-- **Rankings are unchanged.** The new `cursor` weight is 0 by default, so tiers, scores and the order of `triage.md` are those 0.13 gave. With a weight above 0, only the sessions that carry device facts move, and the CLI warns when some sessions do not.
+- **Rankings are unchanged.** The new `cursor` weight is 0 by default, so tiers, scores and the order of `triage.md` are those 0.13 gave. With a weight above 0, only the verdict's level (suspicious 1, highly suspicious 2) ranks, so only the sessions that carry device facts move, and the CLI warns when some sessions do not.
 
 ### What changes for newly collected data
 
@@ -24,12 +24,12 @@ in [CHANGELOG.md](../CHANGELOG.md).
 
 ### What changes in the report output
 
-- **A "Cursor dynamics" section** in each session's detail: the three browser-reported checks with counts, denominators and trial ids; clicks after a pointer jump; the shape features with their n; the stream, its median sample interval and the constants that judged it. What the numbers mean: [interpreting-signals.md](interpreting-signals.md#cursor-dynamics).
-- **A "Pointer checks" tile** in the signal grid ("—" when the data carries no device facts), a "pointer checks: n of 3" cell on each rail row with a "Pointer checks" sort option, and a "pointer checks: …" clause in the triage reason when a check fired.
-- **Sixteen `summary.csv` columns**, all named `cursor…`, after `honeypot_ai_report`. No existing header changes ([cli-reference.md](cli-reference.md#summarycsv)).
-- **`cursor-limits.json`**, a new file beside `score-weights.json`: the constants the section judged with and their meanings ([cli-reference.md](cli-reference.md#cursor-limitsjson)).
-- **One line in the run output**, "Pointer checks: fired in N of M sessions with device facts (K recorded without them; J without a cursor stream)", which `/analyze/` prints under its results summary.
-- **A `scoreWeights` key, `cursor`** (default 0), shown in the analyzer's settings as "pointer checks (cursor)" ([configuration.md](configuration.md#report-score-weights-scoreweights)).
+- **A "Cursor dynamics" section** in each session's detail: the pointer verdict and the tells that decided it, then, in a closed details block, the three browser-reported checks with counts, denominators and trial ids, clicks that arrived without a path, clicks after a pointer jump, and the movement shape as medians with n, with the stream, its median sample interval and the constants that judged it. What the numbers mean: [interpreting-signals.md](interpreting-signals.md#cursor-dynamics).
+- **A "Pointer verdict" tile** in the signal grid (0 clean, 1 suspicious, 2 highly suspicious; "—" when not assessed), a `pointer: <verdict>` cell on each rail row with a "Pointer verdict" sort option, and a `pointer verdict: <verdict> (<tells>)` clause in the triage reason when the verdict is suspicious or highly suspicious.
+- **Nineteen `summary.csv` columns**, all named `cursor…`, after `honeypot_ai_report`. No existing header changes ([cli-reference.md](cli-reference.md#summarycsv)).
+- **`cursor-limits.json`**, a new file beside `score-weights.json`: the constants the section judged with, their meanings and the verdicts over the cohort ([cli-reference.md](cli-reference.md#cursor-limitsjson)).
+- **One line in the run output**, "Pointer verdicts: H highly suspicious, S suspicious, C clean, U not assessed (T sessions; K recorded without device facts)", which `/analyze/` prints under its results summary.
+- **A `scoreWeights` key, `cursor`** (default 0), shown in the analyzer's settings as "pointer verdict (cursor)" ([configuration.md](configuration.md#report-score-weights-scoreweights)).
 
 ## 0.7.0 (and the 0.6.2 patch) — from 0.6.1
 

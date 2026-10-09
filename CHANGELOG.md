@@ -134,27 +134,33 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   text, heading included; the button keeps its label, "Enter fullscreen and
   continue".
 - Report (CLI and `/analyze/`): a "Cursor dynamics" section for each
-  session. It shows three browser-reported checks, each with its count, its
-  denominator and up to ten trial ids: the automation flag set by the
-  browser (`navigator.webdriver`), clicks the page's own scripts dispatched
-  (`isTrusted` false) and trials clicked without pointer movement. It also
-  reports, without a verdict, clicks after a pointer jump and the shape of
-  each movement (duration, path length, displacement, speed, efficiency and
-  deviation, as medians with their n) and the constants it judged with, and
-  links to the page that says what the numbers mean
-  (docs/interpreting-signals.md#cursor-dynamics). With it come a "Pointer
-  checks" tile ("—" when the data carries no device facts), a rail cell
-  ("pointer checks: 2 of 3") and its sort option, a clause in the triage
-  reason, sixteen `cursor…` columns at the end of `summary.csv` (no existing
-  header changes), a new file, `cursor-limits.json`, with the constants the
-  section judged with and their meanings, and one line in the run output,
-  "Pointer checks: fired in N of M sessions with device facts (…)", which
-  `/analyze/` prints under its results summary. A new `scoreWeights` key,
-  `cursor` (default 0, shown in the analyzer's settings as "pointer checks
-  (cursor)"), adds one point per check that fired, not per event, to the
-  triage score; the tier is unchanged, and the CLI warns when the weight is
-  on and some sessions carry no device facts. For the checks the monitor now
-  records the session's device facts (`device: { maxTouchPoints,
+  session that opens with its pointer verdict (clean, suspicious, highly
+  suspicious, or not assessed with the reason) and the tells that decided
+  it: the automation flag set by the browser (`navigator.webdriver`), clicks
+  the page's own scripts dispatched (`isTrusted` false), clicks that arrived
+  without a path (a first click whose movement has at most one sample and
+  starts 20 px or more from where the pointer was last seen), and trials
+  clicked without pointer movement. Beneath, in a closed details block, are
+  every check with its count, its denominator and up to ten trial ids,
+  clicks after a pointer jump, the shape of each movement (duration, path
+  length, displacement, speed, efficiency and deviation, as medians with
+  their n) and the constants it judged with, and a link to the page that
+  says what the numbers mean (docs/interpreting-signals.md#cursor-dynamics).
+  With it come a "Pointer verdict" tile ("—" when the session is not
+  assessed), a rail cell ("pointer: highly suspicious") and its sort option,
+  a clause in the triage reason, nineteen `cursor…` columns at the end of
+  `summary.csv` (no existing header changes), a new file,
+  `cursor-limits.json`, with the constants the section judged with, their
+  meanings and the verdicts over the cohort, and one line in the run output,
+  "Pointer verdicts: H highly suspicious, S suspicious, C clean, U not
+  assessed (…)", which `/analyze/` prints under its results summary. A new
+  `scoreWeights` key, `cursor` (default 0, shown in the analyzer's settings
+  as "pointer verdict (cursor)"), adds the weight times the verdict's level
+  (suspicious 1, highly suspicious 2) to the triage score; the tier is
+  unchanged, and the CLI warns when the weight is on and some sessions carry
+  no device facts. The thresholds behind the verdict are provisional.
+  For the checks the monitor now records the session's device facts
+  (`device: { maxTouchPoints,
   coarsePointer, webdriver }`), viewport coordinates (`cx`, `cy`) on every
   mouse sample, and `trusted`, `detail` and `pointerType` on every click,
   press and release. One trial of 2,000
@@ -162,13 +168,14 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   86,878 to 217,978; the Qualtrics write still leaves the mouse track out and
   adds 69 bytes for the device facts, so Qualtrics sessions read "not
   collected" while the automation flag still comes through. Sessions
-  recorded before 0.14 show the checks as "not recorded" (docs/upgrading.md).
-  The analyzer's sample has a fourth session, SYN-GENERATED-04, recorded as
-  0.14.0 data: two of its checks fire (the automation flag, and one trial
-  clicked without pointer movement), and its two other trials move in
-  straight lines before they click (efficiency 1.000, deviation 0.0, n = 2).
-  Its three other sessions keep their 0.6.1 shape and show the checks as not
-  recorded.
+  recorded before 0.14 show the checks as "not recorded" and are not
+  assessed (docs/upgrading.md). The analyzer's sample has a fourth session,
+  SYN-GENERATED-04, recorded as 0.14.0 data: its pointer verdict is highly
+  suspicious (the automation flag, and two of its four trials clicked
+  without pointer movement), and its other two trials move in straight
+  lines before they click (efficiency 1.000, deviation 0.0, n = 2). The
+  sample's three other sessions keep their 0.6.1 shape, show the checks as
+  not recorded and are not assessed.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded

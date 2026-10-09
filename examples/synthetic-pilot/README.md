@@ -1,8 +1,8 @@
 # synthetic-pilot
 
-A four-participant synthetic dataset for trying out `cyborg-hunter report` without collecting data first. One participant per triage tier (clean, soft-flagged, hard-flagged), and a generated session that sets off the report's pointer checks: its browser set the automation flag, two of its trials move in straight lines before they click, and the third is clicked with no pointer movement.
+A four-participant synthetic dataset for trying out `cyborg-hunter report` without collecting data first. One participant per triage tier (clean, soft-flagged, hard-flagged), and a generated session the report's pointer verdict reads as highly suspicious: its browser set the automation flag, two of its trials move in straight lines before they click, and the other two are clicked with no pointer movement.
 
-**No real participants are behind these files.** `generate-fixture.mjs` hand-authors every number; the data is shaped exactly like what the jsPsych extension saves (v0.6.1 for the three tier sessions, whose pointer checks the report shows as not recorded; 0.14.0 for the generated one, with the device facts and click provenance the checks read), so the full pipeline runs on it.
+**No real participants are behind these files.** `generate-fixture.mjs` hand-authors every number; the data is shaped exactly like what the jsPsych extension saves (v0.6.1 for the three tier sessions, whose pointer verdict the report shows as not assessed; 0.14.0 for the generated one, with the device facts and click provenance the verdict reads), so the full pipeline runs on it.
 
 ```bash
 cd examples/synthetic-pilot

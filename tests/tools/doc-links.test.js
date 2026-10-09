@@ -216,8 +216,8 @@ describe('the cursor section is documented', () => {
     assert.ok(text.includes('cursorCenteredClicks'), 'no cursorCenteredClicks');
   });
 
-  it('docs/configuration.md has the pointer checks weight', () => {
-    assert.ok(read('docs/configuration.md').includes('pointer checks'));
+  it('docs/configuration.md has the pointer verdict weight', () => {
+    assert.ok(read('docs/configuration.md').includes('pointer verdict'));
   });
 
   it('docs/signals-reference.md gives the mouse sampling as mouseThrottleMs, not 20Hz', () => {

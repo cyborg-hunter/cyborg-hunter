@@ -91,7 +91,7 @@ cyborg-hunter-report/
 ├── event-log.csv        # chronological events (copy/paste/drop/synthetic/tabAway)
 ├── extensions.csv       # AI-extension + sidebar detections, one row per participant × detection
 ├── score-weights.json   # the triage-score weights this report used (defaults or scoreWeights)
-├── cursor-limits.json   # the constants the cursor section judged with, and their meanings
+├── cursor-limits.json   # the constants the cursor section judged with, their meanings, and the verdicts over the cohort
 └── images/              # canvas-rendered visuals (skipped if canvas missing)
     ├── trajectories_<participantId>.png      # per-trial mouse paths
     ├── session_timeline_<participantId>.png  # session-wide tab-away / sidebar / guard timeline
@@ -136,13 +136,16 @@ One row per participant:
 | `authoritative_soft_score` | Soft score from `getSessionReport()` (preferred over the per-trial sum) |
 | `honeypot_ai_use` | Three states: `YES` = participant ticked the visible-bait "I used AI" checkbox; `no` = the honeypot was present but the box was left unticked (negative evidence); empty = the honeypot extension wasn't used for this participant at all |
 | `honeypot_ai_report` | Free-text the participant typed into the honeypot's "what did you use?" box (empty if none) |
-| `cursorReason` | Why the session has no cursor analysis: `not collected` (with `(recorded with <version>)` when the data names one), `no cursor stream (touch device)` or `no cursor stream (no pointer events)`; empty when the section ran (since 0.14, like every `cursor…` column) |
-| `cursorChecksRecorded` | How many of the three pointer checks the data supports: 3 (a cursor stream and the session's device facts), 1 (device facts and no cursor stream: the automation flag only), 0 (no device facts: recorded before 0.14) |
-| `cursorFactCount` | Pointer checks that fired, 0–3; empty without device facts |
+| `cursorReason` | Why the session's pointer verdict is `not assessed`: `not collected` (with `(recorded with <version>)` when the data names one), `no cursor stream (touch device)`, `no cursor stream (no pointer events)`, `device facts and click provenance not recorded (library before 0.14)`, or `only N first pointer clicks (the pointer-pattern tells need 4)` (`click` when N is 1); empty when the session is assessed, including a session with no cursor stream that its automation flag makes highly suspicious (since 0.14, like every `cursor…` column) |
+| `cursorVerdict` | The pointer verdict: `clean`, `suspicious`, `highly suspicious` or `not assessed` |
+| `cursorTells` | The tells that decided a suspicious or highly suspicious verdict, `; `-separated: `automation flag`, `untrusted clicks n/N`, `clicks without a path n/N`, `trials clicked without movement n/N`; empty otherwise |
+| `cursorChecksRecorded` | How many of the three browser-reported checks the data supports: 3 (a cursor stream and the session's device facts), 1 (device facts and no cursor stream: the automation flag only), 0 (no device facts: recorded before 0.14) |
+| `cursorFactCount` | Browser-reported checks that fired, 0–3 (one per check, not per event); empty without device facts |
 | `cursorWebdriver` | `YES` / `no`: the automation flag set by the browser; empty without device facts |
 | `cursorUntrustedClicks` | Clicks the page's own scripts dispatched; empty unless the session has a cursor stream and device facts |
 | `cursorZeroMoveTrials` | Trials clicked without pointer movement, as `count/trials`; empty unless the session has a cursor stream and device facts |
-| `cursorJumpClicks` | Clicks after a pointer jump, as `count/pointer clicks`; reported without a verdict |
+| `cursorJumpClicks` | Clicks after a pointer jump, as `count/first pointer clicks`; reported, not a tell |
+| `cursorNoPathClicks` | Clicks that arrived without a path, as `count/first pointer clicks` (a double-click's later clicks are not first clicks) |
 | `cursorCoordinates` | `viewport` (every sample has `cx`, `cy`) or `page` (older data; scrolling can then look like a jump) |
 | `cursorStream` | The stream the section read: `core`, the monitor's mouse track |
 | `cursorSampleIntervalMs` | Median time between consecutive move samples within a trial, in ms; empty when the track has no such pair |
@@ -207,7 +210,7 @@ not written here.
 ### `cursor-limits.json`
 
 The constants the cursor section judged with, written by every run:
-`{ "cliVersion": "<version>", "recordedWith": "<version>, …"|null, "limits": { "<constant>": { "value": n, "meaning": "<text>" } }, "sampleIntervalMs": { "core": { "median": ms|null, "n": k } }, "sessions": { "total": n, "withDeviceFacts": k } }`.
+`{ "cliVersion": "<version>", "recordedWith": "<version>, …"|null, "limits": { "<constant>": { "value": n, "meaning": "<text>" } }, "sampleIntervalMs": { "core": { "median": ms|null, "n": k } }, "sessions": { "total": n, "withDeviceFacts": k, "verdicts": { "highlySuspicious": h, "suspicious": s, "clean": c, "notAssessed": u } } }`.
 `cliVersion` is the version of the CLI that holds the constants and
 `recordedWith` the library versions the data carries, each once, in version
 order and joined by ", " (`"0.6.1, 0.14.0"`; null when the data names none),
@@ -215,14 +218,19 @@ so a report rebuilt by a later CLI shows which constants decided it. Each
 constant comes with a sentence saying what it does (for example,
 `movementGapMs`, 400: two move samples further apart belong to different
 movements); the cursor section prints the same values on its stream line.
+Three constants decide the pointer verdict: `minClicksForVerdict`, 4 first
+pointer clicks before the pattern tells are judged; `shareSuspicious`, 0.2,
+the share of first pointer clicks or of trials at or above which a pattern
+tell makes the session suspicious; and `shareHighlySuspicious`, 0.5, the share
+at or above which a pattern tell, or clicks the page's own scripts dispatched,
+make it highly suspicious. All three are provisional, set from a small number
+of sessions.
 `sampleIntervalMs` is the median of the sessions' own median intervals between
 move samples, over the `n` sessions that have one, and `withDeviceFacts`
-counts the sessions with device facts, as the run line does: "Pointer checks:
-fired in N of M sessions with device facts (K recorded without them; J without
-a cursor stream)". N counts the sessions where any check fired, M those with
-device facts and K the rest; J counts the sessions with no cursor stream, which
-overlap the others (a session with device facts and no stream still reports the
-automation flag).
+counts the sessions with device facts. The run prints "Pointer verdicts: H
+highly suspicious, S suspicious, C clean, U not assessed (T sessions; K
+recorded without device facts)", and the file's `sessions.verdicts` holds the
+same four counts; T is `total` and K is `total` minus `withDeviceFacts`.
 
 ### `event-log.csv`
 
@@ -263,10 +271,10 @@ signals:
 | Tab-aways longer than the participant's tab-away threshold (medium + long bins; 3s by default, 5s for strict) | `× 1` |
 
 Under the default weights no other signal affects the score; each of them,
-`cursor` (the pointer checks, since 0.14) among them, can be given a weight
+`cursor` (the pointer verdict's level, since 0.14) among them, can be given a weight
 (below). Hard-trigger status, AI-extension detections, keyboard shortcuts,
 layout shifts, zoom changes, edge-exit patterns, synthetic insertions, foreign
-inputs, and the pointer checks are all still surfaced — in the per-participant detail panes and the one-line triage
+inputs, and the pointer verdict are all still surfaced — in the per-participant detail panes and the one-line triage
 reason — but they do not change the number. (Earlier versions added a `+100`
 hard-trigger term and several other bonuses; those were removed.)
 
