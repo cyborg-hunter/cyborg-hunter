@@ -18,7 +18,10 @@ export function attachMouseSignals(ctx) {
   if (config.signals.mouseTracking) {
     var mouseThrottle = config.thresholds.mouseThrottleMs;
     var mouseMaxEvents = config.thresholds.mouseMaxEvents;
-    var lastMoveTime = 0;
+    // -Infinity, not 0: the trial's first move is never throttled away, even
+    // when performance.now() is still under mouseThrottleMs (a test process
+    // younger than 50 ms).
+    var lastMoveTime = -Infinity;
     var trialStartTime = trialData.startTime;
     trialData.mouseTrackingCapped = false;
     trialData.mouseTrackingCappedAtMs = null;
