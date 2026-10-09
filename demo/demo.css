@@ -90,6 +90,29 @@ code, pre{font-family:var(--mono);}
 /* The live session record's permanent home, under #card inside .main-col
  * on every step — see index.html's docblock. */
 .pane-slot{margin-top:20px;}
+/* The record is collapsed under its bar so it does not pull the eye from
+ * the step; hovering the slot, keyboard focus inside it, or data-open="true"
+ * (live-pane.js makePaneBar: a click on the bar, or the debrief step) shows
+ * it. :has(:focus-visible) rather than :focus-within: a mouse click leaves
+ * focus on the bar, and :focus-within would then keep the record open after
+ * "click to hide". Collapsed rather than display:none, so the stream keeps
+ * its layout and live-pane.js's addRow still scrolls it to its tail while
+ * hidden: the record opens on its latest event. No transition, so there is
+ * no motion to drop under prefers-reduced-motion. */
+.pane-slot:not(:hover):not(:has(:focus-visible)):not([data-open="true"]) > [data-role="live-pane"]{
+  visibility:hidden;height:0;overflow:hidden;padding:0;border-width:0;box-shadow:none;}
+/* The bar is the record's lid: the record's title treatment (.lp-title) on a
+ * .card ground, with the hint (.hint) after it saying what a click does. The
+ * record opens right under it, so the record drops its own top line rather
+ * than doubling the bar's. */
+.lp-bar{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;
+  width:100%;padding:12px 20px;background:var(--panel);border:1px solid var(--line);border-radius:0;
+  box-shadow:var(--shadow);cursor:pointer;text-align:left;
+  font-family:var(--ff-sofia);font-size:11.5px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim);}
+.lp-bar:hover{color:var(--ink);}
+.lp-bar .hint{font-weight:400;letter-spacing:normal;text-transform:none;}
+.pane-slot > [data-role="live-pane"]{border-top:none;}
 
 /* ---------------------------------------------------------------------
  * Step card — one elevated panel holds the whole step. Serif titles only.

@@ -1,6 +1,8 @@
-// The live session record: a persistently visible two-tab pane —
-// an append-only signal stream (default) and the literal session JSON. Fed by
-// demo.js from the same onSignal dispatch as the rail. Frozen at results.
+// The live session record: a two-tab pane under the step card on every
+// step — an append-only signal stream (default) and the literal session
+// JSON. Fed by demo.js from the same onSignal dispatch as the rail. Frozen at
+// results. Collapsed under the bar above it until the visitor asks for it
+// (makePaneBar below).
 //
 // A per-trial tab rail (`.lp-trials`) sits on the left of the stream/
 // JSON views, filtering the stream to one trial at a time. Rows never leave
@@ -37,6 +39,35 @@ export function renderRowHtml(row) {
     '<span class="lp-event" title="' + escHtml(row.event) + '">' + escHtml(row.event) + '</span>' +
     '<span class="lp-detail">' + escHtml(row.detail || '—') + '</span>' +
     '</div>';
+}
+
+// The bar above the record (index.html's [data-role="pane-toggle"], inside
+// the slot it shares with the record): the record's label while it is
+// collapsed, and the control that keeps it open. demo.css shows the record
+// while the slot is hovered or holds keyboard focus, or while it carries
+// data-open="true"; this owns that attribute. A click on the bar toggles it,
+// for touch screens, which have no hover, and for a visitor who wants the
+// record to stay put while scrolling it; setOpen() lets demo.js open it on
+// the step whose copy sends the visitor to the record. aria-expanded and the
+// hint follow data-open, not hover: they say what a click will do.
+export function makePaneBar(slot) {
+  var bar = slot.querySelector('[data-role="pane-toggle"]');
+  bar.innerHTML = escHtml(LIVE_PANE.bar) + ' <span class="hint"></span>';
+  var hintEl = bar.querySelector('.hint');
+
+  function setOpen(open) {
+    if (open) slot.dataset.open = 'true';
+    else delete slot.dataset.open;
+    bar.setAttribute('aria-expanded', String(open));
+    hintEl.textContent = open ? LIVE_PANE.barHintOpen : LIVE_PANE.barHintClosed;
+  }
+  setOpen(false);
+
+  bar.addEventListener('click', function () {
+    setOpen(slot.dataset.open !== 'true');
+  });
+
+  return { setOpen: setOpen };
 }
 
 export function makeLivePane(mount) {

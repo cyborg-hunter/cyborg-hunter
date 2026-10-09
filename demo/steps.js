@@ -38,9 +38,14 @@ export const RAIL = {
   signalBoxEmpty: 'nothing detected on this step',
 };
 
-/** Live session pane chrome (the pane itself is demo/live-pane.js). */
+/** Live session pane chrome (the pane itself is demo/live-pane.js). `bar`
+ * labels the record while it is collapsed under the bar above it; the hint
+ * after it says what a click on the bar does. */
 export const LIVE_PANE = {
   title: 'Live session record',
+  bar: 'Live session record',
+  barHintClosed: 'hover or click to show',
+  barHintOpen: 'click to hide',
   tabs: { stream: 'signal stream', json: 'raw JSON' },
   trials: { allLabel: 'All', sessionLabel: 'session', groupLabel: 'Filter the stream by trial' },
 };

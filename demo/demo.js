@@ -14,7 +14,8 @@
 // session poll also feed live-pane.js's append-only stream + raw-JSON view
 // (paneRow()) — the rail is the demo-only curated subset, the pane is the
 // full record. Frozen (+ replay/guard finalized, rail hidden) on entering
-// the last step (your files).
+// the last step (your files). Collapsed under its bar until the visitor
+// asks for it, and opened on the step whose copy sends the visitor to it.
 
 import {
   STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS,
@@ -24,7 +25,7 @@ import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
 import { renderRail, light, acknowledge, clearSignalBox } from './rail.js';
 import { buildPayload } from './payload.js';
-import { makeLivePane } from './live-pane.js';
+import { makeLivePane, makePaneBar } from './live-pane.js';
 import { escHtml } from './util.js';
 
 var SESSION_POLL_MS = 5000;
@@ -253,8 +254,8 @@ function startTour(participantId, capabilities, manifest) {
   var signalBoxEl = railEl.querySelector('[data-role="signal-box"]');
 
   // ----- Live session pane -----------------------------------------------
-  // Persistently visible record, fed from the same signal
-  // dispatch as the rail. buildCurrentPayload() is the SAME buildPayload(...)
+  // The record, fed from the same signal dispatch as the rail.
+  // buildCurrentPayload() is the SAME buildPayload(...)
   // call buildDownloadFile('sessionData') makes, extracted so both stay in
   // sync (DRY) — declared here as a function so it can close over `monitor`
   // below despite running after it (function declarations hoist).
@@ -264,6 +265,10 @@ function startTour(participantId, capabilities, manifest) {
   var paneEl = document.querySelector('[data-role="live-pane"]');
   state.pane = makeLivePane(paneEl);
   state.t0 = performance.now();
+  // The bar above the record, which stays collapsed until the slot is
+  // hovered, focused or clicked open (live-pane.js makePaneBar); goTo()
+  // opens it on the debrief step.
+  var paneBar = makePaneBar(document.querySelector('[data-role="pane-slot"]'));
 
   // opts.final is the download seam's flag ONLY (buildDownloadFile passes
   // it for 'sessionData') — with it set, and once the last step has
@@ -1302,6 +1307,9 @@ function startTour(participantId, capabilities, manifest) {
     // Repaints from state.chipCounts (not a reset) so Back-then-forward into
     // guard-cheat shows the tally already accumulated this session.
     if (step.task && step.task.kind === 'guard-cheat') renderViolationChips();
+    // The debrief step's copy sends the visitor to the record, so it opens
+    // there with no hover; every other step leaves it as the visitor left it.
+    if (step.id === 'guard-debrief') paneBar.setOpen(true);
     // The scoring step: fill in the soft score so far against the new panel
     // markup renderStep() just wrote.
     if (step.id === 'signals-to-scores') fillLiveScore(manifest);
@@ -1310,8 +1318,8 @@ function startTour(participantId, capabilities, manifest) {
       // interactive step, so this reflects the complete session. The
       // pane/replay/guard are all one-way finalizations from here on — the
       // tour proper is done — and the rail (a demo-only "current session"
-      // instrument) retires with them; the live pane stays visible, frozen,
-      // as the historical record.
+      // instrument) retires with them; the live pane stays under the card,
+      // frozen, as the historical record.
       // Snapshotted ONCE: re-reading on every entry (e.g. a visitor who goes
       // Back then forward) would let the exit's own sidebar/viewport
       // artifact (exitFullscreenIfActive(), below) slip into a LATER read
