@@ -138,9 +138,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   suspicious, or not assessed with the reason) and the tells that decided
   it: the automation flag set by the browser (`navigator.webdriver`), clicks
   the page's own scripts dispatched (`isTrusted` false), clicks that arrived
-  without a path (a first click whose movement has at most one sample and
-  starts 20 px or more from where the pointer was last seen), and trials
-  clicked without pointer movement. Beneath, in a closed details block, are
+  without a path (a first pointer click whose movement has at most one
+  sample and starts 20 px or more from where the pointer was last seen), and
+  trials clicked without pointer movement. Beneath, in a closed details block, are
   every check with its count, its denominator and up to ten trial ids,
   clicks after a pointer jump, the shape of each movement (duration, path
   length, displacement, speed, efficiency and deviation, as medians with
@@ -160,10 +160,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   unchanged, and the CLI warns when the weight is on and some sessions carry
   no device facts. The thresholds behind the verdict are provisional.
   For the checks the monitor now records the session's device facts
-  (`device: { maxTouchPoints,
-  coarsePointer, webdriver }`), viewport coordinates (`cx`, `cy`) on every
-  mouse sample, and `trusted`, `detail` and `pointerType` on every click,
-  press and release. One trial of 2,000
+  (`device: { maxTouchPoints, coarsePointer, webdriver }`), viewport
+  coordinates (`cx`, `cy`) on every mouse sample, and `trusted`, `detail`
+  and `pointerType` on every click, press and release. One trial of 2,000
   moves grows from 84,878 to 119,978 bytes of JSON, one of 2,000 clicks from
   86,878 to 217,978; the Qualtrics write still leaves the mouse track out and
   adds 69 bytes for the device facts, so Qualtrics sessions read "not

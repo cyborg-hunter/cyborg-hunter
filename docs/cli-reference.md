@@ -218,7 +218,7 @@ so a report rebuilt by a later CLI shows which constants decided it. Each
 constant comes with a sentence saying what it does (for example,
 `movementGapMs`, 400: two move samples further apart belong to different
 movements); the cursor section prints the same values on its stream line.
-Three constants decide the pointer verdict: `minClicksForVerdict`, 4 first
+Three constants set the verdict's thresholds: `minClicksForVerdict`, 4 first
 pointer clicks before the pattern tells are judged; `shareSuspicious`, 0.2,
 the share of first pointer clicks or of trials at or above which a pattern
 tell makes the session suspicious; and `shareHighlySuspicious`, 0.5, the share
