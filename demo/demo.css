@@ -105,7 +105,7 @@ code, pre{font-family:var(--mono);}
 .eyebrow{font-family:var(--ff-sofia);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);margin:0 0 12px;}
 
-.stepcopy{max-width:60ch;color:var(--ink);margin:0 0 26px;}
+.stepcopy{color:var(--ink);margin:0 0 26px;}
 .stepcopy em{color:var(--dim);font-style:normal;}
 .stepcopy p{margin:0 0 14px;}
 .stepcopy p:last-child{margin-bottom:0;}
@@ -117,6 +117,13 @@ code, pre{font-family:var(--mono);}
 .stepcard p, .entrybox p, .task p{margin:0 0 12px;}
 .stepcard p:last-child, .entrybox p:last-child, .task p:last-child{margin-bottom:0;}
 .stepcard ul, .stepcard ol, .entrybox ul, .entrybox ol{margin:0 0 12px;padding-left:20px;}
+/* The copy, the answer chip and the task panel all span the card's content
+ * width, so the prose is justified to that edge; hyphens:auto (index.html's
+ * lang="en") keeps the justified lines from opening wide gaps. */
+#card p, #card li{text-align:justify;hyphens:auto;}
+/* Short lines and code stay ragged-left and unhyphenated: a one-line hint or
+ * question would only stretch, and a word broken inside code misquotes it. */
+#card .hint, #card .question, #card .detected-strip, #card .replicate h3, #card pre, #card code{text-align:left;hyphens:manual;}
 
 /* ---------------------------------------------------------------------
  * Task panel — recessed ground-colored inset, no border.
@@ -125,9 +132,10 @@ code, pre{font-family:var(--mono);}
 .question{font-size:17px;font-weight:600;margin:0 0 16px;}
 
 /* The text to copy (step 3): a bordered block of its own between the step's
- * text and the task panel, as wide as the text, the hint on a line under it. */
+ * text and the task panel, as wide as both (the card's content width), the
+ * hint on a line under it. */
 .answerchip{background:var(--panel);border-radius:4px;box-shadow:inset 0 0 0 1px var(--line);
-  padding:12px 14px;margin:0 0 18px;max-width:60ch;}
+  padding:12px 14px;margin:0 0 18px;}
 .answerchip code{font-family:var(--mono);font-size:14px;line-height:1.5;}
 .answerchip .hint{display:block;margin-top:8px;}
 
@@ -155,12 +163,14 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 /* ---------------------------------------------------------------------
  * Buttons
  * --------------------------------------------------------------------- */
-/* Every step's button row: the primary action centred under the text column
- * (.stepcopy's 60ch), larger, with the Back link beneath it. The row is a
- * column, so the link, first in the markup, can come last; its top margin
- * collapses with the text's to leave 28px between them. The autotype and
- * fullscreen-entry rows share the class and centre the same way. */
-.btnrow{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:28px;max-width:60ch;}
+/* Every step's button row: the primary action centred under the text, which
+ * spans the card's content width, larger, with the Back link beneath it. The
+ * row is a column, so the link, first in the markup, can come last; its top
+ * margin collapses with the text's to leave 28px between them. The autotype
+ * and fullscreen-entry rows share the class and centre within their panel;
+ * the panel's padding is symmetric, so its button shares the card's axis
+ * with the primary below it. */
+.btnrow{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:28px;}
 .btnrow .btn{font-size:17px;padding:14px 28px;}
 .btnrow .skip{order:1;}
 /* font-family AFTER font:inherit: the download buttons sit inside the mono
@@ -190,10 +200,10 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 /* End-guard button (step 7): rendered OUTSIDE the scramble target (the
  * step's copy), so its legibility can never depend on scramble/blur context —
  * a standalone rule rather than composing with .btn keeps that true even if
- * .btn's cascade changes later. Its row is as wide as the text column
- * (.stepcopy's 60ch), so the button centres under the text; while floating
+ * .btn's cascade changes later. Its row is as wide as the text (the card's
+ * content width), so the button centres under the text; while floating
  * (below) it sits on <body>, outside the row. */
-.endguard-row{max-width:60ch;text-align:center;}
+.endguard-row{text-align:center;}
 .endguard{display:inline-block;font:inherit;font-family:var(--ff-recursive);font-weight:600;padding:10px 22px;
   border-radius:4px;border:none;background:var(--ink);color:#fff;cursor:pointer;
   margin-top:14px;}

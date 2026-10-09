@@ -276,7 +276,9 @@ test('top bar: the title, then the REC cue; the card label says the step only', 
 // ---------------------------------------------------------------------------
 // The first step: two paragraphs that name no act, then one button, "Start
 // the demo", centred 28px under the text. Every step's primary button has
-// the same size and centring, with the Back link beneath it.
+// the same size and centring, with the Back link beneath it. On step 5 the
+// task panel's own button centres on the same axis as the primary below it:
+// the panel spans the card and its padding is symmetric.
 // ---------------------------------------------------------------------------
 test('first step: two paragraphs, then a large "Start the demo" centred under them; the next step\'s button matches', async ({ page }) => {
   await page.goto('/');
@@ -305,6 +307,14 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
   expect(Math.abs((nextBox.x + nextBox.width / 2) - (copy.x + copy.width / 2))).toBeLessThan(1);
   const back = await page.locator('#card [data-action="back"]').boundingBox();
   expect(back.y).toBeGreaterThan(nextBox.y + nextBox.height);
+
+  await primaryButton(page).click(); // -> clipboard-cheat (step 3)
+  await primaryButton(page).click(); // -> tab-away (step 4)
+  await primaryButton(page).click(); // -> autotype (step 5): one button in the panel, the primary under it
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 5 of 10');
+  const autotype = await page.locator('#card .task [data-role="autotype-button"]').boundingBox();
+  const primary = await primaryButton(page).boundingBox();
+  expect(Math.abs((autotype.x + autotype.width / 2) - (primary.x + primary.width / 2))).toBeLessThan(1);
 });
 
 // ---------------------------------------------------------------------------
