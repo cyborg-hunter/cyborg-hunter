@@ -351,12 +351,22 @@ ${fontFaceCss}    :root {
     .signal-value { font-family: var(--ff-sora); font-size: 18px; font-weight: 700; line-height: 1; }
     .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
 
-    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-checks cell. */
+    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-verdict cell. */
     .cursor-table { border-collapse: collapse; margin: 6px 0; }
     .cursor-table caption { text-align: left; font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
     .cursor-table th { text-align: left; font-weight: normal; padding: 2px 10px 2px 0; }
     .cursor-table tr.fired th { font-weight: 600; }
     .cursor-cell { font-family: var(--ff-tomorrow); font-size: 11px; color: var(--dim); }
+    .cursor-cell[data-level="2"] { color: var(--hard); }
+    .cursor-cell[data-level="1"] { color: var(--soft); }
+    .cursor-verdict { margin: 8px 0 4px; }
+    .verdict-badge { display: inline-block; font-family: var(--ff-tomorrow); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--line); color: var(--dim); }
+    .verdict-badge[data-level="0"] { color: var(--clean); border-color: var(--clean); }
+    .verdict-badge[data-level="1"] { color: var(--soft); border-color: var(--soft); }
+    .verdict-badge[data-level="2"] { color: #fff; background: var(--hard); border-color: var(--hard); }
+    .cursor-tells { margin: 0 0 8px 20px; padding: 0; }
+    .cursor-tells li.tell-high { font-weight: 600; }
+    .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; cursor: pointer; color: var(--dim); }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -792,7 +802,7 @@ ${fontFaceCss}    :root {
         if (!parent) return;
         const sorted = [...rows].sort((a, b) => {
           if (key === 'score') return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
-          // 'cursor': fired checks desc (not recorded = -1 and null rows last), then score desc.
+          // 'cursor': verdict level desc (not assessed = -1 last), then score desc.
           if (key === 'cursor') {
             const dc = parseInt(b.dataset.cursor, 10) - parseInt(a.dataset.cursor, 10);
             if (dc !== 0) return dc;
@@ -957,25 +967,19 @@ const SIGNALS = [
   { key: 'zoomChangeCount',          label: 'Zoom changes',    tone: 'muted',    hint: 'Browser zoom level changed during task' },
   { key: 'devToolsEventCount',       label: 'DevTools',        tone: 'muted',    hint: 'Reserved (always 0) — DevTools opens are counted under Kb shortcuts' },
   { key: 'edgeExitCount',            label: 'Edge exits',      tone: 'muted',    hint: 'Mouse exited window through a screen edge' },
-  { key: 'cursorFactCount',          label: 'Pointer checks',  tone: 'warn',     hint: 'Browser-reported checks that fired (automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement); 0–3; — when the data carries no device facts' }
+  { key: 'cursorLevel',              label: 'Pointer verdict', tone: 'warn',     hint: 'The pointer verdict: 0 clean, 1 suspicious, 2 highly suspicious; — when the session is not assessed (no device facts, no cursor stream, or too few clicks)' }
 ];
 
-// The pointer checks that fired, as the tile, the rail and its sort read
-// them: the fired count when the session has a cursor stream and a device
-// object; 1 for a session with no cursor stream whose automation flag fired
-// (the one check it can run); null otherwise (nothing checkable).
-function pointerChecksFired(ca) {
-  if (!ca) return null;
-  if (ca.state === 'ok') return ca.checksRecorded > 0 ? ca.factCount : null;
-  return ca.checks.webdriver && ca.checks.webdriver.fired ? 1 : null;
-}
+// The pointer verdict's level, as the tile, the rail and its sort read it:
+// -1 (not assessed) when there is no analysis.
+const pointerLevel = (ca) => ca ? ca.level : -1;
 
 // Renders all 17 SIGNALS as a colour-coded tile grid. Every signal renders
 // (hits AND misses) so the layout is stable across participants — only firing
 // signals light up. Misses share the same footprint as hits, in the muted
 // "tone-zero" style. Cleans show all-zero, suspicious shows a few lit cells.
 // A value is a count, or a string shown as is in the tone-zero style: the
-// pointer-checks tile reads "—" when the data carries no device facts.
+// pointer-verdict tile reads "—" when the session is not assessed.
 function renderSignalGrid(summary, triageRow) {
   const aiExt = summary.aiExtensionCount ?? (summary.aiExtensionsFound || summary.extensionsDetected || []).length;
   const edgeExits = triageRow?.edgeExitCount ?? 0;
@@ -985,9 +989,10 @@ function renderSignalGrid(summary, triageRow) {
     let v;
     if (sig.key === 'aiExtensionsCount')   v = aiExt;
     else if (sig.key === 'edgeExitCount')  v = edgeExits;
-    else if (sig.key === 'cursorFactCount') v = ca && ca.checksRecorded === 0 ? '—' : (pointerChecksFired(ca) ?? 0);
+    else if (sig.key === 'cursorLevel')    v = pointerLevel(ca) === -1 ? '—' : pointerLevel(ca);
     else                                   v = summary[sig.key] ?? 0;
-    return { ...sig, value: typeof v === 'string' ? v : (Number(v) || 0) };
+    // A highly suspicious verdict lights the tile like a hard signal.
+    return { ...sig, tone: sig.key === 'cursorLevel' && v === 2 ? 'critical' : sig.tone, value: typeof v === 'string' ? v : (Number(v) || 0) };
   });
 
   return `<div class="signal-grid" role="list">
@@ -1023,7 +1028,7 @@ function renderCohortList(triage, cohortCounts) {
       <select name="sort">
         <option value="tier" selected>Tier (hard first)</option>
         <option value="score">Score &darr;</option>
-        <option value="cursor">Pointer checks &darr;</option>
+        <option value="cursor">Pointer verdict &darr;</option>
         <option value="id">ID</option>
       </select>
     </label>
@@ -1050,9 +1055,8 @@ function renderCohortList(triage, cohortCounts) {
 //   data-score:     numeric score (defaulted to 0 if null/undefined)
 //   data-reason:    pre-lowercased reason string (search reads this so the
 //                   handler doesn't need to lowercase per keystroke)
-//   data-cursor:    pointer checks that fired, 0–3 (pointerChecksFired); -1
-//                   when nothing is checkable (the 'cursor' sort puts those
-//                   rows last)
+//   data-cursor:    the pointer verdict's level, 2…0; -1 when not assessed
+//                   (the 'cursor' sort puts those rows last)
 function renderCohortRow(t) {
   const tier = tierOf(t);
   const pid = String(t.participantId || '');
@@ -1063,20 +1067,15 @@ function renderCohortRow(t) {
   const reason = String(t.reason || 'clean');
   const reasonLower = reason.toLowerCase();
   const ca = t.summary && t.summary.cursorAnalysis;
-  // data-cursor: fired checks 0–3; -1 when nothing is checkable (sorts last).
-  const cursorCount = pointerChecksFired(ca) ?? -1;
-  // The cell: "n of 3" with a stream and a device object; "not recorded"
-  // with a stream and none; a dash with no stream, unless the automation
-  // flag fired.
-  const cursorCell = !ca ? ''
-    : ca.state === 'ok' ? (ca.checksRecorded === 0 ? 'pointer checks: not recorded' : `pointer checks: ${ca.factCount} of 3`)
-    : ca.checks.webdriver && ca.checks.webdriver.fired ? 'pointer checks: automation flag'
-    : '&mdash;';
+  // data-cursor: the verdict's level; -1 when not assessed (sorts last).
+  const cursorLevel = pointerLevel(ca);
+  // The cell: "pointer: " and the verdict; empty without an analysis.
+  const cursorCell = !ca ? '' : `pointer: ${esc(ca.verdict)}`;
   return `<div class="cohort-row" data-pid="${esc(pid)}"
        data-sanitized="${esc(sanitized)}"
        data-tier="${tier}"
        data-score="${score}"
-       data-cursor="${cursorCount}"
+       data-cursor="${cursorLevel}"
        data-reason="${esc(reasonLower)}">
     <div class="cohort-row-top">
       <span class="tier-dot" data-tier="${tier}"></span>
@@ -1085,7 +1084,7 @@ function renderCohortRow(t) {
     </div>
     <div class="cohort-row-bot">
       <span class="reason-excerpt">${esc(reason)}</span>
-      <span class="cursor-cell">${cursorCell}</span>
+      <span class="cursor-cell" data-level="${cursorLevel}">${cursorCell}</span>
       <span class="tier-badge" data-tier="${tier}">${tier === 'clean' ? 'clean' : tier.toUpperCase()}</span>
     </div>
   </div>`;
@@ -1252,42 +1251,48 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
     </div>`;
 }
 
-// The "Cursor dynamics" section: the three browser-reported checks with
-// their counts, denominators and trial ids; the reported rule; the shape
-// features with their n; the stream and its realised interval; the
-// constants that judged it (the values the analysis carries, also written to
-// cursor-limits.json). Numbers only; their meaning is on
-// docs/interpreting-signals.md, which the section links to. When the
-// session has a recording, it ends with a pointer to the replay: a link to
-// the replay section in the CLI report, a sentence naming the card where the
-// replay is shown outside the report (the analyze page, whose card follows
-// the selected participant).
+// The session's cursor dynamics: the pointer verdict first — the word, then
+// the tells that decided it (a tell at the highly-suspicious level in
+// bold), or why the session is not assessed, or what a clean session was
+// judged on — then every check, the rules and the movement shape inside a
+// closed <details>, so the numbers are there without being the first thing
+// read. "+n more" counts trials (x.trials: the trials involved before the
+// ten-id cap), never clicks.
 function renderCursorSection(s, participant, replayShownExternally) {
   const ca = s.cursorAnalysis;
   if (!ca) return '';
-  // "+n more" counts trials (x.trials: the trials involved before the
-  // ten-id cap), never clicks.
   const ids = (x) => x.trialIds && x.trialIds.length ? ` (${esc(x.trialIds.join(', '))}${x.trials > x.trialIds.length ? `, +${x.trials - x.trialIds.length} more` : ''})` : '';
-  const ofN = (x) => `${x.count} of ${x.of}${ids(x)}`;
+  const ofN = (x, unit = '') => `${x.count} of ${x.of}${unit}${ids(x)}`;
   const check = (label, c, body) => `<tr class="${c && typeof c === 'object' && c.fired ? 'fired' : ''}"><th>${label}</th><td>${c === 'not recorded' ? 'not recorded' : body(c)}</td></tr>`;
   const num = (v, unit, digits) => v == null ? '—' : `${digits == null ? v : v.toFixed(digits)}${unit}`;
   const feat = (label, f, unit = '', digits) => `<tr><th>${label}</th><td>${num(f.median, unit, digits)} <span class="muted">(n = ${f.n})</span></td></tr>`;
   const docs = `<a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>`;
   const constants = Object.entries(ca.limits).map(([name, value]) => `${name} ${value}`).join(', ');
-  let body;
+  const badge = `<span class="verdict-badge" data-level="${ca.level}">${esc(ca.verdict)}</span>`;
+  let verdict;
+  if (ca.level === -1) {
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${esc(ca.verdictReason)}.</span></p>`;
+  } else if (ca.level === 0) {
+    const n = ca.cursor.rules.noPathClicks, z = ca.checks.zeroMoveTrials;
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.of} first clicks, none arrived without a path; ${z.of} trials, none clicked without pointer movement; no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
+  } else {
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">because of:</span></p>
+    <ul class="cursor-tells">${ca.tells.map(t => `<li class="tell-${t.level}">${esc(t.text)}${t.trialIds.length ? ` <span class="muted">${ids(t).trim()}</span>` : ''}</li>`).join('')}</ul>`;
+  }
+  let details = '';
   if (ca.state !== 'ok') {
-    body = `<p class="muted note">${esc(ca.cursorReason)}.${ca.checks.webdriver && ca.checks.webdriver.fired ? ' The browser set its automation flag.' : ''}</p>`;
+    if (ca.level !== -1) details = `<p class="muted note">${esc(ca.cursorReason)}: the other checks could not run.</p>`;
   } else {
     const c = ca.cursor;
-    const recordedNote = ca.checksRecorded === 0 ? `<p class="muted note">device facts and click provenance not recorded (library before 0.14); taps and scripted clicks cannot be told apart, so the checks are not recorded.</p>` : '';
-    body = `${recordedNote}
+    details = `<details class="cursor-details"><summary>every check, the rules and the movement shape</summary>
     <table class="cursor-table"><caption>browser-reported checks</caption>
       ${check('automation flag set by the browser', ca.checks.webdriver, (w) => w.fired ? 'yes' : 'no')}
-      ${check('clicks the page’s own scripts dispatched', ca.checks.untrustedClicks, ofN)}
-      ${check('trials clicked without pointer movement', ca.checks.zeroMoveTrials, ofN)}
+      ${check('clicks the page’s own scripts dispatched', ca.checks.untrustedClicks, (x) => ofN(x))}
+      ${check('trials clicked without pointer movement', ca.checks.zeroMoveTrials, (x) => ofN(x))}
     </table>
-    <table class="cursor-table"><caption>reported, no verdict</caption>
-      <tr><th>clicks after a pointer jump</th><td>${ofN(c.rules.jumpClicks)}</td></tr>
+    <table class="cursor-table"><caption>rules and movement shape</caption>
+      <tr><th>clicks that arrived without a path</th><td>${ofN(c.rules.noPathClicks, ' first clicks')}</td></tr>
+      <tr><th>clicks after a pointer jump</th><td>${ofN(c.rules.jumpClicks, ' first clicks')}</td></tr>
       ${feat('movement duration', c.features.durationMs, ' ms', 0)}
       ${feat('path length', c.features.pathPx, ' px', 0)}
       ${feat('displacement', c.features.displacementPx, ' px', 0)}
@@ -1300,7 +1305,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
       <tr><th>movements · clicks</th><td>${c.movements} · ${c.clicks}</td></tr>
       <tr><th>capped trials</th><td>${c.cappedTrials} of ${c.trials} trials</td></tr>
     </table>
-    <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants: ${esc(constants)} (cursor-limits.json); ${docs}.</p>`;
+    <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; a first click arrives without a path when its movement has at most one sample and starts ${ca.limits.samePositionPx} px or more from the last known position; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; thresholds: suspicious at ${Math.round(100 * ca.limits.shareSuspicious)}%, highly suspicious at ${Math.round(100 * ca.limits.shareHighlySuspicious)}%, judged from ${ca.limits.minClicksForVerdict} first clicks; constants: ${esc(constants)} (cursor-limits.json); ${docs}.</p></details>`;
   }
   // Only a session with a recording gets a pointer to its replay.
   const hasRecording = !!(participant && participant.replay && participant.replay.recording);
@@ -1308,7 +1313,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
     : replayShownExternally
       ? `<p class="muted note">The replay card beside this report shows this session.</p>`
       : `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>`;
-  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${body}${replayLink}</div>`;
+  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${verdict}${details}${replayLink}</div>`;
 }
 
 // Renders the participant's screenout reason as a left-bordered pull-quote.

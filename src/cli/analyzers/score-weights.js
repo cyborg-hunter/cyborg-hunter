@@ -37,10 +37,11 @@ export const SCORE_SIGNALS = [
   // Edge exits are computed per trial by edge-exit.js and summed on the
   // triage row; they are not a summary field.
   { key: 'edgeExits',      weight: 0, count: (s, edgeExitCount) => edgeExitCount || 0 },
-  // The report's pointer checks (analyzers/cursor.js): one per check that
-  // fired (0–3), not per event. Ranks within a tier like every key here.
-  { key: 'cursor',         weight: 0, count: s => (s.cursorAnalysis && typeof s.cursorAnalysis.factCount === 'number') ? s.cursorAnalysis.factCount : 0,
-    label: 'pointer checks', hint: 'ranking weight; the tier is unchanged. 0–3, one per check that fired, not per event.' },
+  // The report's pointer verdict (analyzers/cursor.js): its level, 0 for a
+  // clean or not-assessed session, 1 for suspicious, 2 for highly
+  // suspicious. Ranks within a tier like every key here.
+  { key: 'cursor',         weight: 0, count: s => (s.cursorAnalysis && s.cursorAnalysis.level > 0) ? s.cursorAnalysis.level : 0,
+    label: 'pointer verdict', hint: 'ranking weight × verdict level: suspicious 1, highly suspicious 2; the tier is unchanged.' },
 ];
 
 const KEYS = SCORE_SIGNALS.map(s => s.key);

@@ -148,8 +148,8 @@ test('run on the sample streams a zip of the full report and returns the in-page
   for (const f of ['summary.csv', 'triage.md', 'event-log.csv']) assert.equal(done.files[f], strFromU8(files[f]), f);
   assert.deepEqual(done.participants.map((p) => p.participantId).sort(), ['SYN-CLEAN-01', 'SYN-GENERATED-04', 'SYN-HARD-03', 'SYN-SOFT-02']);
   assert.deepEqual(done.triageOrder.slice().sort(), ['SYN-CLEAN-01', 'SYN-GENERATED-04', 'SYN-HARD-03', 'SYN-SOFT-02']);
-  assert.equal(done.cursorLine, 'Pointer checks: fired in 1 of 1 sessions with device facts (3 recorded without them; 0 without a cursor stream)');
-  assert.match(done.files['triage.md'], /\| SYN-GENERATED-04 \| clean \| 0 \| pointer checks: automation flag; trials clicked without pointer movement 1\/3 \|/);
+  assert.equal(done.cursorLine, 'Pointer verdicts: 1 highly suspicious, 0 suspicious, 0 clean, 3 not assessed (4 sessions; 3 recorded without device facts)');
+  assert.match(done.files['triage.md'], /\| SYN-GENERATED-04 \| clean \| 0 \| pointer verdict: highly suspicious \(automation flag; trials clicked without movement 2\/4\) \|/);
   assert.equal(done.configUsed.participantIdField, 'subject_ID');
   assert.match(done.html, /SYN-HARD-03/);
   const phases = new Set(w.messages.filter((m) => m.type === 'progress').map((m) => m.phase));

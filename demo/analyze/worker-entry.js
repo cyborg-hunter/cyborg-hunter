@@ -34,7 +34,7 @@
 //                   runId: the run id (report-core.js runIdOf); triageRows: each
 //                   participant's tier and triage score in triage order
 //                   (for the annotation export); cursorLine: the run's
-//                   pointer-checks sentence (report-core.js)
+//                   pointer-verdicts sentence (report-core.js)
 //     replay-model  { participantId, model }
 //     error         { phase, message, warnings? }, phase 'ingest' or the type of
 //                   the message that failed: 'check' | 'run' | 'reanalyze' |

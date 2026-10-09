@@ -155,19 +155,17 @@ export async function buildReport(participants, config, deps) {
   sink('extensions.csv', ex.csv);
   log(`  extensions.csv — ${ex.rows} detections`);
 
-  // The pointer checks over the cohort: the run line (returned as cursorLine
-  // for the analyze page, whose worker does not wire log) and, when the
-  // cursor weight is on but some sessions carry no device facts, the warning.
-  // withDevice: sessions with device facts (at least the automation flag is
-  // recorded); fired: sessions with any check that fired, in any state;
-  // withoutDevice: the rest of the cohort; noStream: sessions with no cursor
-  // stream, which overlap the other counts and are stated apart.
+  // The pointer verdicts over the cohort: the run line (returned as
+  // cursorLine for the analyze page, whose worker does not wire log) and,
+  // when the cursor weight is on but some sessions carry no device facts,
+  // the warning. withDevice: sessions with device facts (at least the
+  // automation flag is recorded); withoutDevice: the rest of the cohort.
   const total = cursors.length;
   const withDevice = cursors.filter(c => c.checksRecorded >= 1).length;
-  const fired = cursors.filter(c => c.factCount > 0).length;
   const withoutDevice = total - withDevice;
-  const noStream = cursors.filter(c => c.state !== 'ok').length;
-  const cursorLine = `Pointer checks: fired in ${fired} of ${withDevice} sessions with device facts (${withoutDevice} recorded without them; ${noStream} without a cursor stream)`;
+  const v = { '-1': 0, 0: 0, 1: 0, 2: 0 };
+  for (const c of cursors) v[c.level]++;
+  const cursorLine = `Pointer verdicts: ${v[2]} highly suspicious, ${v[1]} suspicious, ${v[0]} clean, ${v[-1]} not assessed (${total} session${total === 1 ? '' : 's'}; ${withoutDevice} recorded without device facts)`;
   log(`  ${cursorLine}`);
   const cursorWeight = scoreWeights.weights.cursor.weight;
   if (cursorWeight > 0 && withDevice < total) {

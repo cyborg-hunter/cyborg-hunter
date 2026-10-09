@@ -4,7 +4,7 @@
 // any of these numbers; the first three "participants" are hand-authored to
 // illustrate the three triage tiers (clean / soft / HARD) with realistic
 // v0.6.1-shaped data, and the fourth is a generated session, shaped like
-// 0.14.0 data, that sets off the report's pointer checks.
+// 0.14.0 data, that the report's pointer verdict reads as highly suspicious.
 //
 // The rows mirror what the cyborg-hunter jsPsych extension actually saves:
 //   - per-row scalars added via jsPsych.data.addProperties() at finalize()
@@ -325,17 +325,18 @@ const hard = buildParticipant('SYN-HARD-03', [
 
 // SYN-GENERATED-04: a generated session whose browser set its automation
 // flag. Two of its trials move in a straight line, in equal steps 60 ms
-// apart, before they click; the third is clicked with no pointer movement.
-// So the sample report shows two checks firing (the automation flag and one
-// trial clicked without pointer movement) beside the shape of a scripted
-// cursor (efficiency 1, no deviation). The id says what it is. Shaped like
-// 0.14.0 data (device facts, viewport coordinates, click provenance), so its
-// checks are recorded; the three sessions above are 0.6.1 data, whose checks
-// are not.
+// apart, before they click; the third and fourth are clicked with no pointer
+// movement. So the sample report reads highly suspicious on it, because of
+// the automation flag and two of four trials clicked without pointer
+// movement, beside the shape of a scripted cursor (efficiency 1, no
+// deviation). The id says what it is. Shaped like 0.14.0 data (device facts,
+// viewport coordinates, click provenance), so its checks are recorded; the
+// three sessions above are 0.6.1 data, whose checks are not.
 const generated = buildParticipant('SYN-GENERATED-04', [
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.5, scriptedPath: { from: { x: 300, y: 200 }, step: { x: 100, y: 50 } } },
   { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.8, scriptedPath: { from: { x: 260, y: 420 }, step: { x: 120, y: -80 } } },
-  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.1, clickOnly: true }
+  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.1, clickOnly: true },
+  { pasteEvents: [], copyEvents: [], tabAwayEvents: [], charsPerSec: 9.4, clickOnly: true }
 ], { participantIndex: 3, version: GENERATED_VERSION, device: { maxTouchPoints: 0, coarsePointer: false, webdriver: true } });
 
 // ── Write the files ──────────────────────────────────────────────────────────
