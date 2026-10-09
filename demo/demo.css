@@ -118,12 +118,17 @@ code, pre{font-family:var(--mono);}
 .stepcard p:last-child, .entrybox p:last-child, .task p:last-child{margin-bottom:0;}
 .stepcard ul, .stepcard ol, .entrybox ul, .entrybox ol{margin:0 0 12px;padding-left:20px;}
 /* The copy, the answer chip and the task panel all span the card's content
- * width, so the prose is justified to that edge; hyphens:auto (index.html's
- * lang="en") keeps the justified lines from opening wide gaps. */
-#card p, #card li{text-align:justify;hyphens:auto;}
-/* Short lines and code stay ragged-left and unhyphenated: a one-line hint or
- * question would only stretch, and a word broken inside code misquotes it. */
-#card .hint, #card .question, #card .detected-strip, #card .replicate h3, #card pre, #card code{text-align:left;hyphens:manual;}
+ * width, so the prose (hints included) is justified to that edge; a justified
+ * paragraph never stretches its last line, so a one-line hint is unaffected.
+ * hyphens:auto (index.html's lang="en") keeps the justified lines from opening
+ * wide gaps; hyphenate-limit-chars breaks only words of six letters or more,
+ * with at least three on each side, so short words stay whole. */
+#card p, #card li{text-align:justify;hyphens:auto;hyphenate-limit-chars:6 3 3;}
+/* Labels, headings and code stay ragged-left and unhyphenated: the question,
+ * the detected strip and the walkthrough headings are short single-line
+ * labels that keep their words whole if a narrow card wraps them, and a
+ * stretched space or a broken word inside code misquotes it. */
+#card .question, #card .detected-strip, #card .replicate h3, #card pre, #card code{text-align:left;hyphens:manual;}
 
 /* ---------------------------------------------------------------------
  * Task panel — recessed ground-colored inset, no border.

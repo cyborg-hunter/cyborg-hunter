@@ -280,7 +280,7 @@ test('top bar: the title, then the REC cue; the card label says the step only', 
 // task panel's own button centres on the same axis as the primary below it:
 // the panel spans the card and its padding is symmetric.
 // ---------------------------------------------------------------------------
-test('first step: two paragraphs, then a large "Start the demo" centred under them; the next step\'s button matches', async ({ page }) => {
+test('first step: two paragraphs, then a large "Start the demo" centred under them; the next steps\' buttons share the axis', async ({ page }) => {
   await page.goto('/');
   await page.locator('#card h2').waitFor();
   const paragraphs = page.locator('#card .stepcopy p');
