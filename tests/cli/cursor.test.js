@@ -439,15 +439,16 @@ describe('the pointer verdict', () => {
     assert.deepEqual(r.tells[0].trialIds, ['q2', 'q3', 'q4', 'q5']);
   });
   it('the shares: 20% is suspicious, 50% highly, 10% clean', () => {
-    // Ten trials: the first k scripted (one sample, 300 px apart), the rest human paths continuing from there.
-    const mixed = (k) => [...scripted(k), ...Array.from({ length: 10 - k }, (_, j) => { const i = k + j; return trial('q' + (i + 1), path(100 + (i - 1) * 300, 200, 100 + i * 300, 200, 0), spaced(i)); })];
-    // k scripted trials give k - 1 clicks without a path, of nine judged (the first click has no position before it) … unless k = 0.
+    // Eleven trials: the first k scripted (one sample, 300 px apart), the rest human paths continuing from there,
+    // so ten clicks are judged (the first has no position before it) and the shares land on the thresholds.
+    const mixed = (k) => [...scripted(k), ...Array.from({ length: 11 - k }, (_, j) => { const i = k + j; return trial('q' + (i + 1), path(100 + (i - 1) * 300, 200, 100 + i * 300, 200, 0), spaced(i)); })];
+    // k scripted trials give k - 1 clicks without a path, of ten judged … unless k = 0.
     assert.equal(verdictOf(mixed(2)).cursor.rules.noPathClicks.count, 1);
-    assert.equal(verdictOf(mixed(2)).cursor.rules.noPathClicks.of, 9);
-    assert.equal(verdictOf(mixed(2)).level, 0);                 // 1 of 9 = 11%
-    assert.equal(verdictOf(mixed(3)).level, 1);                 // 2 of 9 = 22%
-    assert.equal(verdictOf(mixed(5)).level, 1);                 // 4 of 9 = 44%
-    assert.equal(verdictOf(mixed(6)).level, 2);                 // 5 of 9 = 55%
+    assert.equal(verdictOf(mixed(2)).cursor.rules.noPathClicks.of, 10);
+    assert.equal(verdictOf(mixed(2)).level, 0);                 // 1 of 10 = 10%
+    assert.equal(verdictOf(mixed(3)).level, 1);                 // 2 of 10 = 20%, the threshold itself
+    assert.equal(verdictOf(mixed(5)).level, 1);                 // 4 of 10 = 40%
+    assert.equal(verdictOf(mixed(6)).level, 2);                 // 5 of 10 = 50%, the threshold itself
     assert.deepEqual(verdictOf(mixed(3)).tells.map(t => t.level), ['low']);
   });
   it('trials clicked without pointer movement follow the same shares', () => {
