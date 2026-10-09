@@ -1254,7 +1254,8 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
 // The session's cursor dynamics: the pointer verdict first — the word, then
 // the tells that decided it (a tell at the highly-suspicious level in
 // bold), or why the session is not assessed, or what a clean session was
-// judged on — then every check, the rules and the movement shape inside a
+// judged on (its counts, which need not be 0, and the threshold they stayed
+// under) — then every check, the rules and the movement shape inside a
 // closed <details>, so the numbers are there without being the first thing
 // read. "+n more" counts trials (x.trials: the trials involved before the
 // ten-id cap), never clicks.
@@ -1274,7 +1275,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">${esc(ca.verdictReason)}.</span></p>`;
   } else if (ca.level === 0) {
     const n = ca.cursor.rules.noPathClicks, z = ca.checks.zeroMoveTrials;
-    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.of} first clicks, none arrived without a path; ${z.of} trials, none clicked without pointer movement; no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.count} of ${n.of} first clicks arrived without a path and ${z.count} of ${z.of} trials were clicked without pointer movement, both under ${Math.round(100 * ca.limits.shareSuspicious)}%; no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
   } else {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">because of:</span></p>
     <ul class="cursor-tells">${ca.tells.map(t => `<li class="tell-${t.level}">${esc(t.text)}${t.trialIds.length ? ` <span class="muted">${ids(t).trim()}</span>` : ''}</li>`).join('')}</ul>`;

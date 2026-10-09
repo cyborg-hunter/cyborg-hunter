@@ -178,9 +178,22 @@ describe('the HTML report', () => {
     clean.trials.forEach((t, i) => { t.startTime = 1000 + i * 5100; });
     const { summaries, triage } = analyze([clean]);
     const html = await renderIndexHtml(summaries, triage, [clean], config, false);
-    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">4 first clicks, none arrived without a path; 4 trials, none clicked without pointer movement; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/);
+    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">0 of 4 first clicks arrived without a path and 0 of 4 trials were clicked without pointer movement, both under 20%; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/);
     assert.match(html, /<span class="cursor-cell" data-level="0">pointer: clean<\/span>/);
     assert.match(html, /<div class="signal-tile tone-zero"[^>]*>\s*<span class="signal-value">0<\/span>\s*<span class="signal-label">Pointer verdict/);
+  });
+  it('a clean session with counts under the threshold states them', async () => {
+    // Ten trials, 100 ms apart; the fifth is a lone click far from where q4's
+    // path ended (260, 160): a trial clicked without pointer movement and a
+    // click that arrived without a path, 1 of 10 each (10%), under 20%.
+    const trials = Array.from({ length: 10 }, (_, i) => i === 4 ? [ck(900, 900, 20)] : path(0));
+    const under = base('UNDER', trials, desktop);
+    under.trials.forEach((t, i) => { t.startTime = 1000 + i * 5100; });
+    const { summaries, triage } = analyze([under]);
+    const html = await renderIndexHtml(summaries, triage, [under], config, false);
+    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">1 of 10 first clicks arrived without a path and 1 of 10 trials were clicked without pointer movement, both under 20%; /);
+    assert.match(html, /clicks that arrived without a path<\/th><td>1 of 10 first clicks \(q5\)/);
+    assert.match(html, /trials clicked without pointer movement<\/th><td>1 of 10 \(q5\)/);
   });
   it('a null session says why and shows no numbers', async () => {
     const { summaries, triage } = analyze([touch]);
