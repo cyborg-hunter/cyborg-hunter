@@ -163,6 +163,10 @@ describe('checks', () => {
   it('a click at the last known position does not count as a zero-move trial', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0)), trial('q2', [ck(405, 302, 20)], { startTime: 6100 })]));
     assert.equal(r.checks.zeroMoveTrials.count, 0);
+    // samePositionPx (20 px) away is no longer the same position: 19 px is, 20 px is not.
+    const at = (d) => analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0)), trial('q2', [ck(400 + d, 300, 20)], { startTime: 6100 })])).checks.zeroMoveTrials.count;
+    assert.equal(at(19), 0);
+    assert.equal(at(20), 1);
   });
   it('a touch tap is its own kind: counted, never a pointer click, so a trial tapped with no moves does not fire', () => {
     // A touchscreen laptop: touch points, but a fine primary pointer, so the
@@ -218,6 +222,21 @@ describe('the last known position', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0).map(noCx)), trial('q2', [noCx(ck(405, 302, 20))], { startTime: 6100 })]));
     assert.equal(r.cursor.coordinates, 'page');
     assert.equal(r.checks.zeroMoveTrials.count, 1);
+  });
+  it('is not moved by a keyboard activation or a click the page dispatched, which carry no pointer position', () => {
+    // q1 ends on a pointer click at (400, 300); q2 is a click at (0, 0) the
+    // pointer did not make; q3 is a lone pointer click back at (400, 300).
+    const via = (between) => analyzeCursorForParticipant(participant([
+      trial('q1', path(100, 100, 400, 300, 0)),
+      trial('q2', between, { startTime: 6100 }),
+      trial('q3', [ck(400, 300, 20)], { startTime: 11200 })
+    ]));
+    for (const extra of [{ detail: 0, pointerType: undefined }, { trusted: false }]) {
+      const r = via([ck(0, 0, 20, extra)]);
+      assert.deepEqual([r.cursor.rules.noPathClicks.count, r.checks.zeroMoveTrials.count], [0, 0], JSON.stringify(extra));
+    }
+    // A pointer click there does move it: q2 and q3 then both arrive without a path.
+    assert.deepEqual(via([ck(0, 0, 20)]).cursor.rules.noPathClicks.trialIds, ['q2', 'q3']);
   });
 });
 
@@ -327,6 +346,7 @@ describe('clicks that arrived without a path', () => {
   it('is not a jump below 100 px, and is both at 100 px and over', () => {
     assert.deepEqual([after(1, 60).cursor.rules.jumpClicks.count, after(1, 60).cursor.rules.noPathClicks.count], [0, 1]);
     assert.deepEqual([after(1, 100).cursor.rules.jumpClicks.count, after(1, 100).cursor.rules.noPathClicks.count], [1, 1]);
+    assert.deepEqual([after(1, 300).cursor.rules.jumpClicks.count, after(1, 300).cursor.rules.noPathClicks.count], [1, 1]);
   });
   it('a touch tap and a keyboard activation are not in its denominator', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', [...path(100, 100, 400, 300, 0), ck(700, 300, 950, { detail: 0, pointerType: undefined }), ck(700, 500, 1000, { pointerType: 'touch' })])], { maxTouchPoints: 10, coarsePointer: false, webdriver: false }));
@@ -387,13 +407,14 @@ describe('the pointer verdict', () => {
     assert.equal(r.tells[0].short, 'clicks without a path 3/4');
     assert.deepEqual(r.tells[0].trialIds, ['q2', 'q3', 'q4']);
   });
-  it('the shares: 20% is suspicious, 50% highly, 19% clean', () => {
+  it('the shares: 20% is suspicious, 50% highly, 10% clean', () => {
     // Ten trials: the first k scripted (one sample, 300 px apart), the rest human paths continuing from there.
     const mixed = (k) => [...scripted(k), ...Array.from({ length: 10 - k }, (_, j) => { const i = k + j; return trial('q' + (i + 1), path(100 + (i - 1) * 300, 200, 100 + i * 300, 200, 0), spaced(i)); })];
     // k scripted trials give k - 1 clicks without a path (the first has no position before it) … unless k = 0.
     assert.equal(verdictOf(mixed(2)).cursor.rules.noPathClicks.count, 1);
     assert.equal(verdictOf(mixed(2)).level, 0);                 // 1 of 10 = 10%
     assert.equal(verdictOf(mixed(3)).level, 1);                 // 2 of 10 = 20%
+    assert.equal(verdictOf(mixed(5)).level, 1);                 // 4 of 10 = 40%
     assert.equal(verdictOf(mixed(6)).level, 2);                 // 5 of 10 = 50%
     assert.deepEqual(verdictOf(mixed(3)).tells.map(t => t.level), ['low']);
   });
@@ -412,7 +433,12 @@ describe('the pointer verdict', () => {
   it('clicks the page’s own scripts dispatched: any makes the session suspicious, half or more highly', () => {
     const one = verdictOf([...humans(4), trial('q5', [...path(1300, 200, 1600, 200, 0), ck(1600, 200, 950, { trusted: false })], spaced(4))]);
     assert.equal(one.level, 1);
-    assert.deepEqual(one.tells.map(t => [t.id, t.level, t.text, t.short]), [['untrusted', 'low', 'clicks the page’s own scripts dispatched: 1 of 6 (17%)', 'untrusted clicks 1/6']]);
+    // The printed percent is rounded down, so it never reaches a threshold the level did not.
+    assert.deepEqual(one.tells.map(t => [t.id, t.level, t.text, t.short]), [['untrusted', 'low', 'clicks the page’s own scripts dispatched: 1 of 6 (16%)', 'untrusted clicks 1/6']]);
+    // One trial: a path, then n - 1 more clicks where it ended, the first k of them untrusted.
+    const untrustedOf = (k, n) => verdictOf([trial('q1', [...path(100, 100, 400, 300, 0), ...Array.from({ length: n - 1 }, (_, i) => ck(400, 300, 1000 + i * 10, i < k ? { trusted: false } : {}))])]).tells[0];
+    assert.deepEqual([untrustedOf(99, 199).level, untrustedOf(99, 199).text], ['low', 'clicks the page’s own scripts dispatched: 99 of 199 (49%)']);
+    assert.equal(untrustedOf(29, 100).text, 'clicks the page’s own scripts dispatched: 29 of 100 (29%)');
     const all = verdictOf(humans(4).map(t => ({ ...t, mouseEvents: t.mouseEvents.map(e => e.type === 'click' ? { ...e, trusted: false } : e) })));
     assert.equal(all.level, 2);
     assert.deepEqual(all.tells.map(t => [t.id, t.level]), [['untrusted', 'high']]);
@@ -421,14 +447,16 @@ describe('the pointer verdict', () => {
     assert.deepEqual([few.level, few.cursor.rules.noPathClicks.of, few.tells.map(t => t.level)], [1, 3, ['low']]);
   });
   it('tells come in order: automation flag, untrusted clicks, clicks without a path, trials without movement', () => {
-    // Five lone clicks 300 px apart; the first is untrusted (1 of 5), the four
-    // pointer clicks that follow all arrive without a path, and their four
-    // trials are clicked without movement (the untrusted click's trial has no
-    // pointer click, so it is not one of them).
+    // Five lone clicks 300 px apart; the first is untrusted (1 of 5) and
+    // leaves no position behind, so the first pointer click (q2) has none
+    // before it and the three after it arrive without a path (3 of 4). The
+    // four pointer clicks' trials are clicked without movement (the untrusted
+    // click's trial has no pointer click, so it is not one of them).
     const lone = Array.from({ length: 5 }, (_, i) => trial('q' + (i + 1), [ck(100 + i * 300, 200, 20, i === 0 ? { trusted: false } : {})], spaced(i)));
     const r = verdictOf(lone, { ...desktop, webdriver: true });
     assert.deepEqual(r.tells.map(t => [t.id, t.level]), [['webdriver', 'high'], ['untrusted', 'low'], ['noPath', 'high'], ['zeroMove', 'high']]);
-    assert.deepEqual(r.tells.map(t => t.trials), [0, 1, 4, 4]);
+    assert.deepEqual(r.tells.map(t => t.trials), [0, 1, 3, 4]);
+    assert.equal(r.tells[2].text, 'clicks that arrived without a path: 3 of 4 first clicks (75%)');
     assert.equal(r.tells[3].text, 'trials clicked without pointer movement: 4 of 5 (80%)');
   });
   it('judges with the limits it is given', () => {
@@ -437,6 +465,7 @@ describe('the pointer verdict', () => {
     const r = analyzeCursorForParticipant(participant([...scripted(2), ...humans(8).map((t, j) => ({ ...t, trialId: 'h' + j, startTime: 1000 + (j + 2) * 5100 }))]), custom);
     assert.equal(r.cursor.rules.noPathClicks.count, 1);
     assert.equal(r.level, 1);                                       // 1 of 10 = 10% ≥ 5%
-    assert.deepEqual(Object.keys(r.limits), Object.keys(CURSOR_LIMITS));
+    assert.equal(r.limits.shareSuspicious, 0.05);
+    assert.equal(r.limits.minClicksForVerdict, 2);
   });
 });

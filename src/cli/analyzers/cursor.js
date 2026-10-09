@@ -1,9 +1,9 @@
 // src/cli/analyzers/cursor.js
-// The report's cursor section: three browser-reported checks, one reported
-// rule and the shape of each movement, from the core's per-trial mouse
-// samples. Pure: no DOM, no I/O. Imported by the lab's calibration bench by
-// this path (cyborg-hunter/src/cli/analyzers/cursor.js); keep the exports
-// stable or update the bench with the change.
+// The report's cursor section: three browser-reported checks, two rules,
+// the shape of each movement and the pointer verdict, from the core's
+// per-trial mouse samples. Pure: no DOM, no I/O. Imported by the lab's
+// calibration bench by this path (cyborg-hunter/src/cli/analyzers/cursor.js);
+// keep the exports stable or update the bench with the change.
 //
 // Checks (browser-reported): the automation flag the browser sets
 // (navigator.webdriver), clicks the page's own scripts dispatched (isTrusted
@@ -20,7 +20,7 @@ import { pathLength, displacement, maxDeviation } from '../../shared/cursor-geom
 export const CURSOR_LIMITS = {
   movementGapMs:         { value: 400,  meaning: 'Two move samples more than this many milliseconds apart belong to different movements; a click ends the movement it follows.' },
   staleGapMs:            { value: 2000, meaning: 'When nothing is recorded for longer than this many milliseconds between trials, the last known pointer position is forgotten; a tab-away forgets it at once.' },
-  samePositionPx:        { value: 20,   meaning: 'A click within this many pixels of the last known position was made without moving, and is not a trial clicked without pointer movement. A first click whose movement has at most one sample and starts at least this far from the last known position arrived without a path.' },
+  samePositionPx:        { value: 20,   meaning: 'A click closer than this many pixels to the last known position was made without moving, and is not a trial clicked without pointer movement. A first click whose movement has at most one sample and starts at least this far from the last known position arrived without a path.' },
   discontinuityPx:       { value: 100,  meaning: 'A movement ending in a click that starts at least this many pixels from the last known position is a click after a pointer jump.' },
   minSamplesForShape:    { value: 2,    meaning: 'A movement needs at least this many move samples to contribute to the shape features.' },
   minClicksForVerdict:   { value: 4,    meaning: 'A session needs at least this many first pointer clicks (the later clicks of a double- or triple-click are not counted) before clicks that arrived without a path and trials clicked without pointer movement are judged; with fewer, and no browser fact against it, the session is not assessed.' },
@@ -119,7 +119,10 @@ export const verdictWord = (level) => VERDICTS[level + 1];
 // order of the tells is the order here.
 function assess(result, L) {
   const share = (x) => x.of > 0 ? x.count / x.of : 0;
-  const pct = (x) => `${Math.round(100 * share(x))}%`;
+  // Rounded down, so the printed percent never reaches a threshold the level
+  // did not; computed from the counts (100 * count / of), since
+  // 100 * (29 / 100) is 28.999… in floating point.
+  const pct = (x) => `${x.of > 0 ? Math.floor(100 * x.count / x.of) : 0}%`;
   const tells = [];
   // trialIds: the first ten trials involved; trials: how many there were.
   const tell = (id, level, text, short, trialIds = [], trials = 0) => tells.push({ id, level, text, short, trialIds, trials });
@@ -248,9 +251,9 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
         f.maxDeviationPx.push(maxDeviation(pts));
       }
 
+      const kind = m.click ? clickKind(m.click) : null;
       if (m.click) {
         clicksTotal++;
-        const kind = clickKind(m.click);
         cp = pos(m.click, mode);
         if (kind === 'untrusted') { untrusted.count++; untrustedHere = true; if (!untrusted.trialIds.includes(t.trialId)) untrusted.trialIds.push(t.trialId); }
         else if (kind === 'keyboard') keyboardClicks++;
@@ -266,12 +269,15 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
             // from where the pointer was last seen.
             if (last.valid && m.samples.length <= 1 && dist(startP, last) >= L.samePositionPx) { noPath.count++; noPathHere = true; if (!noPath.trialIds.includes(t.trialId)) noPath.trialIds.push(t.trialId); }
           }
-          if (moves.length === 0 && !(last.valid && dist(cp, last) <= L.samePositionPx)) unexplainedPointerClick = true;
+          if (moves.length === 0 && !(last.valid && dist(cp, last) < L.samePositionPx)) unexplainedPointerClick = true;
         }
         untrusted.of++;
       }
       for (const s of m.samples) see(pos(s, mode));
-      if (m.click) see(cp);
+      // Only a click the pointer made moves the last known position: a
+      // keyboard activation or a click the page's own scripts dispatched
+      // carries no pointer position (its coordinates are often 0, 0).
+      if (m.click && (kind === 'pointer' || kind === 'touch')) see(cp);
     }
     // A tab-away after the trial's last movement (or in a trial with none)
     // forgets the position too.
