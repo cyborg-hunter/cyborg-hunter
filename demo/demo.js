@@ -22,7 +22,7 @@ import {
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
-import { renderRail, light, acknowledge } from './rail.js';
+import { renderRail, light, acknowledge, clearSignalBox } from './rail.js';
 import { buildPayload } from './payload.js';
 import { makeLivePane } from './live-pane.js';
 import { escHtml } from './util.js';
@@ -189,8 +189,8 @@ function boot() {
 }
 
 // Row label lookup (RAIL_GROUPS -> {key: label}), used by acknowledge() so
-// the inline "✓ detected" strip text lives in one place (steps.js) rather
-// than being retyped at every signal call site.
+// the signal box's "✓ detected" line text lives in one place (steps.js)
+// rather than being retyped at every signal call site.
 var RAIL_LABELS = {};
 ['detectors', 'guard', 'recording'].forEach(function (g) {
   RAIL_GROUPS[g].forEach(function (r) { RAIL_LABELS[r.key] = r.label; });
@@ -248,6 +248,9 @@ function startTour(participantId, capabilities, manifest) {
   cardEl.classList.add('stepcard');
 
   renderRail(railEl, { groups: RAIL_GROUPS });
+  // The box at the top of the rail that lists what the current step
+  // detected: syncCountLamp() writes to it, renderStep() resets it.
+  var signalBoxEl = railEl.querySelector('[data-role="signal-box"]');
 
   // ----- Live session pane -----------------------------------------------
   // Persistently visible record, fed from the same signal
@@ -295,7 +298,7 @@ function startTour(participantId, capabilities, manifest) {
   // 5s poll (pollSessionSignals -> syncCountLamp -> acknowledge()), which
   // would see the sidebar/viewport artifact our OWN fullscreen exit there
   // produces (exitFullscreenIfActive(), goTo()'s last-step block below) and
-  // announce a false "✓ detected" strip for a detection the visitor never
+  // announce a false "✓ detected" line for a detection the visitor never
   // produced. Safe to retire for good: the rail is already hidden
   // permanently from that step onward, and the monitor itself keeps recording
   // regardless (finalizing the payload is not this wiring's job).
@@ -345,7 +348,7 @@ function startTour(participantId, capabilities, manifest) {
     if (count > (state.lampCounts[key] || 0)) {
       state.lampCounts[key] = count;
       light(key, count, { hard: hard });
-      if (label) acknowledge(cardEl, label);
+      if (label) acknowledge(signalBoxEl, label);
     }
   }
 
@@ -1257,6 +1260,9 @@ function startTour(participantId, capabilities, manifest) {
     }
     html += '</div>';
     cardEl.innerHTML = html;
+    // A new step starts with an empty signal box: the box holds what this
+    // step detects, the lamps under it keep the count across steps.
+    clearSignalBox(signalBoxEl);
   }
 
   var filesIndex = STEPS.findIndex(function (s) { return s.id === 'your-files'; });

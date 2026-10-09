@@ -185,7 +185,7 @@ test('no tier vocabulary in steps 2-8', () => {
     assert.ok(!before.includes(word), `"${word}" leaked before step 9`);
   }
 });
-test('the lamps panel is the title and the lamps: no intro copy, heads Guard and Recording only', () => {
+test('the lamps panel is the title, the signal box and the lamps: no intro copy, heads Guard and Recording only', () => {
   assert.ok(!('RAIL_INTRO' in copy), 'RAIL_INTRO is still exported');
   assert.ok(!('RAIL_INTRO_TITLE' in copy), 'RAIL_INTRO_TITLE is still exported');
   // renderRail() only writes innerHTML and then looks rows up, so a bare
@@ -193,7 +193,12 @@ test('the lamps panel is the title and the lamps: no intro copy, heads Guard and
   const container = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
   renderRail(container, { groups: RAIL_GROUPS });
   const html = container.innerHTML;
-  assert.ok(html.startsWith('<h3>Tracked signals</h3><ul class="check awaiting">'), html.slice(0, 120));
+  // Under the title, the box for what the step on screen detects, reading
+  // its placeholder until something is detected; the lamps follow it.
+  assert.equal(copy.RAIL.signalBoxEmpty, 'nothing detected on this step');
+  assert.ok(html.startsWith('<h3>Tracked signals</h3>' +
+    '<div class="signal-box" data-role="signal-box"><p class="signal-box-empty">nothing detected on this step</p></div>' +
+    '<ul class="check awaiting">'), html.slice(0, 200));
   assert.doesNotMatch(html, /class="sub|Detectors/);
   // Group heads in source case (demo.css uppercases them): Guard, Recording.
   const heads = [...html.matchAll(/<li class="hint">([^<]*)<\/li>/g)].map((m) => m[1]);

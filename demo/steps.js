@@ -33,6 +33,11 @@ export const RAIL_GROUPS = {
   ],
 };
 
+/** Rail chrome (the rail itself is demo/rail.js). */
+export const RAIL = {
+  signalBoxEmpty: 'nothing detected on this step',
+};
+
 /** Live session pane chrome (the pane itself is demo/live-pane.js). */
 export const LIVE_PANE = {
   title: 'Live session record',

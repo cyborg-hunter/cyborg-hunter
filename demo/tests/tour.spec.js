@@ -40,7 +40,7 @@ import {
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
 import { VERSION } from '../../src/shared/constants.js';
-import { HANDOFF, SAVE_TO_FOLDER, STEPS } from '../steps.js';
+import { HANDOFF, RAIL, SAVE_TO_FOLDER, STEPS } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
@@ -67,6 +67,12 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('#rail .sub')).toHaveCount(0);
   await expect(page.locator('#rail')).not.toContainText(/detectors/i);
   await expect(page.locator('#rail .check li:not([data-key])')).toHaveText(['Guard', 'Recording']);
+  // Between the title and the lamps, a box for what the step on screen
+  // detects; on a fresh step it reads its placeholder.
+  const signalBox = page.locator('#rail [data-role="signal-box"]');
+  await expect(page.locator('#rail > h3 + [data-role="signal-box"] + ul.check')).toHaveCount(1);
+  await expect(signalBox).toHaveText(RAIL.signalBoxEmpty);
+  await expect(signalBox.locator('.detected-strip')).toHaveCount(0);
 
   // ----- Step 2: baseline typing (real per-char typing lights nothing) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
@@ -100,6 +106,12 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await dispatchPaste(page, '#card textarea', offeredText);
   await expect(railRow(page, 'paste')).toHaveClass(/hardlit/); // 2nd paste crosses it
   await expect(railRow(page, 'paste').locator('.n')).toHaveText('2');
+  // The box names each signal the step detected once, however often it
+  // fired (the lamp keeps the count); the placeholder is gone, and the card
+  // itself gets no line.
+  await expect(signalBox.locator('.signal-box-empty')).toHaveCount(0);
+  await expect(signalBox.locator('.detected-strip')).toHaveText(['✓ detected — copy', '✓ detected — paste']);
+  await expect(page.locator('#card .detected-strip')).toHaveCount(0);
   // Only the paste that CROSSES the hard threshold is flagged hard in the
   // live pane (verified live: the 1st paste's row has no .hard class, since
   // its own count (1) is below the threshold at the moment it's logged) —
@@ -114,6 +126,8 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 4: tab-away, three bins (frozen clock for exact durations), then a sidebar -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 4 of 10');
+  // A new step empties the box back to its placeholder.
+  await expect(signalBox).toHaveText(RAIL.signalBoxEmpty);
   // The step's text is its whole task: three paragraphs, no task panel, and
   // the button reads "Done".
   await expect(page.locator('#card .stepcopy p')).toHaveCount(3);

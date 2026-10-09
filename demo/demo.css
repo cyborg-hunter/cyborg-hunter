@@ -124,11 +124,11 @@ code, pre{font-family:var(--mono);}
  * wide gaps; hyphenate-limit-chars breaks only words of six letters or more,
  * with at least three on each side, so short words stay whole. */
 #card p, #card li{text-align:justify;hyphens:auto;hyphenate-limit-chars:6 3 3;}
-/* Labels, headings and code stay ragged-left and unhyphenated: the question,
- * the detected strip and the walkthrough headings are short single-line
- * labels that keep their words whole if a narrow card wraps them, and a
- * stretched space or a broken word inside code misquotes it. */
-#card .question, #card .detected-strip, #card .replicate h3, #card pre, #card code{text-align:left;hyphens:manual;}
+/* Labels, headings and code stay ragged-left and unhyphenated: the question
+ * and the walkthrough headings are short single-line labels that keep their
+ * words whole if a narrow card wraps them, and a stretched space or a broken
+ * word inside code misquotes it. */
+#card .question, #card .replicate h3, #card pre, #card code{text-align:left;hyphens:manual;}
 
 /* ---------------------------------------------------------------------
  * Task panel — recessed ground-colored inset, no border.
@@ -254,8 +254,17 @@ pre code{background:none;padding:0;}
 .card h3, .lp-title{font-family:var(--ff-sofia);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--dim);font-weight:600;margin:0 0 4px;}
 
-/* Rail (rail.js): checklist of tracked signals. The detector lamps come
- * first, with no head above them, so the list keeps the gap under the title. */
+/* Rail (rail.js): the signal box, then the checklist of tracked signals.
+ * The box frames what the step on screen detected, between the title and the
+ * lamps that keep the count over the whole session. It always shows, reading
+ * a muted placeholder until the step detects something, so the lamps hold
+ * still when the first line replaces it. Sizes are border-box: the
+ * min-height is one line plus the padding and border. */
+.signal-box{border:1px solid var(--line);padding:8px 10px;min-height:calc(1lh + 18px);
+  margin:0 0 12px;font-size:13px;}
+.signal-box-empty{color:var(--dim);}
+.detected-strip{color:var(--clean);}
+/* The detector lamps come first in the list, with no head above them. */
 .check{list-style:none;margin:10px 0 0;padding:0;font-size:12.5px;
   max-height:calc(100vh - 220px);overflow-y:auto;}
 .check li{display:flex;align-items:center;gap:9px;padding:3px 0;color:var(--dim);}
