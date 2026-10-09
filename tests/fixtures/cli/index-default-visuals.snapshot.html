@@ -682,7 +682,7 @@
       <tr><th>movements · clicks</th><td>13 · 7</td></tr>
       <tr><th>capped trials</th><td>0 of 6 trials</td></tr>
     </table>
-    <p class="muted note">monitor stream, median 3321 ms between samples, page coordinates (scrolling can look like a jump); scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 100, minSamplesForShape 2 (cursor-limits.json); <a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>.</p></div>
+    <p class="muted note">monitor stream, median 3321 ms between samples, page coordinates (scrolling can look like a jump); scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 100, minSamplesForShape 2, minClicksForVerdict 4, shareSuspicious 0.2, shareHighlySuspicious 0.5 (cursor-limits.json); <a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>.</p></div>
     <div class="image-block replay-block">
       <h4 class="section-heading">Session replay</h4>
       <p class="replay-note">No replay artifact (recording was not enabled for this session).</p>

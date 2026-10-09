@@ -5,21 +5,27 @@
 // this path (cyborg-hunter/src/cli/analyzers/cursor.js); keep the exports
 // stable or update the bench with the change.
 //
-// Checks (flagged): the automation flag the browser sets (navigator.webdriver),
-// clicks the page's own scripts dispatched (isTrusted false), and trials
-// clicked without pointer movement. Reported without a verdict: clicks after a
-// pointer jump (a movement that starts far from where the pointer was last
-// seen) and the per-movement features. Every constant lives in CURSOR_LIMITS
-// with its meaning, and the report writes them beside the results.
+// Checks (browser-reported): the automation flag the browser sets
+// (navigator.webdriver), clicks the page's own scripts dispatched (isTrusted
+// false), and trials clicked without pointer movement. Rules: clicks that
+// arrived without a path (a first click whose movement has at most one
+// sample, starting away from where the pointer was last seen: a scripted
+// cursor appears at its target) and clicks after a pointer jump. Features:
+// the shape of each movement. The pointer verdict (assess) reads the checks
+// and the rules against the shares in CURSOR_LIMITS; every constant lives
+// there with its meaning, and the report writes them beside the results.
 
 import { pathLength, displacement, maxDeviation } from '../../shared/cursor-geometry.js';
 
 export const CURSOR_LIMITS = {
-  movementGapMs:     { value: 400,  meaning: 'Two move samples more than this many milliseconds apart belong to different movements; a click ends the movement it follows.' },
-  staleGapMs:        { value: 2000, meaning: 'When nothing is recorded for longer than this many milliseconds between trials, the last known pointer position is forgotten; a tab-away forgets it at once.' },
-  samePositionPx:    { value: 20,   meaning: 'A click within this many pixels of the last known position was made without moving, and is not a trial clicked without pointer movement.' },
-  discontinuityPx:   { value: 100,  meaning: 'A movement ending in a click that starts at least this many pixels from the last known position is a click after a pointer jump.' },
-  minSamplesForShape:{ value: 2,    meaning: 'A movement needs at least this many move samples to contribute to the shape features.' }
+  movementGapMs:         { value: 400,  meaning: 'Two move samples more than this many milliseconds apart belong to different movements; a click ends the movement it follows.' },
+  staleGapMs:            { value: 2000, meaning: 'When nothing is recorded for longer than this many milliseconds between trials, the last known pointer position is forgotten; a tab-away forgets it at once.' },
+  samePositionPx:        { value: 20,   meaning: 'A click within this many pixels of the last known position was made without moving, and is not a trial clicked without pointer movement. A first click whose movement has at most one sample and starts at least this far from the last known position arrived without a path.' },
+  discontinuityPx:       { value: 100,  meaning: 'A movement ending in a click that starts at least this many pixels from the last known position is a click after a pointer jump.' },
+  minSamplesForShape:    { value: 2,    meaning: 'A movement needs at least this many move samples to contribute to the shape features.' },
+  minClicksForVerdict:   { value: 4,    meaning: 'A session needs at least this many first pointer clicks (the later clicks of a double- or triple-click are not counted) before clicks that arrived without a path and trials clicked without pointer movement are judged; with fewer, and no browser fact against it, the session is not assessed.' },
+  shareSuspicious:       { value: 0.2,  meaning: 'The share of first pointer clicks that arrived without a path, or of trials clicked without pointer movement, at or above which that tell makes the session suspicious. Provisional: set from a small number of sessions.' },
+  shareHighlySuspicious: { value: 0.5,  meaning: 'The share of first pointer clicks that arrived without a path, of trials clicked without pointer movement, or of clicks the page’s own scripts dispatched, at or above which that tell makes the session highly suspicious. Provisional, like shareSuspicious.' }
 };
 
 const NOT_RECORDED = 'not recorded';
@@ -93,6 +99,61 @@ function clickKind(e) {
   return 'pointer';
 }
 
+// The later clicks of a double- or triple-click (detail 2, 3, …) start where
+// their first click ended: only first clicks count for the rules and the
+// verdict. A click with no detail (older data) is a first click.
+const isFirstClick = (e) => !(typeof e.detail === 'number' && e.detail >= 2);
+
+const VERDICTS = ['not assessed', 'clean', 'suspicious', 'highly suspicious'];
+// The word for a level: -1 not assessed, 0 clean, 1 suspicious, 2 highly suspicious.
+export const verdictWord = (level) => VERDICTS[level + 1];
+
+// The pointer verdict over a result: the tells that count against the
+// session — each with its level ('high' makes the session highly
+// suspicious, 'low' suspicious), its sentence for the page, its short form
+// for the triage reason and the CSV, and the trials involved — and the
+// level they add up to, with the reason when the session is not assessed.
+// The browser facts (the automation flag, clicks the page's own scripts
+// dispatched) are judged whatever the number of clicks; the two
+// pointer-pattern tells need minClicksForVerdict first pointer clicks. The
+// order of the tells is the order here.
+function assess(result, L) {
+  const share = (x) => x.of > 0 ? x.count / x.of : 0;
+  const pct = (x) => `${Math.round(100 * share(x))}%`;
+  const tells = [];
+  // trialIds: the first ten trials involved; trials: how many there were.
+  const tell = (id, level, text, short, trialIds = [], trials = 0) => tells.push({ id, level, text, short, trialIds, trials });
+  const done = (level, reason = null) => ({ level, verdict: verdictWord(level), tells, verdictReason: reason });
+  const c = result.checks;
+  if (c.webdriver && c.webdriver.fired) tell('webdriver', 'high', 'automation flag set by the browser', 'automation flag');
+  if (result.state !== 'ok') return tells.length ? done(2) : done(-1, result.cursorReason);
+  if (result.checksRecorded === 0) return done(-1, 'device facts and click provenance not recorded (library before 0.14)');
+  const u = c.untrustedClicks;
+  if (u.count > 0) {
+    tell('untrusted', share(u) >= L.shareHighlySuspicious ? 'high' : 'low',
+      `clicks the page’s own scripts dispatched: ${u.count} of ${u.of} (${pct(u)})`, `untrusted clicks ${u.count}/${u.of}`, u.trialIds, u.trials);
+  }
+  const firstClicks = result.cursor.rules.noPathClicks.of;
+  const enough = firstClicks >= L.minClicksForVerdict;
+  if (enough) {
+    const n = result.cursor.rules.noPathClicks;
+    if (share(n) >= L.shareSuspicious) {
+      tell('noPath', share(n) >= L.shareHighlySuspicious ? 'high' : 'low',
+        `clicks that arrived without a path: ${n.count} of ${n.of} first clicks (${pct(n)})`, `clicks without a path ${n.count}/${n.of}`, n.trialIds, n.trials);
+    }
+    const z = c.zeroMoveTrials;
+    if (share(z) >= L.shareSuspicious) {
+      tell('zeroMove', share(z) >= L.shareHighlySuspicious ? 'high' : 'low',
+        `trials clicked without pointer movement: ${z.count} of ${z.of} (${pct(z)})`, `trials clicked without movement ${z.count}/${z.of}`, z.trialIds, z.trials);
+    }
+  }
+  if (tells.some(t => t.level === 'high')) return done(2);
+  if (tells.length) return done(1);
+  if (enough) return done(0);
+  // No comma in this reason: it is a summary.csv cell.
+  return done(-1, `only ${firstClicks} first pointer click${firstClicks === 1 ? '' : 's'} (the pointer-pattern tells need ${L.minClicksForVerdict})`);
+}
+
 function versionNote(trials) {
   const v = trials.map(t => t && t.libraryVersion).find(Boolean);
   return v ? ` (recorded with ${v})` : '';
@@ -102,6 +163,7 @@ function versionNote(trials) {
 // own; the report passes nothing and gets the defaults).
 export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS) {
   const L = valuesOf(limits);
+  const finish = (r) => ({ ...r, ...assess(r, L) });
   const trials = participant.trials || [];
   const device = participant.session && participant.session.device && typeof participant.session.device === 'object' ? participant.session.device : null;
   const recorded = !!device;
@@ -127,13 +189,13 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
   };
 
   const hasTrack = trials.some(t => Array.isArray(t.mouseEvents));
-  if (!hasTrack) return { ...base, state: 'not collected', cursorReason: 'not collected' + versionNote(trials) };
+  if (!hasTrack) return finish({ ...base, state: 'not collected', cursorReason: 'not collected' + versionNote(trials) });
   if (device && device.maxTouchPoints > 0 && device.coarsePointer === true) {
-    return { ...base, state: 'no cursor stream (touch device)', cursorReason: 'no cursor stream (touch device)' };
+    return finish({ ...base, state: 'no cursor stream (touch device)', cursorReason: 'no cursor stream (touch device)' });
   }
   // Presses and releases alone (down, up) are not a cursor stream.
   const anyPointerEvents = trials.some(t => (t.mouseEvents || []).some(e => e.type === 'move' || e.type === 'click'));
-  if (!anyPointerEvents) return { ...base, state: 'no cursor stream (no pointer events)', cursorReason: 'no cursor stream (no pointer events)' };
+  if (!anyPointerEvents) return finish({ ...base, state: 'no cursor stream (no pointer events)', cursorReason: 'no cursor stream (no pointer events)' });
 
   const mode = coordinateMode(trials);
   const last = { x: 0, y: 0, valid: false };
@@ -143,6 +205,7 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
   const untrusted = { count: 0, of: 0, trialIds: [], trials: 0 };
   const zeroMove = { count: 0, of: 0, trialIds: [], trials: 0 };
   const jump = { count: 0, of: 0, trialIds: [], trials: 0 };
+  const noPath = { count: 0, of: 0, trialIds: [], trials: 0 };
   let keyboardClicks = 0, touchClicks = 0, movementsTotal = 0, clicksTotal = 0, cappedTrials = 0;
   const f = { durationMs: [], pathPx: [], displacementPx: [], speedPxS: [], efficiency: [], maxDeviationPx: [] };
   const movesPerTrial = [], movementsPerTrial = [], gaps = [];
@@ -166,7 +229,7 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
     movementsTotal += movements.length;
     for (let i = 1; i < moves.length; i++) { const d = moves[i].t - moves[i - 1].t; if (d > 0) gaps.push(d); }
 
-    let pointerClicksHere = 0, unexplainedPointerClick = false, untrustedHere = false, jumpHere = false;
+    let pointerClicksHere = 0, unexplainedPointerClick = false, untrustedHere = false, jumpHere = false, noPathHere = false;
     let cp;
     for (const m of movements) {
       const first = m.samples[0] || m.click;
@@ -195,8 +258,14 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
         else {
           pointerClicksHere++;
           const startP = pos(first, mode);
-          jump.of++;
-          if (last.valid && dist(startP, last) >= L.discontinuityPx) { jump.count++; jumpHere = true; if (!jump.trialIds.includes(t.trialId)) jump.trialIds.push(t.trialId); }
+          if (isFirstClick(m.click)) {
+            jump.of++;
+            noPath.of++;
+            if (last.valid && dist(startP, last) >= L.discontinuityPx) { jump.count++; jumpHere = true; if (!jump.trialIds.includes(t.trialId)) jump.trialIds.push(t.trialId); }
+            // Arrived without a path: at most one sample, starting away
+            // from where the pointer was last seen.
+            if (last.valid && m.samples.length <= 1 && dist(startP, last) >= L.samePositionPx) { noPath.count++; noPathHere = true; if (!noPath.trialIds.includes(t.trialId)) noPath.trialIds.push(t.trialId); }
+          }
           if (moves.length === 0 && !(last.valid && dist(cp, last) <= L.samePositionPx)) unexplainedPointerClick = true;
         }
         untrusted.of++;
@@ -210,6 +279,7 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
     if (moves.length === 0 && pointerClicksHere > 0 && unexplainedPointerClick) { zeroMove.count++; zeroMove.trials++; zeroMove.trialIds.push(t.trialId); }
     if (untrustedHere) untrusted.trials++;
     if (jumpHere) jump.trials++;
+    if (noPathHere) noPath.trials++;
   }
 
   const cap = (ids) => ids.slice(0, MAX_IDS);
@@ -220,11 +290,15 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
   } : base.checks;
   const factCount = recorded ? [checks.webdriver.fired, checks.untrustedClicks.fired, checks.zeroMoveTrials.fired].filter(Boolean).length : null;
 
-  return {
+  return finish({
     ...base, state: 'ok', checksRecorded: recorded ? 3 : 0, checks, factCount,
     cursor: {
       stream: 'core', sampleIntervalMs: median(gaps), coordinates: mode,
-      rules: { jumpClicks: { count: jump.count, of: jump.of, trialIds: cap(jump.trialIds), trials: jump.trials }, centeredClicks: null },
+      rules: {
+        noPathClicks: { count: noPath.count, of: noPath.of, trialIds: cap(noPath.trialIds), trials: noPath.trials },
+        jumpClicks: { count: jump.count, of: jump.of, trialIds: cap(jump.trialIds), trials: jump.trials },
+        centeredClicks: null
+      },
       features: {
         durationMs: stat(f.durationMs), pathPx: stat(f.pathPx), displacementPx: stat(f.displacementPx),
         speedPxS: stat(f.speedPxS), efficiency: stat(f.efficiency), maxDeviationPx: stat(f.maxDeviationPx),
@@ -232,7 +306,7 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
       },
       movements: movementsTotal, clicks: clicksTotal, cappedTrials, trials: trials.length
     }
-  };
+  });
 }
 
 // One result per participant, in order (the shape report-core attaches to

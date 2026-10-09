@@ -141,7 +141,7 @@ describe('the HTML report', () => {
     assert.match(html, /trials clicked without pointer movement[\s\S]{0,80}1 of 2 \(q2\)/);
     assert.match(html, /clicks after a pointer jump/);
     assert.match(html, /median \d+ ms between samples/);
-    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 100, minSamplesForShape 2 \(cursor-limits\.json\)/);
+    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 100, minSamplesForShape 2, minClicksForVerdict 4, shareSuspicious 0\.2, shareHighlySuspicious 0\.5 \(cursor-limits\.json\)/);
     assert.match(html, /Pointer checks<\/span>/);     // the tile label
     assert.match(html, /title="Browser-reported checks that fired \(automation flag, clicks the page’s own scripts dispatched, trials clicked without pointer movement\); 0–3; — when the data carries no device facts"/);
     assert.match(html, /keyboard-activated clicks<\/th><td>0 of 2 clicks</);
@@ -198,7 +198,7 @@ describe('the HTML report', () => {
     summaries[0].cursorAnalysis = analyzeCursor([human], custom)[0];
     const triage = rankTriage(summaries, detectEdgeExits([human], config), config);
     const html = await renderIndexHtml(summaries, triage, [human], config, false);
-    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 50, minSamplesForShape 2 \(cursor-limits\.json\)/);
+    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 50, minSamplesForShape 2, minClicksForVerdict 4, shareSuspicious 0\.2, shareHighlySuspicious 0\.5 \(cursor-limits\.json\)/);
   });
   it('the tile of a session recorded before 0.14 reads "—" in the tone-zero style', async () => {
     // The demo fixture: 0.7.2 data with a mouse track and no device facts.
