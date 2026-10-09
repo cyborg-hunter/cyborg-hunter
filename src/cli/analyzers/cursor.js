@@ -24,7 +24,7 @@ export const CURSOR_LIMITS = {
   samePositionPx:        { value: 20,   meaning: 'A click closer than this many pixels to the last known position was made without moving, and is not a trial clicked without pointer movement. A first click whose movement has at most one sample and starts at least this far from the last known position arrived without a path.' },
   discontinuityPx:       { value: 100,  meaning: 'A movement ending in a click that starts at least this many pixels from the last known position is a click after a pointer jump.' },
   minSamplesForShape:    { value: 2,    meaning: 'A movement needs at least this many move samples to contribute to the shape features.' },
-  minClicksForVerdict:   { value: 4,    meaning: 'A session needs at least this many first pointer clicks with a known position before them (the later clicks of a double- or triple-click are not counted; a click whose movement is the first since the session began, since more than staleGapMs passed unrecorded, since a tab-away or, in page coordinates, since its trial began has no known position) before clicks that arrived without a path are judged, and this many first pointer clicks of any kind before trials clicked without pointer movement are; with too few of the former, and no tell against it, the session is not assessed.' },
+  minClicksForVerdict:   { value: 4,    meaning: 'A session needs at least this many first pointer clicks with a known position before them (the later clicks of a double- or triple-click are not counted; a click whose movement is the first since the session began, since more than staleGapMs passed unrecorded between trials, since a tab-away or, in page coordinates, since its trial began has no known position) before clicks that arrived without a path are judged, and this many first pointer clicks of any kind before trials clicked without pointer movement are; with too few of the former, and no tell against it, the session is not assessed.' },
   shareSuspicious:       { value: 0.2,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, or of trials clicked without pointer movement, at or above which that tell makes the session suspicious. Provisional: set from a small number of sessions.' },
   shareHighlySuspicious: { value: 0.5,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, of trials clicked without pointer movement, or of clicks the page’s own scripts dispatched, at or above which that tell makes the session highly suspicious. Provisional, like shareSuspicious.' }
 };
@@ -276,8 +276,8 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
             // was last seen, so only a click with a known position before it
             // can be judged: a click whose movement is the first since the
             // position was forgotten (at the session's start, after more than
-            // staleGapMs unrecorded or a tab-away, and at every trial in page
-            // coordinates) has none and leaves the denominators.
+            // staleGapMs unrecorded between trials or a tab-away, and at every
+            // trial in page coordinates) has none and leaves the denominators.
             if (last.valid) {
               jump.of++;
               noPath.of++;

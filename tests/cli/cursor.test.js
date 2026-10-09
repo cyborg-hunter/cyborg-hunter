@@ -401,6 +401,12 @@ describe('the pointer verdict', () => {
     const r = verdictOf(lone);
     assert.deepEqual([r.cursor.rules.noPathClicks.of, r.level, r.tells.map(t => t.id)], [0, 2, ['zeroMove']]);
   });
+  it('trials clicked without pointer movement need four first clicks: three lone clicks after long gaps are not assessed', () => {
+    const lone = Array.from({ length: 3 }, (_, i) => trial('q' + (i + 1), [ck(100 + i * 300, 200, 20)], { startTime: 1000 + i * 40000 }));
+    const r = verdictOf(lone);
+    assert.equal(r.checks.zeroMoveTrials.count, 3);   // every trial is clicked without movement, but the gate is not reached
+    assert.deepEqual([r.level, r.tells, r.verdictReason], [-1, [], 'only 0 of 3 first pointer clicks had a known position before them (the no-path rule needs 4)']);
+  });
   it('the automation flag makes any session highly suspicious, with the tell', () => {
     for (const trials of [humans(1), humans(4), [trial('q1', [])]]) {
       const r = verdictOf(trials, { ...desktop, webdriver: true });
