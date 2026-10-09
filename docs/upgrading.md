@@ -10,7 +10,7 @@ in [CHANGELOG.md](../CHANGELOG.md).
 ### What changes on re-run over existing data
 
 - **Every session gets a "Cursor dynamics" section**, read from the mouse track the monitor already saved: the pointer verdict (clean, suspicious, highly suspicious, or not assessed with the reason) and the tells behind it. A session recorded before 0.14 is not assessed; what the section shows depends on the version that recorded it:
-  - Sessions recorded with 0.7.2–0.7.5 read "not collected (recorded with <version>)" when the raw mouse track was off, the default in those versions; recorded with it on, they get the section with the three checks "not recorded".
+  - Sessions recorded with 0.7.2–0.7.5 read "not collected (recorded with `<version>`)" when the raw mouse track was off, the default in those versions; recorded with it on, they get the section with the three checks "not recorded".
   - Sessions recorded with 0.8–0.13 (and before 0.7.2) get the section with the three checks "not recorded": those versions saved no device facts and no click provenance, so a tap cannot be told from a scripted click.
   - Sessions recorded with `collectForPostHoc.rawMouseTrack: false`, and Qualtrics sessions, whose payload leaves the mouse track out, read "not collected". Sessions recorded with `signals.mouseTracking: false` save an empty track and read "no cursor stream (no pointer events)".
 - **Rankings are unchanged.** The new `cursor` weight is 0 by default, so tiers, scores and the order of `triage.md` are those 0.13 gave. With a weight above 0, only the verdict's level (suspicious 1, highly suspicious 2) ranks, so only the sessions that carry device facts move, and the CLI warns when some sessions do not.
