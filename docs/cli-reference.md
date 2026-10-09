@@ -136,7 +136,7 @@ One row per participant:
 | `authoritative_soft_score` | Soft score from `getSessionReport()` (preferred over the per-trial sum) |
 | `honeypot_ai_use` | Three states: `YES` = participant ticked the visible-bait "I used AI" checkbox; `no` = the honeypot was present but the box was left unticked (negative evidence); empty = the honeypot extension wasn't used for this participant at all |
 | `honeypot_ai_report` | Free-text the participant typed into the honeypot's "what did you use?" box (empty if none) |
-| `cursorReason` | Why the session's pointer verdict is `not assessed`: `not collected` (with `(recorded with <version>)` when the data names one), `no cursor stream (touch device)`, `no cursor stream (no pointer events)`, `device facts and click provenance not recorded (library before 0.14)`, or `only N first pointer clicks (the pointer-pattern tells need 4)` (`click` when N is 1); empty when the session is assessed, including a session with no cursor stream that its automation flag makes highly suspicious (since 0.14, like every `cursor…` column) |
+| `cursorReason` | Why the session's pointer verdict is `not assessed`: `not collected` (with `(recorded with <version>)` when the data names one), `no cursor stream (touch device)`, `no cursor stream (no pointer events)`, `device facts and click provenance not recorded (library before 0.14)`, or `only K of N first pointer clicks had a known position before them (the no-path rule needs 4)` (`click` when N is 1); empty when the session is assessed, including a session with no cursor stream that its automation flag makes highly suspicious (since 0.14, like every `cursor…` column) |
 | `cursorVerdict` | The pointer verdict: `clean`, `suspicious`, `highly suspicious` or `not assessed` |
 | `cursorTells` | The tells that decided a suspicious or highly suspicious verdict, `; `-separated: `automation flag`, `untrusted clicks n/N`, `clicks without a path n/N`, `trials clicked without movement n/N`; empty otherwise |
 | `cursorChecksRecorded` | How many of the three browser-reported checks the data supports: 3 (a cursor stream and the session's device facts), 1 (device facts and no cursor stream: the automation flag only), 0 (no device facts: recorded before 0.14) |
@@ -144,8 +144,8 @@ One row per participant:
 | `cursorWebdriver` | `YES` / `no`: the automation flag set by the browser; empty without device facts |
 | `cursorUntrustedClicks` | Clicks the page's own scripts dispatched; empty unless the session has a cursor stream and device facts |
 | `cursorZeroMoveTrials` | Trials clicked without pointer movement, as `count/trials`; empty unless the session has a cursor stream and device facts |
-| `cursorJumpClicks` | Clicks after a pointer jump, as `count/first pointer clicks`; reported, not a tell |
-| `cursorNoPathClicks` | Clicks that arrived without a path, as `count/first pointer clicks` (a double-click's later clicks are not first clicks) |
+| `cursorJumpClicks` | Clicks after a pointer jump, as `count/first pointer clicks with a known position before them`; reported, not a tell |
+| `cursorNoPathClicks` | Clicks that arrived without a path, as `count/first pointer clicks with a known position before them` (a double-click's later clicks are not first clicks) |
 | `cursorCoordinates` | `viewport` (every sample has `cx`, `cy`) or `page` (older data; scrolling can then look like a jump) |
 | `cursorStream` | The stream the section read: `core`, the monitor's mouse track |
 | `cursorSampleIntervalMs` | Median time between consecutive move samples within a trial, in ms; empty when the track has no such pair |
@@ -219,9 +219,11 @@ constant comes with a sentence saying what it does (for example,
 `movementGapMs`, 400: two move samples further apart belong to different
 movements); the cursor section prints the same values on its stream line.
 Three constants set the verdict's thresholds: `minClicksForVerdict`, 4 first
-pointer clicks before the pattern tells are judged; `shareSuspicious`, 0.2,
-the share of first pointer clicks or of trials at or above which a pattern
-tell makes the session suspicious; and `shareHighlySuspicious`, 0.5, the share
+clicks with a known position before the no-path tell is judged, and 4 first
+clicks of any kind before trials clicked without pointer movement is;
+`shareSuspicious`, 0.2, the share of first pointer clicks with a known
+position or of trials at or above which a pattern tell makes the session
+suspicious; and `shareHighlySuspicious`, 0.5, the share
 at or above which a pattern tell, or clicks the page's own scripts dispatched,
 make it highly suspicious. All three are provisional, set from a small number
 of sessions.

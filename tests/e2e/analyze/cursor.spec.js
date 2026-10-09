@@ -30,7 +30,7 @@ test('the sample shows the pointer verdict, its tells, the details, the tile, th
   await expect(details).not.toHaveAttribute('open', '');
   await details.locator('summary').click();
   await expect(details.locator('tr', { hasText: 'trials clicked without pointer movement' })).toContainText('2 of 4 (t3, t4)');
-  await expect(details.locator('tr', { hasText: 'clicks that arrived without a path' })).toContainText('0 of 4 first clicks');
+  await expect(details.locator('tr', { hasText: 'clicks that arrived without a path' })).toContainText('0 of 0 first clicks with a known position');
   await expect(details.locator('tr', { hasText: 'efficiency (per movement)' })).toContainText('1.000 (n = 2)');
   await expect(details).toContainText('monitor stream, median 60 ms between samples, viewport coordinates');
   await expect(frame.locator('#p-SYN-GENERATED-04 .signal-tile', { hasText: 'Pointer verdict' }).locator('.signal-value')).toHaveText('2');

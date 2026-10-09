@@ -139,7 +139,8 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   it: the automation flag set by the browser (`navigator.webdriver`), clicks
   the page's own scripts dispatched (`isTrusted` false), clicks that arrived
   without a path (a first pointer click whose movement has at most one
-  sample and starts 20 px or more from where the pointer was last seen), and
+  sample and starts 20 px or more from where the pointer was last seen,
+  judged from 4 first clicks with a known position before them), and
   trials clicked without pointer movement. Beneath, in a closed details block, are
   every check with its count, its denominator and up to ten trial ids,
   clicks after a pointer jump, the shape of each movement (duration, path

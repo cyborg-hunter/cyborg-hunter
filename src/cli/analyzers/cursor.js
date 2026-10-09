@@ -10,7 +10,8 @@
 // false), and trials clicked without pointer movement. Rules: clicks that
 // arrived without a path (a first click whose movement has at most one
 // sample, starting away from where the pointer was last seen: a scripted
-// cursor appears at its target) and clicks after a pointer jump. Features:
+// cursor appears at its target) and clicks after a pointer jump, both judged
+// on clicks with a known position before them. Features:
 // the shape of each movement. The pointer verdict (assess) reads the checks
 // and the rules against the shares in CURSOR_LIMITS; every constant lives
 // there with its meaning, and the report writes them beside the results.
@@ -23,9 +24,9 @@ export const CURSOR_LIMITS = {
   samePositionPx:        { value: 20,   meaning: 'A click closer than this many pixels to the last known position was made without moving, and is not a trial clicked without pointer movement. A first click whose movement has at most one sample and starts at least this far from the last known position arrived without a path.' },
   discontinuityPx:       { value: 100,  meaning: 'A movement ending in a click that starts at least this many pixels from the last known position is a click after a pointer jump.' },
   minSamplesForShape:    { value: 2,    meaning: 'A movement needs at least this many move samples to contribute to the shape features.' },
-  minClicksForVerdict:   { value: 4,    meaning: 'A session needs at least this many first pointer clicks (the later clicks of a double- or triple-click are not counted) before clicks that arrived without a path and trials clicked without pointer movement are judged; with fewer, and no browser fact against it, the session is not assessed.' },
-  shareSuspicious:       { value: 0.2,  meaning: 'The share of first pointer clicks that arrived without a path, or of trials clicked without pointer movement, at or above which that tell makes the session suspicious. Provisional: set from a small number of sessions.' },
-  shareHighlySuspicious: { value: 0.5,  meaning: 'The share of first pointer clicks that arrived without a path, of trials clicked without pointer movement, or of clicks the page’s own scripts dispatched, at or above which that tell makes the session highly suspicious. Provisional, like shareSuspicious.' }
+  minClicksForVerdict:   { value: 4,    meaning: 'A session needs at least this many first pointer clicks with a known position before them (the later clicks of a double- or triple-click are not counted; a click whose movement is the first since the session began, since more than staleGapMs passed unrecorded, since a tab-away or, in page coordinates, since its trial began has no known position) before clicks that arrived without a path are judged, and this many first pointer clicks of any kind before trials clicked without pointer movement are; with too few of the former, and no tell against it, the session is not assessed.' },
+  shareSuspicious:       { value: 0.2,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, or of trials clicked without pointer movement, at or above which that tell makes the session suspicious. Provisional: set from a small number of sessions.' },
+  shareHighlySuspicious: { value: 0.5,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, of trials clicked without pointer movement, or of clicks the page’s own scripts dispatched, at or above which that tell makes the session highly suspicious. Provisional, like shareSuspicious.' }
 };
 
 const NOT_RECORDED = 'not recorded';
@@ -114,9 +115,10 @@ export const verdictWord = (level) => VERDICTS[level + 1];
 // for the triage reason and the CSV, and the trials involved — and the
 // level they add up to, with the reason when the session is not assessed.
 // The browser facts (the automation flag, clicks the page's own scripts
-// dispatched) are judged whatever the number of clicks; the two
-// pointer-pattern tells need minClicksForVerdict first pointer clicks. The
-// order of the tells is the order here.
+// dispatched) are judged whatever the number of clicks; clicks that arrived
+// without a path need minClicksForVerdict first pointer clicks with a known
+// position before them, trials clicked without pointer movement that many
+// first pointer clicks of any kind. The order of the tells is the order here.
 function assess(result, L) {
   const share = (x) => x.of > 0 ? x.count / x.of : 0;
   // Rounded down, so the printed percent never reaches a threshold the level
@@ -136,14 +138,20 @@ function assess(result, L) {
     tell('untrusted', share(u) >= L.shareHighlySuspicious ? 'high' : 'low',
       `clicks the page’s own scripts dispatched: ${u.count} of ${u.of} (${pct(u)})`, `untrusted clicks ${u.count}/${u.of}`, u.trialIds, u.trials);
   }
-  const firstClicks = result.cursor.rules.noPathClicks.of;
-  const enough = firstClicks >= L.minClicksForVerdict;
-  if (enough) {
-    const n = result.cursor.rules.noPathClicks;
-    if (share(n) >= L.shareSuspicious) {
-      tell('noPath', share(n) >= L.shareHighlySuspicious ? 'high' : 'low',
-        `clicks that arrived without a path: ${n.count} of ${n.of} first clicks (${pct(n)})`, `clicks without a path ${n.count}/${n.of}`, n.trialIds, n.trials);
-    }
+  // The no-path tell is judged from minClicksForVerdict first clicks with a
+  // known position before them (noPathClicks.of); trials clicked without
+  // pointer movement from that many first clicks of any kind (a lone click
+  // after an unrecorded gap is unexplained whatever the position). A session
+  // where the no-path tell cannot be judged, and no tell is against it, is
+  // not assessed.
+  const n = result.cursor.rules.noPathClicks;
+  const total = result.cursor.firstClicks;
+  const noPathJudged = n.of >= L.minClicksForVerdict;
+  if (noPathJudged && share(n) >= L.shareSuspicious) {
+    tell('noPath', share(n) >= L.shareHighlySuspicious ? 'high' : 'low',
+      `clicks that arrived without a path: ${n.count} of ${n.of} first clicks with a known position (${pct(n)})`, `clicks without a path ${n.count}/${n.of}`, n.trialIds, n.trials);
+  }
+  if (total >= L.minClicksForVerdict) {
     const z = c.zeroMoveTrials;
     if (share(z) >= L.shareSuspicious) {
       tell('zeroMove', share(z) >= L.shareHighlySuspicious ? 'high' : 'low',
@@ -152,9 +160,9 @@ function assess(result, L) {
   }
   if (tells.some(t => t.level === 'high')) return done(2);
   if (tells.length) return done(1);
-  if (enough) return done(0);
+  if (noPathJudged) return done(0);
   // No comma in this reason: it is a summary.csv cell.
-  return done(-1, `only ${firstClicks} first pointer click${firstClicks === 1 ? '' : 's'} (the pointer-pattern tells need ${L.minClicksForVerdict})`);
+  return done(-1, `only ${n.of} of ${total} first pointer click${total === 1 ? '' : 's'} had a known position before them (the no-path rule needs ${L.minClicksForVerdict})`);
 }
 
 function versionNote(trials) {
@@ -210,6 +218,7 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
   const jump = { count: 0, of: 0, trialIds: [], trials: 0 };
   const noPath = { count: 0, of: 0, trialIds: [], trials: 0 };
   let keyboardClicks = 0, touchClicks = 0, movementsTotal = 0, clicksTotal = 0, cappedTrials = 0;
+  let firstClicks = 0;
   const f = { durationMs: [], pathPx: [], displacementPx: [], speedPxS: [], efficiency: [], maxDeviationPx: [] };
   const movesPerTrial = [], movementsPerTrial = [], gaps = [];
   let prevEnd = null;
@@ -262,12 +271,21 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
           pointerClicksHere++;
           const startP = pos(first, mode);
           if (isFirstClick(m.click)) {
-            jump.of++;
-            noPath.of++;
-            if (last.valid && dist(startP, last) >= L.discontinuityPx) { jump.count++; jumpHere = true; if (!jump.trialIds.includes(t.trialId)) jump.trialIds.push(t.trialId); }
-            // Arrived without a path: at most one sample, starting away
-            // from where the pointer was last seen.
-            if (last.valid && m.samples.length <= 1 && dist(startP, last) >= L.samePositionPx) { noPath.count++; noPathHere = true; if (!noPath.trialIds.includes(t.trialId)) noPath.trialIds.push(t.trialId); }
+            firstClicks++;
+            // Both rules compare the movement's start with where the pointer
+            // was last seen, so only a click with a known position before it
+            // can be judged: a click whose movement is the first since the
+            // position was forgotten (at the session's start, after more than
+            // staleGapMs unrecorded or a tab-away, and at every trial in page
+            // coordinates) has none and leaves the denominators.
+            if (last.valid) {
+              jump.of++;
+              noPath.of++;
+              if (dist(startP, last) >= L.discontinuityPx) { jump.count++; jumpHere = true; if (!jump.trialIds.includes(t.trialId)) jump.trialIds.push(t.trialId); }
+              // Arrived without a path: at most one sample, starting away
+              // from where the pointer was last seen.
+              if (m.samples.length <= 1 && dist(startP, last) >= L.samePositionPx) { noPath.count++; noPathHere = true; if (!noPath.trialIds.includes(t.trialId)) noPath.trialIds.push(t.trialId); }
+            }
           }
           if (moves.length === 0 && !(last.valid && dist(cp, last) < L.samePositionPx)) unexplainedPointerClick = true;
         }
@@ -310,7 +328,7 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
         speedPxS: stat(f.speedPxS), efficiency: stat(f.efficiency), maxDeviationPx: stat(f.maxDeviationPx),
         movesPerTrial: stat(movesPerTrial), movementsPerTrial: stat(movementsPerTrial), keyboardClicks, touchClicks
       },
-      movements: movementsTotal, clicks: clicksTotal, cappedTrials, trials: trials.length
+      firstClicks, movements: movementsTotal, clicks: clicksTotal, cappedTrials, trials: trials.length
     }
   });
 }

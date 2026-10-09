@@ -85,7 +85,8 @@ describe('states', () => {
     assert.equal(r.checks.zeroMoveTrials, 'not recorded');
     assert.equal(r.factCount, null);
     assert.equal(r.cursor.coordinates, 'page');
-    assert.equal(r.cursor.rules.jumpClicks.of, 1);
+    assert.equal(r.cursor.firstClicks, 1);
+    assert.equal(r.cursor.rules.jumpClicks.of, 0);   // page coordinates forget the position at every trial
   });
 });
 
@@ -146,14 +147,15 @@ describe('checks', () => {
   it('counts the trials involved before the ten-id cap, and clicks apart from trials', () => {
     // Eleven trials, each one click with no move 150 px from the last: every
     // trial is clicked without pointer movement, and every click after the
-    // first follows a pointer jump.
+    // first follows a pointer jump (the first has no position before it, so
+    // the rules judge ten).
     const eleven = Array.from({ length: 11 }, (_, i) => trial('q' + (i + 1), [ck(100 + i * 150, 300, 20)], { startTime: 1000 + i * 6000 }));
     const r = analyzeCursorForParticipant(participant(eleven));
     assert.equal(r.checks.zeroMoveTrials.count, 11);
     assert.equal(r.checks.zeroMoveTrials.trials, 11);
     assert.equal(r.checks.zeroMoveTrials.trialIds.length, 10);
-    assert.deepEqual({ ...r.cursor.rules.jumpClicks, trialIds: r.cursor.rules.jumpClicks.trialIds.length }, { count: 10, of: 11, trialIds: 10, trials: 10 });
-    assert.deepEqual({ ...r.cursor.rules.noPathClicks, trialIds: r.cursor.rules.noPathClicks.trialIds.length }, { count: 10, of: 11, trialIds: 10, trials: 10 });
+    assert.deepEqual({ ...r.cursor.rules.jumpClicks, trialIds: r.cursor.rules.jumpClicks.trialIds.length }, { count: 10, of: 10, trialIds: 10, trials: 10 });
+    assert.deepEqual({ ...r.cursor.rules.noPathClicks, trialIds: r.cursor.rules.noPathClicks.trialIds.length }, { count: 10, of: 10, trialIds: 10, trials: 10 });
     assert.equal(r.level, 2);
     assert.equal(r.cursor.trials, 11);
     // Two clicks the page dispatched in one trial: two clicks, one trial.
@@ -312,36 +314,39 @@ describe('analyzeCursor', () => {
 
 describe('first clicks', () => {
   it('the later clicks of a double- or triple-click are not clicks of their own for the rules', () => {
-    // A path to (400, 300), then a triple-click there: three clicks, one first click.
+    // A path to (400, 300), then a triple-click there: three clicks, one first
+    // click. The first has no position before it, and the later two, which
+    // have one, are not judged either.
     const events = [...path(100, 100, 400, 300, 0), ck(400, 300, 950, { detail: 2 }), ck(400, 300, 1000, { detail: 3 })];
     const r = analyzeCursorForParticipant(participant([trial('q1', events)]));
     assert.equal(r.cursor.clicks, 3);
-    assert.equal(r.cursor.rules.jumpClicks.of, 1);
-    assert.equal(r.cursor.rules.noPathClicks.of, 1);
+    assert.equal(r.cursor.firstClicks, 1);
+    assert.equal(r.cursor.rules.jumpClicks.of, 0);
+    assert.equal(r.cursor.rules.noPathClicks.of, 0);
     assert.equal(r.checks.untrustedClicks.of, 3);     // still three of the session's clicks
   });
   it('a click with no detail (older data) is a first click', () => {
     const old = trial('q1', [{ x: 0, y: 0, t: 0, type: 'move' }, { x: 300, y: 0, t: 50, type: 'move' }, { x: 300, y: 0, t: 60, type: 'click' }], { libraryVersion: '0.11.0' });
-    assert.equal(analyzeCursorForParticipant(participant([old], null)).cursor.rules.noPathClicks.of, 1);
+    assert.equal(analyzeCursorForParticipant(participant([old], null)).cursor.firstClicks, 1);
   });
 });
 
 describe('clicks that arrived without a path', () => {
-  // q1 ends on a click at (400, 300). q2 starts 100 ms later (the position
-  // is still known) with a movement of `n` samples at (400 + d, 300), then
-  // a click there.
+  // q1 ends on a click at (400, 300), the session's first, which has no
+  // position before it. q2 starts 100 ms later (the position is still known)
+  // with a movement of `n` samples at (400 + d, 300), then a click there.
   const after = (n, d, over = {}) => {
     const q2 = [...Array.from({ length: n }, (_, i) => mv(400 + d, 300, 20 + i * 50)), ck(400 + d, 300, 20 + n * 50)];
     return analyzeCursorForParticipant(participant([trial('q1', path(100, 100, 400, 300, 0)), trial('q2', q2, { startTime: 6100, ...over })]));
   };
   it('counts a first click whose movement has at most one sample and starts 20 px or more from the last position', () => {
-    assert.deepEqual(after(1, 20).cursor.rules.noPathClicks, { count: 1, of: 2, trialIds: ['q2'], trials: 1 });
-    assert.deepEqual(after(0, 20).cursor.rules.noPathClicks, { count: 1, of: 2, trialIds: ['q2'], trials: 1 });
+    assert.deepEqual(after(1, 20).cursor.rules.noPathClicks, { count: 1, of: 1, trialIds: ['q2'], trials: 1 });
+    assert.deepEqual(after(0, 20).cursor.rules.noPathClicks, { count: 1, of: 1, trialIds: ['q2'], trials: 1 });
   });
   it('does not count 19 px, two samples, or an unknown position', () => {
     assert.equal(after(1, 19).cursor.rules.noPathClicks.count, 0);
     assert.equal(after(2, 300).cursor.rules.noPathClicks.count, 0);
-    assert.equal(after(1, 300, { startTime: 9000 }).cursor.rules.noPathClicks.count, 0);   // 3 s unrecorded: forgotten
+    assert.deepEqual(after(1, 300, { startTime: 9000 }).cursor.rules.noPathClicks, { count: 0, of: 0, trialIds: [], trials: 0 });   // 3 s unrecorded: forgotten, so not judged
   });
   it('is not a jump below 100 px, and is both at 100 px and over', () => {
     assert.deepEqual([after(1, 60).cursor.rules.jumpClicks.count, after(1, 60).cursor.rules.noPathClicks.count], [0, 1]);
@@ -349,8 +354,10 @@ describe('clicks that arrived without a path', () => {
     assert.deepEqual([after(1, 300).cursor.rules.jumpClicks.count, after(1, 300).cursor.rules.noPathClicks.count], [1, 1]);
   });
   it('a touch tap and a keyboard activation are not in its denominator', () => {
+    // The path's click has no position before it; the two after it have one.
     const r = analyzeCursorForParticipant(participant([trial('q1', [...path(100, 100, 400, 300, 0), ck(700, 300, 950, { detail: 0, pointerType: undefined }), ck(700, 500, 1000, { pointerType: 'touch' })])], { maxTouchPoints: 10, coarsePointer: false, webdriver: false }));
-    assert.equal(r.cursor.rules.noPathClicks.of, 1);
+    assert.equal(r.cursor.firstClicks, 1);
+    assert.equal(r.cursor.rules.noPathClicks.of, 0);
   });
 });
 
@@ -367,14 +374,32 @@ describe('the pointer verdict', () => {
   it('exports the words for the levels', () => {
     assert.deepEqual([-1, 0, 1, 2].map(verdictWord), ['not assessed', 'clean', 'suspicious', 'highly suspicious']);
   });
-  it('a human session with four or more first clicks is clean, with no tells', () => {
-    const r = verdictOf(humans(4));
+  it('a human session with four or more first clicks with a known position is clean, with no tells', () => {
+    const r = verdictOf(humans(5));   // the first click has no position before it: four judged
     assert.deepEqual([r.level, r.verdict, r.tells, r.verdictReason], [0, 'clean', [], null]);
   });
-  it('fewer than four first clicks and no browser fact: not assessed, with the count', () => {
+  it('fewer than four first clicks with a known position and no browser fact: not assessed, with the counts', () => {
     const r = verdictOf(humans(3));
-    assert.deepEqual([r.level, r.verdict, r.verdictReason], [-1, 'not assessed', 'only 3 first pointer clicks (the pointer-pattern tells need 4)']);
-    assert.equal(verdictOf(humans(1)).verdictReason, 'only 1 first pointer click (the pointer-pattern tells need 4)');
+    assert.deepEqual([r.level, r.verdict, r.verdictReason], [-1, 'not assessed', 'only 2 of 3 first pointer clicks had a known position before them (the no-path rule needs 4)']);
+    assert.equal(verdictOf(humans(1)).verdictReason, 'only 0 of 1 first pointer click had a known position before them (the no-path rule needs 4)');
+  });
+  it('a first click with no known position before it is not judged, and a session with too few judged clicks is not assessed', () => {
+    // The session's first click, and every click after more than staleGapMs unrecorded, has no position before it.
+    const far = Array.from({ length: 4 }, (_, i) => trial('q' + (i + 1), [mv(100 + i * 300, 200, 5), ck(100 + i * 300, 200, 6)], { startTime: 1000 + i * 40000 }));
+    const r = verdictOf(far);
+    assert.equal(r.cursor.firstClicks, 4);
+    assert.deepEqual([r.cursor.rules.noPathClicks.of, r.cursor.rules.jumpClicks.of], [0, 0]);
+    assert.deepEqual([r.level, r.verdictReason], [-1, 'only 0 of 4 first pointer clicks had a known position before them (the no-path rule needs 4)']);
+    // The same four trials 100 ms apart: three judged, all three without a
+    // path, still one short of the four the rule needs.
+    const near = verdictOf(scripted(4));
+    assert.deepEqual([near.cursor.firstClicks, near.cursor.rules.noPathClicks.of, near.cursor.rules.noPathClicks.count], [4, 3, 3]);
+    assert.deepEqual([near.level, near.verdictReason], [-1, 'only 3 of 4 first pointer clicks had a known position before them (the no-path rule needs 4)']);
+  });
+  it('trials clicked without pointer movement are judged from first clicks of any kind, so lone clicks after long gaps still tell', () => {
+    const lone = Array.from({ length: 4 }, (_, i) => trial('q' + (i + 1), [ck(100 + i * 300, 200, 20)], { startTime: 1000 + i * 40000 }));
+    const r = verdictOf(lone);
+    assert.deepEqual([r.cursor.rules.noPathClicks.of, r.level, r.tells.map(t => t.id)], [0, 2, ['zeroMove']]);
   });
   it('the automation flag makes any session highly suspicious, with the tell', () => {
     for (const trials of [humans(1), humans(4), [trial('q1', [])]]) {
@@ -397,25 +422,26 @@ describe('the pointer verdict', () => {
     const old = (i) => trial('q' + (i + 1), [{ x: 100 + i * 300, y: 200, t: 5, type: 'move' }, { x: 100 + i * 300, y: 200, t: 6, type: 'click' }], { ...spaced(i), libraryVersion: '0.11.0' });
     const r = analyzeCursorForParticipant(participant([old(0), old(1), old(2), old(3)], null));
     assert.deepEqual([r.state, r.level, r.verdictReason], ['ok', -1, 'device facts and click provenance not recorded (library before 0.14)']);
-    assert.equal(r.cursor.rules.noPathClicks.of, 4);     // the rule is still reported
+    assert.equal(r.cursor.rules.noPathClicks.of, 0);     // the rule is still reported: page coordinates forget the position at every trial
   });
   it('a scripted cursor: clicks that arrived without a path at 50% or more is highly suspicious', () => {
-    const r = verdictOf(scripted(4));   // 3 of 4 first clicks arrive without a path (the first has no position before it)
+    const r = verdictOf(scripted(5));   // 4 of 4 judged first clicks arrive without a path (the first has no position before it)
     assert.equal(r.level, 2);
     assert.deepEqual(r.tells.map(t => [t.id, t.level]), [['noPath', 'high']]);
-    assert.equal(r.tells[0].text, 'clicks that arrived without a path: 3 of 4 first clicks (75%)');
-    assert.equal(r.tells[0].short, 'clicks without a path 3/4');
-    assert.deepEqual(r.tells[0].trialIds, ['q2', 'q3', 'q4']);
+    assert.equal(r.tells[0].text, 'clicks that arrived without a path: 4 of 4 first clicks with a known position (100%)');
+    assert.equal(r.tells[0].short, 'clicks without a path 4/4');
+    assert.deepEqual(r.tells[0].trialIds, ['q2', 'q3', 'q4', 'q5']);
   });
   it('the shares: 20% is suspicious, 50% highly, 10% clean', () => {
     // Ten trials: the first k scripted (one sample, 300 px apart), the rest human paths continuing from there.
     const mixed = (k) => [...scripted(k), ...Array.from({ length: 10 - k }, (_, j) => { const i = k + j; return trial('q' + (i + 1), path(100 + (i - 1) * 300, 200, 100 + i * 300, 200, 0), spaced(i)); })];
-    // k scripted trials give k - 1 clicks without a path (the first has no position before it) … unless k = 0.
+    // k scripted trials give k - 1 clicks without a path, of nine judged (the first click has no position before it) … unless k = 0.
     assert.equal(verdictOf(mixed(2)).cursor.rules.noPathClicks.count, 1);
-    assert.equal(verdictOf(mixed(2)).level, 0);                 // 1 of 10 = 10%
-    assert.equal(verdictOf(mixed(3)).level, 1);                 // 2 of 10 = 20%
-    assert.equal(verdictOf(mixed(5)).level, 1);                 // 4 of 10 = 40%
-    assert.equal(verdictOf(mixed(6)).level, 2);                 // 5 of 10 = 50%
+    assert.equal(verdictOf(mixed(2)).cursor.rules.noPathClicks.of, 9);
+    assert.equal(verdictOf(mixed(2)).level, 0);                 // 1 of 9 = 11%
+    assert.equal(verdictOf(mixed(3)).level, 1);                 // 2 of 9 = 22%
+    assert.equal(verdictOf(mixed(5)).level, 1);                 // 4 of 9 = 44%
+    assert.equal(verdictOf(mixed(6)).level, 2);                 // 5 of 9 = 55%
     assert.deepEqual(verdictOf(mixed(3)).tells.map(t => t.level), ['low']);
   });
   it('trials clicked without pointer movement follow the same shares', () => {
@@ -442,29 +468,31 @@ describe('the pointer verdict', () => {
     const all = verdictOf(humans(4).map(t => ({ ...t, mouseEvents: t.mouseEvents.map(e => e.type === 'click' ? { ...e, trusted: false } : e) })));
     assert.equal(all.level, 2);
     assert.deepEqual(all.tells.map(t => [t.id, t.level]), [['untrusted', 'high']]);
-    // Even with too few first clicks for the pattern tells, a fact is judged: three human paths (three first clicks), the last followed by one untrusted click, 1 of 4 (25%).
+    // Even with too few first clicks for the pattern tells, a fact is judged: three human paths (three first clicks, two with a known position), the last followed by one untrusted click, 1 of 4 (25%).
     const few = verdictOf([...humans(2), trial('q3', [...path(700, 200, 1000, 200, 0), ck(1000, 200, 950, { trusted: false })], spaced(2))]);
-    assert.deepEqual([few.level, few.cursor.rules.noPathClicks.of, few.tells.map(t => t.level)], [1, 3, ['low']]);
+    assert.deepEqual([few.level, few.cursor.rules.noPathClicks.of, few.tells.map(t => t.level)], [1, 2, ['low']]);
   });
   it('tells come in order: automation flag, untrusted clicks, clicks without a path, trials without movement', () => {
-    // Five lone clicks 300 px apart; the first is untrusted (1 of 5) and
+    // Six lone clicks 300 px apart; the first is untrusted (1 of 6) and
     // leaves no position behind, so the first pointer click (q2) has none
-    // before it and the three after it arrive without a path (3 of 4). The
-    // four pointer clicks' trials are clicked without movement (the untrusted
-    // click's trial has no pointer click, so it is not one of them).
-    const lone = Array.from({ length: 5 }, (_, i) => trial('q' + (i + 1), [ck(100 + i * 300, 200, 20, i === 0 ? { trusted: false } : {})], spaced(i)));
+    // before it and is not judged, and the four after it arrive without a
+    // path (4 of 4). The five pointer clicks' trials are clicked without
+    // movement (the untrusted click's trial has no pointer click, so it is
+    // not one of them).
+    const lone = Array.from({ length: 6 }, (_, i) => trial('q' + (i + 1), [ck(100 + i * 300, 200, 20, i === 0 ? { trusted: false } : {})], spaced(i)));
     const r = verdictOf(lone, { ...desktop, webdriver: true });
     assert.deepEqual(r.tells.map(t => [t.id, t.level]), [['webdriver', 'high'], ['untrusted', 'low'], ['noPath', 'high'], ['zeroMove', 'high']]);
-    assert.deepEqual(r.tells.map(t => t.trials), [0, 1, 3, 4]);
-    assert.equal(r.tells[2].text, 'clicks that arrived without a path: 3 of 4 first clicks (75%)');
-    assert.equal(r.tells[3].text, 'trials clicked without pointer movement: 4 of 5 (80%)');
+    assert.deepEqual(r.tells.map(t => t.trials), [0, 1, 4, 5]);
+    assert.equal(r.tells[1].text, 'clicks the page’s own scripts dispatched: 1 of 6 (16%)');
+    assert.equal(r.tells[2].text, 'clicks that arrived without a path: 4 of 4 first clicks with a known position (100%)');
+    assert.equal(r.tells[3].text, 'trials clicked without pointer movement: 5 of 6 (83%)');
   });
   it('judges with the limits it is given', () => {
     const custom = { ...CURSOR_LIMITS, shareSuspicious: { value: 0.05, meaning: CURSOR_LIMITS.shareSuspicious.meaning }, minClicksForVerdict: { value: 2, meaning: CURSOR_LIMITS.minClicksForVerdict.meaning } };
-    assert.equal(verdictOf(humans(2), desktop, custom).level, 0);
+    assert.equal(verdictOf(humans(3), desktop, custom).level, 0);   // two judged
     const r = analyzeCursorForParticipant(participant([...scripted(2), ...humans(8).map((t, j) => ({ ...t, trialId: 'h' + j, startTime: 1000 + (j + 2) * 5100 }))]), custom);
     assert.equal(r.cursor.rules.noPathClicks.count, 1);
-    assert.equal(r.level, 1);                                       // 1 of 10 = 10% ≥ 5%
+    assert.equal(r.level, 1);                                       // 1 of 9 = 11% ≥ 5%
     assert.equal(r.limits.shareSuspicious, 0.05);
     assert.equal(r.limits.minClicksForVerdict, 2);
   });

@@ -1275,7 +1275,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">${esc(ca.verdictReason)}.</span></p>`;
   } else if (ca.level === 0) {
     const n = ca.cursor.rules.noPathClicks, z = ca.checks.zeroMoveTrials;
-    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.count} of ${n.of} first clicks arrived without a path and ${z.count} of ${z.of} trials were clicked without pointer movement, both under ${Math.round(100 * ca.limits.shareSuspicious)}%; no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.count} of ${n.of} first clicks with a known position arrived without a path and ${z.count} of ${z.of} trials were clicked without pointer movement, both under ${Math.round(100 * ca.limits.shareSuspicious)}%; no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
   } else {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">because of:</span></p>
     <ul class="cursor-tells">${ca.tells.map(t => `<li class="tell-${t.level}">${esc(t.text)}${t.trialIds.length ? ` <span class="muted">${ids(t).trim()}</span>` : ''}</li>`).join('')}</ul>`;
@@ -1292,8 +1292,8 @@ function renderCursorSection(s, participant, replayShownExternally) {
       ${check('trials clicked without pointer movement', ca.checks.zeroMoveTrials, (x) => ofN(x))}
     </table>
     <table class="cursor-table"><caption>rules and movement shape</caption>
-      <tr><th>clicks that arrived without a path</th><td>${ofN(c.rules.noPathClicks, ' first clicks')}</td></tr>
-      <tr><th>clicks after a pointer jump</th><td>${ofN(c.rules.jumpClicks, ' first clicks')}</td></tr>
+      <tr><th>clicks that arrived without a path</th><td>${ofN(c.rules.noPathClicks, ' first clicks with a known position')}</td></tr>
+      <tr><th>clicks after a pointer jump</th><td>${ofN(c.rules.jumpClicks, ' first clicks with a known position')}</td></tr>
       ${feat('movement duration', c.features.durationMs, ' ms', 0)}
       ${feat('path length', c.features.pathPx, ' px', 0)}
       ${feat('displacement', c.features.displacementPx, ' px', 0)}

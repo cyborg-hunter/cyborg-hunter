@@ -29,10 +29,10 @@ const human = base('HUMAN', [path(0), path(0)], desktop);
 // q2 is a click with no move sample, 700 px from q1's click: a trial clicked
 // without pointer movement (and a click after a pointer jump).
 const driver = base('DRIVER', [[mv(50, 50, 5), ck(50, 50, 6)], [ck(600, 600, 6)]], { ...desktop, webdriver: true });
-// Four trials, 100 ms apart, each one move sample then a click at it, 300 px
-// from the last: three first clicks arrive without a path (the first has no
-// position before it); the automation flag is not set.
-const scripted = base('SCRIPTED', Array.from({ length: 4 }, (_, i) => [mv(100 + i * 300, 200, 5), ck(100 + i * 300, 200, 6)]), desktop);
+// Five trials, 100 ms apart, each one move sample then a click at it, 300 px
+// from the last: the first click has no position before it, and the four
+// after it arrive without a path; the automation flag is not set.
+const scripted = base('SCRIPTED', Array.from({ length: 5 }, (_, i) => [mv(100 + i * 300, 200, 5), ck(100 + i * 300, 200, 6)]), desktop);
 scripted.trials.forEach((t, i) => { t.startTime = 1000 + i * 5100; });
 const old = base('OLD', [[{ x: 1, y: 1, t: 0, type: 'move' }, { x: 2, y: 1, t: 50, type: 'move' }, { x: 2, y: 1, t: 60, type: 'click' }]], undefined);
 const config = { outputDir: '.', participantIdField: 'participantId' };
@@ -78,7 +78,7 @@ describe('the triage reason', () => {
   it('names the verdict and its tells, unscored', () => {
     const { triage } = analyze([driver, scripted]);
     assert.equal(triage.find(t => t.participantId === 'DRIVER').reason, 'pointer verdict: highly suspicious (automation flag)');
-    assert.equal(triage.find(t => t.participantId === 'SCRIPTED').reason, 'pointer verdict: highly suspicious (clicks without a path 3/4)');
+    assert.equal(triage.find(t => t.participantId === 'SCRIPTED').reason, 'pointer verdict: highly suspicious (clicks without a path 4/4)');
   });
   it('says nothing for a clean, a not-assessed and a not-recorded session', () => {
     const { triage } = analyze([human, old]);
@@ -96,10 +96,10 @@ describe('summary.csv', () => {
     assert.deepEqual(cols.slice(-19), COLS);
     const byId = Object.fromEntries(rows.map(r => [r.split(',')[0], r.split(',')]));
     const tail = (id) => byId[id].slice(-19);
-    assert.deepEqual(tail('DRIVER').slice(0, 10), ['', 'highly suspicious', 'automation flag', '3', '2', 'YES', '0', '1/2', '1/2', '1/2']);
-    assert.deepEqual(tail('SCRIPTED').slice(0, 10), ['', 'highly suspicious', 'clicks without a path 3/4', '3', '0', 'no', '0', '0/4', '3/4', '3/4']);
-    assert.deepEqual(tail('HUMAN').slice(0, 3), ['only 2 first pointer clicks (the pointer-pattern tells need 4)', 'not assessed', '']);
-    assert.deepEqual(tail('OLD').slice(0, 10), ['device facts and click provenance not recorded (library before 0.14)', 'not assessed', '', '0', '', '', '', '', '0/1', '0/1']);
+    assert.deepEqual(tail('DRIVER').slice(0, 10), ['', 'highly suspicious', 'automation flag', '3', '2', 'YES', '0', '1/2', '1/1', '1/1']);
+    assert.deepEqual(tail('SCRIPTED').slice(0, 10), ['', 'highly suspicious', 'clicks without a path 4/4', '3', '0', 'no', '0', '0/5', '4/4', '4/4']);
+    assert.deepEqual(tail('HUMAN').slice(0, 3), ['only 1 of 2 first pointer clicks had a known position before them (the no-path rule needs 4)', 'not assessed', '']);
+    assert.deepEqual(tail('OLD').slice(0, 10), ['device facts and click provenance not recorded (library before 0.14)', 'not assessed', '', '0', '', '', '', '', '0/0', '0/0']);
     assert.equal(tail('HUMAN')[18], '');
   });
   it('a null session has its reason and empty values', () => {
@@ -157,14 +157,14 @@ describe('the HTML report', () => {
     // The verdict line and the tells.
     assert.match(html, /<span class="verdict-badge" data-level="2">highly suspicious<\/span> <span class="muted">because of:<\/span>/);
     assert.match(html, /<li class="tell-high">automation flag set by the browser<\/li>/);
-    assert.match(html, /<li class="tell-high">clicks that arrived without a path: 3 of 4 first clicks \(75%\) <span class="muted">\(q2, q3, q4\)<\/span><\/li>/);
-    assert.match(html, /<span class="verdict-badge" data-level="-1">not assessed<\/span> <span class="muted">only 2 first pointer clicks \(the pointer-pattern tells need 4\)\.<\/span>/);
+    assert.match(html, /<li class="tell-high">clicks that arrived without a path: 4 of 4 first clicks with a known position \(100%\) <span class="muted">\(q2, q3, q4, q5\)<\/span><\/li>/);
+    assert.match(html, /<span class="verdict-badge" data-level="-1">not assessed<\/span> <span class="muted">only 1 of 2 first pointer clicks had a known position before them \(the no-path rule needs 4\)\.<\/span>/);
     // The details, closed, hold the checks, the rules and the shape.
     assert.match(html, /<details class="cursor-details"><summary>every check, the rules and the movement shape<\/summary>/);
     assert.match(html, /automation flag set by the browser<\/th><td>yes/);
     assert.match(html, /trials clicked without pointer movement<\/th><td>1 of 2 \(q2\)/);
-    assert.match(html, /clicks that arrived without a path<\/th><td>3 of 4 first clicks \(q2, q3, q4\)/);
-    assert.match(html, /clicks after a pointer jump<\/th><td>3 of 4 first clicks \(q2, q3, q4\)/);
+    assert.match(html, /clicks that arrived without a path<\/th><td>4 of 4 first clicks with a known position \(q2, q3, q4, q5\)/);
+    assert.match(html, /clicks after a pointer jump<\/th><td>4 of 4 first clicks with a known position \(q2, q3, q4, q5\)/);
     assert.match(html, /median \d+ ms between samples/);
     assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 100, minSamplesForShape 2, minClicksForVerdict 4, shareSuspicious 0\.2, shareHighlySuspicious 0\.5 \(cursor-limits\.json\)/);
     assert.match(html, /Pointer verdict<\/span>/);     // the tile label
@@ -174,25 +174,27 @@ describe('the HTML report', () => {
     assert.match(html, /capped trials<\/th><td>0 of 2 trials</);
   });
   it('a clean session says what it was judged on', async () => {
-    const clean = base('CLEAN', [path(0), path(0), path(0), path(0)], desktop);
+    // Five paths, 100 ms apart: the first click has no position before it, so four are judged.
+    const clean = base('CLEAN', [path(0), path(0), path(0), path(0), path(0)], desktop);
     clean.trials.forEach((t, i) => { t.startTime = 1000 + i * 5100; });
     const { summaries, triage } = analyze([clean]);
     const html = await renderIndexHtml(summaries, triage, [clean], config, false);
-    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">0 of 4 first clicks arrived without a path and 0 of 4 trials were clicked without pointer movement, both under 20%; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/);
+    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">0 of 4 first clicks with a known position arrived without a path and 0 of 5 trials were clicked without pointer movement, both under 20%; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/);
     assert.match(html, /<span class="cursor-cell" data-level="0">pointer: clean<\/span>/);
     assert.match(html, /<div class="signal-tile tone-zero"[^>]*>\s*<span class="signal-value">0<\/span>\s*<span class="signal-label">Pointer verdict/);
   });
   it('a clean session with counts under the threshold states them', async () => {
     // Ten trials, 100 ms apart; the fifth is a lone click far from where q4's
-    // path ended (260, 160): a trial clicked without pointer movement and a
-    // click that arrived without a path, 1 of 10 each (10%), under 20%.
+    // path ended (260, 160): a trial clicked without pointer movement, 1 of 10
+    // (10%), and a click that arrived without a path, 1 of the 9 first clicks
+    // with a known position (11%; q1's has none), both under 20%.
     const trials = Array.from({ length: 10 }, (_, i) => i === 4 ? [ck(900, 900, 20)] : path(0));
     const under = base('UNDER', trials, desktop);
     under.trials.forEach((t, i) => { t.startTime = 1000 + i * 5100; });
     const { summaries, triage } = analyze([under]);
     const html = await renderIndexHtml(summaries, triage, [under], config, false);
-    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">1 of 10 first clicks arrived without a path and 1 of 10 trials were clicked without pointer movement, both under 20%; /);
-    assert.match(html, /clicks that arrived without a path<\/th><td>1 of 10 first clicks \(q5\)/);
+    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">1 of 9 first clicks with a known position arrived without a path and 1 of 10 trials were clicked without pointer movement, both under 20%; /);
+    assert.match(html, /clicks that arrived without a path<\/th><td>1 of 9 first clicks with a known position \(q5\)/);
     assert.match(html, /trials clicked without pointer movement<\/th><td>1 of 10 \(q5\)/);
   });
   it('a null session says why and shows no numbers', async () => {
@@ -279,7 +281,7 @@ describe('buildReport', () => {
   });
   it('the run line counts the verdicts and the sessions recorded without device facts', async () => {
     // HUMAN and DRIVER have a stream and device facts: HUMAN is not assessed
-    // (two first clicks), DRIVER highly suspicious (its automation flag); OLD
+    // (one of its two first clicks has a known position before it), DRIVER highly suspicious (its automation flag); OLD
     // has neither device facts nor provenance (not assessed); TOUCH and
     // TOUCHFLAG have device facts and no cursor stream: TOUCH is not
     // assessed, and TOUCHFLAG's automation flag makes it highly suspicious.
