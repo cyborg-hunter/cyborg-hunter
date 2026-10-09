@@ -1250,7 +1250,7 @@ function startTour(participantId, capabilities, manifest) {
     // panel.
     if (step.id === 'signals-to-scores') html += renderScoringPanel(manifest);
     html += '<div class="btnrow">';
-    if (i > 0) html += '<a href="#" class="skip" data-action="back">' + escHtml(BACK_LABEL) + '</a>';
+    if (i > 0) html += '<button class="btn btn-back" data-action="back">← ' + escHtml(BACK_LABEL) + '</button>';
     // guard-cheat's primary lives on the end-guard button rendered above
     // (outside the scramble target) instead of here — never both. Steps
     // with primaryLabel: null (guard-entry) render no primary at all; the

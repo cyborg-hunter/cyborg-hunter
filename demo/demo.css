@@ -169,15 +169,15 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
  * Buttons
  * --------------------------------------------------------------------- */
 /* Every step's button row: the primary action centred under the text, which
- * spans the card's content width, larger, with the Back link beneath it. The
- * row is a column, so the link, first in the markup, can come last; its top
+ * spans the card's content width, larger, with the smaller Back button beneath
+ * it. The row is a column, so Back, first in the markup, can come last; its top
  * margin collapses with the text's to leave 28px between them. The autotype
  * and fullscreen-entry rows share the class and centre within their panel;
  * the panel's padding is symmetric, so its button shares the card's axis
  * with the primary below it. */
 .btnrow{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:28px;}
 .btnrow .btn{font-size:17px;padding:14px 28px;}
-.btnrow .skip{order:1;}
+.btnrow .btn-back{order:1;}
 /* font-family AFTER font:inherit: the download buttons sit inside the mono
  * .file card and would otherwise inherit its monospace. */
 .btn{font:inherit;font-family:var(--ff-recursive);font-weight:600;padding:10px 22px;border-radius:4px;
@@ -188,13 +188,17 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 .btn:disabled{background:var(--line);color:var(--dim);cursor:not-allowed;}
 .btn:focus-visible, button:focus-visible, a:focus-visible{
   outline:2px solid var(--ink);outline-offset:2px;}
+/* Back: a button too, but smaller than the primary and outlined on a faint
+ * blue ground, so it reads as the way back and never as the next step. The
+ * selector is doubled so it outranks .btnrow .btn, which sizes the primary. */
+.btn.btn-back{font-size:14px;padding:8px 16px;background:#eef4fb;color:var(--ink);border:1px solid var(--ink);}
+.btn.btn-back:hover{background:#e2ebf8;}
 .secondary{margin-top:14px;font-size:13.5px;}
 .secondary a{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
 
-/* Link-style secondary actions rendered as standalone .skip anchors
- * (.btnrow's Back link, the fullscreen-fallback "Skip to…" link) — not
- * always nested inside .secondary, so they need the same link treatment
- * on their own. */
+/* The fullscreen-fallback "Skip to…" link, a standalone .skip anchor — not
+ * always nested inside .secondary, so it needs the same link treatment on
+ * its own. */
 .skip{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
 .skip:hover{color:var(--ink);}
 

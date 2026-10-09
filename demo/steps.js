@@ -289,7 +289,7 @@ data.</p>`.trim(),
   },
 ];
 
-/** The link back to the previous step, on every step but the first. */
+/** The button back to the previous step, on every step but the first. */
 export const BACK_LABEL = 'Go back';
 
 /** The last step's files, in two download batches (a Save button per file,

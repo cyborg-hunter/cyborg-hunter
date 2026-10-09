@@ -94,9 +94,9 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await expect(hint).toHaveText('copy this, then paste it below');
   const offeredBox = await offered.boundingBox();
   expect((await hint.boundingBox()).y).toBeGreaterThanOrEqual(offeredBox.y + offeredBox.height);
-  // Every step after the first offers the one link back, "Go back"; the
+  // Every step after the first offers the one button back, "← Go back"; the
   // record under the card has no caption.
-  await expect(backButton(page)).toHaveText('Go back');
+  await expect(backButton(page)).toHaveText('← Go back');
   await expect(page.locator('[data-role="live-pane"] .lp-caption')).toHaveCount(0);
   const offeredText = await offered.textContent();
   await dispatchCopy(page);
@@ -290,9 +290,9 @@ test('top bar: the title, then the REC cue; the card label says the step only', 
 // ---------------------------------------------------------------------------
 // The first step: two paragraphs that name no act, then one button, "Start
 // the demo", centred 28px under the text. Every step's primary button has
-// the same size and centring, with the Back link beneath it. On step 5 the
-// task panel's own button centres on the same axis as the primary below it:
-// the panel spans the card and its padding is symmetric.
+// the same size and centring, with a smaller Back button beneath it. On
+// step 5 the task panel's own button centres on the same axis as the primary
+// below it: the panel spans the card and its padding is symmetric.
 // ---------------------------------------------------------------------------
 test('first step: two paragraphs, then a large "Start the demo" centred under them; the next steps\' buttons share the axis', async ({ page }) => {
   await page.goto('/');
@@ -321,6 +321,7 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
   expect(Math.abs((nextBox.x + nextBox.width / 2) - (copy.x + copy.width / 2))).toBeLessThan(1);
   const back = await page.locator('#card [data-action="back"]').boundingBox();
   expect(back.y).toBeGreaterThan(nextBox.y + nextBox.height);
+  await expect(page.locator('#card button.btn-back[data-action="back"]')).toHaveCSS('font-size', '14px');
 
   await primaryButton(page).click(); // -> clipboard-cheat (step 3)
   await primaryButton(page).click(); // -> tab-away (step 4)
@@ -335,14 +336,14 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
 // The second step asks its question in one paragraph and a panel: the
 // question and a box, with no code under it. From there to the files, no
 // task panel carries a label and no step offers a link ahead of the tour
-// (Back is the only link). The files step's panel is built apart from the
-// others (renderDownloadsPanel), so the walk goes all the way.
+// (Back is a button, not a link). The files step's panel is built apart from
+// the others (renderDownloadsPanel), so the walk goes all the way.
 // ---------------------------------------------------------------------------
 test('second step: the question and a box, no code; no step has a task label or a link ahead', async ({ page }) => {
   const stepLabel = page.locator('[data-role="step-label"]');
   async function noLabelNoLinkAhead() {
     await expect(page.locator('#card .task .label')).toHaveCount(0);
-    await expect(page.locator('#card a.skip:not([data-action="back"])')).toHaveCount(0);
+    await expect(page.locator('#card a.skip')).toHaveCount(0);
   }
 
   await startTour(page); // -> baseline (step 2)

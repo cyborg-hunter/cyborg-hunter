@@ -173,7 +173,7 @@ test('trial ids name the task, not the act, and none is a key the record reserve
 test('the closing invitation names the one script tag, not code the tour no longer shows', () => {
   assert.equal(copy.CLOSING_CTA.installInvitation, 'One script tag is the whole integration; the quickstart shows it.');
 });
-test('the link back reads "Go back"; the record has no caption', () => {
+test('the button back reads "Go back"; the record has no caption', () => {
   assert.equal(copy.BACK_LABEL, 'Go back');
   assert.ok(!('caption' in copy.LIVE_PANE), 'LIVE_PANE.caption is still there');
   assert.doesNotMatch(JSON.stringify(copy.LIVE_PANE), /accumulates into/);
