@@ -99,11 +99,10 @@ var PANEL_HTML =
   '<form data-role="settings-form"><fieldset>' +
   '<legend>Settings</legend>' +
   '<p><label>Participant ID field: <select data-role="id-field" name="participantIdField"></select></label> <span class="hint" data-role="id-files"></span></p>' +
-  '<p class="hint">Settings a report applies after the data were collected. Each participant\'s tier comes from the scores their session saved: the weights order participants within a tier, the threshold re-tiers them against the saved soft scores. A change to the ID, integrity or session-report field reads the files again.</p>' +
   '<p><label>Soft-score threshold <input type="number" min="0" step="any" name="softScoreThreshold" placeholder="each participant\'s saved one"></label> ' +
   '<span class="hint">The score at or above which a participant is flagged as suspicious in the triage list.</span></p>' +
   '<details open><summary>Score weights: choose how much importance to give to each of the potential signals in estimating the participant\'s suspiciousness score.</summary>' +
-  '<table class="weights"><thead><tr><th>Signal</th><th>Weight</th><th>Cap</th></tr></thead><tbody>' + weightRows() + '</tbody></table></details>' +
+  '<table class="weights"><thead><tr><th>Signal</th><th>Weight</th><th title="the most events of one kind that count toward the ranking score">Cap</th></tr></thead><tbody>' + weightRows() + '</tbody></table></details>' +
   '<p><label>Integrity field <input type="text" name="integrityField"></label> ' +
   '<label>Session report path <input type="text" name="sessionIntegrityPath" placeholder="found by convention"></label></p>' +
   '<p><label>Platform ID field <input type="text" name="platformIdField"></label> ' +

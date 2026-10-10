@@ -4,8 +4,9 @@
  * Sora; code and the event stream stay system mono), its high-contrast
  * neutrals, square boxes with a line and a soft shadow, 4px controls,
  * segmented tabs with ink active states, and a double rule under the header.
- * Teal survives only as the live-recording cue (REC); reds/greens stay
- * semantic (lamps, hard rows, tiers) and match the report's tier colours.
+ * Reds/greens stay semantic (lamps, hard rows, tiers) and match the report's
+ * tier colours; the live-recording cue, the rail's pulsing replay lamp,
+ * keeps the red of the REC dot it replaced.
  * Fonts load from assets/fonts/, copied from src/cli/renderers/fonts/ by
  * tools/assemble-demo-site.mjs.
  *
@@ -54,8 +55,9 @@ code, pre{font-family:var(--mono);}
 /* ---------------------------------------------------------------------
  * Topbar — floats on the ground, no bar chrome. Constrained to the same
  * max-width/gutters as .cols so the brand lines up with the content column.
- * It holds the brand and, while the session records, the REC cue right
- * after it; the step count is on the card (.eyebrow).
+ * It holds the brand alone: the cue that the session records is the rail's
+ * replay lamp (.check li.recording, below), and the step count is on the
+ * card (.eyebrow).
  * --------------------------------------------------------------------- */
 /* The report's double header rule, spanning exactly the content column:
  * the bar's gutters are margins (not padding) so the rule stops where the
@@ -65,12 +67,6 @@ code, pre{font-family:var(--mono);}
   border-bottom:3px double var(--ink);}
 .topbar .brand{font-family:var(--ff-space);font-weight:550;letter-spacing:.01em;
   font-size:17px;color:var(--ink);}
-/* REC is the one live-recording cue, so it keeps the teal. */
-.rec{font-family:var(--ff-sora);font-size:12px;color:var(--live);}
-.rec .dot{display:inline-block;width:7px;height:7px;border-radius:50%;
-  background:var(--hard);margin-right:5px;vertical-align:1px;animation:pulse 1.6s infinite;}
-@keyframes pulse{50%{opacity:.25}}
-@media (prefers-reduced-motion: reduce){.rec .dot{animation:none}}
 
 /* ---------------------------------------------------------------------
  * Layout grid — content column + 312px instrument column, shared gutters.
@@ -90,6 +86,31 @@ code, pre{font-family:var(--mono);}
 /* The live session record's permanent home, under #card inside .main-col
  * on every step — see index.html's docblock. */
 .pane-slot{margin-top:20px;}
+/* The record is collapsed under its bar so it does not pull the eye from
+ * the step. It shows while the slot carries data-hover (a mouse over it),
+ * data-focus (keyboard focus inside it) or data-open (a click on the bar, or
+ * the debrief step), all set by live-pane.js makePaneBar. Attributes rather
+ * than :hover and :focus-within: the session recording captures them, so the
+ * replay lays the record out where the visitor clicked inside it, and the
+ * script decides which focus counts (a mouse click on the bar does not).
+ * Collapsed rather than display:none, so the stream keeps its layout and
+ * live-pane.js's addRow still scrolls it to its tail while hidden: the
+ * record opens on its latest event. No transition, so there is no motion to
+ * drop under prefers-reduced-motion. */
+.pane-slot:not([data-hover="true"]):not([data-focus="true"]):not([data-open="true"]) > [data-role="live-pane"]{
+  visibility:hidden;height:0;overflow:hidden;padding:0;border-width:0;box-shadow:none;}
+/* The bar is the record's lid: the record's title treatment (.lp-title) on a
+ * .card ground, with the hint (.hint) after it saying what a click does. The
+ * record opens right under it, so the record drops its own top line rather
+ * than doubling the bar's. */
+.lp-bar{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;
+  width:100%;padding:12px 20px;background:var(--panel);border:1px solid var(--line);border-radius:0;
+  box-shadow:var(--shadow);cursor:pointer;text-align:left;
+  font-family:var(--ff-sofia);font-size:11.5px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim);}
+.lp-bar:hover{color:var(--ink);}
+.lp-bar .hint{font-weight:400;letter-spacing:normal;text-transform:none;}
+.pane-slot > [data-role="live-pane"]{border-top:none;}
 
 /* ---------------------------------------------------------------------
  * Step card — one elevated panel holds the whole step. Serif titles only.
@@ -105,7 +126,7 @@ code, pre{font-family:var(--mono);}
 .eyebrow{font-family:var(--ff-sofia);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);margin:0 0 12px;}
 
-.stepcopy{max-width:60ch;color:var(--ink);margin:0 0 26px;}
+.stepcopy{color:var(--ink);margin:0 0 26px;}
 .stepcopy em{color:var(--dim);font-style:normal;}
 .stepcopy p{margin:0 0 14px;}
 .stepcopy p:last-child{margin-bottom:0;}
@@ -117,6 +138,18 @@ code, pre{font-family:var(--mono);}
 .stepcard p, .entrybox p, .task p{margin:0 0 12px;}
 .stepcard p:last-child, .entrybox p:last-child, .task p:last-child{margin-bottom:0;}
 .stepcard ul, .stepcard ol, .entrybox ul, .entrybox ol{margin:0 0 12px;padding-left:20px;}
+/* The copy, the answer chip and the task panel all span the card's content
+ * width, so the prose (hints included) is justified to that edge; a justified
+ * paragraph never stretches its last line, so a one-line hint is unaffected.
+ * hyphens:auto (index.html's lang="en") keeps the justified lines from opening
+ * wide gaps; hyphenate-limit-chars breaks only words of six letters or more,
+ * with at least three on each side, so short words stay whole. */
+#card p, #card li{text-align:justify;hyphens:auto;hyphenate-limit-chars:6 3 3;}
+/* Labels, headings and code stay ragged-left and unhyphenated: the question
+ * and the walkthrough headings are short single-line labels that keep their
+ * words whole if a narrow card wraps them, and a stretched space or a broken
+ * word inside code misquotes it. */
+#card .question, #card .replicate h3, #card pre, #card code{text-align:left;hyphens:manual;}
 
 /* ---------------------------------------------------------------------
  * Task panel — recessed ground-colored inset, no border.
@@ -125,9 +158,10 @@ code, pre{font-family:var(--mono);}
 .question{font-size:17px;font-weight:600;margin:0 0 16px;}
 
 /* The text to copy (step 3): a bordered block of its own between the step's
- * text and the task panel, as wide as the text, the hint on a line under it. */
+ * text and the task panel, as wide as both (the card's content width), the
+ * hint on a line under it. */
 .answerchip{background:var(--panel);border-radius:4px;box-shadow:inset 0 0 0 1px var(--line);
-  padding:12px 14px;margin:0 0 18px;max-width:60ch;}
+  padding:12px 14px;margin:0 0 18px;}
 .answerchip code{font-family:var(--mono);font-size:14px;line-height:1.5;}
 .answerchip .hint{display:block;margin-top:8px;}
 
@@ -155,14 +189,16 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 /* ---------------------------------------------------------------------
  * Buttons
  * --------------------------------------------------------------------- */
-/* Every step's button row: the primary action centred under the text column
- * (.stepcopy's 60ch), larger, with the Back link beneath it. The row is a
- * column, so the link, first in the markup, can come last; its top margin
- * collapses with the text's to leave 28px between them. The autotype and
- * fullscreen-entry rows share the class and centre the same way. */
-.btnrow{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:28px;max-width:60ch;}
+/* Every step's button row: the primary action centred under the text, which
+ * spans the card's content width, larger, with the smaller Back button beneath
+ * it. The row is a column, so Back, first in the markup, can come last; its top
+ * margin collapses with the text's to leave 28px between them. The autotype
+ * and fullscreen-entry rows share the class and centre within their panel;
+ * the panel's padding is symmetric, so its button shares the card's axis
+ * with the primary below it. */
+.btnrow{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:28px;}
 .btnrow .btn{font-size:17px;padding:14px 28px;}
-.btnrow .skip{order:1;}
+.btnrow .btn-back{order:1;}
 /* font-family AFTER font:inherit: the download buttons sit inside the mono
  * .file card and would otherwise inherit its monospace. */
 .btn{font:inherit;font-family:var(--ff-recursive);font-weight:600;padding:10px 22px;border-radius:4px;
@@ -173,13 +209,17 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 .btn:disabled{background:var(--line);color:var(--dim);cursor:not-allowed;}
 .btn:focus-visible, button:focus-visible, a:focus-visible{
   outline:2px solid var(--ink);outline-offset:2px;}
+/* Back: a button too, but smaller than the primary and outlined on a faint
+ * blue ground, so it reads as the way back and never as the next step. The
+ * selector is doubled so it outranks .btnrow .btn, which sizes the primary. */
+.btn.btn-back{font-size:14px;padding:8px 16px;background:#eef4fb;color:var(--ink);border:1px solid var(--ink);}
+.btn.btn-back:hover{background:#e2ebf8;}
 .secondary{margin-top:14px;font-size:13.5px;}
 .secondary a{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
 
-/* Link-style secondary actions rendered as standalone .skip anchors
- * (.btnrow's Back link, the fullscreen-fallback "Skip to…" link) — not
- * always nested inside .secondary, so they need the same link treatment
- * on their own. */
+/* The fullscreen-fallback "Skip to…" link, a standalone .skip anchor — not
+ * always nested inside .secondary, so it needs the same link treatment on
+ * its own. */
 .skip{color:var(--dim);text-decoration:underline;text-underline-offset:3px;}
 .skip:hover{color:var(--ink);}
 
@@ -190,10 +230,10 @@ textarea:focus, input[type="text"]:focus{outline:2px solid var(--ink);outline-of
 /* End-guard button (step 7): rendered OUTSIDE the scramble target (the
  * step's copy), so its legibility can never depend on scramble/blur context —
  * a standalone rule rather than composing with .btn keeps that true even if
- * .btn's cascade changes later. Its row is as wide as the text column
- * (.stepcopy's 60ch), so the button centres under the text; while floating
+ * .btn's cascade changes later. Its row is as wide as the text (the card's
+ * content width), so the button centres under the text; while floating
  * (below) it sits on <body>, outside the row. */
-.endguard-row{max-width:60ch;text-align:center;}
+.endguard-row{text-align:center;}
 .endguard{display:inline-block;font:inherit;font-family:var(--ff-recursive);font-weight:600;padding:10px 22px;
   border-radius:4px;border:none;background:var(--ink);color:#fff;cursor:pointer;
   margin-top:14px;}
@@ -239,8 +279,17 @@ pre code{background:none;padding:0;}
 .card h3, .lp-title{font-family:var(--ff-sofia);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--dim);font-weight:600;margin:0 0 4px;}
 
-/* Rail (rail.js): checklist of tracked signals. The detector lamps come
- * first, with no head above them, so the list keeps the gap under the title. */
+/* Rail (rail.js): the signal box, then the checklist of tracked signals.
+ * The box frames what the step on screen detected, between the title and the
+ * lamps that keep the count over the whole session. It always shows, reading
+ * a muted placeholder until the step detects something, so the lamps hold
+ * still when the first line replaces it. Sizes are border-box: the
+ * min-height is one line plus the padding and border. */
+.signal-box{border:1px solid var(--line);padding:8px 10px;min-height:calc(1lh + 18px);
+  margin:0 0 12px;font-size:13px;}
+.signal-box-empty{color:var(--dim);}
+.detected-strip{color:var(--clean);}
+/* The detector lamps come first in the list, with no head above them. */
 .check{list-style:none;margin:10px 0 0;padding:0;font-size:12.5px;
   max-height:calc(100vh - 220px);overflow-y:auto;}
 .check li{display:flex;align-items:center;gap:9px;padding:3px 0;color:var(--dim);}
@@ -248,10 +297,23 @@ pre code{background:none;padding:0;}
 .check li.lit .lamp{background:var(--clean);border-color:var(--clean);}
 .check li.lit.hardlit .lamp{background:var(--hard);border-color:var(--hard);}
 .check li.always .lamp{background:var(--line-soft);border-color:var(--line-soft);}
+/* The one cue that the session records: from the moment the recorder
+ * attaches until the recording is finalised, demo.js marks the replay row
+ * .recording and its lamp pulses in the REC dot's own red, the dot it
+ * replaces in the top bar. After .always, which the row also carries, so
+ * the red wins at equal specificity. Steady (still red) under
+ * prefers-reduced-motion. */
+@keyframes rec-pulse{50%{opacity:.25}}
+.check li.recording .lamp{animation:rec-pulse 1.2s ease-in-out infinite;
+  background:var(--hard);border-color:var(--hard);}
+@media (prefers-reduced-motion: reduce){.check li.recording .lamp{animation:none;}}
 .check li .n{margin-left:auto;font-family:var(--ff-sora);font-variant-numeric:tabular-nums;font-size:11.5px;}
 .check .hint{font-family:var(--ff-sofia);padding-top:12px;font-size:10.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--dim);}
 .check.awaiting li:not(.hint){opacity:.55;}
+/* Except the recording row: the recording is on from the start, so its cue
+ * must not read as pending. After the dimming, at equal specificity. */
+.check.awaiting li.recording{opacity:1;}
 /* Unlit lamps keep the soft line: with the high-contrast --line an empty
  * ring would read as lit. */
 .lamp{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--line-soft);
@@ -260,7 +322,7 @@ body[data-view="act2"] .check li.guardrow{color:var(--hard);}
 body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-color:var(--hard);}
 
 /* One-shot pulse for a lamp that just lit, off entirely under
- * prefers-reduced-motion (precedent: the REC dot above). */
+ * prefers-reduced-motion (as the recording lamp's pulse above). */
 @keyframes lamp-pulse{
   0%{transform:scale(1);opacity:1;}
   50%{transform:scale(1.8);opacity:.4;}
@@ -350,10 +412,10 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
   max-height:560px;overflow:auto;font:11.8px/1.6 var(--mono);}
 
 /* ---------------------------------------------------------------------
- * Files step (the last one) — the hand-off to the analyzer and the line
- * under it, "Save all into a folder" (a .batch-head row of its own), the
- * two download batches' file cards on an even grid, the config caveat under
- * the first grid, and the "show as text" fallback dialog.
+ * Files step (the last one) — the hand-off to the analyzer, "Save all into
+ * a folder" (a .batch-head row of its own), the two download batches' file
+ * cards on an even grid, the config caveat under the first grid, and the
+ * "show as text" fallback dialog.
  * --------------------------------------------------------------------- */
 .handoff{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 8px;}
 .batch-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:18px 0 8px;}
@@ -380,8 +442,15 @@ body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-co
 .filetext-dialog h3{margin:0 0 10px;font:600 13px/1 var(--ff-sofia);}
 .filetext-dialog pre{max-height:60vh;overflow:auto;user-select:text;margin:0 0 14px;}
 
-/* The files step's command-line walkthrough — numbered sections. .replicate
- * pre inherits the global `pre` rule above (background/padding/radius/
- * overflow/margin) unchanged — nothing extra needed there. */
+/* The files step's command-line walkthrough — a heading, then numbered
+ * sections. .replicate pre inherits the global `pre` rule above (background/
+ * padding/radius/overflow/margin) unchanged — nothing extra needed there.
+ * The heading is an <h2>, so it sets every property `main h2` (the step
+ * title) gives it: the face and weight of the card's other headings, at the
+ * question's 17px; its top margin parts it from the files panel above (the
+ * panel's own 18px bottom margin collapses into it), and its bottom margin
+ * is the only gap above the first section. */
+.replicate-title{font-family:var(--ff-sofia);font-size:17px;font-weight:600;
+  letter-spacing:normal;line-height:1.3;margin:32px 0 10px;}
 .replicate h3{font-family:var(--ff-sofia);font-size:15px;font-weight:600;margin:18px 0 8px;}
-.replicate h3:first-child{margin-top:0;}
+.replicate-title + h3{margin-top:0;}

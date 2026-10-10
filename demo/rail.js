@@ -1,8 +1,12 @@
 // demo/rail.js
 // Sticky signal-checklist rail. Module-scoped singleton (there is only ever
-// one #rail on the page): renderRail() builds the grouped list and remembers
-// its rows; light()/acknowledge() then update that remembered state without
-// needing the container passed back in each time.
+// one #rail on the page): renderRail() builds the signal box and the grouped
+// list and remembers the list's rows; light() then updates that remembered
+// state without needing the container passed back in each time.
+// acknowledge() and clearSignalBox() take the box itself, which demo.js
+// looks up once after renderRail().
+
+import { RAIL } from './steps.js';
 
 var rowsByKey = {};
 var listEl = null;
@@ -18,16 +22,24 @@ function renderGroupRows(rows, rowClass) {
   }).join('');
 }
 
+// The signal box's placeholder, one place for both renderRail() and
+// clearSignalBox() so the box reads the same when built and when reset.
+function signalBoxEmptyHtml() {
+  return '<p class="signal-box-empty">' + RAIL.signalBoxEmpty + '</p>';
+}
+
 /**
  * Builds the checklist inside `container` (#rail): the title, then the
- * detector lamps directly under it, then the Guard and Recording groups
- * under their heads. Starts dimmed (the .check list carries an `awaiting`
- * class) until the first lamp lights, which clears it.
+ * signal box (what the current step detected, empty until it detects
+ * something), then the detector lamps, then the Guard and Recording groups
+ * under their heads. The lamps start dimmed (the .check list carries an
+ * `awaiting` class) until the first lamp lights, which clears it.
  */
 export function renderRail(container, opts) {
   var groups = opts.groups;
 
   var html = '<h3>Tracked signals</h3>';
+  html += '<div class="signal-box" data-role="signal-box">' + signalBoxEmptyHtml() + '</div>';
   html += '<ul class="check awaiting">';
   html += renderGroupRows(groups.detectors);
   html += '<li class="hint">Guard</li>' + renderGroupRows(groups.guard, 'guardrow');
@@ -74,20 +86,46 @@ export function light(key, count, opts) {
 }
 
 /**
- * Injects the inline "✓ detected — <label>" strip into the current step
- * card. Idempotent per step: renderStep() replaces cardEl's innerHTML on
- * every navigation, so a prior strip is already gone by the time a new
- * step's card could receive one; this guard only prevents a second strip
- * within the SAME step's lifetime (e.g. two pastes on one card).
+ * Marks the replay row as recording (on) or not (off): demo.css pulses its
+ * lamp in red while the row carries .recording, the page's one cue that the
+ * session records. Here rather than in demo.js because the rows are
+ * this module's. Returns the row, or null if renderRail() hasn't run.
  */
-export function acknowledge(cardEl, label) {
-  if (!cardEl || cardEl.querySelector('.detected-strip')) {
-    return cardEl ? cardEl.querySelector('.detected-strip') : null;
+export function setRecording(on) {
+  var row = rowsByKey.replay;
+  if (!row) return null;
+  row.classList.toggle('recording', !!on);
+  return row;
+}
+
+/**
+ * Adds a "✓ detected — <label>" line to the signal box at the top of the
+ * rail, and drops the box's placeholder. One line per label per step: a
+ * second paste on the same step finds its line already there (the lamp
+ * below keeps the count). clearSignalBox() empties the box on every
+ * navigation, so the box only ever holds the current step's signals.
+ */
+export function acknowledge(boxEl, label) {
+  if (!boxEl) return null;
+  var text = '✓ detected — ' + label;
+  var lines = boxEl.querySelectorAll('.detected-strip');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].textContent === text) return lines[i];
   }
-  var strip = document.createElement('p');
-  strip.className = 'detected-strip';
-  strip.setAttribute('style', 'margin:0 0 14px;font-size:13px;color:var(--clean);');
-  strip.textContent = '✓ detected — ' + label;
-  cardEl.appendChild(strip);
-  return strip;
+  var empty = boxEl.querySelector('.signal-box-empty');
+  if (empty) empty.remove();
+  var line = document.createElement('p');
+  line.className = 'detected-strip';
+  line.textContent = text;
+  boxEl.appendChild(line);
+  return line;
+}
+
+/**
+ * Empties the signal box back to its placeholder. renderStep() calls it on
+ * every navigation: the box shows what the step on screen detected, while
+ * the lamps keep the record across the whole session.
+ */
+export function clearSignalBox(boxEl) {
+  if (boxEl) boxEl.innerHTML = signalBoxEmptyHtml();
 }

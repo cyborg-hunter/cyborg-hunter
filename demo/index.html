@@ -3,16 +3,23 @@
      copy (steps.js), and generated signal-manifest.json populate #card, the
      live session record ([data-role="live-pane"]) and the instrument
      column's lamps (#rail / [data-role="rail"]) at runtime — this file only
-     lays out the topbar (the brand, then the REC cue demo.js shows once the
-     session records), two-column grid, and script load order.
+     lays out the topbar (the brand alone: the cue that the session records
+     is the rail's pulsing replay lamp, which demo.js starts once the
+     recorder attaches), two-column grid, and script load order.
 
      [data-role="pane-slot"] is the live session record's permanent home,
      under the step card on every step. It is a sibling of #card, not part
      of it, so renderStep()'s innerHTML rebuild of #card never touches the
      record, and it lives inside .main-col (not as a third .cols child) so it
      stays in the main column's grid cell in both the 2-col and ≤820px
-     single-column layouts. The instrument column holds the lamps only,
-     short enough to stay in view (sticky) while the step scrolls. -->
+     single-column layouts. The record is collapsed under the bar above it
+     ([data-role="pane-toggle"], labelled by live-pane.js) so it does not
+     pull the eye from the step: demo.css shows it while the slot carries
+     data-hover, data-focus or data-open, which live-pane.js sets while a
+     mouse is over the slot, while keyboard focus is inside it, and after a
+     click on the bar or on the step whose copy sends the visitor to it.
+     The instrument column holds the step's detected signals and the lamps
+     only, short enough to stay in view (sticky) while the step scrolls. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,13 +32,13 @@
 
 <div class="topbar">
   <span class="brand">cyborg-hunter · live demo</span>
-  <span class="rec" id="rec" hidden><span class="dot"></span>REC replay</span>
 </div>
 
 <div class="cols">
   <div class="main-col">
     <main id="card"></main>
     <div class="pane-slot" data-role="pane-slot">
+      <button class="lp-bar" type="button" data-role="pane-toggle" aria-expanded="false"></button>
       <div class="card" data-role="live-pane"></div>
     </div>
   </div>

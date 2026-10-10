@@ -85,7 +85,7 @@ for (const n of sizes) {
     const t0 = Date.now();
     try {
       await page.goto(base + '/analyze/');
-      await page.waitForFunction(() => document.querySelector('[data-role="tested-size"]').textContent !== '…', null, { timeout: 60000 });
+      await page.waitForFunction(() => !!(window.__chAnalyze && window.__chAnalyze.state.limits), null, { timeout: 60000 });
       await page.setInputFiles('[data-role="file-input"]', files);
       await page.waitForSelector('[data-role="files-panel"]:not([hidden])', { timeout: TIMEOUT_MS });
       await page.waitForSelector('[data-action="run"]:not([disabled])', { timeout: TIMEOUT_MS });

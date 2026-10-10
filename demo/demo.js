@@ -14,7 +14,8 @@
 // session poll also feed live-pane.js's append-only stream + raw-JSON view
 // (paneRow()) — the rail is the demo-only curated subset, the pane is the
 // full record. Frozen (+ replay/guard finalized, rail hidden) on entering
-// the last step (your files).
+// the last step (your files). Collapsed under its bar until the visitor
+// asks for it, and opened on the step whose copy sends the visitor to it.
 
 import {
   STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS,
@@ -22,9 +23,9 @@ import {
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
-import { renderRail, light, acknowledge } from './rail.js';
+import { renderRail, light, setRecording, acknowledge, clearSignalBox } from './rail.js';
 import { buildPayload } from './payload.js';
-import { makeLivePane } from './live-pane.js';
+import { makeLivePane, makePaneBar } from './live-pane.js';
 import { escHtml } from './util.js';
 
 var SESSION_POLL_MS = 5000;
@@ -189,8 +190,8 @@ function boot() {
 }
 
 // Row label lookup (RAIL_GROUPS -> {key: label}), used by acknowledge() so
-// the inline "✓ detected" strip text lives in one place (steps.js) rather
-// than being retyped at every signal call site.
+// the signal box's "✓ detected" line text lives in one place (steps.js)
+// rather than being retyped at every signal call site.
 var RAIL_LABELS = {};
 ['detectors', 'guard', 'recording'].forEach(function (g) {
   RAIL_GROUPS[g].forEach(function (r) { RAIL_LABELS[r.key] = r.label; });
@@ -248,10 +249,13 @@ function startTour(participantId, capabilities, manifest) {
   cardEl.classList.add('stepcard');
 
   renderRail(railEl, { groups: RAIL_GROUPS });
+  // The box at the top of the rail that lists what the current step
+  // detected: syncCountLamp() writes to it, renderStep() resets it.
+  var signalBoxEl = railEl.querySelector('[data-role="signal-box"]');
 
   // ----- Live session pane -----------------------------------------------
-  // Persistently visible record, fed from the same signal
-  // dispatch as the rail. buildCurrentPayload() is the SAME buildPayload(...)
+  // The record, fed from the same signal dispatch as the rail.
+  // buildCurrentPayload() is the SAME buildPayload(...)
   // call buildDownloadFile('sessionData') makes, extracted so both stay in
   // sync (DRY) — declared here as a function so it can close over `monitor`
   // below despite running after it (function declarations hoist).
@@ -261,6 +265,10 @@ function startTour(participantId, capabilities, manifest) {
   var paneEl = document.querySelector('[data-role="live-pane"]');
   state.pane = makeLivePane(paneEl);
   state.t0 = performance.now();
+  // The bar above the record, which stays collapsed until the slot is
+  // hovered, focused or clicked open (live-pane.js makePaneBar); goTo()
+  // opens it on the debrief step.
+  var paneBar = makePaneBar(document.querySelector('[data-role="pane-slot"]'));
 
   // opts.final is the download seam's flag ONLY (buildDownloadFile passes
   // it for 'sessionData') — with it set, and once the last step has
@@ -295,7 +303,7 @@ function startTour(participantId, capabilities, manifest) {
   // 5s poll (pollSessionSignals -> syncCountLamp -> acknowledge()), which
   // would see the sidebar/viewport artifact our OWN fullscreen exit there
   // produces (exitFullscreenIfActive(), goTo()'s last-step block below) and
-  // announce a false "✓ detected" strip for a detection the visitor never
+  // announce a false "✓ detected" line for a detection the visitor never
   // produced. Safe to retire for good: the rail is already hidden
   // permanently from that step onward, and the monitor itself keeps recording
   // regardless (finalizing the payload is not this wiring's job).
@@ -345,7 +353,7 @@ function startTour(participantId, capabilities, manifest) {
     if (count > (state.lampCounts[key] || 0)) {
       state.lampCounts[key] = count;
       light(key, count, { hard: hard });
-      if (label) acknowledge(cardEl, label);
+      if (label) acknowledge(signalBoxEl, label);
     }
   }
 
@@ -597,6 +605,10 @@ function startTour(participantId, capabilities, manifest) {
     // (emitting its phase:'end', which unfloats via the handler below) and
     // hides the overlay — so ending the guard mid-violation is clean.
     finalizeGuard();
+    // Fullscreen ends with the guard, as step 7's copy promises: AFTER
+    // finalizeGuard(), so the exit logs no 'not_fullscreen' violation (the
+    // same order the files step uses for a visitor who skipped this button).
+    exitFullscreenIfActive();
     goTo(state.stepIndex + 1);
   }
 
@@ -680,14 +692,13 @@ function startTour(participantId, capabilities, manifest) {
   // Attaches the standalone replay recorder unconditionally, called from the
   // "Start the demo" click before goTo(1) opens step 2's trial —
   // recorderBridge reads state.recorder live, so as long as this finishes
-  // first, the very first trial gets bracketed too. The REC pill shows
-  // immediately regardless of whether attach actually succeeds (replay is on
-  // by default); a failure keeps the tour degrading gracefully and marks
-  // state.replayUnavailable so the files step can say so honestly instead
-  // of just silently dropping the file.
+  // first, the very first trial gets bracketed too. The rail's replay lamp
+  // starts pulsing (the cue that the session records) only once the
+  // recorder has attached and started, so it never claims a recording that
+  // is not being made; a failure leaves the lamp steady, keeps the tour
+  // degrading gracefully and marks state.replayUnavailable so the files
+  // step can say so honestly instead of just silently dropping the file.
   function startReplay() {
-    var recEl = document.getElementById('rec');
-    if (recEl) recEl.hidden = false;
     try {
       if (!window.CyborgHunterReplay || typeof window.CyborgHunterReplay.attach !== 'function') {
         throw new Error('CyborgHunterReplay unavailable');
@@ -698,10 +709,14 @@ function startTour(participantId, capabilities, manifest) {
         autoSave: { mode: 'none' }
       });
       state.recorder.startSession();
+      setRecording(true);
     } catch (err) {
       console.warn('cyborg-hunter demo: replay attach failed, continuing without a recording', err);
       state.recorder = null;
       state.replayUnavailable = true;
+      // Steady again if an earlier Start lit it: a new attach first
+      // discards the recorder already running, so nothing records now.
+      setRecording(false);
     }
   }
 
@@ -837,11 +852,13 @@ function startTour(participantId, capabilities, manifest) {
     dlg.showModal();
   }
 
-  // The last step's documentation-style walkthrough (REPLICATE.sections),
-  // numbered headings with copyable code blocks. code may carry {{version}} — tpl()
+  // The last step's documentation-style walkthrough: its heading
+  // (REPLICATE.title), then the numbered sections (REPLICATE.sections) with
+  // copyable code blocks. code may carry {{version}} — tpl()
   // substitutes before escaping, same order as everywhere else code renders.
   function renderReplicateSection() {
     var html = '<div class="replicate">';
+    html += '<h2 class="replicate-title">' + escHtml(REPLICATE.title) + '</h2>';
     REPLICATE.sections.forEach(function (s) {
       html += '<h3>' + s.n + '. ' + escHtml(s.heading) + '</h3>';
       html += '<p>' + escHtml(s.text) + '</p>';
@@ -988,10 +1005,9 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // The last step's panel: the hand-off to the analyzer first, with the
-  // line that leaving the page ends the session; then "Save all into a
-  // folder" where the browser has a folder picker; then the two download
-  // batches, each a heading and an even grid of cards; then the
+  // The last step's panel: the hand-off to the analyzer first; then "Save
+  // all into a folder" where the browser has a folder picker; then the two
+  // download batches, each a heading and an even grid of cards; then the
   // command-line walkthrough.
   function renderDownloadsPanel(task) {
     // scramble coupling: same .jspsych-content convention as renderTaskPanel
@@ -1003,7 +1019,6 @@ function startTour(participantId, capabilities, manifest) {
     parts.push(
       '<div class="handoff"><button class="btn" data-action="open-analyzer">' + escHtml(HANDOFF.buttonLabel) + '</button>' +
       '<span class="hint">' + escHtml(HANDOFF.buttonHint) + '</span></div>' +
-      '<p class="hint" data-role="leave-hint">' + escHtml(HANDOFF.leaveHint) + '</p>' +
       '<p class="rule" data-role="handoff-note" role="status" hidden></p>'
     );
     if ('showDirectoryPicker' in window) {
@@ -1247,7 +1262,7 @@ function startTour(participantId, capabilities, manifest) {
     // panel.
     if (step.id === 'signals-to-scores') html += renderScoringPanel(manifest);
     html += '<div class="btnrow">';
-    if (i > 0) html += '<a href="#" class="skip" data-action="back">' + escHtml(BACK_LABEL) + '</a>';
+    if (i > 0) html += '<button class="btn btn-back" data-action="back">← ' + escHtml(BACK_LABEL) + '</button>';
     // guard-cheat's primary lives on the end-guard button rendered above
     // (outside the scramble target) instead of here — never both. Steps
     // with primaryLabel: null (guard-entry) render no primary at all; the
@@ -1257,6 +1272,9 @@ function startTour(participantId, capabilities, manifest) {
     }
     html += '</div>';
     cardEl.innerHTML = html;
+    // A new step starts with an empty signal box: the box holds what this
+    // step detects, the lamps under it keep the count across steps.
+    clearSignalBox(signalBoxEl);
   }
 
   var filesIndex = STEPS.findIndex(function (s) { return s.id === 'your-files'; });
@@ -1296,6 +1314,9 @@ function startTour(participantId, capabilities, manifest) {
     // Repaints from state.chipCounts (not a reset) so Back-then-forward into
     // guard-cheat shows the tally already accumulated this session.
     if (step.task && step.task.kind === 'guard-cheat') renderViolationChips();
+    // The debrief step's copy sends the visitor to the record, so it opens
+    // there with no hover; every other step leaves it as the visitor left it.
+    if (step.id === 'guard-debrief') paneBar.setOpen(true);
     // The scoring step: fill in the soft score so far against the new panel
     // markup renderStep() just wrote.
     if (step.id === 'signals-to-scores') fillLiveScore(manifest);
@@ -1304,8 +1325,8 @@ function startTour(participantId, capabilities, manifest) {
       // interactive step, so this reflects the complete session. The
       // pane/replay/guard are all one-way finalizations from here on — the
       // tour proper is done — and the rail (a demo-only "current session"
-      // instrument) retires with them; the live pane stays visible, frozen,
-      // as the historical record.
+      // instrument) retires with them; the live pane stays under the card,
+      // frozen, as the historical record.
       // Snapshotted ONCE: re-reading on every entry (e.g. a visitor who goes
       // Back then forward) would let the exit's own sidebar/viewport
       // artifact (exitFullscreenIfActive(), below) slip into a LATER read
@@ -1315,6 +1336,8 @@ function startTour(participantId, capabilities, manifest) {
       if (!state.sessionReport) state.sessionReport = monitor.getSessionReport();
       state.pane.freeze();
       finalizeReplay();
+      // The recording has ended, so the replay lamp stops pulsing with it.
+      setRecording(false);
       finalizeGuard();
       // AFTER finalizeGuard() deliberately: exiting fullscreen under an
       // armed guard logs a false 'not_fullscreen' violation (the plugin now

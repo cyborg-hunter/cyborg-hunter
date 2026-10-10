@@ -16,11 +16,13 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trials carry timestamps (0.6.1 and later), so their annotations stay apart.
 - Reports: annotate each participant with Include, Exclude or Flag and a
   note (keys `i`, `e`, `f` for the selected one). The rail shows the label
-  and how many participants are reviewed. The report keeps the annotations
-  in the browser under its run id; Export JSON and Import carry them
-  elsewhere, and Export CSV writes one row per participant (`participantId,
-  tier, triageScore, label, note, annotatedAt, runId`), optionally counting
-  the unreviewed as included.
+  as a glyph at the left of each row, in place of the tier dot (Include ✓,
+  Exclude ✗, Flag ⚑, the same glyphs as on the buttons; the tier stays on
+  the row's badge), and how many participants are reviewed. The report
+  keeps the annotations in the browser under its run id; Export JSON and
+  Import carry them elsewhere, and Export CSV writes one row per participant
+  (`participantId, tier, triageScore, label, note, annotatedAt, runId`),
+  optionally counting the unreviewed as included.
 - `/analyze/`: the same annotations in the in-page report. The page keeps
   them under the report's run id, so a re-analysis keeps them, and the
   results step has the CSV and JSON exports and the import.
@@ -269,9 +271,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   out of fullscreen or focus, and the violation chips stay legible under
   it. Its button, "End the guard", is centred under the text. The debrief
   names the reasons the guard records (`not_fullscreen`, `window_blurred`).
-- Live demo: the top bar holds the title and, while the session records,
-  the REC cue; the step count ("Step 2 of 10") is on the card, and the
-  participant ID is no longer in the top bar. The lamps panel is its title, the
+- Live demo: the top bar holds only the title, and the recording lamp in
+  the rail carries the REC cue, pulsing red while the session records; the
+  step count ("Step 2 of 10") is on the card, and the participant ID is no
+  longer in the top bar. The lamps panel is its title, the
   detector lamps and the Guard and Recording groups: the intro line, its
   tooltip, the "awaiting your session" note and the Detectors head are
   gone. The session record under the card has no caption.
@@ -282,7 +285,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - `/analyze/`: the top bar reads "cyborg-hunter · report generator" and
   links the live demo, GitHub (the link that read "docs") and the offline
   version, the single-file page as a download. The paragraph that described
-  the page's security policy is gone; the policy is unchanged.
+  the page's security policy is gone; the policy is unchanged. The browser
+  the page needs is no longer stated in the top bar, only in the warning a
+  cohort above the tested size gets. The "Settings from …" line under the
+  file list and the settings panel's explanatory paragraph are gone; the
+  score weights' Cap column has a tooltip instead.
 - Docs: the one-line setup comes first. README and using-cyborg-hunter.md
   show the ch.js tag before the jsPsych extension, and replay with
   `data-replay` and `CyborgHunter.replay()` (saved to DataPipe or to your

@@ -36,11 +36,11 @@ import {
   test, expect,
   dispatchPaste, dispatchCopy, dispatchDevToolsShortcut, typeRealistically,
   startTour, waitForLamp, fastForwardToFiles, walkToGuardEntry,
-  installFailingFullscreenMock,
+  installFailingFullscreenMock, openPane,
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
 import { VERSION } from '../../src/shared/constants.js';
-import { HANDOFF, SAVE_TO_FOLDER, STEPS } from '../steps.js';
+import { HANDOFF, LIVE_PANE, RAIL, REPLICATE, SAVE_TO_FOLDER, STEPS } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
@@ -67,6 +67,12 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await expect(page.locator('#rail .sub')).toHaveCount(0);
   await expect(page.locator('#rail')).not.toContainText(/detectors/i);
   await expect(page.locator('#rail .check li:not([data-key])')).toHaveText(['Guard', 'Recording']);
+  // Between the title and the lamps, a box for what the step on screen
+  // detects; on a fresh step it reads its placeholder.
+  const signalBox = page.locator('#rail [data-role="signal-box"]');
+  await expect(page.locator('#rail > h3 + [data-role="signal-box"] + ul.check')).toHaveCount(1);
+  await expect(signalBox).toHaveText(RAIL.signalBoxEmpty);
+  await expect(signalBox.locator('.detected-strip')).toHaveCount(0);
 
   // ----- Step 2: baseline typing (real per-char typing lights nothing) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
@@ -88,9 +94,9 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await expect(hint).toHaveText('copy this, then paste it below');
   const offeredBox = await offered.boundingBox();
   expect((await hint.boundingBox()).y).toBeGreaterThanOrEqual(offeredBox.y + offeredBox.height);
-  // Every step after the first offers the one link back, "Go back"; the
+  // Every step after the first offers the one button back, "← Go back"; the
   // record under the card has no caption.
-  await expect(backButton(page)).toHaveText('Go back');
+  await expect(backButton(page)).toHaveText('← Go back');
   await expect(page.locator('[data-role="live-pane"] .lp-caption')).toHaveCount(0);
   const offeredText = await offered.textContent();
   await dispatchCopy(page);
@@ -100,10 +106,17 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   await dispatchPaste(page, '#card textarea', offeredText);
   await expect(railRow(page, 'paste')).toHaveClass(/hardlit/); // 2nd paste crosses it
   await expect(railRow(page, 'paste').locator('.n')).toHaveText('2');
+  // The box names each signal the step detected once, however often it
+  // fired (the lamp keeps the count); the placeholder is gone, and the card
+  // itself gets no line.
+  await expect(signalBox.locator('.signal-box-empty')).toHaveCount(0);
+  await expect(signalBox.locator('.detected-strip')).toHaveText(['✓ detected — copy', '✓ detected — paste']);
+  await expect(page.locator('#card .detected-strip')).toHaveCount(0);
   // Only the paste that CROSSES the hard threshold is flagged hard in the
   // live pane (verified live: the 1st paste's row has no .hard class, since
   // its own count (1) is below the threshold at the moment it's logged) —
   // both paste rows carry the pasted text regardless.
+  await openPane(page);
   const pasteRows = page.locator('.lp-row', { has: page.locator('.lp-event', { hasText: 'paste' }) });
   await expect(pasteRows).toHaveCount(2);
   await expect(pasteRows.nth(0)).toContainText(ANSWER_START);
@@ -114,12 +127,15 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 4: tab-away, three bins (frozen clock for exact durations), then a sidebar -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 4 of 10');
+  // A new step empties the box back to its placeholder.
+  await expect(signalBox).toHaveText(RAIL.signalBoxEmpty);
   // The step's text is its whole task: three paragraphs, no task panel, and
   // the button reads "Done".
   await expect(page.locator('#card .stepcopy p')).toHaveCount(3);
   await expect(page.locator('#card .task')).toHaveCount(0);
   await expect(primaryButton(page)).toHaveText('Done');
   // No panel, but the step's trial is open: the record holds its row.
+  await openPane(page);
   await expect(page.locator('.lp-row[data-trial="tabaway"]').first()).toBeAttached();
   await frozenClock.tabAway(0, 2000);      // flicker: <=3000ms
   await frozenClock.tabAway(20000, 6000);  // mid: >3000ms, <10000ms
@@ -188,10 +204,13 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   // carries both its start AND its end.
   await expect(page.locator('#guard-friction-overlay')).toHaveCSS('display', 'none');
 
-  // ----- Step 8: the record is under the card here as on every step
+  // ----- Step 8: the record is under the card here as on every step, and
+  // open with the pointer elsewhere: the step's copy sends the visitor to it.
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 8 of 10');
   const paneInSlot = page.locator('[data-role="pane-slot"] [data-role="live-pane"]');
   await expect(paneInSlot).toHaveCount(1);
+  await page.mouse.move(0, 0);
+  await expect(paneInSlot).toBeVisible();
   await expect(page.locator('.instrument [data-role="live-pane"]')).toHaveCount(0);
   await expect(page.locator('[data-role="live-pane"]')).not.toHaveClass(/promoted/);
   // A signal dispatched on a step with no trial open still appends a live
@@ -212,11 +231,21 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 10: your files (the hand-off to the analyzer: handoff.spec.js) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 10');
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
+  // The recording is finalised here, so the replay lamp stops pulsing with
+  // it (the rail itself is hidden from this step on).
+  await expect(page.locator('#rail li.recording')).toHaveCount(0);
   const participantId = await pid(page);
   expect(participantId).toMatch(/^DEMO-[a-z0-9]{4}$/);
   await expect(page.locator('[data-action="open-analyzer"]')).toBeVisible();
   await expect(page.locator('.replicate')).toContainText('npx cyborg-hunter@' + VERSION);
+  // The walkthrough opens with its own heading, at the question's size,
+  // above the first numbered section.
+  const walkthroughTitle = page.locator('.replicate > :first-child');
+  await expect(walkthroughTitle).toHaveClass('replicate-title');
+  await expect(walkthroughTitle).toHaveText(REPLICATE.title);
+  await expect(walkthroughTitle).toHaveCSS('font-size', '17px');
+  await expect(page.locator('.replicate-title + h3')).toHaveText('1. ' + REPLICATE.sections[0].heading);
 
   // Both batches: the session's three files from their Save buttons, the
   // two examples from their links.
@@ -252,33 +281,70 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 });
 
 // ---------------------------------------------------------------------------
-// Top bar and step label: the bar holds the title and, once the session
-// records, the REC cue right after it. The step count is on the card, and
-// it names no act (the act stays on body[data-view], for the CSS).
+// Top bar and step label: the bar holds the title alone. The cue that the
+// session records is the rail's replay lamp, which pulses in the red the
+// REC dot had from the moment the recorder attaches (steady under reduced
+// motion), at full strength while the other lamps are still dimmed; the
+// mouse paths lamp beside it keeps its steady look. The step count is on
+// the card, and it names no act (the act stays on body[data-view], for the
+// CSS).
 // ---------------------------------------------------------------------------
-test('top bar: the title, then the REC cue; the card label says the step only', async ({ page }) => {
+test('top bar: the title alone; the replay lamp carries the REC cue; the card label says the step only', async ({ page }) => {
   await page.goto('/');
   await page.locator('#card h2').waitFor();
   const bar = page.locator('.topbar');
+  const barChildren = () => bar.evaluate((el) => Array.from(el.children, (c) => c.className));
   await expect(bar.locator('.brand')).toHaveText('cyborg-hunter · live demo');
-  await expect(page.locator('#pid, #progress')).toHaveCount(0);
-  await expect(page.locator('#rec')).toBeHidden();
+  expect(await barChildren()).toEqual(['brand']);
+  await expect(page.locator('#pid, #progress, #rec')).toHaveCount(0);
+  await expect(page.locator('#rail li.recording')).toHaveCount(0);
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 1 of 10');
 
   await page.getByRole('button', { name: 'Start the demo', exact: true }).click(); // -> baseline (step 2)
-  await expect(page.locator('#rec')).toBeVisible();
-  await expect(page.locator('#rec')).toHaveText('REC replay');
-  expect(await bar.evaluate((el) => Array.from(el.children, (c) => c.className))).toEqual(['brand', 'rec']);
+  expect(await barChildren()).toEqual(['brand']);
+  await expect(railRow(page, 'replay')).toHaveClass(/\brecording\b/);
+  await expect(page.locator('#rail li.recording')).toHaveCount(1);
+  const lamp = (key) => railRow(page, key).locator('.lamp');
+  await expect(lamp('replay')).toHaveCSS('animation-name', 'rec-pulse');
+  await expect(lamp('replay')).toHaveCSS('animation-iteration-count', 'infinite');
+  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(211, 47, 47)'); // --hard, the dot's red
+  await expect(lamp('replay')).toHaveCSS('background-color', 'rgb(211, 47, 47)');
+  await expect(lamp('mousePaths')).toHaveCSS('animation-name', 'none');
+  await expect(lamp('mousePaths')).toHaveCSS('border-top-color', 'rgb(226, 221, 209)'); // --line-soft, as before
+  // No detector has lit yet, so the list is still dimmed, all but the
+  // recording row: the recording is on from the start.
+  await expect(page.locator('#rail .check')).toHaveClass(/\bawaiting\b/);
+  await expect(railRow(page, 'mousePaths')).toHaveCSS('opacity', '0.55');
+  await expect(railRow(page, 'replay')).toHaveCSS('opacity', '1');
+  // Reduced motion: the lamp keeps the red and stops moving.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(lamp('replay')).toHaveCSS('animation-name', 'none');
+  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(211, 47, 47)');
+  await expect(lamp('replay')).toHaveCSS('background-color', 'rgb(211, 47, 47)');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'act1');
+});
+
+// A recorder that cannot attach records nothing, so nothing says it does:
+// the replay lamp stays steady (the files step then says the recording is
+// unavailable).
+test('the replay lamp does not pulse when the recorder cannot attach', async ({ page }) => {
+  await page.route('**/cyborg-hunter-replay.js', (route) => route.abort());
+  await startTour(page); // -> baseline (step 2)
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
+  await expect(page.locator('#rail li.recording')).toHaveCount(0);
+  await expect(railRow(page, 'replay').locator('.lamp')).toHaveCSS('animation-name', 'none');
 });
 
 // ---------------------------------------------------------------------------
 // The first step: two paragraphs that name no act, then one button, "Start
 // the demo", centred 28px under the text. Every step's primary button has
-// the same size and centring, with the Back link beneath it.
+// the same size and centring, with a smaller Back button beneath it. On
+// step 5 the task panel's own button centres on the same axis as the primary
+// below it: the panel spans the card and its padding is symmetric.
 // ---------------------------------------------------------------------------
-test('first step: two paragraphs, then a large "Start the demo" centred under them; the next step\'s button matches', async ({ page }) => {
+test('first step: two paragraphs, then a large "Start the demo" centred under them; the next steps\' buttons share the axis', async ({ page }) => {
   await page.goto('/');
   await page.locator('#card h2').waitFor();
   const paragraphs = page.locator('#card .stepcopy p');
@@ -305,20 +371,29 @@ test('first step: two paragraphs, then a large "Start the demo" centred under th
   expect(Math.abs((nextBox.x + nextBox.width / 2) - (copy.x + copy.width / 2))).toBeLessThan(1);
   const back = await page.locator('#card [data-action="back"]').boundingBox();
   expect(back.y).toBeGreaterThan(nextBox.y + nextBox.height);
+  await expect(page.locator('#card button.btn-back[data-action="back"]')).toHaveCSS('font-size', '14px');
+
+  await primaryButton(page).click(); // -> clipboard-cheat (step 3)
+  await primaryButton(page).click(); // -> tab-away (step 4)
+  await primaryButton(page).click(); // -> autotype (step 5): one button in the panel, the primary under it
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 5 of 10');
+  const autotype = await page.locator('#card .task [data-role="autotype-button"]').boundingBox();
+  const primary = await primaryButton(page).boundingBox();
+  expect(Math.abs((autotype.x + autotype.width / 2) - (primary.x + primary.width / 2))).toBeLessThan(1);
 });
 
 // ---------------------------------------------------------------------------
 // The second step asks its question in one paragraph and a panel: the
 // question and a box, with no code under it. From there to the files, no
 // task panel carries a label and no step offers a link ahead of the tour
-// (Back is the only link). The files step's panel is built apart from the
-// others (renderDownloadsPanel), so the walk goes all the way.
+// (Back is a button, not a link). The files step's panel is built apart from
+// the others (renderDownloadsPanel), so the walk goes all the way.
 // ---------------------------------------------------------------------------
 test('second step: the question and a box, no code; no step has a task label or a link ahead', async ({ page }) => {
   const stepLabel = page.locator('[data-role="step-label"]');
   async function noLabelNoLinkAhead() {
     await expect(page.locator('#card .task .label')).toHaveCount(0);
-    await expect(page.locator('#card a.skip:not([data-action="back"])')).toHaveCount(0);
+    await expect(page.locator('#card a.skip')).toHaveCount(0);
   }
 
   await startTour(page); // -> baseline (step 2)
@@ -344,6 +419,9 @@ test('second step: the question and a box, no code; no step has a task label or 
   await expect(stepLabel).toHaveText('Step 7 of 10', { timeout: 5000 });
   await noLabelNoLinkAhead();
   await page.locator('.endguard').click(); // -> step 8
+  // Ending the guard leaves fullscreen too (the mock's exitFullscreen clears
+  // the element), so the visitor is not left full-screen on the next step.
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
   await noLabelNoLinkAhead();
   await primaryButton(page).click(); // -> step 9
   await noLabelNoLinkAhead();
@@ -449,6 +527,181 @@ test('step 8: the record stays under the card on Back to step 7', async ({ page 
 });
 
 // ---------------------------------------------------------------------------
+// The record under the card is collapsed under its bar until the visitor
+// asks for it: hovering the slot or keyboard focus shows it (and Tab walks on
+// through its controls), a click on the bar keeps it open after the pointer
+// leaves (a second click lets it close), and the debrief step (step 8),
+// whose copy sends the visitor to the record, opens it with no hover. Every
+// other step leaves it as the visitor left it. The open state is attributes
+// on the slot (live-pane.js makePaneBar), which the session recording
+// captures. The pointer moves to the page's corner before each check of what
+// shows, so a hover never stands in for the state under test.
+// ---------------------------------------------------------------------------
+test('the record under the card opens on hover, keyboard focus or a click on its bar, and by itself on step 8', async ({ page }) => {
+  test.setTimeout(60000);
+  const stepLabel = page.locator('[data-role="step-label"]');
+  const slot = page.locator('[data-role="pane-slot"]');
+  const bar = page.locator('[data-role="pane-toggle"]');
+  const pane = page.locator('[data-role="live-pane"]');
+  const hint = bar.locator('.hint');
+
+  await startTour(page); // -> baseline (step 2)
+  await expect(stepLabel).toHaveText('Step 2 of 10');
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeHidden();
+  await expect(bar).toHaveText(LIVE_PANE.bar + ' ' + LIVE_PANE.barHintClosed);
+  // The hint's pointer words stay out of the button's accessible name.
+  await expect(bar).toHaveAccessibleName(LIVE_PANE.bar);
+  await expect(bar).toHaveAttribute('aria-expanded', 'false');
+  await expect(slot).not.toHaveAttribute('data-open');
+
+  // Hovering the slot shows it, for as long as the pointer stays.
+  await slot.hover();
+  await expect(slot).toHaveAttribute('data-hover', 'true');
+  await expect(pane).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(slot).not.toHaveAttribute('data-hover');
+  await expect(pane).toBeHidden();
+
+  // So does keyboard focus: Tab from the step's last button lands on the
+  // bar, and the next Tabs walk through the record's own controls with the
+  // record open; Enter on a trial tab, which rebuilds the tabs, keeps focus
+  // on it and the record open. Tab past its last control closes it.
+  await primaryButton(page).focus();
+  await page.keyboard.press('Tab');
+  await expect(bar).toBeFocused();
+  await expect(pane).toBeVisible();
+  await expect(bar).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.lp-tab[data-tab="stream"]')).toBeFocused();
+  const focusedInSlot = () => page.evaluate(() => {
+    const el = document.activeElement;
+    return document.querySelector('[data-role="pane-slot"]').contains(el) ? (el.dataset.tab || el.dataset.trialKey) : null;
+  });
+  const walked = [];
+  for (let key = await focusedInSlot(); key !== null && walked.length < 20; key = await focusedInSlot()) {
+    walked.push(key);
+    await expect(pane).toBeVisible();
+    if (key === 'all') {
+      await page.keyboard.press('Enter');
+      await expect(page.locator('[data-role="lp-trials"] [data-trial-key="all"]')).toBeFocused();
+      await expect(slot).toHaveAttribute('data-focus', 'true');
+      await expect(pane).toBeVisible();
+    }
+    await page.keyboard.press('Tab');
+  }
+  expect(walked.slice(0, 4)).toEqual(['stream', 'json', 'all', 'baseline']);
+  await expect(slot).not.toHaveAttribute('data-focus');
+  await expect(pane).toBeHidden();
+
+  // A click on the bar keeps it open once the pointer leaves, and the hint
+  // says how to close it; the next step leaves it open.
+  await bar.click();
+  await expect(slot).toHaveAttribute('data-open', 'true');
+  await expect(bar).toHaveAttribute('aria-expanded', 'true');
+  await expect(hint).toHaveText(LIVE_PANE.barHintOpen);
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeVisible();
+  await primaryButton(page).click(); // -> clipboard-cheat (step 3)
+  await expect(stepLabel).toHaveText('Step 3 of 10');
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeVisible();
+
+  // A second click lets it close once the pointer leaves, though the click
+  // left the bar focused: a mouse click's focus does not hold it open.
+  await bar.click();
+  await expect(slot).not.toHaveAttribute('data-open');
+  await expect(bar).toHaveAttribute('aria-expanded', 'false');
+  await expect(hint).toHaveText(LIVE_PANE.barHintClosed);
+  await page.mouse.move(0, 0);
+  await expect(bar).toBeFocused();
+  await expect(pane).toBeHidden();
+  // Nor does a key pressed afterwards, which turns that focus into keyboard
+  // focus as far as :focus-visible is concerned.
+  await page.keyboard.press('Shift');
+  await expect(slot).not.toHaveAttribute('data-focus');
+  await expect(pane).toBeHidden();
+
+  // A click inside a record the mouse opened lands while data-hover is on
+  // the slot: the recording carries the open state with the click, so the
+  // replay lays the record out where the visitor clicked.
+  await page.evaluate(() => document.addEventListener('click', () => {
+    window.__chHoverAtClick = document.querySelector('[data-role="pane-slot"]').dataset.hover;
+  }, { capture: true, once: true }));
+  await openPane(page);
+  await page.locator('.lp-tab[data-tab="json"]').click();
+  expect(await page.evaluate(() => window.__chHoverAtClick)).toBe('true');
+  await expect(page.locator('[data-role="lp-json"]')).toBeVisible();
+  await page.locator('.lp-tab[data-tab="stream"]').click(); // back to the stream for the tail check below
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeHidden();
+  // A click on a trial tab replaces the button under the pointer; the record
+  // still closes once the pointer leaves, each time. Ends on All, so the
+  // stream follows its tail below.
+  for (const key of ['baseline', 'all', 'paste', 'all']) {
+    await openPane(page);
+    await page.locator(`[data-role="lp-trials"] [data-trial-key="${key}"]`).click();
+    await page.mouse.move(0, 0);
+    await expect(slot).not.toHaveAttribute('data-hover');
+    await expect(pane).toBeHidden();
+  }
+
+  // Rows logged while it is collapsed, enough for the stream to overflow
+  // its height.
+  for (let i = 0; i < 30; i++) await dispatchPaste(page, '#card textarea', 'x');
+  await expect(page.locator('.lp-row', { has: page.locator('.lp-event', { hasText: 'paste' }) })).toHaveCount(30);
+
+  // Still collapsed on the way; the debrief step opens it.
+  await walkToGuardEntry(page); // -> guard-entry (step 6)
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeHidden();
+  await page.locator('[data-action="enter-fullscreen"]').click();
+  await expect(stepLabel).toHaveText('Step 7 of 10', { timeout: 5000 });
+  await page.locator('.endguard').click(); // -> guard-debrief (step 8)
+  await expect(stepLabel).toHaveText('Step 8 of 10');
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeVisible();
+  await expect(slot).toHaveAttribute('data-open', 'true');
+  await expect(bar).toHaveAttribute('aria-expanded', 'true');
+  await expect(hint).toHaveText(LIVE_PANE.barHintOpen);
+  // It opens on its latest event: the stream kept following its tail while
+  // it was collapsed.
+  const stream = await page.locator('[data-role="lp-stream"]').evaluate((s) =>
+    ({ overflow: s.scrollHeight - s.clientHeight, fromTail: s.scrollHeight - s.clientHeight - s.scrollTop }));
+  expect(stream.overflow).toBeGreaterThan(0);
+  expect(stream.fromTail).toBeLessThanOrEqual(1);
+
+  // The next step leaves it open.
+  await primaryButton(page).click(); // -> signals-to-scores (step 9)
+  await expect(stepLabel).toHaveText('Step 9 of 10');
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeVisible();
+});
+
+// A touch screen has no hover: a tap on the bar keeps the record open, and a
+// second tap closes it, with nothing left from the taps to hold it open.
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true });
+
+  test('a tap on the bar opens the record and a second tap closes it', async ({ page }) => {
+    const slot = page.locator('[data-role="pane-slot"]');
+    const bar = page.locator('[data-role="pane-toggle"]');
+    const pane = page.locator('[data-role="live-pane"]');
+    await startTour(page); // -> baseline (step 2)
+    await page.mouse.move(0, 0); // the mouse click that started the tour, out of the way
+    await expect(pane).toBeHidden();
+    await bar.tap();
+    await expect(slot).toHaveAttribute('data-open', 'true');
+    await expect(slot).not.toHaveAttribute('data-hover');
+    await expect(pane).toBeVisible();
+    await bar.tap();
+    await expect(slot).not.toHaveAttribute('data-open');
+    await expect(slot).not.toHaveAttribute('data-hover');
+    await expect(pane).toBeHidden();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 10. Fullscreen exit: the files step leaves fullscreen through the
 // plugin's own exitFullscreen(), on the way into "Your files" — no Esc
 // press, no fullscreenMock.exit() call, anywhere in this test. The visitor
@@ -472,7 +725,7 @@ test('the files step leaves fullscreen via the plugin, with no false violation l
   await page.locator('.endguard').click(); // -> guard-debrief (step 8), violation-free
   await primaryButton(page).click(); // -> signals-to-scores (step 9)
   await primaryButton(page).click(); // -> your files (step 10)
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
 
   const participantId = await pid(page);
@@ -639,7 +892,10 @@ test('files step: without the folder picker only the per-file Save buttons are o
   await expect(page.locator('[data-action="save-folder"]')).toHaveCount(0);
   await expect(page.locator('[data-action="download"]')).toHaveCount(3);
   await expect(page.locator('.file-actions a[download]')).toHaveCount(2);
-  await expect(page.locator('[data-role="leave-hint"]')).toHaveText(HANDOFF.leaveHint);
+  // The caution about leaving the page is the step's own last paragraph,
+  // not a line under the hand-off button.
+  await expect(page.locator('[data-role="leave-hint"]')).toHaveCount(0);
+  await expect(page.locator('#card .stepcopy p').last()).toHaveText(/^Caution: leaving this page can end the session\./);
   // The config caveat, once, right after the first batch's grid.
   await expect(page.locator('[data-role="config-caveat"]')).toHaveCount(1);
   await expect(page.locator('.files + .file-caveat')).toHaveCount(1);
@@ -654,6 +910,9 @@ test('live pane: row count strictly grows across acts; raw-JSON tab shows partic
   const rowCount = () => page.locator('.lp-row').count();
 
   await startTour(page); // -> baseline (step 2); trial_start for baseline
+  // Kept open across the steps below: every step but the debrief leaves the
+  // record as the visitor left it.
+  await openPane(page, { stayOpen: true });
   const c0 = await rowCount();
 
   await primaryButton(page).click(); // -> clipboard-cheat: trial_end + trial_start
@@ -701,6 +960,7 @@ test('XSS paste: a hostile <script> string is escaped in the live pane, never ex
   const hostile = '<script>alert(1)</script>';
   await dispatchPaste(page, '#card textarea', hostile);
 
+  await openPane(page);
   const streamHtml = await page.locator('.lp-stream').innerHTML();
   expect(streamHtml).not.toContain('<script>alert');
   expect(streamHtml).toContain('&lt;script&gt;');
@@ -749,7 +1009,7 @@ test('zero-lamp path: walk past every task, then the guard skip -> the files ste
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 10');
   await primaryButton(page).click(); // -> your files
 
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
   await expect(page.locator('[data-action="download"][data-key="sessionData"]')).toBeEnabled();
 });
 
@@ -804,6 +1064,9 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   await dispatchPaste(page, '#card textarea', ANSWER);
   await dispatchPaste(page, '#card textarea', ANSWER);
 
+  // Kept open: the tab clicks below, and the walk to the files step after
+  // them, move the pointer away from the record.
+  await openPane(page, { stayOpen: true });
   const rail = page.locator('[data-role="lp-trials"] .lp-trial-tab');
   // Keyed, not hasText: the labels are prose now, and hasText matches
   // substrings case-insensitively — 'All' also matches "Answer a question
@@ -844,8 +1107,9 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   await page.locator('.endguard').click(); // -> guard-debrief (step 8)
   await primaryButton(page).click(); // -> signals-to-scores (step 9)
   await primaryButton(page).click(); // -> your files (step 10)
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
 
+  await openPane(page, { stayOpen: true }); // still open: kept open above, and opened again on the debrief step
   const frozenTotal = await page.locator('.lp-row').count();
   await pasteTab.click(); // same rail node, just reparented — freeze must not disable it
   const frozenVisibleTrials = await page.locator('.lp-row:not(.lp-off)')

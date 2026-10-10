@@ -58,10 +58,10 @@ test('tokens follow the report palette; the serif is gone', () => {
 test('typefaces mirror the report roles', () => {
   const EXPECT = {
     body: 'Recursive', '.stepcard h1': 'Space Grotesk', '.topbar .brand': 'Space Grotesk',
-    '.eyebrow': 'Sofia Sans', '.card h3': 'Sofia Sans', '.replicate h3': 'Sofia Sans',
+    '.eyebrow': 'Sofia Sans', '.card h3': 'Sofia Sans', '.replicate-title': 'Sofia Sans', '.replicate h3': 'Sofia Sans',
     '.batch-heading': 'Sofia Sans', '.filetext-dialog h3': 'Sofia Sans', '.lp-cols': 'Sofia Sans',
     '.hint': 'Tomorrow', '.rule': 'Tomorrow', '.file small': 'Recursive',
-    '.check li .n': 'Sora', '.rec': 'Sora', '.chip': 'Sora',
+    '.check li .n': 'Sora', '.chip': 'Sora',
     '.btn': 'Recursive', '.lp-tab': 'Recursive',
     '.lp-t': 'ui-monospace', '.lp-stream': 'ui-monospace', 'pre': 'ui-monospace',
   };
@@ -116,6 +116,24 @@ test('no promoted state remains: the wide stream rules are unconditional', () =>
 test('teal stays only on live cues: no focus ring or link uses it', () => {
   const offenders = rules.filter(r => Object.values(r.decls).some(v => /var\(--live\)/.test(v)))
     .map(r => r.selectors.join(', '))
-    .filter(s => !/^\.rec\b|\.rec \.dot|^\.live\b/.test(s));
+    .filter(s => !/^\.live\b/.test(s));
   assert.deepEqual(offenders, []);
+});
+
+// The top bar keeps the brand only: the recording cue is the replay lamp's
+// pulse, in the red the REC dot had, and the dimming of a list that awaits
+// its first signal leaves that row out (its look while recording is checked
+// in the browser, tour.spec.js).
+test('the REC pill is gone; the recording lamp carries its pulse and its red, undimmed', () => {
+  assert.ok(!/\.rec\b/.test(css), 'a .rec rule remains');
+  assert.ok(/@keyframes rec-pulse\{/.test(css), 'no rec-pulse keyframes');
+  const recording = rules.filter(r => r.selectors.includes('.check li.recording .lamp')).map(r => r.decls);
+  assert.ok(recording.some(d => d.animation === 'rec-pulse 1.2s ease-in-out infinite' &&
+    d.background === 'var(--hard)' && d['border-color'] === 'var(--hard)'), JSON.stringify(recording));
+  assert.ok(recording.some(d => d.animation === 'none'), 'steady under prefers-reduced-motion');
+  // Equal specificity with the dimming rule, so the exemption must come after it.
+  const dim = rules.findIndex(r => r.selectors.includes('.check.awaiting li:not(.hint)'));
+  const undim = rules.findIndex(r => r.selectors.includes('.check.awaiting li.recording'));
+  assert.ok(dim >= 0 && undim > dim, 'the recording row is exempt from the dimming, after it');
+  assert.equal(rules[undim].decls.opacity, '1');
 });

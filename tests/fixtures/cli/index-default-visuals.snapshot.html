@@ -135,6 +135,14 @@
     .tier-dot[data-tier="soft"]  { background: var(--soft); }
     .tier-dot[data-tier="clean"] { background: var(--clean); }
 
+    /* Annotation mark — the slot at the left of each rail row, sized here so
+       the rail lays out from the first paint; annotation-client.js, which
+       loads at the end of the report, draws its glyph */
+    .annot-mark {
+      display: inline-block; width: 12px; flex-shrink: 0;
+      text-align: center; font-size: 12px; line-height: 1;
+    }
+
     /* Tier badge — small square tag, filled for hard/soft, outline for clean */
     .tier-badge {
       font-family: var(--ff-sora);
@@ -471,7 +479,7 @@
        data-cursor="-1"
        data-reason="2 paste events; 1 tab-away ≥10s">
     <div class="cohort-row-top">
-      <span class="tier-dot" data-tier="hard"></span>
+      <span class="annot-mark" data-label=""></span>
       <span class="mono pid" title="DEMO-FIXT">DEMO-FIXT</span>
       <span class="mono score">11</span>
     </div>

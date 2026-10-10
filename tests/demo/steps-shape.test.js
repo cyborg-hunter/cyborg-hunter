@@ -50,7 +50,8 @@ test('the second step asks how your day is, in one paragraph, with no code under
   assert.equal(baseline.id, 'baseline');
   assert.equal(baseline.body.replace(/\s+/g, ' '), '<p>First, answer the question below the way you normally would. ' +
     'This serves as a baseline: an honest answer produces keystrokes at a human rhythm and not much else. Watch the ' +
-    'lamps on the right as you type; the session record under this card lists each event the moment it happens.</p>');
+    'lamps on the right as you type; the session record under this card (hover it, or click its bar, to open it) ' +
+    'lists each event the moment it happens.</p>');
   assert.equal(baseline.task.prompt, 'How is your day today?');
   assert.ok(!('CODE_TABS' in copy), 'CODE_TABS is still exported');
   for (const s of STEPS) {
@@ -141,8 +142,14 @@ test('the eighth step says where the violations are, in one paragraph', () => {
   const debrief = STEPS[7];
   assert.equal(debrief.id, 'guard-debrief');
   assert.equal(debrief.body.replace(/\s+/g, ' '),
-    '<p>The guard is off. Scroll the session record: every violation from the last step is there with a type ' +
-    '(not_fullscreen, window_blurred) and a timestamp, next to the other previously recorded events.</p>');
+    '<p>The guard is off. Scroll the session record below: every violation from the last step is there with a ' +
+    'type (not_fullscreen, window_blurred) and a timestamp, next to the other previously recorded events.</p>');
+});
+test('the last step ends with the caution that leaving the page can end the session', () => {
+  const files = STEPS[9];
+  assert.equal(files.id, 'your-files');
+  assert.ok(files.body.replace(/\s+/g, ' ').endsWith('<p>Caution: leaving this page can end the session. Open it ' +
+    'in the analyzer or save the files first; Back from the analyzer may start a new tour.</p>'), files.body);
 });
 test('no step, note or fallback message names an act', () => {
   // \s+, not a space: the copy wraps, and "Act" can end one line and "1"
@@ -173,7 +180,7 @@ test('trial ids name the task, not the act, and none is a key the record reserve
 test('the closing invitation names the one script tag, not code the tour no longer shows', () => {
   assert.equal(copy.CLOSING_CTA.installInvitation, 'One script tag is the whole integration; the quickstart shows it.');
 });
-test('the link back reads "Go back"; the record has no caption', () => {
+test('the button back reads "Go back"; the record has no caption', () => {
   assert.equal(copy.BACK_LABEL, 'Go back');
   assert.ok(!('caption' in copy.LIVE_PANE), 'LIVE_PANE.caption is still there');
   assert.doesNotMatch(JSON.stringify(copy.LIVE_PANE), /accumulates into/);
@@ -185,7 +192,7 @@ test('no tier vocabulary in steps 2-8', () => {
     assert.ok(!before.includes(word), `"${word}" leaked before step 9`);
   }
 });
-test('the lamps panel is the title and the lamps: no intro copy, heads Guard and Recording only', () => {
+test('the lamps panel is the title, the signal box and the lamps: no intro copy, heads Guard and Recording only', () => {
   assert.ok(!('RAIL_INTRO' in copy), 'RAIL_INTRO is still exported');
   assert.ok(!('RAIL_INTRO_TITLE' in copy), 'RAIL_INTRO_TITLE is still exported');
   // renderRail() only writes innerHTML and then looks rows up, so a bare
@@ -193,7 +200,12 @@ test('the lamps panel is the title and the lamps: no intro copy, heads Guard and
   const container = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
   renderRail(container, { groups: RAIL_GROUPS });
   const html = container.innerHTML;
-  assert.ok(html.startsWith('<h3>Tracked signals</h3><ul class="check awaiting">'), html.slice(0, 120));
+  // Under the title, the box for what the step on screen detects, reading
+  // its placeholder until something is detected; the lamps follow it.
+  assert.equal(copy.RAIL.signalBoxEmpty, 'nothing detected on this step');
+  assert.ok(html.startsWith('<h3>Tracked signals</h3>' +
+    '<div class="signal-box" data-role="signal-box"><p class="signal-box-empty">nothing detected on this step</p></div>' +
+    '<ul class="check awaiting">'), html.slice(0, 200));
   assert.doesNotMatch(html, /class="sub|Detectors/);
   // Group heads in source case (demo.css uppercases them): Guard, Recording.
   const heads = [...html.matchAll(/<li class="hint">([^<]*)<\/li>/g)].map((m) => m[1]);
@@ -209,6 +221,7 @@ test('rail has three tab-away bins', () => {
   for (const k of ['tabAwayFlicker', 'tabAwayMid', 'tabAwayLong']) assert.ok(keys.includes(k), k);
 });
 test('exports the engine consumes exist', () => {
+  assert.equal(REPLICATE.title, 'To do it locally');
   assert.ok(Array.isArray(REPLICATE.sections) && REPLICATE.sections.length >= 3);
 });
 test('the last step offers five files in two batches: the session built here, the examples the site serves', () => {
@@ -218,7 +231,8 @@ test('the last step offers five files in two batches: the session built here, th
     assert.ok(b.heading);
     for (const f of b.files) assert.ok(f.label && f.filename && f.description, f.filename);
   }
-  assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed && HANDOFF.leaveHint);
+  assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed);
+  assert.ok(!('leaveHint' in HANDOFF), 'HANDOFF.leaveHint is still there');
   assert.ok(SAVE_TO_FOLDER.buttonLabel && SAVE_TO_FOLDER.hint && SAVE_TO_FOLDER.failed);
 });
 test('the hand-off assets are exactly the faces demo.css declares', () => {

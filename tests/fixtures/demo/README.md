@@ -124,4 +124,6 @@ rewritten to the new capture's numbers. If the payload assembler
 tests' assertions to fit a broken fixture.
 
 First captured 2026-07-29 (session + v1 replay); replay regenerated 2026-08-12
-(v2) and 2026-10-07 (the ten-step tour).
+(v2), 2026-10-07 (the ten-step tour) and 2026-10-09 (the revised tour: the
+signal box at the top of the rail, the collapsed session record under its
+bar, Back as a button, the recording cue on the rail's replay lamp).

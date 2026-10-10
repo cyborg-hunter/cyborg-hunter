@@ -240,6 +240,23 @@ export async function fastForwardToFiles(page, answer = 'a city in Australia') {
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 10');
 }
 
+// The live session record under the card is collapsed under its bar until a
+// mouse is over the slot, keyboard focus is inside it, or a click on the bar
+// keeps it open (live-pane.js makePaneBar sets the slot's data-hover,
+// data-focus and data-open; the debrief step opens it itself). A test reads
+// its rows or tabs as a visitor would, so it opens the record first: by
+// hovering the bar, which is part of the slot, or, with stayOpen, by clicking
+// the bar, for a test that goes on to click, scroll or change step while it
+// reads. The click is skipped when the record is already kept open
+// (data-open, not aria-expanded, which keyboard focus also sets), since a
+// second click closes it.
+export async function openPane(page, { stayOpen = false } = {}) {
+  const bar = page.locator('[data-role="pane-toggle"]');
+  if (!stayOpen) await bar.hover();
+  else if (await page.locator('[data-role="pane-slot"]').getAttribute('data-open') !== 'true') await bar.click();
+  await expect(page.locator('[data-role="live-pane"]')).toBeVisible();
+}
+
 export function primaryButton(page) {
   return page.locator('#card [data-action="primary"]');
 }
