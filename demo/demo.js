@@ -852,11 +852,13 @@ function startTour(participantId, capabilities, manifest) {
     dlg.showModal();
   }
 
-  // The last step's documentation-style walkthrough (REPLICATE.sections),
-  // numbered headings with copyable code blocks. code may carry {{version}} — tpl()
+  // The last step's documentation-style walkthrough: its heading
+  // (REPLICATE.title), then the numbered sections (REPLICATE.sections) with
+  // copyable code blocks. code may carry {{version}} — tpl()
   // substitutes before escaping, same order as everywhere else code renders.
   function renderReplicateSection() {
     var html = '<div class="replicate">';
+    html += '<h2 class="replicate-title">' + escHtml(REPLICATE.title) + '</h2>';
     REPLICATE.sections.forEach(function (s) {
       html += '<h3>' + s.n + '. ' + escHtml(s.heading) + '</h3>';
       html += '<p>' + escHtml(s.text) + '</p>';
@@ -1003,10 +1005,9 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // The last step's panel: the hand-off to the analyzer first, with the
-  // line that leaving the page ends the session; then "Save all into a
-  // folder" where the browser has a folder picker; then the two download
-  // batches, each a heading and an even grid of cards; then the
+  // The last step's panel: the hand-off to the analyzer first; then "Save
+  // all into a folder" where the browser has a folder picker; then the two
+  // download batches, each a heading and an even grid of cards; then the
   // command-line walkthrough.
   function renderDownloadsPanel(task) {
     // scramble coupling: same .jspsych-content convention as renderTaskPanel
@@ -1018,7 +1019,6 @@ function startTour(participantId, capabilities, manifest) {
     parts.push(
       '<div class="handoff"><button class="btn" data-action="open-analyzer">' + escHtml(HANDOFF.buttonLabel) + '</button>' +
       '<span class="hint">' + escHtml(HANDOFF.buttonHint) + '</span></div>' +
-      '<p class="hint" data-role="leave-hint">' + escHtml(HANDOFF.leaveHint) + '</p>' +
       '<p class="rule" data-role="handoff-note" role="status" hidden></p>'
     );
     if ('showDirectoryPicker' in window) {

@@ -408,7 +408,7 @@ test('a refused hand-off keeps the visitor on the files step, says why, and enab
   await expect(note).toContainText('could not be prepared for the analyzer');
   await expect(note.locator('a[href="analyze/"]')).toHaveCount(1);
   await expect(button).toBeEnabled();
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
 });
 
 // ---------------------------------------------------------------------------
@@ -427,7 +427,7 @@ test('a data file the hand-off cannot fetch fails the whole hand-off: the visito
   await expect(note).toContainText('could not be prepared for the analyzer');
   await expect(button).toBeEnabled();
   await expect(page).toHaveURL(baseURL + '/');
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
   await expect.poll(() => recordStored(page)).toBe(false);
 });
 

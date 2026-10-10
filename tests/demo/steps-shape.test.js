@@ -50,7 +50,8 @@ test('the second step asks how your day is, in one paragraph, with no code under
   assert.equal(baseline.id, 'baseline');
   assert.equal(baseline.body.replace(/\s+/g, ' '), '<p>First, answer the question below the way you normally would. ' +
     'This serves as a baseline: an honest answer produces keystrokes at a human rhythm and not much else. Watch the ' +
-    'lamps on the right as you type; the session record under this card lists each event the moment it happens.</p>');
+    'lamps on the right as you type; the session record under this card (hover it, or click its bar, to open it) ' +
+    'lists each event the moment it happens.</p>');
   assert.equal(baseline.task.prompt, 'How is your day today?');
   assert.ok(!('CODE_TABS' in copy), 'CODE_TABS is still exported');
   for (const s of STEPS) {
@@ -141,8 +142,14 @@ test('the eighth step says where the violations are, in one paragraph', () => {
   const debrief = STEPS[7];
   assert.equal(debrief.id, 'guard-debrief');
   assert.equal(debrief.body.replace(/\s+/g, ' '),
-    '<p>The guard is off. Scroll the session record: every violation from the last step is there with a type ' +
-    '(not_fullscreen, window_blurred) and a timestamp, next to the other previously recorded events.</p>');
+    '<p>The guard is off. Scroll the session record below: every violation from the last step is there with a ' +
+    'type (not_fullscreen, window_blurred) and a timestamp, next to the other previously recorded events.</p>');
+});
+test('the last step ends with the caution that leaving the page can end the session', () => {
+  const files = STEPS[9];
+  assert.equal(files.id, 'your-files');
+  assert.ok(files.body.replace(/\s+/g, ' ').endsWith('<p>Caution: leaving this page can end the session. Open it ' +
+    'in the analyzer or save the files first; Back from the analyzer may start a new tour.</p>'), files.body);
 });
 test('no step, note or fallback message names an act', () => {
   // \s+, not a space: the copy wraps, and "Act" can end one line and "1"
@@ -214,6 +221,7 @@ test('rail has three tab-away bins', () => {
   for (const k of ['tabAwayFlicker', 'tabAwayMid', 'tabAwayLong']) assert.ok(keys.includes(k), k);
 });
 test('exports the engine consumes exist', () => {
+  assert.equal(REPLICATE.title, 'To do it locally');
   assert.ok(Array.isArray(REPLICATE.sections) && REPLICATE.sections.length >= 3);
 });
 test('the last step offers five files in two batches: the session built here, the examples the site serves', () => {
@@ -223,7 +231,8 @@ test('the last step offers five files in two batches: the session built here, th
     assert.ok(b.heading);
     for (const f of b.files) assert.ok(f.label && f.filename && f.description, f.filename);
   }
-  assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed && HANDOFF.leaveHint);
+  assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed);
+  assert.ok(!('leaveHint' in HANDOFF), 'HANDOFF.leaveHint is still there');
   assert.ok(SAVE_TO_FOLDER.buttonLabel && SAVE_TO_FOLDER.hint && SAVE_TO_FOLDER.failed);
 });
 test('the hand-off assets are exactly the faces demo.css declares', () => {

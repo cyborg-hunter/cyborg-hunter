@@ -107,7 +107,8 @@ server.</p>`.trim(),
 <p>First, answer the question below the way you normally would. This
 serves as a baseline: an honest answer produces keystrokes at a human rhythm
 and not much else. Watch the lamps on the right as you type; the session
-record under this card lists each event the moment it happens.</p>`.trim(),
+record under this card (hover it, or click its bar, to open it) lists each
+event the moment it happens.</p>`.trim(),
     task: {
       kind: 'type-answer',
       trialId: 'baseline',
@@ -240,8 +241,8 @@ fullscreen is no longer required.</p>`.trim(),
     eyebrow: 'Step 8 of 10',
     title: 'What enforcement left behind',
     body: `
-<p>The guard is off. Scroll the session record: every violation from the
-last step is there with a type (not_fullscreen, window_blurred) and a
+<p>The guard is off. Scroll the session record below: every violation from
+the last step is there with a type (not_fullscreen, window_blurred) and a
 timestamp, next to the other previously recorded events.</p>`.trim(),
     task: null,
     primaryLabel: 'Continue to scoring →',
@@ -288,7 +289,9 @@ reads as it would in a real study. Open them all in the analyzer, which
 builds the report right here in your browser and lets you change the
 analysis settings and watch the report follow. Or save them and build the
 same report with the command-line tool, the way you would with real study
-data.</p>`.trim(),
+data.</p>
+<p>Caution: leaving this page can end the session. Open it in the analyzer or
+save the files first; Back from the analyzer may start a new tour.</p>`.trim(),
     task: { kind: 'downloads', trialId: null },
     primaryLabel: null, // the step's own action is the panel's "Open in the analyzer web app"
   },
@@ -343,15 +346,12 @@ export const HANDOFF_ASSETS = [
 /** The last step's one-click hand-off to the analyze page (demo/handoff.js).
  * `failed` is first-party HTML: the step shows it when the files could not be
  * handed over (an example file failed to download, or the browser refused to
- * store them). `leaveHint` sits under the button: the session lives in this
- * page only. */
+ * store them). */
 export const HANDOFF = {
   buttonLabel: 'Open in the analyzer web app →',
   buttonHint: 'The files below and this page\'s fonts, kept in this browser: nothing is uploaded.',
   failed: 'The files could not be prepared for the analyzer. Save them below ' +
     'and drop them on <a href="analyze/">the analyzer</a> instead.',
-  leaveHint: 'Leaving this page can end the session: open it in the analyzer or save the files first; ' +
-    'Back from the analyzer may start a new tour.',
 };
 
 /** The last step's "Save all into a folder" (demo.js saveToFolder), offered
@@ -364,10 +364,11 @@ export const SAVE_TO_FOLDER = {
   failed: 'The folder could not be written. Save the files one by one below.',
 };
 
-/** The last step's documentation-style walkthrough. Rendered as numbered
- * sections with copyable code blocks (engine renders section.code in
- * <pre><code>). */
+/** The last step's documentation-style walkthrough. Rendered as a heading
+ * (`title`), then numbered sections with copyable code blocks (engine renders
+ * section.code in <pre><code>). */
 export const REPLICATE = {
+  title: 'To do it locally',
   sections: [
     { n: 1, heading: 'Save the five files into one empty folder',
       text: 'Use "Save all into a folder" above (Chrome and Edge; inside Downloads, create a folder named ' +

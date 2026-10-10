@@ -40,7 +40,7 @@ import {
   primaryButton, backButton, railRow, pid,
 } from './helpers.mjs';
 import { VERSION } from '../../src/shared/constants.js';
-import { HANDOFF, LIVE_PANE, RAIL, SAVE_TO_FOLDER, STEPS } from '../steps.js';
+import { HANDOFF, LIVE_PANE, RAIL, REPLICATE, SAVE_TO_FOLDER, STEPS } from '../steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = resolve(__dirname, '..', '..', 'bin', 'cyborg-hunter.js');
@@ -231,7 +231,7 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 
   // ----- Step 10: your files (the hand-off to the analyzer: handoff.spec.js) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 10');
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
   // The recording is finalised here, so the replay lamp stops pulsing with
   // it (the rail itself is hidden from this step on).
   await expect(page.locator('#rail li.recording')).toHaveCount(0);
@@ -239,6 +239,13 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   expect(participantId).toMatch(/^DEMO-[a-z0-9]{4}$/);
   await expect(page.locator('[data-action="open-analyzer"]')).toBeVisible();
   await expect(page.locator('.replicate')).toContainText('npx cyborg-hunter@' + VERSION);
+  // The walkthrough opens with its own heading, at the question's size,
+  // above the first numbered section.
+  const walkthroughTitle = page.locator('.replicate > :first-child');
+  await expect(walkthroughTitle).toHaveClass('replicate-title');
+  await expect(walkthroughTitle).toHaveText(REPLICATE.title);
+  await expect(walkthroughTitle).toHaveCSS('font-size', '17px');
+  await expect(page.locator('.replicate-title + h3')).toHaveText('1. ' + REPLICATE.sections[0].heading);
 
   // Both batches: the session's three files from their Save buttons, the
   // two examples from their links.
@@ -718,7 +725,7 @@ test('the files step leaves fullscreen via the plugin, with no false violation l
   await page.locator('.endguard').click(); // -> guard-debrief (step 8), violation-free
   await primaryButton(page).click(); // -> signals-to-scores (step 9)
   await primaryButton(page).click(); // -> your files (step 10)
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
 
   const participantId = await pid(page);
@@ -885,7 +892,10 @@ test('files step: without the folder picker only the per-file Save buttons are o
   await expect(page.locator('[data-action="save-folder"]')).toHaveCount(0);
   await expect(page.locator('[data-action="download"]')).toHaveCount(3);
   await expect(page.locator('.file-actions a[download]')).toHaveCount(2);
-  await expect(page.locator('[data-role="leave-hint"]')).toHaveText(HANDOFF.leaveHint);
+  // The caution about leaving the page is the step's own last paragraph,
+  // not a line under the hand-off button.
+  await expect(page.locator('[data-role="leave-hint"]')).toHaveCount(0);
+  await expect(page.locator('#card .stepcopy p').last()).toHaveText(/^Caution: leaving this page can end the session\./);
   // The config caveat, once, right after the first batch's grid.
   await expect(page.locator('[data-role="config-caveat"]')).toHaveCount(1);
   await expect(page.locator('.files + .file-caveat')).toHaveCount(1);
@@ -999,7 +1009,7 @@ test('zero-lamp path: walk past every task, then the guard skip -> the files ste
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 9 of 10');
   await primaryButton(page).click(); // -> your files
 
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
   await expect(page.locator('[data-action="download"][data-key="sessionData"]')).toBeEnabled();
 });
 
@@ -1097,7 +1107,7 @@ test('live pane rail: filters by trial in run order, All is the default view, an
   await page.locator('.endguard').click(); // -> guard-debrief (step 8)
   await primaryButton(page).click(); // -> signals-to-scores (step 9)
   await primaryButton(page).click(); // -> your files (step 10)
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
 
   await openPane(page, { stayOpen: true }); // still open: kept open above, and opened again on the debrief step
   const frozenTotal = await page.locator('.lp-row').count();
