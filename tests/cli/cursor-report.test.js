@@ -165,8 +165,12 @@ describe('the HTML report', () => {
     assert.match(html, /trials clicked without pointer movement<\/th><td>1 of 2 \(q2\)/);
     assert.match(html, /clicks that arrived without a path<\/th><td>4 of 4 first clicks with a known position \(q2, q3, q4, q5\)/);
     assert.match(html, /clicks after a pointer jump<\/th><td>4 of 4 first clicks with a known position \(q2, q3, q4, q5\)/);
-    assert.match(html, /median \d+ ms between samples/);
-    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 100, minSamplesForShape 2, minClicksForVerdict 4, shareSuspicious 0\.2, shareHighlySuspicious 0\.5 \(cursor-limits\.json\)/);
+    // The details are framed and carry no note: the interval, the coordinates
+    // and the constants are in summary.csv and cursor-limits.json.
+    assert.match(html, /\.cursor-details \{ border: 1px solid var\(--line\);/);
+    const inside = [...html.matchAll(/<details class="cursor-details">([\s\S]*?)<\/details>/g)].map((m) => m[1]);
+    assert.ok(inside.length > 0);
+    for (const d of inside) assert.doesNotMatch(d, /class="[^"]*\bnote\b/);
     assert.match(html, /Pointer verdict<\/span>/);     // the tile label
     assert.match(html, /title="The pointer verdict: 0 clean, 1 suspicious, 2 highly suspicious; — when the session is not assessed \(no device facts, no cursor stream, or too few clicks\)"/);
     assert.match(html, /<div class="signal-tile tone-critical"[^>]*>\s*<span class="signal-value">2<\/span>\s*<span class="signal-label">Pointer verdict/);
@@ -226,7 +230,7 @@ describe('the HTML report', () => {
     assert.match(html, /clicks the page’s own scripts dispatched<\/th><td>2 of 3 \(q1\)</);
     assert.match(html, /<li class="tell-high">trials clicked without pointer movement: 11 of 11 \(100%\) <span class="muted">\(q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, \+1 more\)<\/span><\/li>/);
   });
-  it('links to the replay section, whose wrapper carries the id, unless the replay is shown outside the report', async () => {
+  it('links to the replay section, whose wrapper carries the id; with the replay shown outside the report, says nothing of it', async () => {
     const withReplay = { ...human, replay: { recording: { segments: [] } } };
     const { summaries, triage } = analyze([withReplay]);
     const html = await renderIndexHtml(summaries, triage, [withReplay], config, false);
@@ -234,7 +238,7 @@ describe('the HTML report', () => {
     assert.match(html, /<div class="image-block replay-block" id="replay-HUMAN"/);
     assert.doesNotMatch(html, /replay card/);
     const outside = await renderIndexHtml(summaries, triage, [withReplay], config, false, { replayShownExternally: true });
-    assert.match(outside, /<p class="muted note">The replay card beside this report shows this session\.<\/p><\/div>/);
+    assert.doesNotMatch(outside, /replay card/);
     assert.doesNotMatch(outside, /open the replay/);
   });
   it('without a recording, points to no replay, in the report or outside it', async () => {
@@ -245,14 +249,6 @@ describe('the HTML report', () => {
       assert.match(page, /Cursor dynamics/);
       assert.doesNotMatch(page, /open the replay|replay card beside/);
     }
-  });
-  it('prints the constants the analysis judged with, not the defaults', async () => {
-    const custom = { ...CURSOR_LIMITS, discontinuityPx: { value: 50, meaning: CURSOR_LIMITS.discontinuityPx.meaning } };
-    const summaries = computeSummary([human], config);
-    summaries[0].cursorAnalysis = analyzeCursor([human], custom)[0];
-    const triage = rankTriage(summaries, detectEdgeExits([human], config), config);
-    const html = await renderIndexHtml(summaries, triage, [human], config, false);
-    assert.match(html, /constants: movementGapMs 400, staleGapMs 2000, samePositionPx 20, discontinuityPx 50, minSamplesForShape 2, minClicksForVerdict 4, shareSuspicious 0\.2, shareHighlySuspicious 0\.5 \(cursor-limits\.json\)/);
   });
   it('the tile of a session recorded before 0.14 reads "—" in the tone-zero style', async () => {
     // The demo fixture: 0.7.2 data with a mouse track and no device facts.

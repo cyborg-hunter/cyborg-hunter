@@ -217,7 +217,9 @@ order and joined by ", " (`"0.6.1, 0.14.0"`; null when the data names none),
 so a report rebuilt by a later CLI shows which constants decided it. Each
 constant comes with a sentence saying what it does (for example,
 `movementGapMs`, 400: two move samples further apart belong to different
-movements); the cursor section prints the same values on its stream line.
+movements). The cursor section prints neither the constants nor each
+session's sample interval and coordinates (viewport or page), which are in
+`summary.csv` (`cursorSampleIntervalMs`, `cursorCoordinates`).
 Three constants set the verdict's thresholds: `minClicksForVerdict`, 4 first
 clicks with a known position before the no-path tell is judged, and 4 first
 clicks of any kind before trials clicked without pointer movement is;

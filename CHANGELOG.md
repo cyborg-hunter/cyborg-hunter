@@ -145,10 +145,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   judged from 4 first clicks with a known position before them), and
   trials clicked without pointer movement. Beneath, in a closed details block, are
   every check with its count, its denominator and up to ten trial ids,
-  clicks after a pointer jump, the shape of each movement (duration, path
-  length, displacement, speed, efficiency and deviation, as medians with
-  their n) and the constants it judged with, and a link to the page that
-  says what the numbers mean (docs/interpreting-signals.md#cursor-dynamics).
+  clicks after a pointer jump and the shape of each movement (duration,
+  path length, displacement, speed, efficiency and deviation, as medians
+  with their n).
   With it come a "Pointer verdict" tile ("—" when the session is not
   assessed), a rail cell ("pointer: highly suspicious") and its sort option,
   a clause in the triage reason, nineteen `cursor…` columns at the end of

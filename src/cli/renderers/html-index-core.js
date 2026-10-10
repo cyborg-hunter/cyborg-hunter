@@ -360,9 +360,13 @@ ${fontFaceCss}    :root {
     .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
 
     /* Cursor dynamics section (renderCursorSection) and the rail's pointer-verdict cell. */
-    .cursor-table { border-collapse: collapse; margin: 6px 0; }
-    .cursor-table caption { text-align: left; font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
-    .cursor-table th { text-align: left; font-weight: normal; padding: 2px 10px 2px 0; }
+    .cursor-details { border: 1px solid var(--line); padding: 10px 14px 12px; margin-top: 8px; }
+    .cursor-table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
+    .cursor-table:last-of-type { margin-bottom: 2px; }
+    .cursor-table caption { text-align: center; font-variant: small-caps; letter-spacing: 0.06em; font-size: 14px; color: var(--ink); padding: 2px 0 6px; }
+    .cursor-table th, .cursor-table td { padding: 5px 10px; vertical-align: top; }
+    .cursor-table th { text-align: left; font-weight: normal; width: 46%; }
+    .cursor-table tbody tr:nth-child(even) { background: rgba(26, 24, 20, 0.035); }
     .cursor-table tr.fired th { font-weight: 600; }
     .cursor-cell { font-family: var(--ff-tomorrow); font-size: 11px; color: var(--dim); }
     .cursor-cell[data-level="2"] { color: var(--hard); }
@@ -374,7 +378,7 @@ ${fontFaceCss}    :root {
     .verdict-badge[data-level="2"] { color: #fff; background: var(--hard); border-color: var(--hard); }
     .cursor-tells { margin: 0 0 8px 20px; padding: 0; }
     .cursor-tells li.tell-high { font-weight: 600; }
-    .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; cursor: pointer; color: var(--dim); }
+    .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -1278,8 +1282,6 @@ function renderCursorSection(s, participant, replayShownExternally) {
   const check = (label, c, body) => `<tr class="${c && typeof c === 'object' && c.fired ? 'fired' : ''}"><th>${label}</th><td>${c === 'not recorded' ? 'not recorded' : body(c)}</td></tr>`;
   const num = (v, unit, digits) => v == null ? '—' : `${digits == null ? v : v.toFixed(digits)}${unit}`;
   const feat = (label, f, unit = '', digits) => `<tr><th>${label}</th><td>${num(f.median, unit, digits)} <span class="muted">(n = ${f.n})</span></td></tr>`;
-  const docs = `<a href="https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/interpreting-signals.md#cursor-dynamics">what these mean</a>`;
-  const constants = Object.entries(ca.limits).map(([name, value]) => `${name} ${value}`).join(', ');
   const badge = `<span class="verdict-badge" data-level="${ca.level}">${esc(ca.verdict)}</span>`;
   let verdict;
   if (ca.level === -1) {
@@ -1317,14 +1319,14 @@ function renderCursorSection(s, participant, replayShownExternally) {
       <tr><th>movements · clicks</th><td>${c.movements} · ${c.clicks}</td></tr>
       <tr><th>capped trials</th><td>${c.cappedTrials} of ${c.trials} trials</td></tr>
     </table>
-    <p class="muted note">monitor stream, ${c.sampleIntervalMs == null ? 'no interval' : `median ${Math.round(c.sampleIntervalMs)} ms between samples`}, ${c.coordinates} coordinates${c.coordinates === 'page' ? ' (scrolling can look like a jump)' : ''}; a first click arrives without a path when its movement has at most one sample and starts ${ca.limits.samePositionPx} px or more from the last known position; scripted cursors tend to few moves per trial, efficiency near 1 and no deviation; thresholds: suspicious at ${Math.round(100 * ca.limits.shareSuspicious)}%, highly suspicious at ${Math.round(100 * ca.limits.shareHighlySuspicious)}%, judged from ${ca.limits.minClicksForVerdict} first clicks with a known position (trials clicked without pointer movement from that many first clicks of any kind); constants: ${esc(constants)} (cursor-limits.json); ${docs}.</p></details>`;
+    </details>`;
   }
-  // Only a session with a recording gets a pointer to its replay.
+  // Only a session with a recording gets a link to its replay, and only in
+  // the CLI report: the analyze page shows the replay in its card beside the
+  // report (replayShownExternally), and the section says nothing of it.
   const hasRecording = !!(participant && participant.replay && participant.replay.recording);
-  const replayLink = !hasRecording ? ''
-    : replayShownExternally
-      ? `<p class="muted note">The replay card beside this report shows this session.</p>`
-      : `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>`;
+  const replayLink = !hasRecording || replayShownExternally ? ''
+    : `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>`;
   return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${verdict}${details}${replayLink}</div>`;
 }
 
