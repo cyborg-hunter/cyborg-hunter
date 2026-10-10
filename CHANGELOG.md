@@ -171,10 +171,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   collected" while the automation flag still comes through. Sessions
   recorded before 0.14 show the checks as "not recorded" and are not
   assessed (docs/upgrading.md). The bundled dataset's agent session,
-  DEMO-bsq6, reads highly suspicious: all twelve of its first clicks arrived
-  without a path. The two sessions recorded on the earlier tour, before the
-  device facts existed, show the checks as not recorded and are not
-  assessed.
+  DEMO-bsq6, reads highly suspicious: all twelve of its first clicks with a
+  known position arrived without a path. The two sessions recorded on the
+  earlier tour, before the device facts existed, show the checks as not
+  recorded and are not assessed.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded

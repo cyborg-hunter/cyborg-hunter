@@ -11,10 +11,17 @@ import { join } from 'node:path';
 
 const DIR = 'examples/demo-sessions';
 const ORDER = ['DEMO-9mop', 'DEMO-bsq6', 'DEMO-681w', 'DEMO-a3f3'];
-// The opening of every paste text in the files: the tour's copy, or a
-// selection from inside it.
-const TOUR_PASTES = ['Great question! 😊 Honestly? My day has been', 'ch tapestry of moments',
-  'a flicker (under 3 seconds)', 'Under the guard, the study requires fullscreen', 'Participants meet it as the box below'];
+// The tour's texts the files' pastes come from, each at its longest in the
+// files: every logged paste text is one of these or a selection from inside
+// one. The answer step's reply is here twice: DEMO-9mop's has curly
+// apostrophes.
+const TOUR_TEXTS = [
+  'Great question! 😊 Honestly? My day has been a rich tapestry of moments — both big and small — that have reminded me what it truly means to be human. It\'s not just a day — it\'s a journey.',
+  'Great question! 😊 Honestly? My day has been a rich tapestry of moments — both big and small — that have reminded me what it truly means to be human. It’s not just a day — it’s a journey.',
+  'a flicker (under 3 seconds), a short absence (3–10 seconds), and a long one (over 10 seconds). ',
+  'Under the guard, the study requires fullscreen and focus; leaving either scrambles the on-screen text until you return, and every violation is logged with its type and timestamp.',
+  'Participants meet it as the box below, the library\'s actual entry screen, word for word. Enter whenever you\'re ready; nothing is enforced until you do.',
+];
 
 describe('examples/demo-sessions', () => {
   let out, stdout;
@@ -54,10 +61,10 @@ describe('examples/demo-sessions', () => {
   test('nothing personal: no user-agent or address, and every paste text is the tour\'s own copy or removed', () => {
     for (const f of readdirSync(join(DIR, 'data'))) {
       const raw = readFileSync(join(DIR, 'data', f), 'utf8');
-      assert.doesNotMatch(raw, /Mozilla|https?:\/\//, f);
+      assert.doesNotMatch(raw, /Mozilla|https?:\/\/|\/Users\/|localhost|file:/, f);
       const j = JSON.parse(raw);
       for (const t of j.trials) for (const p of t.integrity.pasteEvents) {
-        assert.ok(p.text === '' || TOUR_PASTES.some((s) => p.text.startsWith(s)), f + ' ' + t.trialId + ': ' + p.text.slice(0, 40));
+        assert.ok(p.text === '' || TOUR_TEXTS.some((s) => s.includes(p.text)), f + ' ' + t.trialId + ': ' + p.text.slice(0, 40));
       }
     }
     const a3f3 = JSON.parse(readFileSync(join(DIR, 'data', 'DEMO-a3f3.json'), 'utf8'));

@@ -7,6 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { join } from 'node:path';
 import * as copy from '../../demo/steps.js';
 import { STEPS, RAIL_GROUPS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
 import { renderRail } from '../../demo/rail.js';
@@ -230,6 +231,10 @@ test('the last step offers five files in two batches: the session built here, th
   for (const b of DOWNLOAD_BATCHES) {
     assert.ok(b.heading);
     for (const f of b.files) assert.ok(f.label && f.filename && f.description, f.filename);
+  }
+  // The examples are the bundled sessions under their own names.
+  for (const f of DOWNLOAD_BATCHES.flatMap((b) => b.files).filter((f) => f.href)) {
+    assert.ok(fs.existsSync(join('examples', 'demo-sessions', 'data', f.filename)), f.filename);
   }
   assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed);
   assert.ok(!('leaveHint' in HANDOFF), 'HANDOFF.leaveHint is still there');
