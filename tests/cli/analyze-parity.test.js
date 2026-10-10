@@ -91,9 +91,9 @@ describe('browser path parity with the CLI', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ch-parity-'));
   after(() => rmSync(tmp, { recursive: true, force: true }));
 
-  it('examples/synthetic-pilot', async () => {
-    const files = await assertParity('examples/synthetic-pilot/data',
-      JSON.parse(readFileSync('examples/synthetic-pilot/cyborg-hunter.config.json', 'utf8')), mkdirSync(join(tmp, 'pilot'), { recursive: true }));
+  it('examples/demo-sessions', async () => {
+    const files = await assertParity('examples/demo-sessions/data',
+      JSON.parse(readFileSync('examples/demo-sessions/cyborg-hunter.config.json', 'utf8')), mkdirSync(join(tmp, 'sessions'), { recursive: true }));
     assert.ok(files.includes('triage.md'));
   });
   it('tests/cli/fixtures', async () => {

@@ -14,8 +14,10 @@
 //      (Playwright specs must not ship in the public artifact), everything
 //      under demo/analyze/ but index.html and the built bundle, and the two
 //      scripts only that bundle uses.
-//   4. Copy the report's typefaces, which demo.css loads for the tour.
-//   5. Write the analyze page as one offline file,
+//   4. Copy the files step's two example participants from
+//      examples/demo-sessions/data/ into assets/.
+//   5. Copy the report's typefaces, which demo.css loads for the tour.
+//   6. Write the analyze page as one offline file,
 //      .demo-site/analyze/cyborg-hunter-analyze.html (bundle inlined, policy
 //      without 'self'; see tools/offline-analyze.mjs).
 //
@@ -27,6 +29,7 @@ import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildOfflineHtml, OFFLINE_NAME } from './offline-analyze.mjs';
+import { DOWNLOAD_BATCHES } from '../demo/steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -42,7 +45,7 @@ const BUNDLED_ONLY = new Set(['report-frame.js', 'replay-host.js']);
 // publicly); under demo/analyze/, everything but the page and its built
 // bundle (the other files there are build inputs of tools/build-analyze.mjs);
 // and BUNDLED_ONLY. Everything else under demo/ is runtime: index.html,
-// demo.css, the tour's *.js modules, signal-manifest.json, assets/.
+// demo.css, the tour's *.js modules, signal-manifest.json.
 export function isRuntimeFile(src) {
   const rel = relative(DEMO_DIR, src);
   if (rel === 'tests' || rel.startsWith('tests' + sep)) return false;
@@ -92,8 +95,13 @@ function main() {
   mkdirSync(SITE_DIR, { recursive: true });
   cpSync(DEMO_DIR, SITE_DIR, { recursive: true, filter: isRuntimeFile });
   cpSync(join(ROOT, 'dist'), join(SITE_DIR, 'dist'), { recursive: true });
-  // demo/assets/ (the two example participants) is copied above as part of
-  // demo/* — it isn't excluded by isRuntimeFile.
+  // The files step's two example participants are two of the bundled sessions
+  // (examples/demo-sessions), served under assets/ by the names the step links.
+  const SESSIONS_DIR = join(ROOT, 'examples', 'demo-sessions', 'data');
+  mkdirSync(join(SITE_DIR, 'assets'), { recursive: true });
+  for (const f of DOWNLOAD_BATCHES.flatMap((b) => b.files).filter((f) => f.href)) {
+    cpSync(join(SESSIONS_DIR, f.filename), join(SITE_DIR, f.href));
+  }
   // The report's typefaces (WOFF2 + each family's OFL.txt + the manifest),
   // copied from their one committed home rather than duplicated under demo/.
   // demo.css loads them by URL for the tour itself.

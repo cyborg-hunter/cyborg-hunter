@@ -168,7 +168,7 @@ Start with `triage.md`: participants ranked tier-first (HARD, then soft, then cl
 
 Two pages take you the rest of the way:
 
-- [worked-example.md](worked-example.md) — a full run on a bundled synthetic dataset, with the outputs interpreted line by line.
+- [worked-example.md](worked-example.md) — a full run on the bundled recorded sessions, with the outputs interpreted line by line.
 - [interpreting-signals.md](interpreting-signals.md) — what the scores and tiers mean, and the three most common misreadings.
 
 ## Where to go deeper

@@ -28,8 +28,7 @@
 // and overwrites the committed replay file.
 //
 // Two post-capture rewrites keep the committed fixture stable and honest — the
-// same synthetic-fixture discipline the README documents for the pid and
-// gen-example-fixtures.mjs uses for its EPOCH:
+// synthetic-fixture discipline the README documents for the pid and the epoch:
 //   - pid: the demo assigns a random 'DEMO-'+4-base36 id per session; a
 //     committed fixture needs a fixed one, so every occurrence of the captured
 //     id (the top-level participant_id and any pid text the page renders into

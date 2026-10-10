@@ -2,7 +2,7 @@
 
 Start with [`quickstart.md`](quickstart.md): install → instrument → collect → report, end-to-end for a jsPsych experiment. The README at the repository root covers the same ground in condensed form.
 
-To try the pipeline before you have data, run the bundled synthetic dataset: [`worked-example.md`](worked-example.md).
+To try the pipeline before you have data, run the bundled recorded sessions: [`worked-example.md`](worked-example.md).
 
 For depth (per-trial parameters, session replay, common pitfalls, DOM-protection helpers), see [`using-cyborg-hunter.md`](using-cyborg-hunter.md).
 

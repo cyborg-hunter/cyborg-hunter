@@ -96,8 +96,7 @@ existing filename epoch `1785352263344`, so the artifact overwrites in place
 under the same name each run instead of churning to a fresh epoch. Only the
 anchor is pinned; the recording's relative event timeline (perf-now offsets,
 segment origins, durations) is the untouched real capture, so playback is
-exactly what the recorder produced. This mirrors the fixed-`EPOCH` discipline in
-`tools/gen-example-fixtures.mjs`.
+exactly what the recorder produced.
 
 ## How to regenerate
 

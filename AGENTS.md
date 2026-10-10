@@ -12,7 +12,7 @@ Orientation for coding agents working in this repository.
 - `src/cli/` — ingest → analyzers → renderers pipeline; `bin/cyborg-hunter.js` is the entry point
 - `dist/` — built artifacts, produced by `node build.js`. Edit `src/`, never `dist/`.
 - `tests/` — `node --test` suites per half, plus browser-run suites under `tests/browser/`
-- `examples/synthetic-pilot/` — fully synthetic four-participant dataset; regenerate with its `generate-fixture.mjs`
+- `examples/demo-sessions/` — four sessions recorded on the demo tour (three by the author, one by a GPT agent), for trying the CLI; the tour's saved files (one paste's text removed), never generated or edited otherwise
 - `docs/` — user documentation; `quickstart.md` and `worked-example.md` are the entry points
 
 ## Commands
@@ -27,5 +27,5 @@ Orientation for coding agents working in this repository.
 
 - A golden regression suite freezes the ingest → summary → triage pipeline output. A change that alters counts, scores, or tiers on existing data is a versioned behavioral change, not a silent fix — see the deferred items in `docs/known-issues.md` for how those are handled.
 - The CLI degrades on malformed participant payloads: warn and continue, never crash the whole report.
-- No real participant data anywhere in the tree. Examples and test fixtures are synthetic by construction; keep it that way.
+- No study participant's data anywhere in the tree. Test fixtures are synthetic by construction; the example sessions were recorded on the demo tour by the author and an AI agent, and carry no typed answer, user-agent string or address. Keep it that way.
 - Docs are written descriptively about the package, not in second person.

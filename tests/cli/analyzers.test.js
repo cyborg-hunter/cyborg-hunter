@@ -534,9 +534,9 @@ describe('triage', () => {
 });
 
 describe('decomposeScore with configurable weights', () => {
-  // SYN-HARD-03's shape from examples/synthetic-pilot: sidebar contributes 0.
+  // A hard-flagged shape: sidebar contributes 0.
   const hardShape = {
-    participantId: 'SYN-HARD-03', hardTriggered: true,
+    participantId: 'HARD-1', hardTriggered: true,
     totalPasteEvents: 2, totalCopyEvents: 1, sidebarEventCount: 0,
     tabAwayLongCount: 3, tabAwayMediumCount: 0, tabAwayFlickerCount: 2,
     totalSyntheticInsertions: 0,

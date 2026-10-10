@@ -8,8 +8,10 @@
 //
 // Protocol (every message is { type, ... }):
 //   page → worker
-//     { type: 'check',  files: [{ path, file: File } | { path, bytes: ArrayBuffer }], sample?: true }
-//     { type: 'run',    files, sample?: true, config, participantIdField }
+//     { type: 'sample' }  → { type: 'sample', files: [{ path, text }] }: the bundled
+//                   sessions as text, for the page to list as files of its own
+//     { type: 'check',  files: [{ path, file: File } | { path, bytes: ArrayBuffer }] }
+//     { type: 'run',    files, config, participantIdField }
 //     { type: 'reanalyze', config, participantIdField }  the last run's participants
 //                   again under another config: analysis, figures, report and
 //                   zip, with no file read (the settings panel's post-hoc keys);
@@ -73,13 +75,7 @@ function fileReader(entry) {
       return entry.file.arrayBuffer().then(function (b) { return new Uint8Array(b); });
     } };
 }
-function textReader(path, text) {
-  var bytes = new TextEncoder().encode(text);
-  var name = path.slice(path.lastIndexOf('/') + 1);
-  return { name: name, path: path, size: bytes.length, read: function () { return Promise.resolve(bytes); } };
-}
 function readersFor(msg) {
-  if (msg.sample) return sample.files.map(function (f) { return textReader(f.path, f.text); });
   return msg.files.map(fileReader);
 }
 
@@ -239,6 +235,7 @@ function replay(msg) {
 self.onmessage = function (ev) {
   var msg = ev.data || {};
   if (msg.type === 'reset') { lastRun = null; return; }
+  if (msg.type === 'sample') { post({ type: 'sample', files: sample.files }); return; }
   var job = msg.type === 'check' ? check(msg) : msg.type === 'run' ? run(msg) : msg.type === 'reanalyze' ? reanalyze(msg)
     : msg.type === 'replay' ? Promise.resolve().then(function () { replay(msg); }) : null;
   if (!job) return;
