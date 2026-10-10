@@ -87,8 +87,8 @@ export function light(key, count, opts) {
 
 /**
  * Marks the replay row as recording (on) or not (off): demo.css pulses its
- * lamp in the live teal while the row carries .recording, the page's one cue
- * that the session records. Here rather than in demo.js because the rows are
+ * lamp in red while the row carries .recording, the page's one cue that the
+ * session records. Here rather than in demo.js because the rows are
  * this module's. Returns the row, or null if renderRail() hasn't run.
  */
 export function setRecording(on) {

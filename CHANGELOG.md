@@ -226,9 +226,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   out of fullscreen or focus, and the violation chips stay legible under
   it. Its button, "End the guard", is centred under the text. The debrief
   names the reasons the guard records (`not_fullscreen`, `window_blurred`).
-- Live demo: the top bar holds the title and, while the session records,
-  the REC cue; the step count ("Step 2 of 10") is on the card, and the
-  participant ID is no longer in the top bar. The lamps panel is its title, the
+- Live demo: the top bar holds only the title, and the recording lamp in
+  the rail carries the REC cue, pulsing red while the session records; the
+  step count ("Step 2 of 10") is on the card, and the participant ID is no
+  longer in the top bar. The lamps panel is its title, the
   detector lamps and the Guard and Recording groups: the intro line, its
   tooltip, the "awaiting your session" note and the Detectors head are
   gone. The session record under the card has no caption.

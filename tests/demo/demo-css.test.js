@@ -116,17 +116,24 @@ test('no promoted state remains: the wide stream rules are unconditional', () =>
 test('teal stays only on live cues: no focus ring or link uses it', () => {
   const offenders = rules.filter(r => Object.values(r.decls).some(v => /var\(--live\)/.test(v)))
     .map(r => r.selectors.join(', '))
-    .filter(s => !/^\.check li\.recording \.lamp$|^\.live\b/.test(s));
+    .filter(s => !/^\.live\b/.test(s));
   assert.deepEqual(offenders, []);
 });
 
 // The top bar keeps the brand only: the recording cue is the replay lamp's
-// pulse (its look while recording is checked in the browser, tour.spec.js).
-test('the REC pill is gone; the recording lamp carries its pulse', () => {
+// pulse, in the red the REC dot had, and the dimming of a list that awaits
+// its first signal leaves that row out (its look while recording is checked
+// in the browser, tour.spec.js).
+test('the REC pill is gone; the recording lamp carries its pulse and its red, undimmed', () => {
   assert.ok(!/\.rec\b/.test(css), 'a .rec rule remains');
   assert.ok(/@keyframes rec-pulse\{/.test(css), 'no rec-pulse keyframes');
   const recording = rules.filter(r => r.selectors.includes('.check li.recording .lamp')).map(r => r.decls);
   assert.ok(recording.some(d => d.animation === 'rec-pulse 1.2s ease-in-out infinite' &&
-    d.background === 'var(--live)' && d['border-color'] === 'var(--live)'), JSON.stringify(recording));
+    d.background === 'var(--hard)' && d['border-color'] === 'var(--hard)'), JSON.stringify(recording));
   assert.ok(recording.some(d => d.animation === 'none'), 'steady under prefers-reduced-motion');
+  // Equal specificity with the dimming rule, so the exemption must come after it.
+  const dim = rules.findIndex(r => r.selectors.includes('.check.awaiting li:not(.hint)'));
+  const undim = rules.findIndex(r => r.selectors.includes('.check.awaiting li.recording'));
+  assert.ok(dim >= 0 && undim > dim, 'the recording row is exempt from the dimming, after it');
+  assert.equal(rules[undim].decls.opacity, '1');
 });

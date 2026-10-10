@@ -275,10 +275,12 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 
 // ---------------------------------------------------------------------------
 // Top bar and step label: the bar holds the title alone. The cue that the
-// session records is the rail's replay lamp, which pulses in teal from the
-// moment the recorder attaches (steady under reduced motion); the mouse
-// paths lamp beside it keeps its steady look. The step count is on the
-// card, and it names no act (the act stays on body[data-view], for the CSS).
+// session records is the rail's replay lamp, which pulses in the red the
+// REC dot had from the moment the recorder attaches (steady under reduced
+// motion), at full strength while the other lamps are still dimmed; the
+// mouse paths lamp beside it keeps its steady look. The step count is on
+// the card, and it names no act (the act stays on body[data-view], for the
+// CSS).
 // ---------------------------------------------------------------------------
 test('top bar: the title alone; the replay lamp carries the REC cue; the card label says the step only', async ({ page }) => {
   await page.goto('/');
@@ -298,13 +300,20 @@ test('top bar: the title alone; the replay lamp carries the REC cue; the card la
   const lamp = (key) => railRow(page, key).locator('.lamp');
   await expect(lamp('replay')).toHaveCSS('animation-name', 'rec-pulse');
   await expect(lamp('replay')).toHaveCSS('animation-iteration-count', 'infinite');
-  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(14, 116, 144)'); // --live
+  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(211, 47, 47)'); // --hard, the dot's red
+  await expect(lamp('replay')).toHaveCSS('background-color', 'rgb(211, 47, 47)');
   await expect(lamp('mousePaths')).toHaveCSS('animation-name', 'none');
   await expect(lamp('mousePaths')).toHaveCSS('border-top-color', 'rgb(226, 221, 209)'); // --line-soft, as before
-  // Reduced motion: the lamp stays teal and stops moving.
+  // No detector has lit yet, so the list is still dimmed, all but the
+  // recording row: the recording is on from the start.
+  await expect(page.locator('#rail .check')).toHaveClass(/\bawaiting\b/);
+  await expect(railRow(page, 'mousePaths')).toHaveCSS('opacity', '0.55');
+  await expect(railRow(page, 'replay')).toHaveCSS('opacity', '1');
+  // Reduced motion: the lamp keeps the red and stops moving.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(lamp('replay')).toHaveCSS('animation-name', 'none');
-  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(14, 116, 144)');
+  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(211, 47, 47)');
+  await expect(lamp('replay')).toHaveCSS('background-color', 'rgb(211, 47, 47)');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'act1');

@@ -4,9 +4,9 @@
  * Sora; code and the event stream stay system mono), its high-contrast
  * neutrals, square boxes with a line and a soft shadow, 4px controls,
  * segmented tabs with ink active states, and a double rule under the header.
- * Teal survives only as the live-recording cue (the rail's pulsing replay
- * lamp); reds/greens stay semantic (lamps, hard rows, tiers) and match the
- * report's tier colours.
+ * Reds/greens stay semantic (lamps, hard rows, tiers) and match the report's
+ * tier colours; the live-recording cue, the rail's pulsing replay lamp,
+ * keeps the red of the REC dot it replaced.
  * Fonts load from assets/fonts/, copied from src/cli/renderers/fonts/ by
  * tools/assemble-demo-site.mjs.
  *
@@ -299,17 +299,21 @@ pre code{background:none;padding:0;}
 .check li.always .lamp{background:var(--line-soft);border-color:var(--line-soft);}
 /* The one cue that the session records: from the moment the recorder
  * attaches until the recording is finalised, demo.js marks the replay row
- * .recording and its lamp pulses in the live teal. After .always, which the
- * row also carries, so the teal wins at equal specificity. Steady (still
- * teal) under prefers-reduced-motion. */
+ * .recording and its lamp pulses in the REC dot's own red, the dot it
+ * replaces in the top bar. After .always, which the row also carries, so
+ * the red wins at equal specificity. Steady (still red) under
+ * prefers-reduced-motion. */
 @keyframes rec-pulse{50%{opacity:.25}}
 .check li.recording .lamp{animation:rec-pulse 1.2s ease-in-out infinite;
-  background:var(--live);border-color:var(--live);}
+  background:var(--hard);border-color:var(--hard);}
 @media (prefers-reduced-motion: reduce){.check li.recording .lamp{animation:none;}}
 .check li .n{margin-left:auto;font-family:var(--ff-sora);font-variant-numeric:tabular-nums;font-size:11.5px;}
 .check .hint{font-family:var(--ff-sofia);padding-top:12px;font-size:10.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--dim);}
 .check.awaiting li:not(.hint){opacity:.55;}
+/* Except the recording row: the recording is on from the start, so its cue
+ * must not read as pending. After the dimming, at equal specificity. */
+.check.awaiting li.recording{opacity:1;}
 /* Unlit lamps keep the soft line: with the high-contrast --line an empty
  * ring would read as lit. */
 .lamp{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--line-soft);
