@@ -251,7 +251,7 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   // two examples from their links.
   const tmpDir = mkdtempSync(join(tmpdir(), 'ch-demo-e2e-'));
   const saves = ['sessionData', 'replay', 'config'].map((key) => `[data-action="download"][data-key="${key}"]`)
-    .concat(['example-1.json', 'example-2.json'].map((name) => `a[download="${name}"]`));
+    .concat(['DEMO-bsq6.json', 'DEMO-681w.json'].map((name) => `a[download="${name}"]`));
   for (const selector of saves) {
     const [download] = await Promise.all([
       page.waitForEvent('download'),
@@ -274,8 +274,8 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   expect(existsSync(reportIndex)).toBe(true);
   const reportHtml = readFileSync(reportIndex, 'utf8');
   expect(reportHtml).toContain(participantId);
-  expect(reportHtml).toContain('example-1');
-  expect(reportHtml).toContain('example-2');
+  expect(reportHtml).toContain('DEMO-bsq6');
+  expect(reportHtml).toContain('DEMO-681w');
   expect(stdout).not.toContain('files had warnings');
   expect(stdout).toContain('Found 3 participants');
 });
@@ -776,7 +776,7 @@ test('files step: "Save all into a folder" writes the five files through the fol
   const cardNames = await page.locator('.file small').allTextContents();
   expect(cardNames[0]).toMatch(/^DEMO-[a-z0-9]{4}\.json$/);
   expect(cardNames[1]).toMatch(new RegExp('^' + participantId + '-replay-\\d+\\.json$'));
-  expect(cardNames.slice(2)).toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
+  expect(cardNames.slice(2)).toEqual(['cyborg-hunter.config.json', 'DEMO-bsq6.json', 'DEMO-681w.json']);
 
   await expect(page.locator('[data-action="save-all"]')).toHaveCount(0);
   const btn = page.locator('[data-action="save-folder"]');

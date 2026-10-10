@@ -799,10 +799,10 @@ function startTour(participantId, capabilities, manifest) {
     }
     if (key === 'config') {
       // The analysis settings for the five files the step offers: the
-      // session file and the two examples match the pattern (one brace
-      // group, which the CLI expands: src/cli/ingest-core.js
-      // expandPatternToMatchers), and the scoring keys carry the manifest's
-      // defaults, limited to keys the CLI honors (summary.js reads
+      // session file and the two examples (sessions recorded on this tour,
+      // under their own DEMO- ids) match the pattern; the replay matches it
+      // too and is read as a recording, as before. The scoring keys carry the
+      // manifest's defaults, limited to keys the CLI honors (summary.js reads
       // thresholds.tabAwayDurationMs / typingSpeedThreshold_cps as fallbacks
       // behind each participant's saved runtime thresholds; triage.js honors
       // scoring.softScoreThreshold as an analyst-side override). Changing
@@ -811,7 +811,7 @@ function startTour(participantId, capabilities, manifest) {
         filename: sessionFileName('config'),
         data: {
           dataDir: '.',
-          filePattern: '{DEMO-*,example-*}.json',
+          filePattern: 'DEMO-*.json',
           participantIdField: 'participantId',
           thresholds: { tabAwayDurationMs: manifest.signals.tabAway.durationMs },
           typingSpeedThreshold_cps: manifest.signals.typingSpeed.cps,

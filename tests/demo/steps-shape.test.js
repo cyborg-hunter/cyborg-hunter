@@ -226,7 +226,7 @@ test('exports the engine consumes exist', () => {
 });
 test('the last step offers five files in two batches: the session built here, the examples the site serves', () => {
   assert.deepEqual(DOWNLOAD_BATCHES.map((b) => b.files.map((f) => f.key || f.href)),
-    [['sessionData', 'replay', 'config'], ['assets/example-1.json', 'assets/example-2.json']]);
+    [['sessionData', 'replay', 'config'], ['assets/DEMO-bsq6.json', 'assets/DEMO-681w.json']]);
   for (const b of DOWNLOAD_BATCHES) {
     assert.ok(b.heading);
     for (const f of b.files) assert.ok(f.label && f.filename && f.description, f.filename);

@@ -1712,7 +1712,7 @@ test('the fonts the tour hands over are not the analyst\'s assets: no hint, no a
 // marked `handoff` (demo/handoff.js handoffEntries), and what the check reads
 // them as.
 const FILES = [{ path: 'DEMO-ab12.json', kind: 'data' }, { path: 'DEMO-ab12-replay-1.json', kind: 'recording' },
-  { path: 'cyborg-hunter.config.json', kind: 'config' }, { path: 'example-1.json', kind: 'data' }, { path: 'example-2.json', kind: 'data' }];
+  { path: 'cyborg-hunter.config.json', kind: 'config' }, { path: 'DEMO-bsq6.json', kind: 'data' }, { path: 'DEMO-681w.json', kind: 'data' }];
 const FONTS = HANDOFF_ASSETS.map((path) => ({ path, kind: 'asset' }));
 const handed = (path) => ({ path, file: new File(['x'], path.slice(path.lastIndexOf('/') + 1), { lastModified: 1 }), handoff: true });
 async function handOver(t) {
@@ -1758,8 +1758,8 @@ test('the fonts the tour hands over are neither listed nor counted; a line under
   assert.equal(line().hidden, false);
   await loadSample(s);
   assert.equal(line().hidden, true, 'while the list is checked again');
-  assert.equal(s.sent[2].files.length, 15, 'the sample\'s four sessions beside the hand-off\'s files and fonts');
-  s.emit({ ...CHECKED, files: FILES.concat(FONTS, SAMPLE_PATHS.slice(0, 4).map((path) => ({ path, kind: 'data' }))) });
+  assert.equal(s.sent[2].files.length, 13, 'the sample\'s two sessions the tour did not bring beside the hand-off\'s files and fonts');
+  s.emit({ ...CHECKED, files: FILES.concat(FONTS, ['DEMO-9mop.json', 'DEMO-a3f3.json'].map((path) => ({ path, kind: 'data' }))) });
   await tick();
   assert.equal(line().hidden, false, 'after the sample');
 });
