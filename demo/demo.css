@@ -91,15 +91,17 @@ code, pre{font-family:var(--mono);}
  * on every step — see index.html's docblock. */
 .pane-slot{margin-top:20px;}
 /* The record is collapsed under its bar so it does not pull the eye from
- * the step; hovering the slot, keyboard focus inside it, or data-open="true"
- * (live-pane.js makePaneBar: a click on the bar, or the debrief step) shows
- * it. :has(:focus-visible) rather than :focus-within: a mouse click leaves
- * focus on the bar, and :focus-within would then keep the record open after
- * "click to hide". Collapsed rather than display:none, so the stream keeps
- * its layout and live-pane.js's addRow still scrolls it to its tail while
- * hidden: the record opens on its latest event. No transition, so there is
- * no motion to drop under prefers-reduced-motion. */
-.pane-slot:not(:hover):not(:has(:focus-visible)):not([data-open="true"]) > [data-role="live-pane"]{
+ * the step. It shows while the slot carries data-hover (a mouse over it),
+ * data-focus (keyboard focus inside it) or data-open (a click on the bar, or
+ * the debrief step), all set by live-pane.js makePaneBar. Attributes rather
+ * than :hover and :focus-within: the session recording captures them, so the
+ * replay lays the record out where the visitor clicked inside it, and the
+ * script decides which focus counts (a mouse click on the bar does not).
+ * Collapsed rather than display:none, so the stream keeps its layout and
+ * live-pane.js's addRow still scrolls it to its tail while hidden: the
+ * record opens on its latest event. No transition, so there is no motion to
+ * drop under prefers-reduced-motion. */
+.pane-slot:not([data-hover="true"]):not([data-focus="true"]):not([data-open="true"]) > [data-role="live-pane"]{
   visibility:hidden;height:0;overflow:hidden;padding:0;border-width:0;box-shadow:none;}
 /* The bar is the record's lid: the record's title treatment (.lp-title) on a
  * .card ground, with the hint (.hint) after it saying what a click does. The

@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { test, expect, fastForwardToFiles, pid } from './helpers.mjs';
+import { test, expect, fastForwardToFiles, pid, startTour, primaryButton, walkToGuardEntry, openPane } from './helpers.mjs';
 import { guardNetwork, assertOnlyAllowed, siteAllowlist, buildReport, railOrder, reportSelected, waitReady } from '../../tests/e2e/analyze/support.mjs';
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
 import { HANDOFF_ASSETS } from '../steps.js';
@@ -198,6 +198,51 @@ test('replay: keycast overlay shows a chip during typed playback; DOM-tier recon
     return !!testMount.querySelector('.replay-key-chip--redacted');
   }, [redactedModel, firstRedactedDown]);
   expect(redactedChipShown).toBe(true);
+});
+
+// ---------------------------------------------------------------------------
+// The record under the step card opens on hover through attributes on its
+// slot (live-pane.js makePaneBar), which the recording carries: clicks inside
+// a record the mouse opened, and never kept open, replay against the record
+// laid out as the visitor saw it, and pass the viewer's alignment self-check.
+// Read from the step-3 trial ("paste"), where the clicks are.
+// ---------------------------------------------------------------------------
+test('replay: clicks inside the record opened by hover pass the alignment self-check', async ({ page }) => {
+  test.setTimeout(120000);
+  await startTour(page); // -> baseline (step 2)
+  await primaryButton(page).click(); // -> clipboard-cheat (step 3)
+  for (const control of ['.lp-tab[data-tab="json"]', '.lp-tab[data-tab="stream"]',
+    '[data-role="lp-trials"] [data-trial-key="baseline"]', '[data-role="lp-trials"] [data-trial-key="all"]']) {
+    await openPane(page);
+    await page.locator(control).click();
+    await page.mouse.move(0, 0);
+    await expect(page.locator('[data-role="live-pane"]')).toBeHidden();
+  }
+  await walkToGuardEntry(page); // -> guard-entry (step 6)
+  await page.locator('[data-action="enter-fullscreen"]').click();
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 });
+  await page.locator('.endguard').click(); // -> guard-debrief (step 8)
+  await primaryButton(page).click(); // -> signals-to-scores (step 9)
+  await primaryButton(page).click(); // -> your files (step 10)
+
+  const participantId = await openInAnalyzer(page);
+  await buildReport(page);
+  await selectVisitorReplay(page, participantId);
+  await page.click('[data-action="load-replay"]');
+  const host = page.frameLocator('iframe.replay-host-frame[data-participant-id="' + participantId + '"]');
+  const mount = host.locator('#ch-replay-mount');
+  await mount.locator('.replay-stage').waitFor({ timeout: 30000 });
+
+  const segments = await mount.locator('.replay-segment-select option').allTextContents();
+  const paste = segments.findIndex((label) => label.includes('— paste'));
+  expect(paste).toBeGreaterThanOrEqual(0);
+  await mount.evaluate((m, i) => m._chReplayDebug.selectSegment(i), paste);
+  await expect.poll(() => mount.evaluate((m) => m._chReplayDebug.frameReady())).toBe(true);
+  await mount.evaluate((m) => m._chReplayDebug.seek(999999)); // clamps to the trial's end
+  const checks = await mount.evaluate((m) => m._chReplayDebug.getChecks());
+  // The four clicks inside the record, and the click that left step 3.
+  expect(checks.filter((c) => c.type === 'mouse.click')).toHaveLength(5);
+  expect(checks.filter((c) => c.status !== 'ok')).toEqual([]);
 });
 
 // ---------------------------------------------------------------------------

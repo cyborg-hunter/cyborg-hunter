@@ -480,12 +480,14 @@ test('step 8: the record stays under the card on Back to step 7', async ({ page 
 
 // ---------------------------------------------------------------------------
 // The record under the card is collapsed under its bar until the visitor
-// asks for it: hovering the slot or keyboard focus shows it, a click on the
-// bar keeps it open after the pointer leaves (a second click lets it close),
-// and the debrief step (step 8), whose copy sends the visitor to the record,
-// opens it with no hover. Every other step leaves it as the visitor left it.
-// The pointer moves to the page's corner before each check of what shows, so
-// a hover never stands in for the state under test.
+// asks for it: hovering the slot or keyboard focus shows it (and Tab walks on
+// through its controls), a click on the bar keeps it open after the pointer
+// leaves (a second click lets it close), and the debrief step (step 8),
+// whose copy sends the visitor to the record, opens it with no hover. Every
+// other step leaves it as the visitor left it. The open state is attributes
+// on the slot (live-pane.js makePaneBar), which the session recording
+// captures. The pointer moves to the page's corner before each check of what
+// shows, so a hover never stands in for the state under test.
 // ---------------------------------------------------------------------------
 test('the record under the card opens on hover, keyboard focus or a click on its bar, and by itself on step 8', async ({ page }) => {
   test.setTimeout(60000);
@@ -500,21 +502,48 @@ test('the record under the card opens on hover, keyboard focus or a click on its
   await page.mouse.move(0, 0);
   await expect(pane).toBeHidden();
   await expect(bar).toHaveText(LIVE_PANE.bar + ' ' + LIVE_PANE.barHintClosed);
+  // The hint's pointer words stay out of the button's accessible name.
+  await expect(bar).toHaveAccessibleName(LIVE_PANE.bar);
   await expect(bar).toHaveAttribute('aria-expanded', 'false');
   await expect(slot).not.toHaveAttribute('data-open');
 
   // Hovering the slot shows it, for as long as the pointer stays.
   await slot.hover();
+  await expect(slot).toHaveAttribute('data-hover', 'true');
   await expect(pane).toBeVisible();
   await page.mouse.move(0, 0);
+  await expect(slot).not.toHaveAttribute('data-hover');
   await expect(pane).toBeHidden();
 
-  // So does keyboard focus: Tab from the step's last button lands on the bar.
+  // So does keyboard focus: Tab from the step's last button lands on the
+  // bar, and the next Tabs walk through the record's own controls with the
+  // record open; Enter on a trial tab, which rebuilds the tabs, keeps focus
+  // on it and the record open. Tab past its last control closes it.
   await primaryButton(page).focus();
   await page.keyboard.press('Tab');
   await expect(bar).toBeFocused();
   await expect(pane).toBeVisible();
-  await page.evaluate(() => document.activeElement.blur());
+  await expect(bar).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.lp-tab[data-tab="stream"]')).toBeFocused();
+  const focusedInSlot = () => page.evaluate(() => {
+    const el = document.activeElement;
+    return document.querySelector('[data-role="pane-slot"]').contains(el) ? (el.dataset.tab || el.dataset.trialKey) : null;
+  });
+  const walked = [];
+  for (let key = await focusedInSlot(); key !== null && walked.length < 20; key = await focusedInSlot()) {
+    walked.push(key);
+    await expect(pane).toBeVisible();
+    if (key === 'all') {
+      await page.keyboard.press('Enter');
+      await expect(page.locator('[data-role="lp-trials"] [data-trial-key="all"]')).toBeFocused();
+      await expect(slot).toHaveAttribute('data-focus', 'true');
+      await expect(pane).toBeVisible();
+    }
+    await page.keyboard.press('Tab');
+  }
+  expect(walked.slice(0, 4)).toEqual(['stream', 'json', 'all', 'baseline']);
+  await expect(slot).not.toHaveAttribute('data-focus');
   await expect(pane).toBeHidden();
 
   // A click on the bar keeps it open once the pointer leaves, and the hint
@@ -539,6 +568,35 @@ test('the record under the card opens on hover, keyboard focus or a click on its
   await page.mouse.move(0, 0);
   await expect(bar).toBeFocused();
   await expect(pane).toBeHidden();
+  // Nor does a key pressed afterwards, which turns that focus into keyboard
+  // focus as far as :focus-visible is concerned.
+  await page.keyboard.press('Shift');
+  await expect(slot).not.toHaveAttribute('data-focus');
+  await expect(pane).toBeHidden();
+
+  // A click inside a record the mouse opened lands while data-hover is on
+  // the slot: the recording carries the open state with the click, so the
+  // replay lays the record out where the visitor clicked.
+  await page.evaluate(() => document.addEventListener('click', () => {
+    window.__chHoverAtClick = document.querySelector('[data-role="pane-slot"]').dataset.hover;
+  }, { capture: true, once: true }));
+  await openPane(page);
+  await page.locator('.lp-tab[data-tab="json"]').click();
+  expect(await page.evaluate(() => window.__chHoverAtClick)).toBe('true');
+  await expect(page.locator('[data-role="lp-json"]')).toBeVisible();
+  await page.locator('.lp-tab[data-tab="stream"]').click(); // back to the stream for the tail check below
+  await page.mouse.move(0, 0);
+  await expect(pane).toBeHidden();
+  // A click on a trial tab replaces the button under the pointer; the record
+  // still closes once the pointer leaves, each time. Ends on All, so the
+  // stream follows its tail below.
+  for (const key of ['baseline', 'all', 'paste', 'all']) {
+    await openPane(page);
+    await page.locator(`[data-role="lp-trials"] [data-trial-key="${key}"]`).click();
+    await page.mouse.move(0, 0);
+    await expect(slot).not.toHaveAttribute('data-hover');
+    await expect(pane).toBeHidden();
+  }
 
   // Rows logged while it is collapsed, enough for the stream to overflow
   // its height.
@@ -570,6 +628,29 @@ test('the record under the card opens on hover, keyboard focus or a click on its
   await expect(stepLabel).toHaveText('Step 9 of 10');
   await page.mouse.move(0, 0);
   await expect(pane).toBeVisible();
+});
+
+// A touch screen has no hover: a tap on the bar keeps the record open, and a
+// second tap closes it, with nothing left from the taps to hold it open.
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true });
+
+  test('a tap on the bar opens the record and a second tap closes it', async ({ page }) => {
+    const slot = page.locator('[data-role="pane-slot"]');
+    const bar = page.locator('[data-role="pane-toggle"]');
+    const pane = page.locator('[data-role="live-pane"]');
+    await startTour(page); // -> baseline (step 2)
+    await page.mouse.move(0, 0); // the mouse click that started the tour, out of the way
+    await expect(pane).toBeHidden();
+    await bar.tap();
+    await expect(slot).toHaveAttribute('data-open', 'true');
+    await expect(slot).not.toHaveAttribute('data-hover');
+    await expect(pane).toBeVisible();
+    await bar.tap();
+    await expect(slot).not.toHaveAttribute('data-open');
+    await expect(slot).not.toHaveAttribute('data-hover');
+    await expect(pane).toBeHidden();
+  });
 });
 
 // ---------------------------------------------------------------------------
