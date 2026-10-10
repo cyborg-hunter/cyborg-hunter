@@ -10,10 +10,10 @@
 // dropped file itself and transfers the bytes, for every check and run.
 //
 // The worker's messages carry no run id (worker-entry.js), so the page runs
-// ONE operation at a time: while a check, a run or a re-analysis is in
-// flight the controls (the settings too) that would start another are
-// disabled, and a run that fails throws away the zip chunks it had already
-// streamed before a retry is offered.
+// ONE operation at a time: while a sample request, a check, a run or a
+// re-analysis is in flight the controls (the settings too) that would start
+// another are disabled, and a run that fails throws away the zip chunks it
+// had already streamed before a retry is offered.
 import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
@@ -120,7 +120,7 @@ export function createPage(root, worker, opts) {
 
   function send(msg, transfer) { worker.postMessage(msg, transfer || []); }
   function waitFor(type) { return new Promise(function (resolve, reject) { pending[type] = { resolve: resolve, reject: reject }; }); }
-  function busy() { return !!(pending.checked || pending.done); }
+  function busy() { return !!(pending.checked || pending.done || pending.sample); }
   function goTo(name) {
     state.step = name;
     root.querySelectorAll('section.step').forEach(function (s) { s.hidden = s.dataset.step !== name; });
@@ -174,9 +174,10 @@ export function createPage(root, worker, opts) {
 
   // Every failure lands here, from the worker ({ type: 'error', phase }) or
   // from the page's own code. A replay failure leaves the results alone; a
-  // check failure goes back to an empty files step; a run or re-analysis
-  // failure goes back to the file list with its partial zip discarded and
-  // the run control enabled for a retry.
+  // check failure goes back to an empty files step; a failed sample request
+  // leaves the list as it was (the sample's files were not added yet); a run
+  // or re-analysis failure goes back to the file list with its partial zip
+  // discarded and the run control enabled for a retry.
   function recover(phase, message, warnings) {
     showError(message);
     q(root, 'rerun-status').hidden = true;
@@ -211,11 +212,11 @@ export function createPage(root, worker, opts) {
 
   // A failure of the worker itself (a script error outside a job, a message
   // that cannot be read, a worker the browser killed) carries no phase: it is
-  // charged to whatever is in flight, so a pending check or run cannot leave
-  // the page busy for good. The worker is then replaced by a fresh one from
-  // opts.createWorker, since a dead worker would swallow the retry. The new
-  // one holds no run, so replays need the report built again.
-  function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : replayWaiters.length ? 'replay' : null; }
+  // charged to whatever is in flight, so a pending sample request, check or
+  // run cannot leave the page busy for good. The worker is then replaced by a
+  // fresh one from opts.createWorker, since a dead worker would swallow the
+  // retry. The new one holds no run, so replays need the report built again.
+  function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : pending.sample ? 'sample' : replayWaiters.length ? 'replay' : null; }
   function workerFailed(message) {
     var phase = inFlight();
     var restarted = replaceWorker();
@@ -637,7 +638,12 @@ export function createPage(root, worker, opts) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
     var empty = !state.entries.length;
+    // In flight like a check (busy): a drop, a file choice or another click
+    // is refused until the answer, and a worker failure settles the request
+    // (recover) with the list as it was.
     var reply = waitFor('sample');
+    updateControls();
+    armStallHint();
     send({ type: 'sample' });
     return reply.then(function (msg) {
       var listed = {};

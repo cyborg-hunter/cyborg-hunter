@@ -1051,6 +1051,44 @@ test('from file:, the sample\'s files are sent as bytes like a drop\'s', async (
   assert.ok(t.sent[1].files.every((f) => f.bytes instanceof ArrayBuffer && f.bytes.byteLength > 0));
 });
 
+// The sample request is in flight like a check: what would start another
+// operation waits for its answer.
+test('a drop while the sample is pending is refused; the check that follows lists the sample', async () => {
+  const t = boot();
+  action('sample').click();
+  await tick();
+  t.page.addFiles([{ path: 'late.csv', file: new File(['x'], 'late.csv') }]);
+  action('sample').click();
+  await tick();
+  assert.equal(t.sent.length, 1, 'neither the drop nor a second click sends anything');
+  assert.equal(action('run').disabled, true);
+  assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => b.disabled), 'busy, as during a check');
+  t.emit(SAMPLE);
+  await tick();
+  assert.deepEqual(paths(t.sent[1]), SAMPLE_PATHS);
+});
+
+test('a worker error while the sample is pending shows the error and leaves the list empty', async () => {
+  for (const kind of ['onerror', 'onmessageerror']) {
+    const t = boot();
+    action('sample').click();
+    await tick();
+    t.worker[kind]({ message: 'out of memory' });
+    await tick();
+    assert.equal(role('error').hidden, false, kind);
+    assert.match(role('error').textContent, /worker/i, kind);
+    assert.equal(role('files-panel').hidden, true, kind);
+    assert.deepEqual(t.page.state.entries, [], kind);
+    assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled), kind + ': no longer busy');
+    t.emit(SAMPLE);              // a late answer to the request the failure settled
+    await tick();
+    assert.deepEqual(t.page.state.entries, [], kind + ': the settled request adds nothing');
+    action('sample').click();
+    await tick();
+    assert.deepEqual(t.sent.map((m) => m.type), ['sample', 'sample'], kind + ': a new request');
+  }
+});
+
 // The classifier lists every JSON file as participant data; the check's peek
 // tells a recording apart. Run waits for a file the peek read as data.
 test('a list of replay recordings only shows 0 data files, and Run stays disabled', async () => {
