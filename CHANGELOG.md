@@ -23,17 +23,76 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   that shows it at the size it was drawn, scrolling inside the overlay (a
   click on the figure switches too), and a **Fullscreen** control wherever
   the page may go fullscreen. On `/analyze/` the report frame now allows it.
-- One-line setup: one file per framework. `ch.js` stays the file for jsPsych
-  and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
-  surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
-  tag's attributes and the double-load sentinel, and each carries only its
-  own framework's adapter, so participants never download the others. A file
-  on a page that runs another framework logs one console error naming the
-  file to load (also on the `data-debug` badge) and records the page as a
-  page without a framework (one exception: `ch-labjs.js` on a lab.js page
-  whose jsPsych loads after it keeps lab.js hooked). `ch-qualtrics.js`
-  records a survey whose page also runs jsPsych as a Qualtrics page, with
-  one warning. See docs/quickstart.md#which-file.
+- Session replay: the recorder records `<html>`'s own attributes (on every
+  keyframe, and each change), and the viewer applies them to the replay.
+  A page that keeps its layout on `<html>`, for example CSS variables set
+  with `document.documentElement.style.setProperty`, replays at the sizes
+  the participant saw; before, everything sized by those variables fell
+  back to its default (a card image at its natural size). The data rides in
+  the recording's `extensions["cyborg-hunter"]` (`root_attrs` on keyframe
+  segments, `root_attr_events` on the recording), so other players ignore
+  it. Recordings made before 0.13.0 replay as before.
+- `/analyze/`: a settings panel with the keys a report can apply after
+  collection (score weights, soft-score threshold, phase scope, the ID,
+  integrity and session-report fields, platform ID and trajectory order).
+  On the results, a change re-analyses in place without dropping the files
+  again; a change to the ID, integrity or session-report field reads the
+  files again from the same list.
+
+### Changed
+- `/analyze/`: dropping and checking are one "Files & settings" step. Every
+  drop or file choice adds to the list, so data and replays can come from
+  different folders; the same file dropped twice is listed once. A table
+  lists each file with what it was read as (participant data, replay
+  recording, experiment asset, settings, ignored, unreadable) and a Remove
+  button, and a line says whether the settings came from a dropped
+  `cyborg-hunter.config.json` or are the defaults.
+- Live demo: the tour ends with your files. Its last step, "Your files",
+  offers the session data, the replay recording and a config, plus two
+  example participants, as two batches of Save links (no zip), and an
+  "Open in the analyzer" button that hands all five to `/analyze/` in the
+  same browser, where they are listed as if dropped. The report the tour
+  used to build at its end, and its scoring playground, are gone: the
+  analyzer builds the report and holds the settings. The tour has 11 steps.
+- Replay viewer: the stage shows the participant's whole recorded viewport,
+  scaled to fit on both axes. Before, it took the available width only, and a
+  tall recording ran below the window. **1:1** shows the recorded page at
+  its own pixel size, scrolling inside the stage's box; **Fullscreen** gives
+  the viewer the whole screen. In the CLI report the replay takes the detail
+  pane's full width and height, beyond the 800 px column the rest of the pane
+  keeps.
+- `/analyze/`: the replay frame is as tall as the viewer inside it (it was a
+  fixed 640 px, so a tall replay scrolled inside it), the viewer fits the
+  page's window, and its **Fullscreen** control works there, the offline
+  single file included.
+- Experiment assets: an image a replay shows on many elements (a card game's
+  card art on every card) is now stored once in the report's replay file
+  (`replay/<id>.replay.js`), however many elements show it, and the viewer
+  puts it back on each element when the replay loads; the recordings
+  themselves are unchanged. A `srcset` keeps its images inline.
+
+### Fixed
+- `/analyze/`: "Export config" writes only the settings that differ from the
+  CLI's defaults, plus the participant-ID field. Before, it wrote every
+  default key and replaced your own `dataDir`, `filePattern` and `outputDir`
+  with fixed values. With experiment files dropped, it sets `assetsDir` to
+  `./assets`, and the page says where to put them.
+- Report and `/analyze/`: when several data records share a participant ID
+  and several replays claim it, no replay is attached, and the replay section
+  said the session was never recorded. It now says why no replay is shown and
+  names the replay files. The analyze page's replay card gives the reason
+  too, and does the same for a replay file that could not be loaded.
+
+## [0.12.0] — 2026-10-07
+
+Qualtrics and lab.js: two more one-line files, `dist/ch-qualtrics.js` for
+Qualtrics surveys and `dist/ch-labjs.js` for lab.js studies, next to
+`dist/ch.js` for jsPsych and pages without a framework. The CLI and the
+`/analyze/` page read both frameworks' data. Also fixes for the one-line
+setup on pages without jsPsych (form submits, pages restored from the
+back/forward cache), the jsPsych extensions, session replay and the report.
+
+### Added
 - One-line setup in Qualtrics surveys: `dist/ch-qualtrics.js` in the
   survey's Look & Feel header writes a capped summary of the session
   (scores, counts and event timings, never text the participant typed or
@@ -62,16 +121,17 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trial row and the root row, before `on('end')` handlers run. A lab.js 23
   pre-release is not hooked yet: one warning, and the page runs as one
   without lab.js. See docs/labjs.md.
-- Standalone replay recorder (`CyborgHunterReplay.attach()`):
-  `resumeSession()` records again after `stopSession()`, in later segments of
-  the same recording; call `startTrial()` right after it.
-  `startTrial({ extensions })` sets a segment's vendor `extensions`. The
-  one-line setup uses both for a page restored from the back/forward cache,
-  marking its segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
-  A value that is not an object keyed by lowercase vendor names (`"my-lab"`),
-  or that holds anything a JSON copy would change (a function, `undefined`,
-  `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
-  capture failure.
+- One-line setup: one file per framework. `ch.js` stays the file for jsPsych
+  and pages without a framework; `ch-qualtrics.js` is the file for Qualtrics
+  surveys and `ch-labjs.js` for lab.js studies. The files share the API, the
+  tag's attributes and the double-load sentinel, and each carries only its
+  own framework's adapter, so participants never download the others. A file
+  on a page that runs another framework logs one console error naming the
+  file to load (also on the `data-debug` badge) and records the page as a
+  page without a framework (one exception: `ch-labjs.js` on a lab.js page
+  whose jsPsych loads after it keeps lab.js hooked). `ch-qualtrics.js`
+  records a survey whose page also runs jsPsych as a Qualtrics page, with
+  one warning. See docs/quickstart.md#which-file.
 - CLI and analyze page: the lab.js Transmit plugin's envelope
   (`{ metadata, url, data: [rows] }`, what `datastore.transmit()` posts) is
   read as a participant file. So is any object that holds its rows under
@@ -94,21 +154,16 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   Transmit body), the participant ID field is suggested from its first row
   and its own top-level fields, never from its `metadata` (where `id` is
   lab.js's upload-session id).
-- Session replay: the recorder records `<html>`'s own attributes (on every
-  keyframe, and each change), and the viewer applies them to the replay.
-  A page that keeps its layout on `<html>`, for example CSS variables set
-  with `document.documentElement.style.setProperty`, replays at the sizes
-  the participant saw; before, everything sized by those variables fell
-  back to its default (a card image at its natural size). The data rides in
-  the recording's `extensions["cyborg-hunter"]` (`root_attrs` on keyframe
-  segments, `root_attr_events` on the recording), so other players ignore
-  it. Recordings made before 0.13.0 replay as before.
-- `/analyze/`: a settings panel with the keys a report can apply after
-  collection (score weights, soft-score threshold, phase scope, the ID,
-  integrity and session-report fields, platform ID and trajectory order).
-  On the results, a change re-analyses in place without dropping the files
-  again; a change to the ID, integrity or session-report field reads the
-  files again from the same list.
+- Standalone replay recorder (`CyborgHunterReplay.attach()`):
+  `resumeSession()` records again after `stopSession()`, in later segments of
+  the same recording; call `startTrial()` right after it.
+  `startTrial({ extensions })` sets a segment's vendor `extensions`. The
+  one-line setup uses both for a page restored from the back/forward cache,
+  marking its segment `extensions["cyborg-hunter"].restored_from: "bfcache"`.
+  A value that is not an object keyed by lowercase vendor names (`"my-lab"`),
+  or that holds anything a JSON copy would change (a function, `undefined`,
+  `NaN`, a `Date`), is left out whole and logged as a `segment_extensions`
+  capture failure.
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
@@ -159,36 +214,6 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trialId/phase now keeps that label on its row; unlabelled steps keep
   `gap-<n>`. Rows recorded by 0.10.x–0.11.x for such steps were labelled
   `gap-<n>`.
-- `/analyze/`: dropping and checking are one "Files & settings" step. Every
-  drop or file choice adds to the list, so data and replays can come from
-  different folders; the same file dropped twice is listed once. A table
-  lists each file with what it was read as (participant data, replay
-  recording, experiment asset, settings, ignored, unreadable) and a Remove
-  button, and a line says whether the settings came from a dropped
-  `cyborg-hunter.config.json` or are the defaults.
-- Live demo: the tour ends with your files. Its last step, "Your files",
-  offers the session data, the replay recording and a config, plus two
-  example participants, as two batches of Save links (no zip), and an
-  "Open in the analyzer" button that hands all five to `/analyze/` in the
-  same browser, where they are listed as if dropped. The report the tour
-  used to build at its end, and its scoring playground, are gone: the
-  analyzer builds the report and holds the settings. The tour has 11 steps.
-- Replay viewer: the stage shows the participant's whole recorded viewport,
-  scaled to fit on both axes. Before, it took the available width only, and a
-  tall recording ran below the window. **1:1** shows the recorded page at
-  its own pixel size, scrolling inside the stage's box; **Fullscreen** gives
-  the viewer the whole screen. In the CLI report the replay takes the detail
-  pane's full width and height, beyond the 800 px column the rest of the pane
-  keeps.
-- `/analyze/`: the replay frame is as tall as the viewer inside it (it was a
-  fixed 640 px, so a tall replay scrolled inside it), the viewer fits the
-  page's window, and its **Fullscreen** control works there, the offline
-  single file included.
-- Experiment assets: an image a replay shows on many elements (a card game's
-  card art on every card) is now stored once in the report's replay file
-  (`replay/<id>.replay.js`), however many elements show it, and the viewer
-  puts it back on each element when the replay loads; the recordings
-  themselves are unchanged. A `srcset` keeps its images inline.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the
@@ -273,10 +298,6 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   versions) gets a double-load error whose fix says to load `ch.js` once and
   keep one of its `<script>` tags. Before, the fix said to load only one of
   `ch.js` and `cyborg-hunter.min.js`, a file the page did not load.
-- CLI and analyze page: a CSV participant ID keeps its text (`007` stays
-  `007`, and so does ch-labjs.js's ID on lab.js rows). Before, `007` was
-  keyed `7`, so its replay recording did not attach and `--participant 007`
-  found nothing.
 - Report (CLI and `/analyze/`): the ▸ toggle beside a long paste now shows
   its full text. Before, a click hid the preview and showed nothing.
 - Report (CLI and `/analyze/`): "… +N more" under a session-level signal
@@ -292,16 +313,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   page fell back to `participantId`, which is wrong for jsPsych's
   `subject_ID`. The line beside the field counts the data files read and
   the recordings skipped.
-- `/analyze/`: "Export config" writes only the settings that differ from the
-  CLI's defaults, plus the participant-ID field. Before, it wrote every
-  default key and replaced your own `dataDir`, `filePattern` and `outputDir`
-  with fixed values. With experiment files dropped, it sets `assetsDir` to
-  `./assets`, and the page says where to put them.
-- Report and `/analyze/`: when several data records share a participant ID
-  and several replays claim it, no replay is attached, and the replay section
-  said the session was never recorded. It now says why no replay is shown and
-  names the replay files. The analyze page's replay card gives the reason
-  too, and does the same for a replay file that could not be loaded.
+- CLI and analyze page: a CSV participant ID keeps its text (`007` stays
+  `007`, and so does ch-labjs.js's ID on lab.js rows). Before, `007` was
+  keyed `7`, so its replay recording did not attach and `--participant 007`
+  found nothing.
 
 ### Removed
 - Internal renderer wrappers removed

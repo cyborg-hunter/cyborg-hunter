@@ -47,7 +47,7 @@ npm install -g cyborg-hunter
 Browser (experiment page): one tag, below `jspsych.js` and above your experiment code (on a page without jsPsych, anywhere in the page; in `<head>`, recording starts at `DOMContentLoaded`):
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.11.0/dist/ch.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.12.0/dist/ch.js"></script>
 ```
 
 Each framework has its own one-line file, with the same API and the same tag attributes ([quickstart § Which file](docs/quickstart.md#which-file)):
@@ -58,7 +58,7 @@ Each framework has its own one-line file, with the same API and the same tag att
 | `ch-qualtrics.js` | Qualtrics surveys, in the survey's header ([docs/qualtrics.md](docs/qualtrics.md)) |
 | `ch-labjs.js` | lab.js studies, below `lib/lab.js` ([docs/labjs.md](docs/labjs.md)) |
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.11.0/dist/...`. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
+For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.12.0/dist/...`. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
 
 Manual mode (advanced), for experiments that wire the jsPsych extension themselves: see [docs/advanced-integration.md](docs/advanced-integration.md#manual-mode). It loads these files instead of `ch.js`:
 
@@ -219,7 +219,7 @@ Run the test suite with `npm test`. Before publishing, run `scripts/check-public
   author  = {Konuk, Can and Btesh, Victor and Nunez, Jose Luis},
   title   = {cyborg-hunter: detecting AI-tool use in browser-based behavioral experiments},
   year    = {2026},
-  version = {0.11.0},
+  version = {0.12.0},
   url     = {https://github.com/cyborg-hunter/cyborg-hunter},
   license = {MIT}
 }
