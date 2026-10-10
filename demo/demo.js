@@ -605,10 +605,11 @@ function startTour(participantId, capabilities, manifest) {
     // (emitting its phase:'end', which unfloats via the handler below) and
     // hides the overlay — so ending the guard mid-violation is clean.
     finalizeGuard();
-    // Fullscreen ends with the guard, as step 7's copy promises: AFTER
-    // finalizeGuard(), so the exit logs no 'not_fullscreen' violation (the
-    // same order the files step uses for a visitor who skipped this button).
-    exitFullscreenIfActive();
+    // Fullscreen stays until the files step, where the session is finalised
+    // first: leaving it here, while the monitor still records, makes the
+    // window's width change read as a sidebar opening (a false sidebar event
+    // and lamp). Leaving at the end of the guard returns once the library
+    // tells a fullscreen change from a sidebar.
     goTo(state.stepIndex + 1);
   }
 

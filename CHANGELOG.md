@@ -220,8 +220,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   step's text and its task panel. Step 5 opens with what automated bots
   leave behind, and step 6 says what the guard is and that the wording of
   its entry page can be changed. No task panel shows a label, no step has
-  a "Skip to the guarded act" link, no text names an act, and the link
-  back reads "Go back" on every step. The last step's closing line reads
+  a "Skip to the guarded act" link, no text names an act, and a small
+  button beneath the primary one reads "← Go back" on every step. The
+  last step's closing line reads
   "One script tag is the whole integration; the quickstart shows it."
 - Live demo: the guard's step, "Try to break the guard", has no task box.
   Its own text is what the guard scrambles and hides while the visitor is
@@ -231,14 +232,18 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - Live demo: the top bar holds only the title, and the recording lamp in
   the rail carries the REC cue, pulsing red while the session records; the
   step count ("Step 2 of 10") is on the card, and the participant ID is no
-  longer in the top bar. The lamps panel is its title, the
-  detector lamps and the Guard and Recording groups: the intro line, its
-  tooltip, the "awaiting your session" note and the Detectors head are
-  gone. The session record under the card has no caption.
+  longer in the top bar. The lamps panel is its title, a framed box with
+  the signals the current step detected ("nothing detected on this step"
+  until one fires), the detector lamps and the Guard and Recording groups:
+  the intro line, its tooltip, the "awaiting your session" note and the
+  Detectors head are gone. The session record under the card has no
+  caption.
 - Live demo: the live session record sits under the step card on every
-  step, and the column on the right holds the signal lamps alone, which stay
-  in view while the step scrolls. Before, the record shared that column
-  with the lamps and moved under the card for one step only.
+  step, collapsed under a bar that opens it on hover or keyboard focus (a
+  click on the bar pins it open; step 8, whose text points to it, opens it),
+  and the column on the right holds the signal lamps alone, which stay in
+  view while the step scrolls. Before, the record was always open, shared
+  that column with the lamps and moved under the card for one step only.
 - `/analyze/`: the top bar reads "cyborg-hunter · report generator" and
   links the live demo, GitHub (the link that read "docs") and the offline
   version, the single-file page as a download. The paragraph that described
