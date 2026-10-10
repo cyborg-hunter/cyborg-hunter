@@ -632,8 +632,9 @@ export function createPage(root, worker, opts) {
   // name, and a name already listed is not added twice (the tour's examples
   // arrive by the hand-off under these same names). The sample's config
   // comes only to an empty list: a cohort keeps the settings it brought, or
-  // the ones the analyst set, and the sample's id field (participantId) is
-  // never put on files that use another.
+  // the ones the analyst set. The sessions are keyed by participantId, so
+  // beside files keyed by another field one side reads as unknown until it
+  // is removed.
   function loadSample() {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();

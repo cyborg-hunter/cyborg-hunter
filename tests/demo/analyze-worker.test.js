@@ -171,6 +171,28 @@ test('run on the sample streams a zip of the full report and returns the in-page
   assert.ok(phases.has('ingest') && phases.has('report'), [...phases].join(','));
 });
 
+// The sample added to a cohort already listed, as the page adds it: without
+// its config. The cohort's CSV is keyed by subjectId, the sessions by
+// participantId; no id field is in every file, so the check suggests none,
+// and a run under participantId reads the CSV's participant as unknown.
+test('beside a CSV keyed by another field, the sample reads under participantId and the CSV\'s participant is unknown', async () => {
+  const w = startWorker();
+  const files = async () => [fileEntry('tests/cli/fixtures', 'conj-disj-sample.csv'),
+    ...(await sampleEntries(w)).filter((f) => f.path !== 'cyborg-hunter.config.json')];
+  w.send({ type: 'check', files: await files() });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.equal(checked.configFound, false);
+  assert.equal(checked.idSuggestion.suggested, null);
+  w.send({ type: 'run', files: await files(), config: checked.config, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.ok(done.warnings.some((x) => /conj-disj-sample\.csv/.test(x.file)
+    && x.warnings.some((t) => /field "participantId" not found.*defaulted to "unknown"/.test(t))), JSON.stringify(done.warnings));
+  assert.deepEqual(done.participants.map((p) => p.participantId).sort(), ['DEMO-681w', 'DEMO-9mop', 'DEMO-a3f3', 'DEMO-bsq6', 'unknown']);
+  assert.ok(done.triageOrder.includes('unknown'), done.triageOrder.join(','));
+});
+
 test('a run with a recording serves the same styled replay model the zip carries', async () => {
   // The fixture's recording plus one external stylesheet the dropped folder
   // supplies, with an image of its own: the matcher, the note and the

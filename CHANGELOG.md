@@ -338,6 +338,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   instead of replacing them: a session already listed by name is left out,
   the sample's config comes only to an empty list (a cohort keeps the config
   and settings it has), and each added file can be removed like any other.
+  The sessions are read under the cohort's participant-ID field: beside
+  files keyed by another field, one side reads as `unknown` until it is
+  removed.
 
 ### Fixed
 - One-line setup on pages without jsPsych: more form submits that keep the
