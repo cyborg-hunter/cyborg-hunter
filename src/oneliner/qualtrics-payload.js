@@ -184,7 +184,10 @@ var SEGMENT = /* @__PURE__ */ fields({
     softScoreThreshold: num, anyHardTriggered: bool, trialsCompleted: num }),
   gap: /* @__PURE__ */ listOf({ duration_ms: num, pasteEvents: PASTE, copyEvents: COPY, dropEvents: DROP, syntheticInsertions: INSERTION }),
   config: /* @__PURE__ */ fields({ preset: label, participantId: label, thresholds: /* @__PURE__ */ fields({ tabAwayDurationMs: num, typingSpeedCps: num }) }),
-  libraryVersion: label
+  libraryVersion: label,
+  // What the browser said about the device (monitor.js readDeviceFacts),
+  // first segment only: three scalars, under a hundred bytes.
+  device: /* @__PURE__ */ fields({ maxTouchPoints: num, coarsePointer: bool, webdriver: bool })
 });
 var ROW = /* @__PURE__ */ fields({
   trialId: label, integrity: /* @__PURE__ */ fields(TRIAL), integritySegment: SEGMENT,
@@ -397,20 +400,23 @@ function rollup(all, kept) {
 
 // Level 3: the newest KEEP_PAGES rows. The first segment's config (preset,
 // thresholds) moves onto the oldest kept segment so the CLI still bins this
-// participant with the thresholds the monitor used.
+// participant with the thresholds the monitor used; its device facts move
+// with it.
 function keepNewestRows(p, t, all) {
   if (p.trials.length <= KEEP_PAGES) return;
   var dropped = p.trials.slice(0, -KEEP_PAGES);
   p.trials = p.trials.slice(-KEEP_PAGES);
-  var config;
+  var config, device;
   dropped.forEach(function (r) {
     var s = r.integritySegment;
     if (!s) return;
     countDeltas(t, s.deltas);
     if (!config) config = s.config;
+    if (!device) device = s.device;
   });
   var first = p.trials[0].integritySegment;
   if (config && first && !first.config) first.config = config;
+  if (device && first && !first.device) first.device = device;
   t.pagesDropped += dropped.length;
   t.pagesTrimmed = p.trials.length - 1;
   var r = rollup(all, p.trials);

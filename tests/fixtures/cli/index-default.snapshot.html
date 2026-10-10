@@ -236,6 +236,29 @@
     .signal-value { font-family: var(--ff-sora); font-size: 18px; font-weight: 700; line-height: 1; }
     .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
 
+    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-verdict cell. */
+    .cursor-details { border: 1px solid var(--line); padding: 10px 14px 12px; margin-top: 8px; }
+    .cursor-table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
+    .cursor-table:last-of-type { margin-bottom: 2px; }
+    .cursor-table caption { font-family: var(--ff-tomorrow); text-align: center; font-variant: small-caps; letter-spacing: 0.06em; font-size: 14px; color: var(--ink); padding: 2px 0 6px; }
+    .cursor-table th, .cursor-table td { padding: 5px 10px; vertical-align: top; }
+    .cursor-table th { text-align: left; font-weight: normal; width: 46%; }
+    .cursor-table tbody tr:nth-child(even) { background: rgba(26, 24, 20, 0.035); }
+    .cursor-table tr.fired th { font-weight: 600; }
+    .cursor-cell { font-family: var(--ff-tomorrow); font-size: 11px; color: var(--dim); }
+    .cursor-cell[data-level="2"] { color: var(--hard); }
+    .cursor-cell[data-level="1"] { color: var(--soft); }
+    .cursor-verdict { margin: 8px 0 4px; }
+    .verdict-badge { display: inline-block; font-family: var(--ff-tomorrow); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--line); color: var(--dim); }
+    .verdict-badge[data-level="0"] { color: var(--clean); border-color: var(--clean); }
+    .verdict-badge[data-level="1"] { color: var(--soft); border-color: var(--soft); }
+    .verdict-badge[data-level="2"] { color: #fff; background: var(--hard); border-color: var(--hard); }
+    .cursor-tells { margin: 0 0 8px 20px; padding: 0; }
+    .cursor-tells li.tell-high { font-weight: 600; }
+    .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
+    /* Closed, the summary is the block's only line: no bottom margin, so the frame sits evenly around it. */
+    .cursor-details:not([open]) > summary { margin-bottom: 0; }
+
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
        proportional to each term's share of the total. */
@@ -447,6 +470,7 @@
       <select name="sort">
         <option value="tier" selected>Tier (hard first)</option>
         <option value="score">Score &darr;</option>
+        <option value="cursor">Pointer verdict &darr;</option>
         <option value="id">ID</option>
       </select>
     </label>
@@ -458,6 +482,7 @@
        data-sanitized="DEMO-FIXT"
        data-tier="hard"
        data-score="11"
+       data-cursor="-1"
        data-reason="2 paste events; 1 tab-away ≥10s">
     <div class="cohort-row-top">
       <span class="annot-mark" data-label=""></span>
@@ -466,6 +491,7 @@
     </div>
     <div class="cohort-row-bot">
       <span class="reason-excerpt">2 paste events; 1 tab-away ≥10s</span>
+      <span class="cursor-cell" data-level="-1">pointer: not assessed</span>
       <span class="tier-badge" data-tier="hard">HARD</span>
     </div>
   </div>
@@ -602,6 +628,13 @@
         <span class="signal-label">Edge exits</span>
       </div>
     
+      <div class="signal-tile tone-zero"
+           role="listitem"
+           title="The pointer verdict: 0 clean, 1 suspicious, 2 highly suspicious; — when the session is not assessed (no device facts, no cursor stream, or too few clicks)">
+        <span class="signal-value">—</span>
+        <span class="signal-label">Pointer verdict</span>
+      </div>
+    
   </div>
     <div class="score-breakdown">
     <span class="score-term">
@@ -632,6 +665,28 @@
     </div></div>
   
     <p class="muted note">Visual renderers not available (install the canvas package).</p>
+    <div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4><p class="cursor-verdict"><span class="verdict-badge" data-level="-1">not assessed</span> <span class="muted">device facts and click provenance not recorded (library before 0.14).</span></p><details class="cursor-details"><summary>every check, the rules and the movement shape</summary>
+    <table class="cursor-table"><caption>browser-reported checks</caption>
+      <tr class=""><th>automation flag set by the browser</th><td>not recorded</td></tr>
+      <tr class=""><th>clicks the page’s own scripts dispatched</th><td>not recorded</td></tr>
+      <tr class=""><th>trials clicked without pointer movement</th><td>not recorded</td></tr>
+    </table>
+    <table class="cursor-table"><caption>rules and movement shape</caption>
+      <tr><th>clicks that arrived without a path</th><td>1 of 1 first clicks with a known position (act1-paste)</td></tr>
+      <tr><th>clicks after a pointer jump</th><td>1 of 1 first clicks with a known position (act1-paste)</td></tr>
+      <tr><th>movement duration</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>path length</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>displacement</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>mean speed</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>efficiency (per movement)</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>maximum deviation from the chord</th><td>— <span class="muted">(n = 0)</span></td></tr>
+      <tr><th>moves per trial</th><td>1.0 <span class="muted">(n = 6)</span></td></tr>
+      <tr><th>movements per trial</th><td>2.0 <span class="muted">(n = 6)</span></td></tr>
+      <tr><th>keyboard-activated clicks</th><td>0 of 7 clicks</td></tr>
+      <tr><th>movements · clicks</th><td>13 · 7</td></tr>
+      <tr><th>capped trials</th><td>0 of 6 trials</td></tr>
+    </table>
+    </details></div>
     <div class="image-block replay-block">
       <h4 class="section-heading">Session replay</h4>
       <p class="replay-note">No replay artifact (recording was not enabled for this session).</p>
@@ -867,12 +922,18 @@
       // --- Sort ---
       const sortEl = document.querySelector('.sort-wrap select');
       sortEl.addEventListener('change', () => {
-        const key = sortEl.value;  // 'score' | 'id' | 'tier'
+        const key = sortEl.value;  // 'score' | 'cursor' | 'id' | 'tier'
         const tierRank = { hard: 0, soft: 1, clean: 2 };
         const parent = rows[0]?.parentNode;
         if (!parent) return;
         const sorted = [...rows].sort((a, b) => {
           if (key === 'score') return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          // 'cursor': verdict level desc (not assessed = -1 last), then score desc.
+          if (key === 'cursor') {
+            const dc = parseInt(b.dataset.cursor, 10) - parseInt(a.dataset.cursor, 10);
+            if (dc !== 0) return dc;
+            return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          }
           if (key === 'id')    return a.dataset.pid.localeCompare(b.dataset.pid);
           // 'tier': hard first, then soft, then clean; within tier, score desc.
           const dt = tierRank[a.dataset.tier] - tierRank[b.dataset.tier];

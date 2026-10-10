@@ -19,7 +19,7 @@ describe('score-weights.json', () => {
     assert.equal(json.isDefault, true);
     assert.deepEqual(json.weights.paste, { weight: 5, max: null });
     assert.deepEqual(json.weights.synthetic, { weight: 0, max: null });
-    assert.equal(Object.keys(json.weights).length, 16);
+    assert.equal(Object.keys(json.weights).length, 17);
   });
 
   it('records custom weights and marks them non-default', () => {

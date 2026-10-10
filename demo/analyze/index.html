@@ -47,7 +47,7 @@ iframe.analyze-report{ width:100%; height:min(80vh,900px); border:1px solid var(
     <label><input type="file" multiple data-role="file-input"> choose files</label> /
     <label><input type="file" webkitdirectory data-role="dir-input"> choose a folder</label>
   </div>
-  <p><button class="secondary" data-action="sample">Load sample data</button> <span class="hint">— three synthetic participants (no real person behind them), so you can see the whole report before trusting this page with real data.</span></p>
+  <p><button class="secondary" data-action="sample">Load sample data</button> <span class="hint">— four synthetic participants (no real person behind them), so you can see the whole report before trusting this page with real data.</span></p>
   <div data-role="files-panel" hidden>
     <div class="files-list"><table class="files"><thead><tr><th>File</th><th>Read as</th><th></th></tr></thead><tbody data-role="file-rows"></tbody></table></div>
     <p class="hint" data-role="handoff-assets" hidden>(The demo page's fonts were included so the replay renders in them.)</p>
@@ -66,6 +66,7 @@ iframe.analyze-report{ width:100%; height:min(80vh,900px); border:1px solid var(
 <section class="step" data-step="results" hidden>
   <h2>3. Results</h2>
   <p class="hint" data-role="summary"></p>
+  <p class="hint" data-role="cursor-line"></p>
   <div class="downloads">
     <button data-action="download-zip">Download all (.zip)</button>
     <button class="secondary" data-action="download" data-file="summary.csv">summary.csv</button>

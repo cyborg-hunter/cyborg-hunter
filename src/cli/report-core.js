@@ -25,11 +25,13 @@
 // }
 import { computeSummary } from './analyzers/summary.js';
 import { detectEdgeExits } from './analyzers/edge-exit.js';
+import { analyzeCursor } from './analyzers/cursor.js';
 import { rankTriage } from './analyzers/triage.js';
 import { resolveScoreWeights, formulaText } from './analyzers/score-weights.js';
 import { applyPhaseScope, describePhaseScope, findUnmatchedPhaseScopePhases } from './analyzers/phase-scope.js';
 import { buildSummaryCsv } from './renderers/summary-csv-core.js';
 import { buildScoreWeightsJson } from './renderers/score-weights-core.js';
+import { buildCursorLimitsJson } from './renderers/cursor-limits-core.js';
 import { buildTriageMd } from './renderers/triage-md-core.js';
 import { buildEventLogCsv } from './renderers/event-log-core.js';
 import { buildExtensionsCsv } from './renderers/extensions-core.js';
@@ -42,7 +44,7 @@ import { bytesToBase64 } from '../shared/base64.js';
 
 // The text files every report contains, in write order (images/ and replay/
 // files, when there are any, come between extensions.csv and index.html).
-export const REPORT_FILES = ['summary.csv', 'score-weights.json', 'triage.md', 'event-log.csv', 'extensions.csv', 'index.html'];
+export const REPORT_FILES = ['summary.csv', 'score-weights.json', 'cursor-limits.json', 'triage.md', 'event-log.csv', 'extensions.csv', 'index.html'];
 
 // The run id names the cohort and its data: each participant's id with a
 // config-free fingerprint (trial count, first and last trial timestamps), the
@@ -100,6 +102,12 @@ export async function buildReport(participants, config, deps) {
     }
   }
   const summaries = computeSummary(scoredParticipants, config);
+  // The cursor section (analyzers/cursor.js) rides on each summary so the
+  // triage reason, the CSV, the rail and the score term read one object. It
+  // judges with the default constants (CURSOR_LIMITS); no config key changes
+  // them.
+  const cursors = analyzeCursor(scoredParticipants);
+  summaries.forEach((s, i) => { s.cursorAnalysis = cursors[i]; });
   const edgeExits = detectEdgeExits(scoredParticipants, config);
   const triage = rankTriage(summaries, edgeExits, config);
 
@@ -131,6 +139,13 @@ export async function buildReport(participants, config, deps) {
   const sw = buildScoreWeightsJson(config);
   sink('score-weights.json', sw.text);
   log(`  score-weights.json — ${sw.isDefault ? 'default' : 'custom'} weights`);
+  // recordedWith: every library version the data names, once each, in
+  // version order (0.6.1 before 0.14.0), joined by ", "; null when none.
+  const versions = new Set();
+  for (const p of participants) for (const t of p.trials || []) if (typeof t.libraryVersion === 'string' && t.libraryVersion) versions.add(t.libraryVersion);
+  const recordedWith = versions.size ? [...versions].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).join(', ') : null;
+  sink('cursor-limits.json', buildCursorLimitsJson(recordedWith, cursors));
+  log(`  cursor-limits.json — the constants the cursor section used`);
   sink('triage.md', buildTriageMd(triage, config));
   log(`  triage.md — ranked list`);
   const ev = buildEventLogCsv(participants);
@@ -139,6 +154,23 @@ export async function buildReport(participants, config, deps) {
   const ex = buildExtensionsCsv(participants);
   sink('extensions.csv', ex.csv);
   log(`  extensions.csv — ${ex.rows} detections`);
+
+  // The pointer verdicts over the cohort: the run line (returned as
+  // cursorLine for the analyze page, whose worker does not wire log) and,
+  // when the cursor weight is on but some sessions carry no device facts,
+  // the warning. withDevice: sessions with device facts (at least the
+  // automation flag is recorded); withoutDevice: the rest of the cohort.
+  const total = cursors.length;
+  const withDevice = cursors.filter(c => c.checksRecorded >= 1).length;
+  const withoutDevice = total - withDevice;
+  const v = { '-1': 0, 0: 0, 1: 0, 2: 0 };
+  for (const c of cursors) v[c.level]++;
+  const cursorLine = `Pointer verdicts: ${v[2]} highly suspicious, ${v[1]} suspicious, ${v[0]} clean, ${v[-1]} not assessed (${total} session${total === 1 ? '' : 's'}; ${withoutDevice} recorded without device facts)`;
+  log(`  ${cursorLine}`);
+  const cursorWeight = scoreWeights.weights.cursor.weight;
+  if (cursorWeight > 0 && withDevice < total) {
+    warn(`[cyborg-hunter] scoreWeights.cursor is ${cursorWeight}; ${withDevice} of ${total} sessions carry device facts (the rest were recorded before 0.14): the weight ranks only those.`);
+  }
 
   // Plots, through the injected canvas: one PNG per participant from each of
   // trajectories-core.js, session-timeline-core.js and typing-profile-core.js.
@@ -207,7 +239,7 @@ export async function buildReport(participants, config, deps) {
   log('  index.html — report page');
 
   return { summaries, triage, triageOrder: triage.map(t => t.participantId),
-    counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images, runId, generatedAt };
+    counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images, runId, generatedAt, cursorLine };
 }
 
 // The in-page report: the SAME summaries/triage and the SAME PNG bytes the zip

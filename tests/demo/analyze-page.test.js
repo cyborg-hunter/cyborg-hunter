@@ -54,6 +54,7 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
 const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null,
   integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
+  cursorLine: 'Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 0 not assessed (2 sessions; 0 recorded without device facts)',
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
 
@@ -262,6 +263,7 @@ test('done → results: summary, sandboxed report frame, zip blob, replay dropdo
   await toResults(t);
   assert.deepEqual(visibleStep(), ['results']);
   assert.match(role('summary').textContent, /2 participants: 1 hard, 0 soft, 1 clean\. Zip: 2 KB\./);
+  assert.equal(role('cursor-line').textContent, DONE.cursorLine);
   const frame = document.querySelector('iframe.analyze-report');
   assert.equal(frame.getAttribute('sandbox'), 'allow-scripts');
   assert.match(t.page.state.zipUrl, /^blob:/);

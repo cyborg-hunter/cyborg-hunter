@@ -14,7 +14,8 @@ test('summary.csv, event-log.csv and extensions.csv put every cell through csvCe
   const summaryRow = buildSummaryCsv([summary], [{ participantId: pid, score: -0.5, reason: '-' }]).split('\n')[1];
   assert.ok(summaryRow.startsWith("'=1+1,1,-0.5,no,'-,"), summaryRow);
   assert.ok(summaryRow.includes(",-1.00,"), 'a negative number as text stays a number: ' + summaryRow);
-  assert.ok(summaryRow.endsWith(",'@ext,0,0,0,0,,YES,'+cmd"), summaryRow);
+  // The nineteen cursor columns follow, empty without a cursor analysis.
+  assert.ok(summaryRow.endsWith(",'@ext,0,0,0,0,,YES,'+cmd" + ','.repeat(19)), summaryRow);
 
   const participants = [{ participantId: pid, session: { aiExtensionsFound: ['-x'] },
     trials: [{ trialId: '@t', pasteEvents: [{ t: 10, text: '=HYPERLINK("x")' }] }] }];

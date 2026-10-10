@@ -49,6 +49,32 @@ const COLUMNS = [
   // extension not used for this participant (honeypotAiUse is null).
   ['honeypot_ai_use', (s, t) => s.honeypotAiUse == null ? '' : (s.honeypotAiUse ? 'YES' : 'no')],
   ['honeypot_ai_report', (s, t) => s.honeypotAiReport || ''],
+  // The cursor section (analyzers/cursor.js). Headers are fixed here once;
+  // nineteen columns: the reason a session has no verdict, the verdict and
+  // its tells, then the checks, the rules and the shape (medians only, no n).
+  // '' means "no value" (a null session, a check not recorded, a value with
+  // no n). cursorCenteredClicks is filled by the replay tier; '' until then.
+  // A session with no cursor stream records only the automation flag, so its
+  // other two checks are '' like the cursor block.
+  ['cursorReason', (s) => s.cursorAnalysis?.verdictReason ?? ''],
+  ['cursorVerdict', (s) => s.cursorAnalysis?.verdict ?? ''],
+  ['cursorTells', (s) => s.cursorAnalysis ? s.cursorAnalysis.tells.map(t => t.short).join('; ') : ''],
+  ['cursorChecksRecorded', (s) => s.cursorAnalysis ? s.cursorAnalysis.checksRecorded : ''],
+  ['cursorFactCount', (s) => typeof s.cursorAnalysis?.factCount === 'number' ? s.cursorAnalysis.factCount : ''],
+  ['cursorWebdriver', (s) => { const c = s.cursorAnalysis?.checks?.webdriver; return c && typeof c === 'object' ? (c.fired ? 'YES' : 'no') : ''; }],
+  ['cursorUntrustedClicks', (s) => { const c = s.cursorAnalysis?.checks?.untrustedClicks; return c && typeof c === 'object' && s.cursorAnalysis.state === 'ok' ? c.count : ''; }],
+  ['cursorZeroMoveTrials', (s) => { const c = s.cursorAnalysis?.checks?.zeroMoveTrials; return c && typeof c === 'object' && s.cursorAnalysis.state === 'ok' ? `${c.count}/${c.of}` : ''; }],
+  ['cursorJumpClicks', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.jumpClicks; return r ? `${r.count}/${r.of}` : ''; }],
+  ['cursorNoPathClicks', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.noPathClicks; return r ? `${r.count}/${r.of}` : ''; }],
+  ['cursorCoordinates', (s) => s.cursorAnalysis?.cursor?.coordinates ?? ''],
+  ['cursorStream', (s) => s.cursorAnalysis?.cursor?.stream ?? ''],
+  ['cursorSampleIntervalMs', (s) => s.cursorAnalysis?.cursor?.sampleIntervalMs ?? ''],
+  ['cursorClicks', (s) => s.cursorAnalysis?.cursor?.clicks ?? ''],
+  ['cursorMovements', (s) => s.cursorAnalysis?.cursor?.movements ?? ''],
+  ['cursorMovesPerTrialMedian', (s) => s.cursorAnalysis?.cursor?.features?.movesPerTrial?.median ?? ''],
+  ['cursorEfficiencyMedian', (s) => { const m = s.cursorAnalysis?.cursor?.features?.efficiency?.median; return m == null ? '' : m.toFixed(3); }],
+  ['cursorMaxDeviationPxMedian', (s) => { const m = s.cursorAnalysis?.cursor?.features?.maxDeviationPx?.median; return m == null ? '' : m.toFixed(1); }],
+  ['cursorCenteredClicks', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.centeredClicks; return r ? `${r.count}/${r.of}` : ''; }],
 ];
 
 export function buildSummaryCsv(summaries, triage) {

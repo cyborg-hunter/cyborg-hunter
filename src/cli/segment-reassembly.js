@@ -111,7 +111,7 @@ export function collectSegments(raw) {
 
 // Concatenates segment deltas in segmentIndex order into the finalize() dump
 // shape: { pasteCount, copyCount, dropCount, <every array key>, layoutShifts,
-// config } — score fields and libraryVersion are NOT in the session (finalize()
+// config, device? } — score fields and libraryVersion are NOT in the session (finalize()
 // stores them separately). Returns { session, score, pageOrigins } or null for
 // no segments. Segments from a later page (different pageOrigin) have their
 // times re-based to the first page's origin. Counters and score add up the
@@ -149,6 +149,10 @@ export function reassembleSegments(segments) {
   }
   const withConfig = sorted.find(s => s.config);
   session.config = withConfig ? withConfig.config : undefined;
+  // Only when a segment has it: segments recorded before the device facts
+  // existed leave the key out, as their finalize() dump does.
+  const withDevice = sorted.find(s => s.device);
+  if (withDevice) session.device = withDevice.device;
 
   return { session, score: sessionScore(lasts), pageOrigins };
 }

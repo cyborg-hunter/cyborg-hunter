@@ -12,7 +12,7 @@ Orientation for coding agents working in this repository.
 - `src/cli/` — ingest → analyzers → renderers pipeline; `bin/cyborg-hunter.js` is the entry point
 - `dist/` — built artifacts, produced by `node build.js`. Edit `src/`, never `dist/`.
 - `tests/` — `node --test` suites per half, plus browser-run suites under `tests/browser/`
-- `examples/synthetic-pilot/` — fully synthetic three-participant dataset; regenerate with its `generate-fixture.mjs`
+- `examples/synthetic-pilot/` — fully synthetic four-participant dataset; regenerate with its `generate-fixture.mjs`
 - `docs/` — user documentation; `quickstart.md` and `worked-example.md` are the entry points
 
 ## Commands
