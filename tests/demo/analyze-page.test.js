@@ -876,6 +876,13 @@ describe('the still-working hint', () => {
     assert.equal(shown(), true, 'a later stall shows it again');
   });
 
+  test('a stalled sample request shows the hint too', async () => {
+    const { clock } = bootWatched();
+    action('sample').click(); await tick();
+    fireStall(clock);
+    assert.equal(shown(), true);
+  });
+
   test('a stalled check shows the hint too, and its result hides it', async () => {
     const { t, clock } = bootWatched();
     await loadSample(t);
@@ -1087,6 +1094,31 @@ test('a worker error while the sample is pending shows the error and leaves the 
     await tick();
     assert.deepEqual(t.sent.map((m) => m.type), ['sample', 'sample'], kind + ': a new request');
   }
+});
+
+// A checked list stays as it was when the sample request fails: the sample's
+// files were never added, so there is nothing to take out and nothing to
+// check again.
+test('a worker error while the sample is pending keeps a checked list, its row and its check', async () => {
+  const t = boot();
+  t.page.addFiles([{ path: 'a.csv', file: new File(['x'], 'a.csv') }]);
+  await until(() => t.sent.length === 1);
+  const checked = { ...CHECKED, files: [{ path: 'a.csv', kind: 'data' }] };
+  t.emit(checked);
+  await tick();
+  assert.equal(action('run').disabled, false, 'the checked list can be built');
+  action('sample').click();
+  await tick();
+  assert.equal(action('run').disabled, true, 'busy while the sample is pending');
+  t.worker.onerror({ message: 'out of memory' });
+  await tick();
+  assert.equal(role('error').hidden, false);
+  assert.deepEqual(t.page.state.entries.map((e) => e.path), ['a.csv']);
+  assert.equal(t.page.state.checked, checked);
+  assert.equal(role('files-panel').hidden, false);
+  assert.deepEqual([...role('file-rows').querySelectorAll('[data-path]')].map((b) => b.dataset.path), ['a.csv']);
+  assert.equal(action('run').disabled, false, 'no longer busy');
+  assert.deepEqual(t.sent.map((m) => m.type), ['check', 'sample'], 'nothing checked again');
 });
 
 // The classifier lists every JSON file as participant data; the check's peek

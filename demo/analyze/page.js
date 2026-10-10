@@ -161,8 +161,8 @@ export function createPage(root, worker, opts) {
     if (stallTimer) { timers.clear(stallTimer); stallTimer = null; }
     q(root, 'stall-hint').hidden = true;
   }
-  // (Re)starts the wait: called when a check or run is sent, and on each of
-  // its progress messages.
+  // (Re)starts the wait: called when a sample request, a check or a run is
+  // sent, and on each of its progress messages.
   function armStallHint() {
     hideStallHint();
     stallTimer = timers.set(function () { stallTimer = null; q(root, 'stall-hint').hidden = false; }, stallHintMs);
