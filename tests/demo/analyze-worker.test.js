@@ -116,17 +116,15 @@ test('check skips replay recordings when it suggests the id field: a DEMO sessio
   assert.equal(checked.recordings, 1);
 });
 
-test('check skips replay recordings when it suggests the id field: jsPsych CSVs and one replay, no config', async () => {
-  const pilot = 'examples/synthetic-pilot/data';
-  const files = readdirSync(pilot).filter((f) => f.endsWith('.csv')).map((f) => fileEntry(pilot, f, 'data/' + f))
-    .concat([fileEntry('tests/fixtures/demo', 'DEMO-FIXT-replay-1785352263344.json', 'replays/DEMO-FIXT-replay-1785352263344.json')]);
+test('check skips replay recordings when it suggests the id field: a jsPsych CSV and one replay, no config', async () => {
+  const files = [fileEntry('tests/cli/fixtures', 'conj-disj-sample.csv', 'data/conj-disj-sample.csv'),
+    fileEntry('tests/fixtures/demo', 'DEMO-FIXT-replay-1785352263344.json', 'replays/DEMO-FIXT-replay-1785352263344.json')];
   const w = startWorker();
   w.send({ type: 'check', files });
   const checked = await w.next('checked', 'error');
   assert.equal(checked.type, 'checked', checked.message);
-  assert.equal(checked.idSuggestion.suggested, 'subject_ID');
-  assert.deepEqual(checked.idSuggestion.candidates[0], { field: 'subject_ID', reason: 'known name' });
-  assert.equal(checked.sampled, 4);
+  assert.deepEqual(checked.idSuggestion, { suggested: 'subjectId', candidates: [{ field: 'subjectId', reason: 'constant within each file, unique across files' }] });
+  assert.equal(checked.sampled, 1);
   assert.equal(checked.recordings, 1);
 });
 

@@ -80,9 +80,9 @@ test('an import applies what this report has and names what it does not', async 
   const file = join(dir, 'import.json');
   writeFileSync(file, JSON.stringify({ format: 'cyborg-hunter-annotations', runId, annotations: {
     'DEMO-a3f3': { label: 'include', note: 'fine', annotatedAt: '2026-10-05T09:00:00.000Z' },
-    'SYN-OTHER-99': { label: 'exclude', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } }));
+    'OTHER-99': { label: 'exclude', note: '', annotatedAt: '2026-10-05T09:00:00.000Z' } } }));
   await page.locator('.annot-bar input[type="file"]').setInputFiles(file);
-  await expect(page.locator('.annot-msg')).toHaveText('Imported 1 annotation. Not in this report: SYN-OTHER-99.');
+  await expect(page.locator('.annot-msg')).toHaveText('Imported 1 annotation. Not in this report: OTHER-99.');
   await expect(mark(page, 'DEMO-a3f3')).toHaveAttribute('data-label', 'include');
   await expect(page.locator('.annot-count')).toHaveText('1 of 4 reviewed');
 });
