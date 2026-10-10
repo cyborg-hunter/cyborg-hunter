@@ -16,11 +16,13 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   trials carry timestamps (0.6.1 and later), so their annotations stay apart.
 - Reports: annotate each participant with Include, Exclude or Flag and a
   note (keys `i`, `e`, `f` for the selected one). The rail shows the label
-  and how many participants are reviewed. The report keeps the annotations
-  in the browser under its run id; Export JSON and Import carry them
-  elsewhere, and Export CSV writes one row per participant (`participantId,
-  tier, triageScore, label, note, annotatedAt, runId`), optionally counting
-  the unreviewed as included.
+  as a glyph at the left of each row, in place of the tier dot (Include ✓,
+  Exclude ✗, Flag ⚑, the same glyphs as on the buttons; the tier stays on
+  the row's badge), and how many participants are reviewed. The report
+  keeps the annotations in the browser under its run id; Export JSON and
+  Import carry them elsewhere, and Export CSV writes one row per participant
+  (`participantId, tier, triageScore, label, note, annotatedAt, runId`),
+  optionally counting the unreviewed as included.
 - `/analyze/`: the same annotations in the in-page report. The page keeps
   them under the report's run id, so a re-analysis keeps them, and the
   results step has the CSV and JSON exports and the import.
@@ -112,15 +114,27 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   segments, `root_attr_events` on the recording), so other players ignore
   it. Recordings made before 0.13.0 replay as before.
 - `/analyze/`: a settings panel with the keys a report can apply after
-  collection (score weights, soft-score threshold, phase scope, the ID,
-  integrity and session-report fields, platform ID and trajectory order).
-  On the results, a change re-analyses in place without dropping the files
-  again; a change to the ID, integrity or session-report field reads the
-  files again from the same list. A drop that adds data files or recordings
-  keeps the panel's values; only a config whose values differ from the
-  loaded one replaces them, and a line under the file list says so. The
-  Participant ID field likewise keeps the analyst's choice while the files
-  still offer it and the config is unchanged.
+  collection (score weights, soft-score threshold, the ID, integrity and
+  session-report fields, and platform ID). On the results, a change
+  re-analyses in place without dropping the files again; a change to the
+  ID, integrity or session-report field reads the files again from the same
+  list. A drop that adds data files or recordings keeps the panel's values;
+  only a config whose values differ from the loaded one replaces them, and
+  a line under the file list says so. The Participant ID field likewise
+  keeps the analyst's choice while the files still offer it and the config
+  is unchanged. The threshold has a line saying what it is for, and the
+  score weights are open, under a summary that says what they do. The
+  phase scope and the trajectory order stay CLI keys: the panel does not
+  show them, and a dropped config that sets them keeps them in every run
+  and in the exported config (the page's worker no longer reports a run's
+  phases, `done.phases`).
+- Docs: the friction entry trial's text is an option of the call that
+  builds it, `CyborgHunter.frictionEntryTrial({ message })` under the
+  one-line setup (quickstart) and
+  `jsPsychGuardFriction.entryTrial({ message })` with the extensions wired
+  by hand (advanced-integration.md). The message replaces the default
+  text, heading included; the button keeps its label, "Enter fullscreen and
+  continue".
 
 ### Changed
 - CLI: with `--participant`, a replay recording that has no embedded
@@ -182,8 +196,9 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   takes the page's full width and offers the session data, the replay
   recording and a config, plus two example participants, each with its own
   Save button (no zip). In Chrome and Edge, "Save all into a folder" writes
-  all five into one folder the visitor picks. "Open in the analyzer" hands
-  the five files and the page's six fonts to `/analyze/` in the same
+  all five into one folder the visitor picks (the step asks for one named
+  `cyborg-hunter-demo` inside Downloads). "Open in the analyzer web app"
+  hands the five files and the page's six fonts to `/analyze/` in the same
   browser, where the five files are listed as if dropped and the visitor's
   replay renders in the tour's typefaces. The hand-off keeps them for ten
   minutes; `/analyze/` opened from it later says that nothing was handed
@@ -191,11 +206,60 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   and the scoring step's weight inputs are gone: the scoring step shows the
   visitor's soft score so far, as the library computes it with the standard
   weights, and the analyzer builds the report and holds the settings that
-  apply after collection (its settings panel). The tour has 11 steps.
+  apply after collection (its settings panel). The tour has 10 steps.
+- Live demo: leaving the tab and opening a browser sidebar are one step
+  (step 4, whose text is its task and whose button reads "Done"); the step
+  that docked an AI beside the task is gone. The trials in the visitor's
+  session file and record are `baseline`, `paste`, `tabaway`, `autotype`,
+  `guard-entry` and `guard` (they were `act1-*` and `act2-*`).
+- Live demo: new copy on every step. The first step says what the demo is
+  for, and its button, "Start the demo", is larger and centred under the
+  text. Step 2 asks "How is your day today?" and no longer shows the code
+  box with its jsPsych and plain-JS tabs; step 3 asks the same question and
+  offers an assistant's answer to copy, in a bordered block between the
+  step's text and its task panel. Step 5 opens with what automated bots
+  leave behind, and step 6 says what the guard is and that the wording of
+  its entry page can be changed. No task panel shows a label, no step has
+  a "Skip to the guarded act" link, no text names an act, and a small
+  button beneath the primary one reads "← Go back" on every step. The
+  last step's closing line reads
+  "One script tag is the whole integration; the quickstart shows it."
+- Live demo: the guard's step, "Try to break the guard", has no task box.
+  Its own text is what the guard scrambles and hides while the visitor is
+  out of fullscreen or focus, and the violation chips stay legible under
+  it. Its button, "End the guard", is centred under the text. The debrief
+  names the reasons the guard records (`not_fullscreen`, `window_blurred`).
+- Live demo: the top bar holds only the title, and the recording lamp in
+  the rail carries the REC cue, pulsing red while the session records; the
+  step count ("Step 2 of 10") is on the card, and the participant ID is no
+  longer in the top bar. The lamps panel is its title, a framed box with
+  the signals the current step detected ("nothing detected on this step"
+  until one fires), the detector lamps and the Guard and Recording groups:
+  the intro line, its tooltip, the "awaiting your session" note and the
+  Detectors head are gone. The session record under the card has no
+  caption.
 - Live demo: the live session record sits under the step card on every
-  step, and the column on the right holds the signal lamps alone, which stay
-  in view while the step scrolls. Before, the record shared that column
-  with the lamps and moved under the card for one step only.
+  step, collapsed under a bar that opens it on hover or keyboard focus (a
+  click on the bar pins it open; step 8, whose text points to it, opens it),
+  and the column on the right holds the lamps panel alone, which stay in
+  view while the step scrolls. Before, the record was always open, shared
+  that column with the lamps and moved under the card for one step only.
+- `/analyze/`: the top bar reads "cyborg-hunter · report generator" and
+  links the live demo, GitHub (the link that read "docs") and the offline
+  version, the single-file page as a download. The paragraph that described
+  the page's security policy is gone; the policy is unchanged. The browser
+  the page needs is no longer stated in the top bar, only in the warning a
+  cohort above the tested size gets. The "Settings from …" line under the
+  file list and the settings panel's explanatory paragraph are gone; the
+  score weights' Cap column has a tooltip instead.
+- Docs: the one-line setup comes first. README and using-cyborg-hunter.md
+  show the ch.js tag before the jsPsych extension, and replay with
+  `data-replay` and `CyborgHunter.replay()` (saved to DataPipe or to your
+  own server) before manual mode's wiring, which is labelled as such.
+  configuration.md and signals-reference.md set the monitor's options in
+  `window.CyborgHunterConfig`, with `CyborgHunter.init()` shown as manual
+  mode's form: with the one-line setup, `init()` logs an error and returns
+  a monitor that records nothing.
 - CSV files (`summary.csv`, `event-log.csv`, `extensions.csv`, and the
   annotations' Export CSV in the report and on `/analyze/`): a text cell
   that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written
@@ -222,6 +286,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   themselves are unchanged. A `srcset` keeps its images inline.
 
 ### Fixed
+- Live demo: the example participant `example-1.json` (offered on the files
+  step) records its fullscreen violation as `not_fullscreen`, the reason the
+  guard records; it read `fullscreen_exit`, which the guard never records.
+  It copies and pastes the question and the answer the tour shows.
 - One-line setup on pages without jsPsych: more form submits that keep the
   page no longer lose the data recorded after them. A form target with
   spaces around it (`target=" "`, `" _self "`) names another window, as
@@ -352,6 +420,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - Live demo site: `report-frame.js` and `replay-host.js` are no longer
   published at the site's root. The analyze page's bundle holds them, and
   the tour never loaded them.
+- Live demo site: `signal-manifest.json` holds what the tour reads. Its
+  `presets` block holds only `standard.scoring.soft`, which the scoring
+  step prints; `presets.strict`, each preset's `controls` and
+  `presets.standard.scoring.softScoreThreshold` are gone.
+  `signals.softScoreThreshold`, which the CLI config snippet reads, stays.
 
 ## [0.11.0] — 2026-10-02
 

@@ -1,12 +1,14 @@
 // demo/analyze/settings-panel.js
 // The analyzer's settings: only keys a report can apply after the data were
 // collected. The score weights order participants within a tier; the soft
-// threshold re-tiers them against the soft scores the data saved; the phase
-// scope rescopes those scores; the id, integrity and session-report fields
-// say where the data are, so a change to one reads the files again; the
-// platform id and the trajectory order change only the display. Nothing here
-// re-screens a participant: the hard tier and the saved soft scores are the
-// data's own (docs/configuration.md, "Which fields actually do something").
+// threshold re-tiers them against the soft scores the data saved; the id,
+// integrity and session-report fields say where the data are, so a change to
+// one reads the files again; the platform id changes only the display. Nothing
+// here re-screens a participant: the hard tier and the saved soft scores are
+// the data's own (docs/configuration.md, "Which fields actually do something").
+// The phase scope and the trajectory order are left to the CLI: the panel
+// neither shows nor edits them, and a dropped config that sets them keeps
+// them, in every run and in the export (configFromSettings).
 import { SCORE_SIGNALS } from '../../src/cli/analyzers/score-weights.js';
 
 // The keys whose change needs the files read again; the panel's others
@@ -14,9 +16,6 @@ import { SCORE_SIGNALS } from '../../src/cli/analyzers/score-weights.js';
 export var REINGEST_KEYS = ['participantIdField', 'integrityField', 'sessionIntegrityPath'];
 
 var DEFAULT_WEIGHT = Object.fromEntries(SCORE_SIGNALS.map(function (s) { return [s.key, s.weight]; }));
-var commaList = function (text) {
-  return String(text || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-};
 var numberOrNull = function (text) {
   if (String(text).trim() === '') return null;
   var n = Number(text);
@@ -29,17 +28,13 @@ var numberOrNull = function (text) {
  * settingsKey, or a config that differs only in it never counts as changed.
  */
 export function settingsFromConfig(config) {
-  var scope = config.phaseScope || {};
   return {
     scoreWeights: config.scoreWeights || null,
     softScoreThreshold: config.scoring && typeof config.scoring.softScoreThreshold === 'number' ? config.scoring.softScoreThreshold : null,
-    phaseInclude: Array.isArray(scope.include) ? scope.include.slice() : [],
-    phaseExclude: Array.isArray(scope.exclude) ? scope.exclude.slice() : [],
     integrityField: config.integrityField || 'integrity',
     sessionIntegrityPath: config.sessionIntegrityPath || null,
     platformIdField: config.platformIdField || null,
     showPlatformId: !!config.showPlatformId,
-    trajectoryDisplayOrder: config.trajectoryDisplayOrder || 'rule',
   };
 }
 
@@ -57,19 +52,22 @@ function resolveWeight(user, sig) {
  * The settings as the panel shows them, as a string two configs can be
  * compared by: the weights resolved per signal in SCORE_SIGNALS order, so
  * key order, a bare number against { weight }, and an explicit default
- * against no entry all compare equal.
+ * against no entry all compare equal. The phase scope and the trajectory
+ * order are not in it: two configs that differ only in them put the same
+ * values in the panel, so the page does not count the second as a change
+ * (the run still takes the newer config's, through configFromSettings).
  */
 export function settingsKey(s) {
   var user = s.scoreWeights || {};
   return JSON.stringify([SCORE_SIGNALS.map(function (sig) { return resolveWeight(user, sig); }),
-    s.softScoreThreshold, s.phaseInclude, s.phaseExclude, s.integrityField, s.sessionIntegrityPath,
-    s.platformIdField, s.showPlatformId, s.trajectoryDisplayOrder]);
+    s.softScoreThreshold, s.integrityField, s.sessionIntegrityPath, s.platformIdField, s.showPlatformId]);
 }
 
 /**
  * The config a run uses: `base` (the merged config) with the panel's values
- * on top. A soft threshold left empty takes each participant's saved one, a
- * scope left empty scores every phase.
+ * on top. A soft threshold left empty takes each participant's saved one.
+ * The keys the panel does not hold, the phase scope and the trajectory order
+ * among them, are base's own.
  */
 export function configFromSettings(base, settings) {
   var c = Object.assign({}, base);
@@ -78,15 +76,10 @@ export function configFromSettings(base, settings) {
   delete scoring.softScoreThreshold;
   if (settings.softScoreThreshold != null) scoring.softScoreThreshold = settings.softScoreThreshold;
   c.scoring = Object.keys(scoring).length ? scoring : null;
-  var scope = {};
-  if (settings.phaseInclude.length) scope.include = settings.phaseInclude.slice();
-  if (settings.phaseExclude.length) scope.exclude = settings.phaseExclude.slice();
-  c.phaseScope = Object.keys(scope).length ? scope : null;
   c.integrityField = settings.integrityField || 'integrity';
   c.sessionIntegrityPath = settings.sessionIntegrityPath || null;
   c.platformIdField = settings.platformIdField || null;
   c.showPlatformId = !!settings.showPlatformId;
-  c.trajectoryDisplayOrder = settings.trajectoryDisplayOrder || 'rule';
   return c;
 }
 
@@ -103,17 +96,14 @@ var PANEL_HTML =
   '<form data-role="settings-form"><fieldset>' +
   '<legend>Settings</legend>' +
   '<p><label>Participant ID field: <select data-role="id-field" name="participantIdField"></select></label> <span class="hint" data-role="id-files"></span></p>' +
-  '<p class="hint">Settings a report applies after the data were collected. Each participant\'s tier comes from the scores their session saved: the weights order participants within a tier, the threshold re-tiers them against the saved soft scores, the phases rescope them. A change to the ID, integrity or session-report field reads the files again.</p>' +
-  '<p><label>Soft-score threshold <input type="number" min="0" step="any" name="softScoreThreshold" placeholder="each participant\'s saved one"></label></p>' +
-  '<p><label>Phases to include <input type="text" name="phaseInclude" placeholder="all"></label> ' +
-  '<label>Phases to exclude <input type="text" name="phaseExclude" placeholder="none"></label> <span class="hint" data-role="phase-hint"></span></p>' +
-  '<details><summary>Score weights (the order within a tier)</summary>' +
-  '<table class="weights"><thead><tr><th>Signal</th><th>Weight</th><th>Cap</th></tr></thead><tbody>' + weightRows() + '</tbody></table></details>' +
+  '<p><label>Soft-score threshold <input type="number" min="0" step="any" name="softScoreThreshold" placeholder="each participant\'s saved one"></label> ' +
+  '<span class="hint">The score at or above which a participant is flagged as suspicious in the triage list.</span></p>' +
+  '<details open><summary>Score weights: choose how much importance to give to each of the potential signals in estimating the participant\'s suspiciousness score.</summary>' +
+  '<table class="weights"><thead><tr><th>Signal</th><th>Weight</th><th title="the most events of one kind that count toward the ranking score">Cap</th></tr></thead><tbody>' + weightRows() + '</tbody></table></details>' +
   '<p><label>Integrity field <input type="text" name="integrityField"></label> ' +
   '<label>Session report path <input type="text" name="sessionIntegrityPath" placeholder="found by convention"></label></p>' +
   '<p><label>Platform ID field <input type="text" name="platformIdField"></label> ' +
   '<label><input type="checkbox" name="showPlatformId"> show it in the report</label></p>' +
-  '<p><label>Trajectory order <select name="trajectoryDisplayOrder"><option value="rule">rule</option><option value="time">time</option><option value="insertion">insertion</option></select></label></p>' +
   '<p><button type="button" class="secondary" data-action="export-config">Export config</button> ' +
   '<span class="hint" data-role="assets-hint" hidden>The exported config sets assetsDir to ./assets: for the CLI, put the experiment\'s CSS and image files in an assets folder beside it.</span></p>' +
   '</fieldset></form>';
@@ -132,13 +122,10 @@ export function createSettingsPanel(container, onChange) {
   return {
     write: function (s) {
       field('softScoreThreshold').value = s.softScoreThreshold == null ? '' : String(s.softScoreThreshold);
-      field('phaseInclude').value = s.phaseInclude.join(', ');
-      field('phaseExclude').value = s.phaseExclude.join(', ');
       field('integrityField').value = s.integrityField || '';
       field('sessionIntegrityPath').value = s.sessionIntegrityPath || '';
       field('platformIdField').value = s.platformIdField || '';
       field('showPlatformId').checked = !!s.showPlatformId;
-      field('trajectoryDisplayOrder').value = s.trajectoryDisplayOrder || 'rule';
       var user = s.scoreWeights || {};
       SCORE_SIGNALS.forEach(function (sig) {
         var resolved = resolveWeight(user, sig), weight = resolved[0], max = resolved[1];
@@ -158,23 +145,11 @@ export function createSettingsPanel(container, onChange) {
       return {
         scoreWeights: Object.keys(weights).length ? weights : null,
         softScoreThreshold: numberOrNull(field('softScoreThreshold').value),
-        phaseInclude: commaList(field('phaseInclude').value),
-        phaseExclude: commaList(field('phaseExclude').value),
         integrityField: field('integrityField').value.trim() || 'integrity',
         sessionIntegrityPath: field('sessionIntegrityPath').value.trim() || null,
         platformIdField: field('platformIdField').value.trim() || null,
         showPlatformId: field('showPlatformId').checked,
-        trajectoryDisplayOrder: field('trajectoryDisplayOrder').value,
       };
-    },
-    // The phases the last run found (worker-entry.js `done.phases`). Phase
-    // scope reads a trial without a phase as "default", and the worker lists
-    // that name when such a trial exists: the hint says what it stands for.
-    setPhases: function (phases) {
-      var list = phases || [];
-      container.querySelector('[data-role="phase-hint"]').textContent = list.length
-        ? 'Phases in the data: ' + list.join(', ') + (list.indexOf('default') >= 0 ? ' (default: the trials with no phase)' : '')
-        : '';
     },
     setAssetsHint: function (shown) { container.querySelector('[data-role="assets-hint"]').hidden = !shown; },
     setDisabled: function (disabled) { form.querySelector('fieldset').disabled = !!disabled; },

@@ -22,8 +22,8 @@
 //   node tools/gen-demo-fixture.mjs
 // It assembles .demo-site/ (the same artifact Pages CI + the Playwright suite
 // use), serves it, walks the full tour (baseline typing + two pastes → advance
-// through the optional tasks → a clean, violation-free pass through the guarded
-// act → your files), captures the replay download via the browser's own
+// through the optional tasks → a clean, violation-free pass through the
+// guard → your files), captures the replay download via the browser's own
 // download event, rewrites the random per-session pid to the stable DEMO-FIXT,
 // and overwrites the committed replay file.
 //
@@ -32,8 +32,8 @@
 // gen-example-fixtures.mjs uses for its EPOCH:
 //   - pid: the demo assigns a random 'DEMO-'+4-base36 id per session; a
 //     committed fixture needs a fixed one, so every occurrence of the captured
-//     id (the top-level participant_id and the pid text the topbar renders into
-//     each segment's DOM snapshot) is replaced with DEMO-FIXT via a whole-file
+//     id (the top-level participant_id and any pid text the page renders into
+//     the segments' DOM snapshots) is replaced with DEMO-FIXT via a whole-file
 //     string swap of the full 'DEMO-xxxx' token (distinctive; no collisions).
 //   - the wall-clock anchor (recording_started_at) is pinned to the fixture's
 //     existing filename epoch so the file OVERWRITES IN PLACE under the same
@@ -56,13 +56,17 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
+import { STEPS } from '../demo/steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const FIXTURE_DIR = join(ROOT, 'tests', 'fixtures', 'demo');
 const PORT = 8188;
 const BASE = `http://localhost:${PORT}`;
-const ANSWER = 'Canberra';
+// The baseline step's typed answer to "How is your day today?", and the
+// assistant's answer the clipboard step offers to copy and paste.
+const TYPED_ANSWER = 'Pretty good, thanks.';
+const ANSWER = STEPS.find((s) => s.id === 'clipboard-cheat').task.providedAnswer;
 
 // The existing committed replay filename's epoch. Pinning recording_started_at
 // to this keeps the fixture a single, same-named, in-place overwrite.
@@ -82,7 +86,7 @@ function resolvePlaywright() {
 }
 
 // The fullscreen mock helpers.mjs installs: headless Chromium's real
-// Fullscreen API needs a user gesture and is unreliable, so the guarded act's
+// Fullscreen API needs a user gesture and is unreliable, so the guard's
 // enter-fullscreen step is faked to SUCCEED (no violation — the exit path is
 // never called). Same script as demo/tests/helpers.mjs installFullscreenMock.
 function fullscreenMockInit() {
@@ -174,7 +178,7 @@ async function main() {
     // Real per-character typing on the clean baseline (never .value=/fill(),
     // which the library flags as synthetic insertion).
     await page.locator('#card textarea').click();
-    await page.locator('#card textarea').pressSequentially('a city in Australia', { delay: 150 });
+    await page.locator('#card textarea').pressSequentially(TYPED_ANSWER, { delay: 150 });
     await clickPrimary();                         // → step 3 (clipboard cheat)
     await waitForStep(3);
 
@@ -185,22 +189,20 @@ async function main() {
     await dispatchPaste('#card textarea', ANSWER);
     await clickPrimary();                         // → step 4 (tab-away)
     await waitForStep(4);
-    // Steps 4-6 are optional tasks; advancing without performing them is a
+    // Steps 4 and 5 are optional tasks; advancing without performing them is a
     // supported path and brackets each step's replay segment all the same.
-    await clickPrimary();                         // → step 5 (rearrange)
+    await clickPrimary();                         // → step 5 (autotype)
     await waitForStep(5);
-    await clickPrimary();                         // → step 6 (autotype)
+    await clickPrimary();                         // → step 6 (guard-entry)
     await waitForStep(6);
-    await clickPrimary();                         // → step 7 (guard-entry)
-    await waitForStep(7);
     await page.locator('[data-action="enter-fullscreen"]').click();
-    await waitForStep(8);                         // guard-cheat (fullscreen mock succeeded)
-    await page.locator('.endguard').click();      // → step 9, ended clean (no violation)
+    await waitForStep(7);                         // guard-cheat (fullscreen mock succeeded)
+    await page.locator('.endguard').click();      // → step 8, ended clean (no violation)
+    await waitForStep(8);
+    await clickPrimary();                         // → step 9 (signals-to-scores)
     await waitForStep(9);
-    await clickPrimary();                         // → step 10 (signals-to-scores)
+    await clickPrimary();                         // → step 10 (your files)
     await waitForStep(10);
-    await clickPrimary();                         // → step 11 (your files)
-    await waitForStep(11);
     await page.locator('[data-action="download"][data-key="replay"]').waitFor({ timeout: 10000 });
 
     // ── capture the replay download only ────────────────────────────────────
@@ -221,7 +223,7 @@ async function main() {
     const capturedPid = JSON.parse(rawReplay).participant_id;
     if (!/^DEMO-/.test(capturedPid)) throw new Error('unexpected pid: ' + capturedPid);
 
-    // String swap first (catches the pid the topbar renders into the segment
+    // String swap first (catches the pid the page renders into the segment
     // DOM snapshots, not just the participant_id field), then parse + pin.
     const swapped = rawReplay.split(capturedPid).join('DEMO-FIXT');
     const replay = JSON.parse(swapped);

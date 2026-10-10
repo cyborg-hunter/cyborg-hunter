@@ -50,9 +50,9 @@ recordings (the record_session branch, PR #3661) are converted on the way in
 by `tools/convert/jspsych-v1-to-v2.mjs`; see `docs/v2-player-migration.md`.
 Releases before 0.8.0 recorded the earlier v1 shape.
 
-With the one-line setup, replay is `data-replay` on the tag and `CyborgHunter.replay()` in your save code: see [advanced-integration.md → Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner). The wiring below is manual mode's; the configuration, privacy, volume and viewing notes apply to both.
+With the one-line setup, replay is `data-replay` on the tag and `CyborgHunter.replay()` in the experiment's save code: see [advanced-integration.md → Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner). The wiring below is manual mode's. The privacy, volume and viewing notes apply to both. Of the configuration options, the one-line setup sets `tier` (`data-replay`) and, on jsPsych, `autoSave` (`CyborgHunterConfig.replay`); `participantId` is the ID ch.js found, and the others keep their defaults, so to redact a field, mark it with `data-ch-redact`.
 
-### jsPsych wiring
+### jsPsych wiring (manual mode)
 
 ```javascript
 const jsPsych = initJsPsych({
@@ -82,7 +82,7 @@ Add the extension to your timeline trials the same way as the others. After `fin
 saved_to, capture_failures, capture_stopped}) — enough to tell from the CSV alone
 whether an artifact exists and where it went.
 
-### Standalone wiring
+### Standalone wiring (manual mode)
 
 ```javascript
 const rec = CyborgHunterReplay.attach({
@@ -126,12 +126,14 @@ rec.destroy();
 - Password inputs: identity, value, and serialized DOM value are never
   recorded — length only. Not configurable.
 - `keys: 'full'` records what was typed **into the experiment you already
-  collect responses from**; use `'off'` (or `redactSelector`) if your
-  ethics protocol requires less. This mirrors the core library's
+  collect responses from**; use `'off'` (manual mode) or `redactSelector`
+  (`data-ch-redact` on a field, in both setups) if the study's ethics
+  protocol requires less. This mirrors the core library's
   GDPR-cautious stance (`keystrokeDynamics` off by default).
 - Clipboard events record lengths only **by default**. Setting
-  `clipboardContent: true` makes the replay stream record the clipboard
-  text and HTML too (redacted fields and password inputs excepted).
+  `clipboardContent: true` (manual mode) makes the replay stream record
+  the clipboard text and HTML too (redacted fields and password inputs
+  excepted).
   CH-core's own paste/drop content capture is a separate switch,
   `collectForPostHoc.pasteDropContent`.
 - Raw mouse coordinates (`mouseTrack`, the per-sample {x, y, t} trace the
@@ -162,12 +164,25 @@ uses the latest and warns.
 
 #### Saving the replay to your own server
 
-DataPipe is optional. With `autoSave: { mode: 'none' }` (the default, in
-`attach()` or in the jsPsych extension's params) the recorder keeps the
-recording in memory and you send it wherever your lab stores data:
+DataPipe is optional. With `autoSave: { mode: 'none' }` (the default, in the
+one-line setup, in `attach()` and in the jsPsych extension's params) the
+recorder keeps the recording in memory, and the experiment sends it
+wherever the lab stores data:
 
 ```javascript
-// Standalone
+// One-line setup (data-replay on the tag), in the experiment's save code (an async function)
+const recording = CyborgHunter.replay();   // null when replay is off or has not started
+if (recording) {
+  await fetch('https://your-lab-server.example/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: CyborgHunterReplay.replayFilename(recording), data: recording })
+  });
+}
+```
+
+```javascript
+// Standalone (manual mode)
 const rec = CyborgHunterReplay.attach({ participantId, tier: 'dom', autoSave: { mode: 'none' } });
 // … run the experiment …
 rec.stopSession('finished');
@@ -181,7 +196,7 @@ await fetch('https://your-lab-server.example/upload', {
 ```
 
 ```javascript
-// jsPsych: in an async on_finish, after the other finalize() calls
+// jsPsych (manual mode): in an async on_finish, after the other finalize() calls
 await jsPsych.extensions['cyborg-hunter-replay'].finalize();
 const recording = jsPsych.extensions['cyborg-hunter-replay'].getLastRecording();
 if (recording) {
@@ -200,12 +215,13 @@ if (recording) {
   name; the epoch suffix keeps a reload from overwriting the earlier file.
 - If you run the CH monitor standalone, pass its report in so it lands in
   the recording: `rec.getRecording({ chSessionReport: monitor.getSessionReport() })`.
-  The jsPsych `finalize()` does this for you.
+  The jsPsych `finalize()` and `CyborgHunter.replay()` do this themselves.
 - `await` needs an `async` `on_finish`, as in the jsPsych wiring above.
   A save trial's `data_string` cannot wait for it (jsPsych calls it
   synchronously); if you save with a save-as-a-trial plugin, do the
-  finalize and upload in a `jsPsychCallFunction` trial with `async: true`
-  placed before the save trial. After `finalize()` the CSV's
+  upload (in manual mode, the finalize and upload) in a `jsPsychCallFunction`
+  trial with `async: true` placed before the save trial. In manual mode,
+  after `finalize()` the CSV's
   `integrityReplayMeta.saved_to` reads `'none'`, which is correct here: the
   recorder did not save the file, your upload did.
 - For large `dom`-tier recordings, the standalone handle's
@@ -215,9 +231,10 @@ if (recording) {
   request body. Add `.gz` to the name (`replayFilename(recording) + '.gz'`)
   only when `blob.type === 'application/gzip'`; a plain-JSON Blob keeps the
   `.json` name, because the CLI treats a `.gz` suffix as gzip.
-- At `startSession` the recorder warns "autoSave.mode is \"none\" — the
+- In manual mode, at `startSession` the recorder warns "autoSave.mode is \"none\" — the
   recording will be lost unless you call getRecording() yourself." That is
-  expected with this setup.
+  expected with this setup. Under the one-line setup ch.js logs its own
+  reminder at load instead, naming `CyborgHunter.replay()`.
 
 ### Viewing replays
 
@@ -364,9 +381,9 @@ lists every file with what it read it as, and you can remove any of them.
 Confirm the participant-ID field the page suggests, adjust the settings if
 you need to, and download the report as a `.zip` with the CLI's output
 layout, or `summary.csv`, `triage.md` and `event-log.csv` on their own.
-The settings are the ones a report can apply after collection: the score
-weights, the soft-score threshold, the phase scope, the ID, integrity and
-session-report fields, and two display options. Changing one on the results
+The settings are the ones a report can apply after collection: the
+soft-score threshold, the score weights, the ID, integrity and
+session-report fields, and the platform ID field. Changing one on the results
 re-analyses at once, without dropping the files again. "Load sample data"
 runs the whole pipeline on the bundled synthetic pilot first, so you can see
 what you get before dropping real data. "Export config" writes a
@@ -405,9 +422,9 @@ Requirements and limits:
 
 - A 2023-or-later browser (Chrome, Firefox or Safari).
 - The page has been tested with cohorts of up to 150 participants (a
-  0.8 MB replay recording each) on a laptop with 24 GB of memory; it states
-  that number on screen and, above it, warns that the build may be slow or
-  fail and suggests the CLI (the build is still allowed). If a check or a
+  0.8 MB replay recording each) on a laptop with 24 GB of memory; above that
+  number, it warns that the build may be slow or fail, names the browser it
+  needs and suggests the CLI (the build is still allowed). If a check or a
   build reports no progress for a minute, the page says it is still working
   and suggests reloading if nothing changes in a few minutes; it never stops
   the build itself. If a report loads but never finishes rendering, the page

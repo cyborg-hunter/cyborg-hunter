@@ -2,12 +2,31 @@
 // The full flow on Chromium: dropped files, the zip tree against the CLI's,
 // the report's own scripts and its selection message, styled replays from a
 // dropped stylesheet with the recorded external image blocked, and the
-// participant switch, and the files the demo hands over. Every test runs
-// under the same request guard as engines.spec.js.
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+// participant switch, and the files the demo hands over; first, the top
+// bar. Every test runs under the same request guard as engines.spec.js.
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
-  pilotFiles, cliPilotTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT } from './support.mjs';
+  pilotFiles, cliPilotTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
+
+test('the top bar names the page and links the demo, GitHub and the offline file; the files step has no policy paragraph', async ({ page, baseURL }) => {
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  await page.goto('/analyze/');
+  await waitReady(page);
+  const bar = page.locator('.topbar');
+  await expect(bar.locator('.brand')).toHaveText('cyborg-hunter · report generator');
+  expect(await bar.locator('a').evaluateAll((as) => as.map((a) => [a.textContent, a.href, a.hasAttribute('download')]))).toEqual([
+    ['live demo', baseURL + '/', false],
+    ['GitHub', 'https://github.com/cyborg-hunter/cyborg-hunter#readme', false],
+    ['offline version', baseURL + '/analyze/' + basename(OFFLINE_FILE), true],
+  ]);
+  expect(existsSync(OFFLINE_FILE), 'the site serves the file the link names').toBe(true);
+  await expect(page.getByText('2023-or-later')).toHaveCount(0);
+  await expect(page.getByText('Nothing leaves your browser')).toHaveCount(0);
+  await expect(page.locator('section[data-step="files"] > .policy')).toHaveCount(0);
+  await assertOnlyAllowed(page, seen, allow);
+});
 
 test('dropped synthetic pilot: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -133,7 +152,7 @@ test('files from two drops are one list: data first, the replays and the config 
     await page.setInputFiles('[data-role="file-input"]', rest);
     await expect(page.locator('[data-role="counts"]')).toContainText('2 replay recordings');
     await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment asset');
-    await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
+    await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
     await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(6);
     await page.locator('[data-role="file-rows"] [data-path="demo.css"]').click();
     await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(5);
@@ -221,14 +240,16 @@ test('annotations made in the report frame are kept by the page through a re-ana
   await buildReport(page);
   const frame = reportFrame(page);
   await frame.locator('#p-SYN-HARD-03').getByRole('button', { name: 'Exclude' }).click();
-  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
+  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
+  // The glyph drawn in the frame (its CSS and its charset are the report's own).
+  expect(await frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark').evaluate((el) => getComputedStyle(el, '::before').content)).toBe('"✗"');
   await expect(frame.locator('.annot-count')).toHaveText('1 of 3 reviewed');
   // The frame cannot download: its exports are the page's.
   await expect(frame.getByRole('button', { name: 'Export CSV' })).toHaveCount(0);
   await page.fill('[name="softScoreThreshold"]', '12');
   await page.press('[name="softScoreThreshold"]', 'Tab');
   await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 2 clean', { timeout: 60000 });
-  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
+  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="annotations-csv"]')]);
   expect(readFileSync(await csv.path(), 'utf8').split('\n')[1]).toMatch(/^SYN-HARD-03,hard,[^,]+,exclude,/);
   await assertOnlyAllowed(page, seen, allow);

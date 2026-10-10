@@ -258,6 +258,14 @@ ${fontFaceCss}    :root {
     .tier-dot[data-tier="soft"]  { background: var(--soft); }
     .tier-dot[data-tier="clean"] { background: var(--clean); }
 
+    /* Annotation mark — the slot at the left of each rail row, sized here so
+       the rail lays out from the first paint; annotation-client.js, which
+       loads at the end of the report, draws its glyph */
+    .annot-mark {
+      display: inline-block; width: 12px; flex-shrink: 0;
+      text-align: center; font-size: 12px; line-height: 1;
+    }
+
     /* Tier badge — small square tag, filled for hard/soft, outline for clean */
     .tier-badge {
       font-family: var(--ff-sora);
@@ -1021,6 +1029,9 @@ function renderCohortList(triage, cohortCounts) {
 //   data-score:     numeric score (defaulted to 0 if null/undefined)
 //   data-reason:    pre-lowercased reason string (search reads this so the
 //                   handler doesn't need to lowercase per keystroke)
+// The row's first span is the annotation mark, empty until the report's
+// annotation script (annotation-client.js) sets its label; the tier is read
+// from the badge at the right of the row.
 function renderCohortRow(t) {
   const tier = tierOf(t);
   const pid = String(t.participantId || '');
@@ -1036,7 +1047,7 @@ function renderCohortRow(t) {
        data-score="${score}"
        data-reason="${esc(reasonLower)}">
     <div class="cohort-row-top">
-      <span class="tier-dot" data-tier="${tier}"></span>
+      <span class="annot-mark" data-label=""></span>
       <span class="mono pid" title="${esc(pid)}">${esc(pid)}</span>
       <span class="mono score">${formatScore(score)}</span>
     </div>

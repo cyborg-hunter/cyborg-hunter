@@ -1,7 +1,7 @@
 // tools/gen-example-fixtures.mjs
 //
 // Hand-authored-by-construction example participants for the demo's last
-// step (spec §7.2): "example-1" (HARD-leaning) and "example-2" (CLEAN) come
+// step: "example-1" (HARD-leaning) and "example-2" (CLEAN) come
 // with the visitor's own files, so the report built from them never looks
 // empty. Deterministic: a seeded mulberry32 PRNG plus a fixed EPOCH decide
 // every value — no Date.now(), no Math.random() — so regenerating these
@@ -22,12 +22,18 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { PRESETS, DEFAULT_THRESHOLDS, VERSION } from '../src/shared/constants.js';
+import { STEPS } from '../demo/steps.js';
 
 // Read the real screening parameters from the 'standard' preset (same one
 // demo/demo.js initializes with) instead of hand-typing thresholds that
 // could silently drift from the library. Merge order matches monitor.js.
 const SCORING = PRESETS.standard.scoring;
 const THRESHOLDS = { ...DEFAULT_THRESHOLDS, ...PRESETS.standard.thresholds };
+
+// example-1's copied question and pasted answer are the ones the tour's
+// clipboard step shows, read from its copy (demo/steps.js) so the two
+// cannot drift apart.
+const CLIPBOARD_TASK = STEPS.find((s) => s.id === 'clipboard-cheat').task;
 
 // Fixed epoch — perfNow=0 maps to this wall-clock instant. Arbitrary but
 // fixed, so isoAt() below is deterministic across runs.
@@ -241,19 +247,19 @@ function buildParticipant(participantId, seed, trialSpecs, opts = {}) {
 
 // ── example-1: HARD-leaning ──────────────────────────────────────────────
 // Trial 1 ("q1"): an ordinary typed answer — nothing flagged. Trial 2
-// ("q2"): copies the question, then pastes the same short answer twice —
+// ("q2"): copies the question, then pastes an assistant's answer twice —
 // 2 pastes crosses the standard preset's paste hard-trigger (countThreshold
 // 2) — plus a long (14.2s) and a medium (4.1s) tab-away. Trial 3 ("q3"):
 // fast, synthetic-flavored typing (22.4 cps, over the 10 cps soft
 // threshold) plus one more medium tab-away. A short guard-friction
 // violation trail closes the session, as if the participant briefly left
-// fullscreen twice during the guarded act.
+// fullscreen twice under the guard.
 function makeExample1() {
   return buildParticipant('example-1', 101, [
     { id: 'q1', startAt: 100, durationMs: 41000, cps: 5.1, mousePoints: 220 },
     {
       id: 'q2', durationMs: 62000, mousePoints: 260,
-      copies: ['What is the capital of Australia?'], pastes: ['Canberra', 'Canberra'],
+      copies: [CLIPBOARD_TASK.question], pastes: [CLIPBOARD_TASK.providedAnswer, CLIPBOARD_TASK.providedAnswer],
       tabAways: [{ offsetMs: 12000, durationMs: 14200 }, { offsetMs: 45000, durationMs: 4100 }]
     },
     {
@@ -264,7 +270,7 @@ function makeExample1() {
     copyCount: 1,
     guardFriction: {
       violations: [
-        { t: 132000, reason: 'fullscreen_exit', phase: 'guard' },
+        { t: 132000, reason: 'not_fullscreen', phase: 'guard' },
         { t: 137500, reason: 'window_blurred', phase: 'guard' },
       ]
     }
