@@ -419,9 +419,9 @@ test('second step: the question and a box, no code; no step has a task label or 
   await expect(stepLabel).toHaveText('Step 7 of 10', { timeout: 5000 });
   await noLabelNoLinkAhead();
   await page.locator('.endguard').click(); // -> step 8
-  // Ending the guard leaves fullscreen too (the mock's exitFullscreen clears
-  // the element), so the visitor is not left full-screen on the next step.
-  await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
+  // Fullscreen stays until the files step (leaving it while the monitor
+  // records reads as a sidebar opening), so the element is still set here.
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
   await noLabelNoLinkAhead();
   await primaryButton(page).click(); // -> step 9
   await noLabelNoLinkAhead();
