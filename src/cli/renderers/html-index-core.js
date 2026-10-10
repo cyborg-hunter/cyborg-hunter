@@ -363,7 +363,7 @@ ${fontFaceCss}    :root {
     .cursor-details { border: 1px solid var(--line); padding: 10px 14px 12px; margin-top: 8px; }
     .cursor-table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
     .cursor-table:last-of-type { margin-bottom: 2px; }
-    .cursor-table caption { text-align: center; font-variant: small-caps; letter-spacing: 0.06em; font-size: 14px; color: var(--ink); padding: 2px 0 6px; }
+    .cursor-table caption { font-family: var(--ff-tomorrow); text-align: center; font-variant: small-caps; letter-spacing: 0.06em; font-size: 14px; color: var(--ink); padding: 2px 0 6px; }
     .cursor-table th, .cursor-table td { padding: 5px 10px; vertical-align: top; }
     .cursor-table th { text-align: left; font-weight: normal; width: 46%; }
     .cursor-table tbody tr:nth-child(even) { background: rgba(26, 24, 20, 0.035); }
@@ -379,6 +379,8 @@ ${fontFaceCss}    :root {
     .cursor-tells { margin: 0 0 8px 20px; padding: 0; }
     .cursor-tells li.tell-high { font-weight: 600; }
     .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
+    /* Closed, the summary is the block's only line: no bottom margin, so the frame sits evenly around it. */
+    .cursor-details:not([open]) > summary { margin-bottom: 0; }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
