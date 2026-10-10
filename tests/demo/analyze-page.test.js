@@ -80,15 +80,16 @@ test('the page declares the no-network policy verbatim, before anything else in 
   assert.equal(/<link[^>]+rel="stylesheet"|<script[^>]+src="http|@import|url\(http/i.test(html), false, 'no external resource');
 });
 
-test('ready shows the tested cohort size and installs the baked fonts', () => {
-  boot();
-  assert.equal(role('tested-size').textContent, '150');
+test('ready keeps the tested cohort size and installs the baked fonts', () => {
+  const t = boot();
+  assert.equal(t.page.state.limits.testedParticipants, 150);
   assert.ok([...document.head.querySelectorAll('style')].some((s) => s.textContent === '@font-face{}'));
 });
 
 // The top bar says what the page is and links the offline file; the files
 // step carries no paragraph about the policy (the meta tag above is the policy).
-test('the top bar: the name, the three links, and what the page needs; no policy paragraph', () => {
+// What the page needs is said only by the cohort-size warning (below).
+test('the top bar: the name and the three links; no policy paragraph, no browser note', () => {
   boot();
   const bar = document.querySelector('.topbar');
   assert.equal(bar.querySelector('.brand').textContent, 'cyborg-hunter · report generator');
@@ -97,8 +98,7 @@ test('the top bar: the name, the three links, and what the page needs; no policy
     ['GitHub', 'https://github.com/cyborg-hunter/cyborg-hunter#readme', false],
     ['offline version', './cyborg-hunter-analyze.html', true],
   ]);
-  assert.equal(role('requirements').textContent,
-    'This page needs a 2023-or-later browser. Tested up to 150 participants; for larger cohorts, use the CLI version.');
+  assert.equal(html.includes('2023-or-later'), false);
   assert.equal(html.includes('Nothing leaves your browser'), false);
   assert.deepEqual([...document.querySelectorAll('.policy')].map((el) => el.dataset.role), ['size-warning']);
 });
@@ -111,7 +111,6 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
   assert.equal(role('files-panel').hidden, false);
   // Counted by what the check read each file as.
   assert.equal(role('counts').textContent, '3 data files0 replay recordings0 experiment assets1 config file');
-  assert.equal(role('config-source').textContent, 'Settings from cyborg-hunter.config.json, over the defaults.');
   assert.deepEqual([...role('id-field').options].map((o) => o.value), ['subject_ID', 'run_id']);
   assert.equal(role('id-field').value, 'subject_ID');
   assert.equal(role('check-warnings').textContent, 'unknown key "dataDri"');
@@ -633,7 +632,7 @@ test('a worker failure with several replay requests outstanding settles them all
 const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, assets: 0, ignored: 0 },
   files: Array.from({ length: n }, (_, i) => ({ path: 'p' + i + '.csv', kind: 'data' })) });
 
-test('a cohort above the tested size shows a warning with its size; the run stays allowed', async () => {
+test('a cohort above the tested size shows a warning with its size and the browser the page needs; the run stays allowed', async () => {
   const t = boot();
   action('sample').click(); await tick();
   t.emit(checkedWith(151)); await tick();
@@ -644,6 +643,7 @@ test('a cohort above the tested size shows a warning with its size; the run stay
   assert.match(warning.textContent, /slow or fail/);
   // Only what is known: the CLI runs outside the browser, nothing is promised about size.
   assert.match(warning.textContent, /the CLI, which is not limited by browser memory\./);
+  assert.ok(role('size-warning-text').textContent.endsWith('memory. This page needs a 2023-or-later browser; for larger cohorts, use the CLI version.'));
   assert.equal(action('run').disabled, false);
 });
 
@@ -968,14 +968,13 @@ test('the table lists what each file was read as, with Remove; removing the last
   await tick();
   const rows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent));
   assert.deepEqual(rows(), [['study/a.csv', 'participant data'], ['study/cyborg-hunter.config.json', 'settings']]);
-  assert.equal(role('config-source').textContent, 'Settings from study/cyborg-hunter.config.json, over the defaults.');
   assert.equal(role('file-rows').querySelector('[data-path="study/a.csv"]').getAttribute('aria-label'), 'Remove study/a.csv');
   role('file-rows').querySelector('[data-path="study/cyborg-hunter.config.json"]').click();
   await until(() => t.sent.length === 2);
   assert.deepEqual(t.sent[1].files.map((f) => f.path), ['study/a.csv']);
   t.emit({ ...CHECKED, configFound: false, configPath: null, files: [{ path: 'study/a.csv', kind: 'data' }] });
   await tick();
-  assert.equal(role('config-source').textContent, 'Settings: the defaults (no cyborg-hunter.config.json among the files).');
+  assert.match(role('counts').textContent, /0 config files/);
   role('file-rows').querySelector('[data-path="study/a.csv"]').click();
   await tick();
   assert.deepEqual(t.sent.at(-1), { type: 'reset' }, 'nothing left to check: the page starts over');
@@ -1036,7 +1035,7 @@ test('the settings show from the first check on, and a run sends their config', 
   assert.deepEqual(t.sent[1].config.scoreWeights, { paste: 9 });
 });
 
-test('the threshold says what it is for, the weights are open under their sentence, and no field sets a phase or the trajectory order', async () => {
+test('the threshold says what it is for, the weights are open under their sentence with Cap explained in its title, no paragraph explains the panel, and no field sets a phase or the trajectory order', async () => {
   const t = boot();
   await toCheck(t);
   const form = role('settings-form');
@@ -1049,6 +1048,9 @@ test('the threshold says what it is for, the weights are open under their senten
   assert.equal(details.hasAttribute('open'), true, 'open until the analyst closes it');
   assert.equal(details.querySelector('summary').textContent,
     'Score weights: choose how much importance to give to each of the potential signals in estimating the participant\'s suspiciousness score.');
+  assert.deepEqual([...details.querySelectorAll('th')].map((th) => [th.textContent, th.title]),
+    [['Signal', ''], ['Weight', ''], ['Cap', 'the most events of one kind that count toward the ranking score']]);
+  assert.equal(form.querySelectorAll('p.hint').length, 0);
   for (const name of ['phaseInclude', 'phaseExclude', 'trajectoryDisplayOrder']) assert.equal(form.elements.namedItem(name), null, name);
   assert.equal(role('phase-hint'), null);
 });

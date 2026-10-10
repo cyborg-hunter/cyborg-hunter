@@ -139,10 +139,12 @@ describe('the report emits its annotation controls only with a run id', () => {
     assert.ok(html.endsWith('</script>\n</body>\n</html>'));
   });
 
-  it('none without one (html-index-snapshot.test.js pins the whole page)', async () => {
+  it('none without one, only each rail row\'s empty mark (html-index-snapshot.test.js holds the whole page)', async () => {
     const html = await renderIndexHtml(summaries, triage, [p], config, false, {});
+    const EMPTY_MARK = '<span class="annot-mark" data-label=""></span>';
+    assert.equal(html.split(EMPTY_MARK).length - 1, 1, 'one row, one mark');
     assert.equal(html.includes('ch-annot:'), false);
-    assert.equal(html.includes('annot-'), false);
+    assert.equal(html.split(EMPTY_MARK).join('').includes('annot-'), false);
   });
 
   it('the in-page report hands its annotations to the page; the CLI report keeps its own', async () => {
@@ -207,7 +209,7 @@ describe('the report\'s annotation script', () => {
         doc.querySelectorAll('.participant').forEach((pane) => pane.removeAttribute('hidden'));
       },
       key: (key, over) => doc.dispatchEvent(new win.KeyboardEvent('keydown', { key, bubbles: true, ...over })),
-      badge: (pid) => doc.querySelector('.cohort-row[data-pid="' + pid + '"] .annot-badge'),
+      mark: (pid) => doc.querySelector('.cohort-row[data-pid="' + pid + '"] .annot-mark'),
       note: (pid) => paneOf(pid).querySelector('.annot-note'),
     };
   }
@@ -218,8 +220,24 @@ describe('the report\'s annotation script', () => {
     r.select('a b');
     r.key('e');
     assert.deepEqual(r.labels(), { 'a b': 'exclude' });
-    assert.equal(r.badge('a b').textContent, 'exclude');
-    assert.equal(r.badge('a_b').hidden, true);
+    assert.equal(r.mark('a b').dataset.label, 'exclude');
+    assert.equal(r.mark('a_b').dataset.label, '');
+  });
+
+  it('the header buttons carry the rail\'s glyphs before their words; the mark is named by its label\'s word', () => {
+    const r = mount(memoryStorage());
+    const buttons = [...r.note('a b').closest('.annot').querySelectorAll('.annot-btn')];
+    assert.deepEqual(buttons.map((b) => b.textContent), ['✓ Include', '✗ Exclude', '⚑ Flag']);
+    assert.deepEqual(buttons.map((b) => b.querySelector('span').getAttribute('aria-hidden')), ['true', 'true', 'true'],
+      'the glyph is not read: each button is named by its word');
+    const mark = r.mark('a b');
+    const said = () => [mark.dataset.label, mark.getAttribute('role'), mark.getAttribute('aria-label')];
+    assert.deepEqual(said(), ['', null, null], 'unreviewed: no glyph, no name');
+    r.select('a b');
+    r.key('f');
+    assert.deepEqual(said(), ['flag', 'img', 'Flag']);
+    r.key('f');
+    assert.deepEqual(said(), ['', null, null], 'cleared: the name goes with the glyph');
   });
 
   it('a held key\'s repeats, and the keys while the legend or an enlarged image is open, label nothing', () => {
@@ -260,12 +278,12 @@ describe('the report\'s annotation script', () => {
     r.select('a b');
     r.key('f');
     assert.deepEqual(r.labels(), { a_b: 'exclude', 'a b': 'flag' });
-    assert.equal(r.badge('a_b').textContent, 'exclude', 'the page shows what it wrote');
+    assert.equal(r.mark('a_b').dataset.label, 'exclude', 'the page shows what it wrote');
     // A change in another tab, with none here: the storage event.
     storage.items.set(KEY, JSON.stringify({ a_b: { label: 'include', note: '', annotatedAt: 't' } }));
     r.win.dispatchEvent(new r.win.StorageEvent('storage', { key: KEY }));
-    assert.equal(r.badge('a_b').textContent, 'include');
-    assert.equal(r.badge('a b').hidden, true);
+    assert.equal(r.mark('a_b').dataset.label, 'include');
+    assert.equal(r.mark('a b').dataset.label, '');
     assert.equal(r.doc.querySelector('.annot-count').textContent, '1 of 2 reviewed');
   });
 
@@ -275,7 +293,7 @@ describe('the report\'s annotation script', () => {
       zz: { label: 'flag', note: '', annotatedAt: 't' } }));
     const r = mount(storage);
     assert.equal(r.doc.querySelector('.annot-count').textContent, '1 of 2 reviewed');
-    assert.equal(r.badge('a b').hidden, true);
+    assert.equal(r.mark('a b').dataset.label, '');
     r.select('a_b');
     r.key('f');
     assert.deepEqual(r.labels(), { a_b: 'flag' }, 'the next write drops what was not read');
@@ -286,11 +304,11 @@ describe('the report\'s annotation script', () => {
     const msg = r.doc.querySelector('.annot-msg');
     r.select('a b');
     r.key('e');
-    assert.equal(r.badge('a b').textContent, 'exclude');
+    assert.equal(r.mark('a b').dataset.label, 'exclude');
     assert.equal(msg.textContent, REFUSED);
     msg.textContent = '';
     r.key('f');
-    assert.equal(r.badge('a b').textContent, 'flag');
+    assert.equal(r.mark('a b').dataset.label, 'flag');
     assert.equal(msg.textContent, '', 'only on the first failure');
   });
 
@@ -322,9 +340,9 @@ describe('the report\'s annotation script', () => {
     const message = (data, source) => r.win.dispatchEvent(new r.win.MessageEvent('message', { data, source }));
     message(state, {});
     message({ ...state, runId: 'ffffffffffffffff' }, r.parent);
-    assert.equal(r.badge('a_b').hidden, true, 'not from the page, or not for this run');
+    assert.equal(r.mark('a_b').dataset.label, '', 'not from the page, or not for this run');
     message(state, r.parent);
-    assert.equal(r.badge('a_b').textContent, 'flag');
-    assert.equal(r.badge('a b').hidden, true, 'the page\'s state replaces the report\'s');
+    assert.equal(r.mark('a_b').dataset.label, 'flag');
+    assert.equal(r.mark('a b').dataset.label, '', 'the page\'s state replaces the report\'s');
   });
 });

@@ -124,8 +124,9 @@ describe('the run id', () => {
     assert.equal(built.runId, null);
     assert.equal(built.generatedAt, null);
     assert.equal(files.get('index.html').includes('run-id'), false);
-    // The annotations are stored under the run id: without one, none.
+    // The annotations are stored under the run id: without one, none (each
+    // rail row's mark stays empty).
     assert.equal(files.get('index.html').includes('ch-annot:'), false);
-    assert.equal(files.get('index.html').includes('annot-'), false);
+    assert.equal(files.get('index.html').split('<span class="annot-mark" data-label=""></span>').join('').includes('annot-'), false);
   });
 });

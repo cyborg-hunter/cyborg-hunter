@@ -1,8 +1,9 @@
 // src/cli/renderers/annotation-client.js
 // The report's annotation controls, emitted by html-index-core.js only when
 // the report has a run id (report-core.js runIdOf): Include / Exclude / Flag
-// and a note in each participant's header, a badge on its rail row, and a
-// "N of M reviewed" line with the exports and the import in the rail footer.
+// and a note in each participant's header, a glyph at the left of its rail
+// row (the row's .annot-mark, html-index-core.js), and a "N of M reviewed"
+// line with the exports and the import in the rail footer.
 // The annotations are kept in the report's own localStorage under
 // ch-annot:<runId>, so a report opened again from disk shows them again; the
 // JSON export is the durable copy (another browser, another machine). Each
@@ -27,9 +28,10 @@ export const ANNOTATION_CSS = `    .annot { display: flex; flex-wrap: wrap; alig
     .annot-btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
     .annot-note { flex: 1 1 240px; min-height: 30px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 0;
       background: var(--bg); color: var(--ink); font: 13px/1.3 var(--ff-recursive); resize: vertical; }
-    .annot-badge { font-family: var(--ff-sora); font-size: 10px; padding: 1px 5px; border: 1px solid var(--ink); flex-shrink: 0; }
-    .annot-badge[data-label="exclude"] { background: var(--ink); color: var(--surface); }
-    .annot-badge[data-label="flag"] { border-style: dashed; }
+    .annot-mark { display: inline-block; width: 12px; flex-shrink: 0; text-align: center; font-size: 12px; line-height: 1; }
+    .annot-mark[data-label="include"]::before { content: "✓"; color: var(--clean); }
+    .annot-mark[data-label="exclude"]::before { content: "✗"; color: var(--hard); }
+    .annot-mark[data-label="flag"]::before { content: "⚑"; color: var(--soft); }
     .annot-bar { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
       display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-family: var(--ff-sora); }
     .annot-bar .annot-count, .annot-bar .annot-msg { flex-basis: 100%; }
@@ -112,6 +114,8 @@ export const ANNOTATION_UI_JS = String.raw`
       var PARENT = !!cfg.parent;
       var KEY = 'ch-annot:' + RUN_ID;
       var TEXT = { include: 'Include', exclude: 'Exclude', flag: 'Flag' };
+      // The same glyphs as the rail's marks (ANNOTATION_CSS).
+      var GLYPH = { include: '✓', exclude: '✗', flag: '⚑' };
       // A note is saved after a pause in typing this long, when its field is
       // left, and when the page goes away.
       var NOTE_SAVE_MS = 400;
@@ -201,7 +205,13 @@ export const ANNOTATION_UI_JS = String.raw`
           b.type = 'button';
           b.className = 'annot-btn';
           b.dataset.label = label;
-          b.textContent = TEXT[label];
+          // The glyph is hidden from a screen reader: the button's name is
+          // the word.
+          var glyph = document.createElement('span');
+          glyph.setAttribute('aria-hidden', 'true');
+          glyph.textContent = GLYPH[label];
+          b.appendChild(glyph);
+          b.appendChild(document.createTextNode(' ' + TEXT[label]));
           b.addEventListener('click', function () {
             var a = own(state, id);
             setAnnotation(id, a && a.label === label ? null : label, note.value);
@@ -217,15 +227,9 @@ export const ANNOTATION_UI_JS = String.raw`
         controls.forEach(function (c) { if (c) c.flush(); });
       });
 
-      // A badge on each rail row, before its score.
-      var badges = rows.map(function (row) {
-        var top = row.querySelector('.cohort-row-top');
-        var badge = document.createElement('span');
-        badge.className = 'annot-badge';
-        badge.hidden = true;
-        top.insertBefore(badge, top.querySelector('.score'));
-        return badge;
-      });
+      // The mark at the left of each rail row, which the CSS draws from its
+      // data-label; the tier stays on the row's badge.
+      var marks = rows.map(function (row) { return row.querySelector('.annot-mark'); });
 
       // The rail footer: how many are reviewed, then the exports and the import.
       var bar = document.createElement('div');
@@ -338,9 +342,11 @@ export const ANNOTATION_UI_JS = String.raw`
           var a = own(state, id);
           var label = a ? a.label : null;
           if (label) reviewed++;
-          badges[i].hidden = !label;
-          badges[i].textContent = label || '';
-          badges[i].dataset.label = label || '';
+          // A drawn glyph has no name of its own: the label's word is the
+          // mark's, as an image's (role img), so a screen reader says it.
+          marks[i].dataset.label = label || '';
+          if (label) { marks[i].setAttribute('role', 'img'); marks[i].setAttribute('aria-label', TEXT[label]); }
+          else { marks[i].removeAttribute('role'); marks[i].removeAttribute('aria-label'); }
           var c = controls[i];
           if (!c) return;
           c.buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.label === label)); });

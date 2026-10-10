@@ -6,7 +6,6 @@
 // bar. Every test runs under the same request guard as engines.spec.js.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { TESTED_PARTICIPANTS } from '../../../demo/analyze/limits.js';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
   pilotFiles, cliPilotTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
 
@@ -23,8 +22,7 @@ test('the top bar names the page and links the demo, GitHub and the offline file
     ['offline version', baseURL + '/analyze/' + basename(OFFLINE_FILE), true],
   ]);
   expect(existsSync(OFFLINE_FILE), 'the site serves the file the link names').toBe(true);
-  await expect(page.locator('[data-role="requirements"]')).toHaveText('This page needs a 2023-or-later browser. Tested up to ' +
-    TESTED_PARTICIPANTS + ' participants; for larger cohorts, use the CLI version.');
+  await expect(page.getByText('2023-or-later')).toHaveCount(0);
   await expect(page.getByText('Nothing leaves your browser')).toHaveCount(0);
   await expect(page.locator('section[data-step="files"] > .policy')).toHaveCount(0);
   await assertOnlyAllowed(page, seen, allow);
@@ -154,7 +152,7 @@ test('files from two drops are one list: data first, the replays and the config 
     await page.setInputFiles('[data-role="file-input"]', rest);
     await expect(page.locator('[data-role="counts"]')).toContainText('2 replay recordings');
     await expect(page.locator('[data-role="counts"]')).toContainText('1 experiment asset');
-    await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
+    await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
     await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(6);
     await page.locator('[data-role="file-rows"] [data-path="demo.css"]').click();
     await expect(page.locator('[data-role="file-rows"] tr')).toHaveCount(5);
@@ -242,14 +240,16 @@ test('annotations made in the report frame are kept by the page through a re-ana
   await buildReport(page);
   const frame = reportFrame(page);
   await frame.locator('#p-SYN-HARD-03').getByRole('button', { name: 'Exclude' }).click();
-  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
+  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
+  // The glyph drawn in the frame (its CSS and its charset are the report's own).
+  expect(await frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark').evaluate((el) => getComputedStyle(el, '::before').content)).toBe('"✗"');
   await expect(frame.locator('.annot-count')).toHaveText('1 of 3 reviewed');
   // The frame cannot download: its exports are the page's.
   await expect(frame.getByRole('button', { name: 'Export CSV' })).toHaveCount(0);
   await page.fill('[name="softScoreThreshold"]', '12');
   await page.press('[name="softScoreThreshold"]', 'Tab');
   await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 2 clean', { timeout: 60000 });
-  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-badge')).toHaveText('exclude');
+  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="annotations-csv"]')]);
   expect(readFileSync(await csv.path(), 'utf8').split('\n')[1]).toMatch(/^SYN-HARD-03,hard,[^,]+,exclude,/);
   await assertOnlyAllowed(page, seen, allow);

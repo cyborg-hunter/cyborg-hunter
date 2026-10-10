@@ -91,7 +91,7 @@ test('"Open in the analyzer web app" hands over the five files and the fonts: th
   await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 replay recording');
   await expect(page.locator('[data-role="counts"]')).toContainText('0 experiment assets');
-  await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
+  await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   // The fonts are the tour's, not experiment files the visitor dropped: no
   // assets hint, and the exported config names no assets folder.

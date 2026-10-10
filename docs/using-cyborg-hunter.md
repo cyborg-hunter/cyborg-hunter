@@ -422,9 +422,9 @@ Requirements and limits:
 
 - A 2023-or-later browser (Chrome, Firefox or Safari).
 - The page has been tested with cohorts of up to 150 participants (a
-  0.8 MB replay recording each) on a laptop with 24 GB of memory; it states
-  that number on screen and, above it, warns that the build may be slow or
-  fail and suggests the CLI (the build is still allowed). If a check or a
+  0.8 MB replay recording each) on a laptop with 24 GB of memory; above that
+  number, it warns that the build may be slow or fail, names the browser it
+  needs and suggests the CLI (the build is still allowed). If a check or a
   build reports no progress for a minute, the page says it is still working
   and suggests reloading if nothing changes in a few minutes; it never stops
   the build itself. If a report loads but never finishes rendering, the page
