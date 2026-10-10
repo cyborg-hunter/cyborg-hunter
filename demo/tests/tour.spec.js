@@ -232,6 +232,9 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
   // ----- Step 10: your files (the hand-off to the analyzer: handoff.spec.js) -----
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 10 of 10');
   await expect(page.locator('#card h2')).toHaveText('Your files');
+  // The recording is finalised here, so the replay lamp stops pulsing with
+  // it (the rail itself is hidden from this step on).
+  await expect(page.locator('#rail li.recording')).toHaveCount(0);
   const participantId = await pid(page);
   expect(participantId).toMatch(/^DEMO-[a-z0-9]{4}$/);
   await expect(page.locator('[data-action="open-analyzer"]')).toBeVisible();
@@ -271,25 +274,51 @@ test('happy path: all 10 steps, welcome through your files', async ({ page, froz
 });
 
 // ---------------------------------------------------------------------------
-// Top bar and step label: the bar holds the title and, once the session
-// records, the REC cue right after it. The step count is on the card, and
-// it names no act (the act stays on body[data-view], for the CSS).
+// Top bar and step label: the bar holds the title alone. The cue that the
+// session records is the rail's replay lamp, which pulses in teal from the
+// moment the recorder attaches (steady under reduced motion); the mouse
+// paths lamp beside it keeps its steady look. The step count is on the
+// card, and it names no act (the act stays on body[data-view], for the CSS).
 // ---------------------------------------------------------------------------
-test('top bar: the title, then the REC cue; the card label says the step only', async ({ page }) => {
+test('top bar: the title alone; the replay lamp carries the REC cue; the card label says the step only', async ({ page }) => {
   await page.goto('/');
   await page.locator('#card h2').waitFor();
   const bar = page.locator('.topbar');
+  const barChildren = () => bar.evaluate((el) => Array.from(el.children, (c) => c.className));
   await expect(bar.locator('.brand')).toHaveText('cyborg-hunter · live demo');
-  await expect(page.locator('#pid, #progress')).toHaveCount(0);
-  await expect(page.locator('#rec')).toBeHidden();
+  expect(await barChildren()).toEqual(['brand']);
+  await expect(page.locator('#pid, #progress, #rec')).toHaveCount(0);
+  await expect(page.locator('#rail li.recording')).toHaveCount(0);
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 1 of 10');
 
   await page.getByRole('button', { name: 'Start the demo', exact: true }).click(); // -> baseline (step 2)
-  await expect(page.locator('#rec')).toBeVisible();
-  await expect(page.locator('#rec')).toHaveText('REC replay');
-  expect(await bar.evaluate((el) => Array.from(el.children, (c) => c.className))).toEqual(['brand', 'rec']);
+  expect(await barChildren()).toEqual(['brand']);
+  await expect(railRow(page, 'replay')).toHaveClass(/\brecording\b/);
+  await expect(page.locator('#rail li.recording')).toHaveCount(1);
+  const lamp = (key) => railRow(page, key).locator('.lamp');
+  await expect(lamp('replay')).toHaveCSS('animation-name', 'rec-pulse');
+  await expect(lamp('replay')).toHaveCSS('animation-iteration-count', 'infinite');
+  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(14, 116, 144)'); // --live
+  await expect(lamp('mousePaths')).toHaveCSS('animation-name', 'none');
+  await expect(lamp('mousePaths')).toHaveCSS('border-top-color', 'rgb(226, 221, 209)'); // --line-soft, as before
+  // Reduced motion: the lamp stays teal and stops moving.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(lamp('replay')).toHaveCSS('animation-name', 'none');
+  await expect(lamp('replay')).toHaveCSS('border-top-color', 'rgb(14, 116, 144)');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'act1');
+});
+
+// A recorder that cannot attach records nothing, so nothing says it does:
+// the replay lamp stays steady (the files step then says the recording is
+// unavailable).
+test('the replay lamp does not pulse when the recorder cannot attach', async ({ page }) => {
+  await page.route('**/cyborg-hunter-replay.js', (route) => route.abort());
+  await startTour(page); // -> baseline (step 2)
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 2 of 10');
+  await expect(page.locator('#rail li.recording')).toHaveCount(0);
+  await expect(railRow(page, 'replay').locator('.lamp')).toHaveCSS('animation-name', 'none');
 });
 
 // ---------------------------------------------------------------------------

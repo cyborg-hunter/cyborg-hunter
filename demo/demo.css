@@ -4,8 +4,9 @@
  * Sora; code and the event stream stay system mono), its high-contrast
  * neutrals, square boxes with a line and a soft shadow, 4px controls,
  * segmented tabs with ink active states, and a double rule under the header.
- * Teal survives only as the live-recording cue (REC); reds/greens stay
- * semantic (lamps, hard rows, tiers) and match the report's tier colours.
+ * Teal survives only as the live-recording cue (the rail's pulsing replay
+ * lamp); reds/greens stay semantic (lamps, hard rows, tiers) and match the
+ * report's tier colours.
  * Fonts load from assets/fonts/, copied from src/cli/renderers/fonts/ by
  * tools/assemble-demo-site.mjs.
  *
@@ -54,8 +55,9 @@ code, pre{font-family:var(--mono);}
 /* ---------------------------------------------------------------------
  * Topbar — floats on the ground, no bar chrome. Constrained to the same
  * max-width/gutters as .cols so the brand lines up with the content column.
- * It holds the brand and, while the session records, the REC cue right
- * after it; the step count is on the card (.eyebrow).
+ * It holds the brand alone: the cue that the session records is the rail's
+ * replay lamp (.check li.recording, below), and the step count is on the
+ * card (.eyebrow).
  * --------------------------------------------------------------------- */
 /* The report's double header rule, spanning exactly the content column:
  * the bar's gutters are margins (not padding) so the rule stops where the
@@ -65,12 +67,6 @@ code, pre{font-family:var(--mono);}
   border-bottom:3px double var(--ink);}
 .topbar .brand{font-family:var(--ff-space);font-weight:550;letter-spacing:.01em;
   font-size:17px;color:var(--ink);}
-/* REC is the one live-recording cue, so it keeps the teal. */
-.rec{font-family:var(--ff-sora);font-size:12px;color:var(--live);}
-.rec .dot{display:inline-block;width:7px;height:7px;border-radius:50%;
-  background:var(--hard);margin-right:5px;vertical-align:1px;animation:pulse 1.6s infinite;}
-@keyframes pulse{50%{opacity:.25}}
-@media (prefers-reduced-motion: reduce){.rec .dot{animation:none}}
 
 /* ---------------------------------------------------------------------
  * Layout grid — content column + 312px instrument column, shared gutters.
@@ -301,6 +297,15 @@ pre code{background:none;padding:0;}
 .check li.lit .lamp{background:var(--clean);border-color:var(--clean);}
 .check li.lit.hardlit .lamp{background:var(--hard);border-color:var(--hard);}
 .check li.always .lamp{background:var(--line-soft);border-color:var(--line-soft);}
+/* The one cue that the session records: from the moment the recorder
+ * attaches until the recording is finalised, demo.js marks the replay row
+ * .recording and its lamp pulses in the live teal. After .always, which the
+ * row also carries, so the teal wins at equal specificity. Steady (still
+ * teal) under prefers-reduced-motion. */
+@keyframes rec-pulse{50%{opacity:.25}}
+.check li.recording .lamp{animation:rec-pulse 1.2s ease-in-out infinite;
+  background:var(--live);border-color:var(--live);}
+@media (prefers-reduced-motion: reduce){.check li.recording .lamp{animation:none;}}
 .check li .n{margin-left:auto;font-family:var(--ff-sora);font-variant-numeric:tabular-nums;font-size:11.5px;}
 .check .hint{font-family:var(--ff-sofia);padding-top:12px;font-size:10.5px;
   letter-spacing:.12em;text-transform:uppercase;color:var(--dim);}
@@ -313,7 +318,7 @@ body[data-view="act2"] .check li.guardrow{color:var(--hard);}
 body[data-view="act2"] .check li.guardrow .lamp{background:var(--hard);border-color:var(--hard);}
 
 /* One-shot pulse for a lamp that just lit, off entirely under
- * prefers-reduced-motion (precedent: the REC dot above). */
+ * prefers-reduced-motion (as the recording lamp's pulse above). */
 @keyframes lamp-pulse{
   0%{transform:scale(1);opacity:1;}
   50%{transform:scale(1.8);opacity:.4;}

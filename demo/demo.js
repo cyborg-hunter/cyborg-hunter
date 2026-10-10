@@ -23,7 +23,7 @@ import {
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
-import { renderRail, light, acknowledge, clearSignalBox } from './rail.js';
+import { renderRail, light, setRecording, acknowledge, clearSignalBox } from './rail.js';
 import { buildPayload } from './payload.js';
 import { makeLivePane, makePaneBar } from './live-pane.js';
 import { escHtml } from './util.js';
@@ -688,14 +688,13 @@ function startTour(participantId, capabilities, manifest) {
   // Attaches the standalone replay recorder unconditionally, called from the
   // "Start the demo" click before goTo(1) opens step 2's trial —
   // recorderBridge reads state.recorder live, so as long as this finishes
-  // first, the very first trial gets bracketed too. The REC pill shows
-  // immediately regardless of whether attach actually succeeds (replay is on
-  // by default); a failure keeps the tour degrading gracefully and marks
-  // state.replayUnavailable so the files step can say so honestly instead
-  // of just silently dropping the file.
+  // first, the very first trial gets bracketed too. The rail's replay lamp
+  // starts pulsing (the cue that the session records) only once the
+  // recorder has attached and started, so it never claims a recording that
+  // is not being made; a failure leaves the lamp steady, keeps the tour
+  // degrading gracefully and marks state.replayUnavailable so the files
+  // step can say so honestly instead of just silently dropping the file.
   function startReplay() {
-    var recEl = document.getElementById('rec');
-    if (recEl) recEl.hidden = false;
     try {
       if (!window.CyborgHunterReplay || typeof window.CyborgHunterReplay.attach !== 'function') {
         throw new Error('CyborgHunterReplay unavailable');
@@ -706,10 +705,14 @@ function startTour(participantId, capabilities, manifest) {
         autoSave: { mode: 'none' }
       });
       state.recorder.startSession();
+      setRecording(true);
     } catch (err) {
       console.warn('cyborg-hunter demo: replay attach failed, continuing without a recording', err);
       state.recorder = null;
       state.replayUnavailable = true;
+      // Steady again if an earlier Start lit it: a new attach first
+      // discards the recorder already running, so nothing records now.
+      setRecording(false);
     }
   }
 
@@ -1329,6 +1332,8 @@ function startTour(participantId, capabilities, manifest) {
       if (!state.sessionReport) state.sessionReport = monitor.getSessionReport();
       state.pane.freeze();
       finalizeReplay();
+      // The recording has ended, so the replay lamp stops pulsing with it.
+      setRecording(false);
       finalizeGuard();
       // AFTER finalizeGuard() deliberately: exiting fullscreen under an
       // armed guard logs a false 'not_fullscreen' violation (the plugin now

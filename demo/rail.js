@@ -86,6 +86,19 @@ export function light(key, count, opts) {
 }
 
 /**
+ * Marks the replay row as recording (on) or not (off): demo.css pulses its
+ * lamp in the live teal while the row carries .recording, the page's one cue
+ * that the session records. Here rather than in demo.js because the rows are
+ * this module's. Returns the row, or null if renderRail() hasn't run.
+ */
+export function setRecording(on) {
+  var row = rowsByKey.replay;
+  if (!row) return null;
+  row.classList.toggle('recording', !!on);
+  return row;
+}
+
+/**
  * Adds a "✓ detected — <label>" line to the signal box at the top of the
  * rail, and drops the box's placeholder. One line per label per step: a
  * second paste on the same step finds its line already there (the lamp
