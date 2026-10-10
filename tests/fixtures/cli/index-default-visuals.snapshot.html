@@ -135,6 +135,14 @@
     .tier-dot[data-tier="soft"]  { background: var(--soft); }
     .tier-dot[data-tier="clean"] { background: var(--clean); }
 
+    /* Annotation mark — the slot at the left of each rail row, sized here so
+       the rail lays out from the first paint; annotation-client.js, which
+       loads at the end of the report, draws its glyph */
+    .annot-mark {
+      display: inline-block; width: 12px; flex-shrink: 0;
+      text-align: center; font-size: 12px; line-height: 1;
+    }
+
     /* Tier badge — small square tag, filled for hard/soft, outline for clean */
     .tier-badge {
       font-family: var(--ff-sora);

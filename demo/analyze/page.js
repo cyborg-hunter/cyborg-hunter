@@ -355,8 +355,7 @@ export function createPage(root, worker, opts) {
     var dataFiles = kindCount(checked, 'data');
     if (tested && dataFiles > tested) {
       q(root, 'size-warning-text').textContent = 'This cohort has ' + dataFiles + ' data files, more than the ' + tested +
-        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here, or use the CLI, which is not limited by browser memory.' +
-        ' This page needs a 2023-or-later browser; for larger cohorts, use the CLI version.';
+        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here (in a 2023-or-later browser), or use the CLI, which is not limited by browser memory.';
       q(root, 'size-warning').hidden = false;
     }
     updateControls();

@@ -28,7 +28,7 @@ export const ANNOTATION_CSS = `    .annot { display: flex; flex-wrap: wrap; alig
     .annot-btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
     .annot-note { flex: 1 1 240px; min-height: 30px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 0;
       background: var(--bg); color: var(--ink); font: 13px/1.3 var(--ff-recursive); resize: vertical; }
-    .annot-mark { display: inline-block; width: 12px; flex-shrink: 0; text-align: center; font-size: 12px; line-height: 1; }
+    /* The mark's slot is sized in the report's own stylesheet (html-index-core.js). */
     .annot-mark[data-label="include"]::before { content: "✓"; color: var(--clean); }
     .annot-mark[data-label="exclude"]::before { content: "✗"; color: var(--hard); }
     .annot-mark[data-label="flag"]::before { content: "⚑"; color: var(--soft); }

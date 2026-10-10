@@ -643,7 +643,8 @@ test('a cohort above the tested size shows a warning with its size and the brows
   assert.match(warning.textContent, /slow or fail/);
   // Only what is known: the CLI runs outside the browser, nothing is promised about size.
   assert.match(warning.textContent, /the CLI, which is not limited by browser memory\./);
-  assert.ok(role('size-warning-text').textContent.endsWith('memory. This page needs a 2023-or-later browser; for larger cohorts, use the CLI version.'));
+  assert.equal(role('size-warning-text').textContent, 'This cohort has 151 data files, more than the 150 participants this page was tested with. ' +
+    'It may be slow or fail in some browsers. You can still build the report here (in a 2023-or-later browser), or use the CLI, which is not limited by browser memory.');
   assert.equal(action('run').disabled, false);
 });
 

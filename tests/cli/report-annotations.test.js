@@ -139,12 +139,11 @@ describe('the report emits its annotation controls only with a run id', () => {
     assert.ok(html.endsWith('</script>\n</body>\n</html>'));
   });
 
-  it('none without one, only each rail row\'s empty mark (html-index-snapshot.test.js holds the whole page)', async () => {
+  it('none without one, only each rail row\'s empty mark and its slot\'s style (html-index-snapshot.test.js holds the whole page)', async () => {
     const html = await renderIndexHtml(summaries, triage, [p], config, false, {});
-    const EMPTY_MARK = '<span class="annot-mark" data-label=""></span>';
-    assert.equal(html.split(EMPTY_MARK).length - 1, 1, 'one row, one mark');
+    assert.equal(html.split('<span class="annot-mark" data-label=""></span>').length - 1, 1, 'one row, one mark');
     assert.equal(html.includes('ch-annot:'), false);
-    assert.equal(html.split(EMPTY_MARK).join('').includes('annot-'), false);
+    assert.deepEqual([...new Set(html.match(/annot-[\w-]+/g))], ['annot-mark']);
   });
 
   it('the in-page report hands its annotations to the page; the CLI report keeps its own', async () => {
