@@ -605,6 +605,10 @@ function startTour(participantId, capabilities, manifest) {
     // (emitting its phase:'end', which unfloats via the handler below) and
     // hides the overlay — so ending the guard mid-violation is clean.
     finalizeGuard();
+    // Fullscreen ends with the guard, as step 7's copy promises: AFTER
+    // finalizeGuard(), so the exit logs no 'not_fullscreen' violation (the
+    // same order the files step uses for a visitor who skipped this button).
+    exitFullscreenIfActive();
     goTo(state.stepIndex + 1);
   }
 
