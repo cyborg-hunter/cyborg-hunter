@@ -4,7 +4,7 @@
 // the same for the offline single file opened from disk, through dropped
 // files, which requests nothing but itself.
 import { pathToFileURL } from 'node:url';
-import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip, pilotFiles, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, OFFLINE_FILE } from './support.mjs';
+import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip, sampleFiles, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, OFFLINE_FILE } from './support.mjs';
 
 test('the page makes no request beyond its own files, sample → report → zip', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -13,7 +13,7 @@ test('the page makes no request beyond its own files, sample → report → zip'
   await waitReady(page);
   await loadSample(page);
   await buildReport(page);
-  expect(await railOrder(page)).toEqual(PILOT_ORDER);
+  expect(await railOrder(page)).toEqual(SAMPLE_ORDER);
   const zip = await downloadZip(page);
   expect(zip.names).toContain('triage.md');
   await assertOnlyAllowed(page, seen, allow);
@@ -29,11 +29,11 @@ test('the offline single file works from file:// and makes no request at all', a
   const seen = await guardNetwork(page, allow, { route: false });
   await page.goto(url);
   await waitReady(page);
-  await page.setInputFiles('[data-role="file-input"]', pilotFiles());
+  await page.setInputFiles('[data-role="file-input"]', sampleFiles());
   await expect(page.locator('[data-role="counts"]')).toContainText('4 data files');
-  await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
+  await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   await buildReport(page);
-  expect(await railOrder(page)).toEqual(PILOT_ORDER);
+  expect(await railOrder(page)).toEqual(SAMPLE_ORDER);
   const zip = await downloadZip(page);
   expect(zip.names).toContain('summary.csv');
   expect(zip.names.filter((n) => n.endsWith('.png')).length).toBeGreaterThanOrEqual(3);

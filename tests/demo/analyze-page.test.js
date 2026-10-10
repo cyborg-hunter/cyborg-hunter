@@ -58,9 +58,21 @@ const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], cou
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
 
-async function toCheck(t) {
+// The worker's reply to `sample`: the bundled sessions as text.
+const SAMPLE = { type: 'sample', files: [
+  { path: 'DEMO-681w.json', text: '{"participantId":"DEMO-681w"}' }, { path: 'DEMO-9mop.json', text: '{"participantId":"DEMO-9mop"}' },
+  { path: 'DEMO-a3f3.json', text: '{"participantId":"DEMO-a3f3"}' }, { path: 'DEMO-bsq6.json', text: '{"participantId":"DEMO-bsq6"}' },
+  { path: 'cyborg-hunter.config.json', text: '{"participantIdField":"participantId"}' } ] };
+const SAMPLE_PATHS = SAMPLE.files.map((f) => f.path);
+const paths = (msg) => msg.files.map((f) => f.path);
+async function loadSample(t) {
   action('sample').click();
   await tick();
+  t.emit(SAMPLE);
+  await tick();
+}
+async function toCheck(t) {
+  await loadSample(t);
   t.emit(CHECKED);
   await tick();
 }
@@ -107,7 +119,8 @@ test('the top bar: the name and the three links; no policy paragraph, no browser
 test('sample → check: counts, id candidates (deduplicated), config warnings', async () => {
   const t = boot();
   await toCheck(t);
-  assert.deepEqual(t.sent, [{ type: 'check', files: [], sample: true }]);
+  assert.deepEqual(t.sent.map((m) => m.type), ['sample', 'check']);
+  assert.deepEqual(paths(t.sent[1]), SAMPLE_PATHS);
   assert.deepEqual(visibleStep(), ['files']);
   assert.equal(role('files-panel').hidden, false);
   // Counted by what the check read each file as.
@@ -121,8 +134,7 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
 
 test('check: the files the id field was looked for in are data files; the replay recordings it skipped are counted apart', async () => {
   const t = boot();
-  action('sample').click();
-  await tick();
+  await loadSample(t);
   t.emit({ ...CHECKED, sampled: 1, recordings: 2 });
   await tick();
   assert.equal(role('id-files').textContent, '1 data file inspected; 2 replay recordings skipped');
@@ -138,7 +150,7 @@ test('over http the page hands the worker File handles, not bytes', async () => 
   const entries = dropped();
   t.page.addFiles(entries);
   await until(() => t.sent.length === 1);
-  assert.deepEqual(t.sent[0], { type: 'check', sample: false, files: entries.map((e) => ({ path: e.path, file: e.file })) });
+  assert.deepEqual(t.sent[0], { type: 'check', files: entries.map((e) => ({ path: e.path, file: e.file })) });
   assert.deepEqual(t.transfers[0], []);
 });
 
@@ -174,7 +186,7 @@ test('an empty hand-off read after a drop or the sample shows no line', async ()
   t.page.handoffEmpty();
   assert.equal(role('handoff-empty').hidden, true, 'after a drop');
   const s = boot();
-  action('sample').click();
+  await loadSample(s);
   s.page.handoffEmpty();
   assert.equal(role('handoff-empty').hidden, true, 'after the sample');
 });
@@ -221,7 +233,9 @@ test('one run at a time: the run control is disabled while a run is in flight', 
   await tick();
   assert.equal(t.sent.filter((m) => m.type === 'run').length, 1);
   // The check's config with the settings panel's keys on top, here at their defaults.
-  assert.deepEqual(t.sent[1], { type: 'run', files: [], sample: true, participantIdField: 'subject_ID', config: PANEL_DEFAULTS });
+  const { files, ...run } = t.sent[2];
+  assert.deepEqual(run, { type: 'run', participantIdField: 'subject_ID', config: PANEL_DEFAULTS });
+  assert.deepEqual(files.map((f) => f.path), SAMPLE_PATHS);
 });
 
 test('a run error discards the zip chunks already received and offers a retry', async () => {
@@ -249,8 +263,7 @@ test('a run error discards the zip chunks already received and offers a retry', 
 
 test('a check error returns to the files step with no list', async () => {
   const t = boot();
-  action('sample').click();
-  await tick();
+  await loadSample(t);
   t.emit({ type: 'error', phase: 'check', message: 'boom' });
   await tick();
   assert.deepEqual(visibleStep(), ['files']);
@@ -373,16 +386,14 @@ test('a worker failure mid-run recovers like a run error: chunks discarded, cont
 
 test('a worker failure mid-check returns to the files step with Start over usable', async () => {
   const t = boot();
-  action('sample').click();
-  await tick();
+  await loadSample(t);
   t.worker.onerror({ message: 'SyntaxError' });
   await tick();
   assert.deepEqual(visibleStep(), ['files']);
   assert.equal(role('files-panel').hidden, true);
   assert.match(role('error').textContent, /SyntaxError/);
   assert.ok([...document.querySelectorAll('[data-action="reset"]')].every((b) => !b.disabled));
-  action('sample').click();   // a retry is accepted
-  await tick();
+  await loadSample(t);   // a retry is accepted
   assert.equal(t.sent.filter((m) => m.type === 'check').length, 2);
 });
 
@@ -570,6 +581,7 @@ test('after a worker failure the page retries on a fresh worker from the factory
   const ready = { type: 'ready', assets: { replayClientSrc: '', replayCss: '', fontFaceCss: '@font-face{}' }, limits: { testedParticipants: 150 } };
   workers[0].onmessage({ data: ready });
   action('sample').click(); await tick();
+  workers[0].onmessage({ data: SAMPLE }); await tick();
   workers[0].onmessage({ data: CHECKED }); await tick();
   action('run').click(); await tick();
   workers[0].onmessage({ data: { type: 'zip', chunk: new Uint8Array([9]) } });
@@ -610,6 +622,7 @@ test('a worker failure with several replay requests outstanding settles them all
   const w0 = (data) => workers[0].onmessage({ data });
   w0(ready);
   action('sample').click(); await tick();
+  w0(SAMPLE); await tick();
   w0(CHECKED); await tick();
   action('run').click(); await tick();
   w0({ type: 'zip', chunk: new Uint8Array([1]) });
@@ -636,7 +649,7 @@ const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, a
 
 test('a cohort above the tested size shows a warning with its size and the browser the page needs; the run stays allowed', async () => {
   const t = boot();
-  action('sample').click(); await tick();
+  await loadSample(t);
   t.emit(checkedWith(151)); await tick();
   const warning = role('size-warning');
   assert.equal(warning.hidden, false);
@@ -652,15 +665,15 @@ test('a cohort above the tested size shows a warning with its size and the brows
 
 test('a cohort at the tested size shows no warning, and a new check clears an earlier one', async () => {
   const t = boot();
-  action('sample').click(); await tick();
+  await loadSample(t);
   t.emit(checkedWith(150)); await tick();
   assert.equal(role('size-warning').hidden, true);
   document.querySelectorAll('[data-action="reset"]')[0].click();
-  action('sample').click(); await tick();
+  await loadSample(t);
   t.emit(checkedWith(400)); await tick();
   assert.equal(role('size-warning').hidden, false);
   document.querySelectorAll('[data-action="reset"]')[0].click();
-  action('sample').click(); await tick();
+  await loadSample(t);
   assert.equal(role('size-warning').hidden, true, 'hidden again while the next check is read');
 });
 
@@ -865,7 +878,7 @@ describe('the still-working hint', () => {
 
   test('a stalled check shows the hint too, and its result hides it', async () => {
     const { t, clock } = bootWatched();
-    action('sample').click(); await tick();
+    await loadSample(t);
     fireStall(clock);
     assert.equal(shown(), true);
     t.emit(CHECKED); await tick();
@@ -985,19 +998,64 @@ test('the table lists what each file was read as, with Remove; removing the last
   assert.deepEqual(t.page.state.entries, []);
 });
 
-test('the sample lists its files without Remove controls', async () => {
+test('the sample lists its files with Remove controls, like a drop; removing one checks the rest', async () => {
   const t = boot();
   await toCheck(t);
-  assert.equal(role('file-rows').querySelectorAll('tr').length, 4);
-  assert.equal(role('file-rows').querySelectorAll('[data-action="remove-file"]').length, 0);
+  assert.equal(role('file-rows').querySelectorAll('[data-action="remove-file"]').length, 4);
+  t.page.removeFile('DEMO-9mop.json');
+  await until(() => t.sent.length === 3);
+  assert.deepEqual(paths(t.sent[2]), SAMPLE_PATHS.filter((p) => p !== 'DEMO-9mop.json'));
+});
+
+test('the sample adds to a hand-off cohort: a session already listed by name and the config are left out', async () => {
+  const t = boot();
+  t.page.addFiles([{ path: 'DEMO-ab12.json', file: new File(['{}'], 'DEMO-ab12.json') },
+    { path: 'DEMO-bsq6.json', file: new File(['{}'], 'DEMO-bsq6.json') },
+    { path: 'cyborg-hunter.config.json', file: new File(['{}'], 'cyborg-hunter.config.json') }]);
+  await until(() => t.sent.length === 1);
+  t.emit(CHECKED);
+  await tick();
+  await loadSample(t);
+  assert.deepEqual(paths(t.sent[2]), ['DEMO-ab12.json', 'DEMO-bsq6.json', 'cyborg-hunter.config.json', 'DEMO-681w.json', 'DEMO-9mop.json', 'DEMO-a3f3.json']);
+});
+
+test('files without a config, then the sample: the sessions are added, the sample\'s config is left out', async () => {
+  const t = boot();
+  t.page.addFiles([{ path: 'a.csv', file: new File(['x'], 'a.csv') }]);
+  await until(() => t.sent.length === 1);
+  t.emit({ ...CHECKED, configFound: false, configPath: null });
+  await tick();
+  await loadSample(t);
+  assert.deepEqual(paths(t.sent[2]), ['a.csv', 'DEMO-681w.json', 'DEMO-9mop.json', 'DEMO-a3f3.json', 'DEMO-bsq6.json']);
+});
+
+test('a second Load sample adds nothing and checks the same list', async () => {
+  const t = boot();
+  await toCheck(t);
+  await loadSample(t);
+  assert.deepEqual(paths(t.sent[3]), SAMPLE_PATHS);
+});
+
+test('files dropped after the sample are added to it', async () => {
+  const t = boot();
+  await toCheck(t);
+  await dropMore(t, 'more.csv', CHECKED);
+  assert.deepEqual(paths(t.sent.at(-1)), SAMPLE_PATHS.concat(['more.csv']));
+});
+
+test('from file:, the sample\'s files are sent as bytes like a drop\'s', async () => {
+  const t = boot({ transferBytes: true });
+  await loadSample(t);
+  await until(() => t.sent.length === 2);
+  assert.deepEqual(paths(t.sent[1]), SAMPLE_PATHS);
+  assert.ok(t.sent[1].files.every((f) => f.bytes instanceof ArrayBuffer && f.bytes.byteLength > 0));
 });
 
 // The classifier lists every JSON file as participant data; the check's peek
 // tells a recording apart. Run waits for a file the peek read as data.
 test('a list of replay recordings only shows 0 data files, and Run stays disabled', async () => {
   const t = boot();
-  action('sample').click();
-  await tick();
+  await loadSample(t);
   t.emit({ ...CHECKED, files: [{ path: 'A-replay-1.json', kind: 'recording' }, { path: 'B-replay-1.json', kind: 'recording' }] });
   await tick();
   assert.match(role('counts').textContent, /^0 data files2 replay recordings/);
@@ -1031,11 +1089,11 @@ test('the settings show from the first check on, and a run sends their config', 
   assert.ok(role('id-field').closest('label'), 'the id field has its label');
   setField('softScoreThreshold', '4');
   setWeight('paste', '9');
-  assert.equal(t.sent.length, 1, 'no run before Build');
+  assert.equal(t.sent.length, 2, 'no run before Build');
   action('run').click();
   await tick();
-  assert.deepEqual(t.sent[1].config.scoring, { softScoreThreshold: 4 });
-  assert.deepEqual(t.sent[1].config.scoreWeights, { paste: 9 });
+  assert.deepEqual(t.sent[2].config.scoring, { softScoreThreshold: 4 });
+  assert.deepEqual(t.sent[2].config.scoreWeights, { paste: 9 });
 });
 
 test('the threshold says what it is for, the weights are open under their sentence with Cap explained in its title, no paragraph explains the panel, and no field sets a phase or the trajectory order', async () => {
@@ -1245,9 +1303,9 @@ test('choosing the suggestion again lets the field follow the suggestions once m
   assert.equal(role('id-field').value, 'run_id', 'the new suggestion stands');
 });
 
-// The sample, and files dropped after it, replace the cohort: the settings
-// start over as at the first check, and nothing says they were replaced.
-test('the sample, and a drop after it, start the settings over: the new cohort\'s values and no note', async () => {
+// The sample, and files dropped after it, add to the cohort: a check whose
+// config is unchanged keeps what the analyst set, and says nothing.
+test('the sample, and a drop after it, add to the cohort: the analyst\'s settings stay, with no note', async () => {
   const t = boot();
   t.page.addFiles(dropped());
   await until(() => t.sent.length === 1);
@@ -1255,18 +1313,15 @@ test('the sample, and a drop after it, start the settings over: the new cohort\'
   await tick();
   weightInput('paste').value = '9';
   pickIdField('run_id');
-  action('sample').click();
-  await until(() => t.sent.length === 2);
+  await loadSample(t);
   t.emit(CHECKED);   // the same config as the drop before
   await tick();
-  assert.equal(weightInput('paste').value, '5');
-  assert.equal(role('id-field').value, 'subject_ID');
+  assert.equal(weightInput('paste').value, '9', 'the sample adds to the cohort; its settings stay');
+  assert.equal(role('id-field').value, 'run_id');
   assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
-  weightInput('paste').value = '9';
-  pickIdField('run_id');
   await dropMore(t, 'a.csv', CHECKED);
-  assert.equal(weightInput('paste').value, '5', 'files after the sample');
-  assert.equal(role('id-field').value, 'subject_ID');
+  assert.equal(weightInput('paste').value, '9', 'files after the sample');
+  assert.equal(role('id-field').value, 'run_id');
   assert.deepEqual(checkNotes(), ['unknown key "dataDri"']);
 });
 
@@ -1321,7 +1376,7 @@ test('on the results, a change to the integrity field reads the files again', as
   await tick();
   const last = t.sent.at(-1);
   assert.equal(last.type, 'run');
-  assert.equal(last.sample, true);
+  assert.deepEqual(paths(last), SAMPLE_PATHS);
   assert.equal(last.config.integrityField, 'chIntegrity');
 });
 
@@ -1369,7 +1424,9 @@ test('on the results, another Participant ID field reads the files again under i
   sel.value = 'run_id';
   sel.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick();
-  assert.deepEqual(t.sent.at(-1), { type: 'run', sample: true, files: [], participantIdField: 'run_id', config: PANEL_DEFAULTS });
+  const { files, ...run } = t.sent.at(-1);
+  assert.deepEqual(run, { type: 'run', participantIdField: 'run_id', config: PANEL_DEFAULTS });
+  assert.deepEqual(files.map((f) => f.path), SAMPLE_PATHS);
   assert.equal(role('rerun-status').hidden, false);
   assert.deepEqual(visibleStep(), ['results']);
 });
@@ -1528,8 +1585,7 @@ test('Export config on the results writes the settings, not the config the run s
 
 test('with experiment files among the drop, the panel says where they go and the export sets assetsDir', async () => {
   const t = boot();
-  action('sample').click();
-  await tick();
+  await loadSample(t);
   t.emit({ ...CHECKED, files: [...CHECKED.files, { path: 'css/style.css', kind: 'asset' }] });
   await tick();
   assert.equal(role('assets-hint').hidden, false);
@@ -1625,15 +1681,17 @@ test('the fonts the tour hands over are neither listed nor counted; a line under
   t.page.reset();
   assert.equal(line().hidden, true, 'after Start over');
 
+  // The sample adds to the hand-off: the fonts stay for its replay, and so
+  // does the line.
   const s = boot();
   await handOver(s);
   assert.equal(line().hidden, false);
-  action('sample').click();
-  await until(() => s.sent.length === 2);
-  assert.equal(line().hidden, true, 'while the sample is read');
-  s.emit(CHECKED);
+  await loadSample(s);
+  assert.equal(line().hidden, true, 'while the list is checked again');
+  assert.equal(s.sent[2].files.length, 15, 'the sample\'s four sessions beside the hand-off\'s files and fonts');
+  s.emit({ ...CHECKED, files: FILES.concat(FONTS, SAMPLE_PATHS.slice(0, 4).map((path) => ({ path, kind: 'data' }))) });
   await tick();
-  assert.equal(line().hidden, true, 'after the sample');
+  assert.equal(line().hidden, false, 'after the sample');
 });
 
 // With the last listed file removed, only the hand-off's fonts would be

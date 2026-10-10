@@ -35,8 +35,8 @@
 //   waitReady / loadSample / buildReport / railOrder / reportFrame /
 //   reportSelected / downloadZip   the page's steps, through its
 //                     data-action/data-role hooks.
-//   pilotFiles / cliPilotTree   the synthetic pilot as dropped files, and the
-//                     CLI's report tree for it.
+//   sampleFiles / cliSampleTree   the bundled sessions (examples/demo-sessions)
+//                     as dropped files, and the CLI's report tree for them.
 //   startSentinel / makeReplayCohort   a counting local server, and a
 //                     two-participant dom-tier cohort (a stylesheet to drop,
 //                     a recorded image, and with opts.media recorded video
@@ -55,8 +55,8 @@ import { unzipSync, strFromU8 } from 'fflate';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(__dirname, '..', '..', '..');
 export const OFFLINE_FILE = join(ROOT, '.demo-site', 'analyze', 'cyborg-hunter-analyze.html');
-export const PILOT_DIR = join(ROOT, 'examples', 'synthetic-pilot');
-export const PILOT_ORDER = ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01', 'SYN-GENERATED-04'];
+export const SAMPLE_DIR = join(ROOT, 'examples', 'demo-sessions');
+export const SAMPLE_ORDER = ['DEMO-9mop', 'DEMO-bsq6', 'DEMO-681w', 'DEMO-a3f3'];
 
 export const test = base.extend({
   pageErrors: [async ({ page }, use) => {
@@ -153,7 +153,7 @@ export async function waitReady(page) {
 export async function loadSample(page) {
   await page.click('[data-action="sample"]');
   await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
-  await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
+  await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
 }
 // A failed run sends the page back to the files step with its error shown:
 // fail at once with the page's own message instead of at the timeout.
@@ -191,19 +191,19 @@ export async function downloadZip(page) {
   const files = unzipSync(new Uint8Array(readFileSync(await download.path())));
   return { names: Object.keys(files).sort(), text: (n) => strFromU8(files[n]) };
 }
-export const pilotFiles = () => readdirSync(join(PILOT_DIR, 'data')).filter((f) => f.endsWith('.csv')).sort().map((f) => join(PILOT_DIR, 'data', f))
-  .concat([join(PILOT_DIR, 'cyborg-hunter.config.json')]);
+export const sampleFiles = () => readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => f.endsWith('.json')).sort().map((f) => join(SAMPLE_DIR, 'data', f))
+  .concat([join(SAMPLE_DIR, 'cyborg-hunter.config.json')]);
 
 // The time a report was built is the one part of index.html that differs
 // between two runs over the same files (the run id is the cohort's own).
 export const withoutRunTime = (html) => html.replace(/<time class="run-time" datetime="[^"]*">[^<]*<\/time>/, '<time class="run-time"></time>');
 
-// The CLI's tree for the synthetic pilot (images when node-canvas is
+// The CLI's tree for the bundled sessions (images when node-canvas is
 // installed), for the zip-tree comparison.
-export function cliPilotTree() {
+export function cliSampleTree() {
   const out = mkdtempSync(join(tmpdir(), 'ch-e2e-cli-'));
   execFileSync(process.execPath, [join(ROOT, 'bin', 'cyborg-hunter.js'), 'report', '--output', join(out, 'report')],
-    { cwd: PILOT_DIR, env: { ...process.env, NO_UPDATE_NOTIFIER: '1' }, stdio: 'pipe' });
+    { cwd: SAMPLE_DIR, env: { ...process.env, NO_UPDATE_NOTIFIER: '1' }, stdio: 'pipe' });
   const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]));
   const names = walk(join(out, 'report')).map((p) => relative(join(out, 'report'), p)).sort();
   return { names, text: (n) => readFileSync(join(out, 'report', n), 'utf8'), cleanup: () => rmSync(out, { recursive: true, force: true }) };

@@ -1,6 +1,6 @@
 // demo/analyze/page.js
 // The page's steps over one worker: files (each drop or file choice adds to
-// the list and checks it again; or the sample) → run → results. All
+// the list and checks it again; so does the sample) → run → results. All
 // participant data stays in the worker (File handles go over,
 // the worker reads the bytes one file at a time); this module only holds
 // what the page shows: counts, warnings, the report HTML, the zip chunks,
@@ -18,6 +18,7 @@ import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
 import { mergeEntries, removeEntry } from './files-panel.js';
+import { baseName, CONFIG_NAME } from './classify-files.js';
 import { createSettingsPanel, settingsFromConfig, configFromSettings, settingsKey, REINGEST_KEYS } from './settings-panel.js';
 import { exportConfig } from './export-config.js';
 import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
@@ -72,9 +73,9 @@ export function createPage(root, worker, opts) {
   // handed over (addFiles), whose fonts are not the analyst's experiment
   // assets (droppedAssetCount) and stay out of the table and the counts
   // (renderFiles); emptied with the list.
-  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
+  var state = { step: 'files', entries: [], dropCount: 0, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
     zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null, handoffPaths: new Set() };
-  var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
+  var pending = {};        // the awaited 'checked', 'done' or 'sample' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
   var reportUrl = null;
@@ -274,8 +275,8 @@ export function createPage(root, worker, opts) {
   // (a transferred buffer is gone from this side). A file that cannot be read
   // fails the step like a worker error would.
   function sendWithFiles(msg) {
-    if (state.sample || !(opts && opts.transferBytes)) {
-      msg.files = state.sample ? [] : state.entries.map(function (e) { return { path: e.path, file: e.file }; });
+    if (!(opts && opts.transferBytes)) {
+      msg.files = state.entries.map(function (e) { return { path: e.path, file: e.file }; });
       send(msg);
       return;
     }
@@ -287,9 +288,9 @@ export function createPage(root, worker, opts) {
     });
   }
 
-  // A replaced cohort (Start over, the sample, files after the sample, a
-  // failed check): its next check writes the settings as a first one does,
-  // with no note, and takes the suggested Participant ID field.
+  // A replaced cohort (Start over, a failed check): its next check writes
+  // the settings as a first one does, with no note, and takes the suggested
+  // Participant ID field.
   function forgetSettings() {
     state.settingsWritten = null; state.idField = null; state.idSuggested = null; state.idPicked = null;
   }
@@ -308,7 +309,7 @@ export function createPage(root, worker, opts) {
     var reply = waitFor('checked');
     updateControls();
     armStallHint();
-    sendWithFiles({ type: 'check', sample: state.sample });
+    sendWithFiles({ type: 'check' });
     var checked = await reply;
     state.checked = checked;
     renderFiles(checked);
@@ -380,10 +381,10 @@ export function createPage(root, worker, opts) {
   }
 
   // The recognised-files table (one row per file, what it was read as, and
-  // a Remove control; the sample has no file list of its own to edit), the
-  // counts by kind, and where the settings came from. The fonts the tour
-  // handed over stay in the list the worker reads, for the replay, but not
-  // in the table or the counts: one line under the table says they are there.
+  // a Remove control), the counts by kind, and where the settings came from.
+  // The fonts the tour handed over stay in the list the worker reads, for
+  // the replay, but not in the table or the counts: one line under the table
+  // says they are there.
   function renderFiles(checked) {
     var rows = q(root, 'file-rows');
     rows.innerHTML = '';
@@ -397,15 +398,13 @@ export function createPage(root, worker, opts) {
       var kind = document.createElement('td');
       kind.textContent = KIND_LABELS[f.kind] || f.kind;
       var act = document.createElement('td');
-      if (!state.sample) {
-        var b = document.createElement('button');
-        b.className = 'secondary';
-        b.dataset.action = 'remove-file';
-        b.dataset.path = f.path;
-        b.textContent = 'Remove';
-        b.setAttribute('aria-label', 'Remove ' + f.path);
-        act.appendChild(b);
-      }
+      var b = document.createElement('button');
+      b.className = 'secondary';
+      b.dataset.action = 'remove-file';
+      b.dataset.path = f.path;
+      b.textContent = 'Remove';
+      b.setAttribute('aria-label', 'Remove ' + f.path);
+      act.appendChild(b);
       tr.appendChild(name); tr.appendChild(kind); tr.appendChild(act);
       rows.appendChild(tr);
     });
@@ -436,7 +435,7 @@ export function createPage(root, worker, opts) {
     updateControls();
     armStallHint();
     var config = effectiveConfig();
-    sendWithFiles({ type: 'run', sample: state.sample, config: config, participantIdField: state.idField });
+    sendWithFiles({ type: 'run', config: config, participantIdField: state.idField });
     var done = await reply;
     state.ranWith = { config: config, idField: state.idField };
     showResults(done);
@@ -470,7 +469,7 @@ export function createPage(root, worker, opts) {
     updateControls();
     armStallHint();
     var msg = { type: type, config: config, participantIdField: state.idField };
-    if (type === 'run') { msg.sample = state.sample; sendWithFiles(msg); } else send(msg);
+    if (type === 'run') sendWithFiles(msg); else send(msg);
     var done = await reply;
     status.hidden = true;
     state.ranWith = { config: config, idField: state.idField };
@@ -574,7 +573,7 @@ export function createPage(root, worker, opts) {
   function reset() {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
-    state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
+    state.entries = []; state.checked = null; state.result = null; state.selected = null;
     state.runId = null; state.annotations = null; state.handoffPaths.clear();
     forgetSettings();
     q(root, 'annotations-status').textContent = '';
@@ -602,12 +601,10 @@ export function createPage(root, worker, opts) {
   }
 
   // Each drop or file choice ADDS to the list (files-panel.js), and the list
-  // is checked again. Files added after the sample replace it: the sample is
-  // not a file list, and its settings start over (forgetSettings).
+  // is checked again.
   function addFiles(entries) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
-    if (state.sample) { state.sample = false; state.entries = []; forgetSettings(); }
     state.dropCount++;
     state.entries = mergeEntries(state.entries, entries, state.dropCount);
     // The hand-off's files under the paths they are listed by: mergeEntries
@@ -629,16 +626,35 @@ export function createPage(root, worker, opts) {
     if (!state.entries.length || !listed) { reset(); return Promise.resolve(); }
     return check();
   }
+  // Load sample data ADDS the bundled sessions to the list, as a drop does:
+  // the worker hands over their text, each becomes a File under its own
+  // name, and a name already listed is not added twice (the tour's examples
+  // arrive by the hand-off under these same names). The sample's config
+  // comes only to an empty list: a cohort keeps the settings it brought, or
+  // the ones the analyst set, and the sample's id field (participantId) is
+  // never put on files that use another.
   function loadSample() {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
-    forgetSettings();
-    state.sample = true; state.entries = []; state.handoffPaths.clear(); return check();
+    var empty = !state.entries.length;
+    var reply = waitFor('sample');
+    send({ type: 'sample' });
+    return reply.then(function (msg) {
+      var listed = {};
+      state.entries.forEach(function (e) { listed[baseName(e.path)] = true; });
+      var entries = [];
+      msg.files.forEach(function (f) {
+        var name = baseName(f.path);
+        if (listed[name] || (name === CONFIG_NAME && !empty)) return;
+        entries.push({ path: name, file: new File([f.text], name, { type: 'application/json' }) });
+      });
+      return addFiles(entries);
+    });
   }
   // Opened from the demo with nothing to hand over (main.js): the files step
   // says so above the drop zone, until a drop, the sample or Start over.
   function handoffEmpty() {
-    if (state.entries.length || state.sample) return;   // a drop or the sample came first
+    if (state.entries.length) return;   // a drop came first
     q(root, 'handoff-empty').hidden = false;
   }
 
