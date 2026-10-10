@@ -10,8 +10,6 @@ test('the copy filter keeps the runtime files and leaves out tests and build inp
   const at = (...p) => isRuntimeFile(join(DEMO_DIR, ...p));
   assert.equal(at('index.html'), true);
   assert.equal(at('demo.css'), true);
-  assert.equal(at('assets', 'DEMO-bsq6.json'), true);
-  assert.equal(at('assets', 'DEMO-681w.json'), true);
   assert.equal(at('analyze'), true, 'the folder itself, so cpSync walks into it');
   assert.equal(at('analyze', 'index.html'), true);
   assert.equal(at('analyze', 'analyze.bundle.js'), true);

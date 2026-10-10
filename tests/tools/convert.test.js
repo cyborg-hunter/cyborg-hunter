@@ -12,8 +12,7 @@
 //       repeated runs and across input key order, and byte-identical to a
 //       committed golden that the CLI regenerates.
 //
-// Paths are relative to the repo root, matching example-fixtures.test.js:
-// `npm run test:tools` runs node --test from there.
+// Paths are relative to the repo root: `npm run test:tools` runs node --test from there.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';

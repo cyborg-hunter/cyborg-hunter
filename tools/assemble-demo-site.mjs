@@ -45,7 +45,7 @@ const BUNDLED_ONLY = new Set(['report-frame.js', 'replay-host.js']);
 // publicly); under demo/analyze/, everything but the page and its built
 // bundle (the other files there are build inputs of tools/build-analyze.mjs);
 // and BUNDLED_ONLY. Everything else under demo/ is runtime: index.html,
-// demo.css, the tour's *.js modules, signal-manifest.json, assets/.
+// demo.css, the tour's *.js modules, signal-manifest.json.
 export function isRuntimeFile(src) {
   const rel = relative(DEMO_DIR, src);
   if (rel === 'tests' || rel.startsWith('tests' + sep)) return false;
