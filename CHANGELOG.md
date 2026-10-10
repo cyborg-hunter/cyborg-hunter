@@ -241,7 +241,7 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 - Live demo: the live session record sits under the step card on every
   step, collapsed under a bar that opens it on hover or keyboard focus (a
   click on the bar pins it open; step 8, whose text points to it, opens it),
-  and the column on the right holds the signal lamps alone, which stay in
+  and the column on the right holds the lamps panel alone, which stay in
   view while the step scrolls. Before, the record was always open, shared
   that column with the lamps and moved under the card for one step only.
 - `/analyze/`: the top bar reads "cyborg-hunter · report generator" and
