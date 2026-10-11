@@ -538,8 +538,9 @@ describe('srcset, SVG <image> and <input type="image">', () => {
   });
 });
 
-// A page that shows one picture on many elements (a card game's card art)
-// gets the picture once in the replay file, however many elements show it.
+// A page that shows one picture on many elements (a stimulus image shown on
+// every trial) gets the picture once in the replay file, however many
+// elements show it.
 describe('an image shown on many elements is stored once', () => {
   const CARD = X + 'img/card-back.png';
   const ART = new Uint8Array(3000).fill(7);

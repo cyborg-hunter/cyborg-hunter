@@ -4,12 +4,12 @@
 // for the CLI report and the analyze page's baked fonts alike. Each manifest
 // entry ({ family, weight, path }) becomes one rule with a base64 data URI.
 //
-// display: 'block' for the CLI report — everything is inline, so a face is
-// never late and must never swap in after a fallback flash.
+// font-display: block, as every face is inline: a face is never late and
+// must never swap in after a fallback flash.
 
-export function fontFaceCss(files, base64Of, display = 'block') {
+export function fontFaceCss(files, base64Of) {
   return files.map(f =>
     `@font-face { font-family: "${f.family}"; font-style: normal; font-weight: ${f.weight}; ` +
-    `font-display: ${display}; src: url(data:font/woff2;base64,${base64Of(f.path)}) format("woff2"); }`
+    `font-display: block; src: url(data:font/woff2;base64,${base64Of(f.path)}) format("woff2"); }`
   ).join('\n');
 }

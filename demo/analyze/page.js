@@ -18,7 +18,7 @@ import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
 import { mergeEntries, removeEntry } from './files-panel.js';
-import { createSettingsPanel, settingsFromConfig, configFromSettings, REINGEST_KEYS } from './settings-panel.js';
+import { createSettingsPanel, settingsFromConfig, configFromSettings, settingsKey, REINGEST_KEYS } from './settings-panel.js';
 import { exportConfig } from './export-config.js';
 import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
 import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
@@ -62,8 +62,18 @@ function listWarnings(ul, items) {
 }
 
 export function createPage(root, worker, opts) {
-  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, result: null,
-    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null };
+  // settingsWritten: the key of the settings last taken from a check's
+  // config, the panel's values (settingsKey) and the config's participant-id
+  // field (check). idSuggested: the Participant ID field the last check's
+  // suggestion put in the select; idPicked: the analyst's own choice of
+  // another field, kept through the checks that still offer it. All null
+  // until the first check and again once the cohort is replaced
+  // (forgetSettings). handoffPaths: the listed paths of the files the tour
+  // handed over (addFiles), whose fonts are not the analyst's experiment
+  // assets (droppedAssetCount) and stay out of the table and the counts
+  // (renderFiles); emptied with the list.
+  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
+    zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null, handoffPaths: new Set() };
   var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
@@ -72,8 +82,11 @@ export function createPage(root, worker, opts) {
   // (changeAnnotations); cleared with the status line for each new cohort.
   var annotationsUnstored = false;
   // True from a run's results until the new report's first selection message:
-  // that one is the report's own load-time pick of its first row.
+  // that one is the report's own load-time pick, its first row or the
+  // participant it reopens on (showResults). reportReopened: it reopens on a
+  // participant the replay card already showed, the analyst's own pick.
   var reportFirstSelection = false;
+  var reportReopened = false;
   // The report posts a selection message when its script runs. One that has
   // not arrived reportWatchdogMs after the frame loaded means the report did
   // not render (seen in Firefox with a few hundred participants).
@@ -97,8 +110,9 @@ export function createPage(root, worker, opts) {
   // watchdog's job, not this one's.
   var REPORT_LOAD_TIMEOUT_MS = 60000;
   // The settings panel (settings-panel.js), shown from the first check on,
-  // beside the file list and above the results. Created first: it holds the
-  // id field the page wires below.
+  // beside the file list and above the results; a check writes it from the
+  // config only when that config's values changed (check). Created first: it
+  // holds the id field the page wires below.
   var settingsPanel = createSettingsPanel(q(root, 'settings'), onSettingsChange);
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
@@ -177,9 +191,11 @@ export function createPage(root, worker, opts) {
     if (warnings) listWarnings(q(root, 'check-warnings'), (state.checked && phase !== 'check' ? state.checked.configWarnings || [] : []).concat(warnings));
     // A check that fails empties the list: drops add to it now, and a file
     // that cannot be read would fail every later check while the table that
-    // offers Remove is not shown.
+    // offers Remove is not shown. The settings start over with it: the next
+    // check is a first one (forgetSettings).
     if (phase === 'check' || !state.checked) {
-      state.checked = null; state.entries = []; state.dropCount = 0;
+      state.checked = null; state.entries = []; state.dropCount = 0; state.handoffPaths.clear();
+      forgetSettings();
       q(root, 'files-panel').hidden = true; goTo('files');
     }
     else { discardZip(); goTo('files'); }
@@ -272,6 +288,13 @@ export function createPage(root, worker, opts) {
     });
   }
 
+  // A replaced cohort (Start over, the sample, files after the sample, a
+  // failed check): its next check writes the settings as a first one does,
+  // with no note, and takes the suggested Participant ID field.
+  function forgetSettings() {
+    state.settingsWritten = null; state.idField = null; state.idSuggested = null; state.idPicked = null;
+  }
+
   async function check() {
     if (busy()) return;
     clearError();
@@ -279,6 +302,7 @@ export function createPage(root, worker, opts) {
     goTo('files');
     q(root, 'files-panel').hidden = false;
     q(root, 'file-rows').innerHTML = '';
+    q(root, 'handoff-assets').hidden = true;
     q(root, 'config-source').textContent = '';
     q(root, 'counts').innerHTML = '<span class="hint">Reading the files…</span>';
     listWarnings(q(root, 'check-warnings'), []);
@@ -290,8 +314,21 @@ export function createPage(root, worker, opts) {
     var checked = await reply;
     state.checked = checked;
     renderFiles(checked);
-    settingsPanel.write(settingsFromConfig(checked.config));
-    settingsPanel.setAssetsHint(kindCount(checked, 'asset') > 0);
+    // The settings are taken from the config only when the config's values
+    // differ from the ones last taken: a drop that adds data files, or a
+    // recording, keeps what the analyst set. The config's participant-id
+    // field counts too (the id field below follows it). A replacement after
+    // the first check says so under the list (one sentence, this check's).
+    var fromFile = settingsFromConfig(checked.config);
+    var key = JSON.stringify([settingsKey(fromFile), checked.config.participantIdField]);
+    var configChanged = key !== state.settingsWritten;
+    var replaced = null;
+    if (configChanged) {
+      if (state.settingsWritten) replaced = settingsReplacedText(checked);
+      settingsPanel.write(fromFile);
+      state.settingsWritten = key;
+    }
+    settingsPanel.setAssetsHint(droppedAssetCount(checked) > 0);
     q(root, 'settings').hidden = false;
     var sel = q(root, 'id-field'); sel.innerHTML = '';
     var offered = {};
@@ -304,10 +341,18 @@ export function createPage(root, worker, opts) {
     if (!checked.idSuggestion.candidates.length) {
       var o2 = document.createElement('option'); o2.value = checked.config.participantIdField; o2.textContent = checked.config.participantIdField + ' — CLI default'; sel.appendChild(o2);
     }
+    // The analyst's own pick (idPicked, recorded by the select's change
+    // listener) stays while this check still offers it and the config is
+    // unchanged; otherwise it is let go and the check's suggestion stands, as
+    // for the settings above. `=== true`: only a listed field, never a name
+    // the object inherits.
+    if (state.idPicked !== null && (configChanged || offered[state.idPicked] !== true)) state.idPicked = null;
     if (checked.idSuggestion.suggested && offered[checked.idSuggestion.suggested]) sel.value = checked.idSuggestion.suggested;
+    state.idSuggested = sel.value;
+    if (state.idPicked !== null) sel.value = state.idPicked;
     state.idField = sel.value;
     q(root, 'id-files').textContent = filesInspectedText(checked.sampled, checked.recordings);
-    listWarnings(q(root, 'check-warnings'), checked.configWarnings);
+    listWarnings(q(root, 'check-warnings'), (checked.configWarnings || []).concat(replaced ? [replaced] : []));
     var tested = state.limits && state.limits.testedParticipants;
     var dataFiles = kindCount(checked, 'data');
     if (tested && dataFiles > tested) {
@@ -318,17 +363,34 @@ export function createPage(root, worker, opts) {
     updateControls();
   }
 
+  // Where the replacing values came from: the config file the check read, or
+  // the defaults once no config is among the files.
+  function settingsReplacedText(checked) {
+    return checked.configPath ? 'Settings replaced from ' + checked.configPath + '.' : 'Settings replaced with the defaults.';
+  }
+
   function kindCount(checked, kind) {
     return (checked.files || []).filter(function (f) { return f.kind === kind; }).length;
+  }
+  // A font the tour handed over: matched like any asset, but not one of the
+  // analyst's files.
+  function handedOverAsset(f) { return f.kind === 'asset' && state.handoffPaths.has(f.path); }
+  // The experiment assets the analyst dropped: the CLI needs only these in an
+  // assets folder (the hint and the export's assetsDir).
+  function droppedAssetCount(checked) {
+    return (checked.files || []).filter(function (f) { return f.kind === 'asset' && !handedOverAsset(f); }).length;
   }
 
   // The recognised-files table (one row per file, what it was read as, and
   // a Remove control; the sample has no file list of its own to edit), the
-  // counts by kind, and where the settings came from.
+  // counts by kind, and where the settings came from. The fonts the tour
+  // handed over stay in the list the worker reads, for the replay, but not
+  // in the table or the counts: one line under the table says they are there.
   function renderFiles(checked) {
     var rows = q(root, 'file-rows');
     rows.innerHTML = '';
-    (checked.files || []).forEach(function (f) {
+    var shown = (checked.files || []).filter(function (f) { return !handedOverAsset(f); });
+    shown.forEach(function (f) {
       var tr = document.createElement('tr');
       var name = document.createElement('td');
       var code = document.createElement('code');
@@ -353,10 +415,11 @@ export function createPage(root, worker, opts) {
     q(root, 'counts').innerHTML =
       countSpan(kindCount(checked, 'data'), 'data file', 'data files') +
       countSpan(kindCount(checked, 'recording'), 'replay recording', 'replay recordings') +
-      countSpan(kindCount(checked, 'asset'), 'experiment asset', 'experiment assets') +
+      countSpan(droppedAssetCount(checked), 'experiment asset', 'experiment assets') +
       countSpan(checked.configFound ? 1 : 0, 'config file', 'config files') +
       (ignored ? countSpan(ignored, 'ignored', 'ignored') : '') +
       (unreadable ? countSpan(unreadable, 'unreadable', 'unreadable') : '');
+    q(root, 'handoff-assets').hidden = shown.length === (checked.files || []).length;
     q(root, 'config-source').textContent = checked.configPath
       ? 'Settings from ' + checked.configPath + ', over the defaults.'
       : 'Settings: the defaults (no cyborg-hunter.config.json among the files).';
@@ -444,6 +507,10 @@ export function createPage(root, worker, opts) {
     // another in the meantime. Read before setParticipants tears it down.
     var reopen = state.selected && done.triageOrder.indexOf(state.selected) >= 0 ? state.selected : null;
     var mounted = root.querySelector('iframe.replay-host-frame');
+    // The reopen is the analyst's own pick only if the card already showed
+    // that participant (a row click or a dropdown choice put it there), not
+    // when the report picked it on load and the card stayed on another.
+    var cardOnReopen = !!(reopen && replayCard && replayCard.shows(reopen));
     var reloadReplay = !!(reopen && mounted && mounted.dataset.participantId === reopen &&
       done.participants.some(function (p) { return p.participantId === reopen && p.hasReplay; }));
     // reportUrl moves to the new document only once it has loaded: a failed
@@ -466,6 +533,7 @@ export function createPage(root, worker, opts) {
     replayCard.setParticipants(done.participants);
     settingsPanel.setPhases(done.phases);
     reportFirstSelection = true;
+    reportReopened = cardOnReopen;
     reportPosted = false;
   }
 
@@ -509,9 +577,11 @@ export function createPage(root, worker, opts) {
   }
 
   function reset() {
+    q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
     state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
-    state.runId = null; state.annotations = null;
+    state.runId = null; state.annotations = null; state.handoffPaths.clear();
+    forgetSettings();
     q(root, 'annotations-status').textContent = '';
     annotationsUnstored = false;
     stopWatchdog();
@@ -529,6 +599,7 @@ export function createPage(root, worker, opts) {
     // Cleared so choosing the same files again still fires `change`.
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';
     q(root, 'files-panel').hidden = true;
+    q(root, 'handoff-assets').hidden = true;
     state.dropCount = 0;
     goTo('files');
     clearError();
@@ -537,21 +608,44 @@ export function createPage(root, worker, opts) {
 
   // Each drop or file choice ADDS to the list (files-panel.js), and the list
   // is checked again. Files added after the sample replace it: the sample is
-  // not a file list.
+  // not a file list, and its settings start over (forgetSettings).
   function addFiles(entries) {
+    q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
-    if (state.sample) { state.sample = false; state.entries = []; }
+    if (state.sample) { state.sample = false; state.entries = []; forgetSettings(); }
     state.dropCount++;
     state.entries = mergeEntries(state.entries, entries, state.dropCount);
+    // The hand-off's files under the paths they are listed by: mergeEntries
+    // keeps an entry's own object only for a path not yet taken, so one moved
+    // to a drop<n>/ folder, or skipped as a file already listed, is not marked.
+    state.entries.forEach(function (e) { if (e.handoff) state.handoffPaths.add(e.path); });
     return check();
   }
+  // Removing the last file the table lists starts over, as an empty list
+  // does: the hand-off's fonts that may be left are there only for the
+  // replay of files that are gone (renderFiles).
   function removeFile(path) {
     if (busy()) return Promise.resolve();
     state.entries = removeEntry(state.entries, path);
-    if (!state.entries.length) { reset(); return Promise.resolve(); }
+    state.handoffPaths.delete(path);
+    var listed = state.checked
+      ? (state.checked.files || []).filter(function (f) { return f.path !== path && !handedOverAsset(f); }).length
+      : state.entries.length;
+    if (!state.entries.length || !listed) { reset(); return Promise.resolve(); }
     return check();
   }
-  function loadSample() { if (busy()) return Promise.resolve(); state.sample = true; state.entries = []; return check(); }
+  function loadSample() {
+    q(root, 'handoff-empty').hidden = true;
+    if (busy()) return Promise.resolve();
+    forgetSettings();
+    state.sample = true; state.entries = []; state.handoffPaths.clear(); return check();
+  }
+  // Opened from the demo with nothing to hand over (main.js): the files step
+  // says so above the drop zone, until a drop, the sample or Start over.
+  function handoffEmpty() {
+    if (state.entries.length || state.sample) return;   // a drop or the sample came first
+    q(root, 'handoff-empty').hidden = false;
+  }
 
   // Wiring
   var zone = q(root, 'dropzone');
@@ -581,7 +675,13 @@ export function createPage(root, worker, opts) {
     if (b) removeFile(b.dataset.path).catch(onFailure('check'));
   });
   root.querySelector('[data-action="sample"]').addEventListener('click', function () { loadSample().catch(onFailure('check')); });
-  q(root, 'id-field').addEventListener('change', function (e) { state.idField = e.target.value; });
+  // A field other than the suggestion is the analyst's pick, which later
+  // checks keep while they offer it (check); choosing the suggestion again
+  // lets the field follow the suggestions.
+  q(root, 'id-field').addEventListener('change', function (e) {
+    state.idField = e.target.value;
+    state.idPicked = e.target.value !== state.idSuggested ? e.target.value : null;
+  });
   runButton.addEventListener('click', function () { run().catch(onFailure('run')); });
   resetButtons.forEach(function (b) { b.addEventListener('click', reset); });
   root.querySelector('[data-action="download-zip"]').addEventListener('click', function () {
@@ -598,7 +698,7 @@ export function createPage(root, worker, opts) {
   // keys that differ from its defaults; export-config.js).
   root.querySelector('[data-action="export-config"]').addEventListener('click', function () {
     if (!state.checked) return;
-    var cfg = exportConfig(effectiveConfig(), { participantIdField: state.idField, assetsDropped: kindCount(state.checked, 'asset') > 0 });
+    var cfg = exportConfig(effectiveConfig(), { participantIdField: state.idField, assetsDropped: droppedAssetCount(state.checked) > 0 });
     download('cyborg-hunter.config.json', JSON.stringify(cfg, null, 2) + '\n', 'application/json');
   });
   // The annotation exports and import (the report's frame can neither
@@ -655,8 +755,8 @@ export function createPage(root, worker, opts) {
     if (watchdogErrorShown) clearError();
     if (!replayCard || !state.result) return;
     var pid = e.data.participantId;
-    var known = typeof pid === 'string' && state.result.participants.some(function (p) { return p.participantId === pid; });
-    if (!known) return;
+    var picked = typeof pid === 'string' && state.result.participants.find(function (p) { return p.participantId === pid; });
+    if (!picked) return;
     state.selected = pid;
     // The report's load-time pick must not undo a replay the analyst chose
     // (or loaded) while the report frame was still loading; every later
@@ -664,10 +764,16 @@ export function createPage(root, worker, opts) {
     var first = reportFirstSelection;
     reportFirstSelection = false;
     if (first && replayCard.userChose()) return;
+    // When the load-time pick has no replay and another participant has one,
+    // the card's own default (the first with one) stands, unless the report
+    // reopened on a participant the card already showed (reportReopened):
+    // the card follows it there, replay or not.
+    var anyReplay = state.result.participants.some(function (p) { return p.hasReplay; });
+    if (first && !reportReopened && !picked.hasReplay && anyReplay) return;
     replayCard.select(pid);
   });
 
-  return { state: state, addFiles: addFiles, removeFile: removeFile, loadSample: loadSample, run: run, reset: reset,
+  return { state: state, addFiles: addFiles, removeFile: removeFile, loadSample: loadSample, handoffEmpty: handoffEmpty, run: run, reset: reset,
     selectParticipant: function (pid) { if (replayCard) replayCard.select(pid); },
     loadReplay: function () { return replayCard ? replayCard.load() : Promise.resolve(); } };
 }

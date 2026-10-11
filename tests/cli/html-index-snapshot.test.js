@@ -1,7 +1,8 @@
 // tests/cli/html-index-snapshot.test.js
 // Full-output snapshot of renderIndexHtml with ALL opts absent. This is the
-// contract every later opt (imageSources, inlineReplayModels, demo-mode hash
-// guard) must not disturb: defaults absent ⇒ output identical to this file.
+// contract every later opt (imageSources and its in-page hash guard,
+// replayShownExternally, ...) must not disturb: defaults absent ⇒ output
+// identical to this file.
 // Regenerate ONLY when a deliberate default-output change is intended:
 //   SNAPSHOT_UPDATE=1 node --test tests/cli/html-index-snapshot.test.js
 import { test } from 'node:test';

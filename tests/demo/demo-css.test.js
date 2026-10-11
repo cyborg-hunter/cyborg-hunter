@@ -86,6 +86,11 @@ test('active tabs keep their weight (no width jump in a joined control)', () => 
   }
 });
 
+test('no promoted state remains: the wide stream rules are unconditional', () => {
+  assert.doesNotMatch(css, /\.promoted/);
+  assert.match(css, /\[data-role="live-pane"\] \.lp-body\{grid-template-columns:156px minmax\(0,1fr\);\}/);
+});
+
 test('teal stays only on live cues: no focus ring or link uses it', () => {
   const offenders = rules.filter(r => Object.values(r.decls).some(v => /var\(--live\)/.test(v)))
     .map(r => r.selectors.join(', '))

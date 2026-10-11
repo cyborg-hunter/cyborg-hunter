@@ -7,8 +7,13 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ### Added
 - Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
-  14:03 UTC`). The id is a hash of the participant ids, so a report rebuilt
-  from the same files keeps it, whatever the settings.
+  14:03 UTC`). The id is a hash of each participant's id, trial count, and
+  first and last trial timestamps. A report rebuilt from the same files keeps
+  it, whatever the analysis settings (a change to the ID or integrity field
+  reads the files again and can give another id), and the CLI and
+  `/analyze/` give the same files the same id, in whatever order they read
+  them. Two studies that share participant ids get different ids when their
+  trials carry timestamps (0.6.1 and later), so their annotations stay apart.
 - Reports: annotate each participant with Include, Exclude or Flag and a
   note (keys `i`, `e`, `f` for the selected one). The rail shows the label
   and how many participants are reviewed. The report keeps the annotations
@@ -23,6 +28,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   that shows it at the size it was drawn, scrolling inside the overlay (a
   click on the figure switches too), and a **Fullscreen** control wherever
   the page may go fullscreen. On `/analyze/` the report frame now allows it.
+- Qualtrics: each survey opened in a tab keeps a session of its own. The
+  tag's `data-qualtrics-survey-id`, which the install snippet fills with
+  `${e://Field/SurveyID}`, names the survey, and the page address does when
+  the attribute is missing or unfilled.
 - Session replay: the recorder records `<html>`'s own attributes (on every
   keyframe, and each change), and the viewer applies them to the replay.
   A page that keeps its layout on `<html>`, for example CSS variables set
@@ -37,7 +46,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   integrity and session-report fields, platform ID and trajectory order).
   On the results, a change re-analyses in place without dropping the files
   again; a change to the ID, integrity or session-report field reads the
-  files again from the same list.
+  files again from the same list. A drop that adds data files or recordings
+  keeps the panel's values; only a config whose values differ from the
+  loaded one replaces them, and a line under the file list says so. The
+  Participant ID field likewise keeps the analyst's choice while the files
+  still offer it and the config is unchanged.
 
 ### Changed
 - `/analyze/`: dropping and checking are one "Files & settings" step. Every
@@ -48,12 +61,31 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   button, and a line says whether the settings came from a dropped
   `cyborg-hunter.config.json` or are the defaults.
 - Live demo: the tour ends with your files. Its last step, "Your files",
-  offers the session data, the replay recording and a config, plus two
-  example participants, as two batches of Save links (no zip), and an
-  "Open in the analyzer" button that hands all five to `/analyze/` in the
-  same browser, where they are listed as if dropped. The report the tour
-  used to build at its end, and its scoring playground, are gone: the
-  analyzer builds the report and holds the settings. The tour has 11 steps.
+  takes the page's full width and offers the session data, the replay
+  recording and a config, plus two example participants, each with its own
+  Save button (no zip). In Chrome and Edge, "Save all into a folder" writes
+  all five into one folder the visitor picks. "Open in the analyzer" hands
+  the five files and the page's six fonts to `/analyze/` in the same
+  browser, where the five files are listed as if dropped and the visitor's
+  replay renders in the tour's typefaces. The hand-off keeps them for ten
+  minutes; `/analyze/` opened from it later says that nothing was handed
+  off. The report the tour used to build at its end, its scoring playground
+  and the scoring step's weight inputs are gone: the scoring step shows the
+  visitor's soft score so far, as the library computes it with the standard
+  weights, and the analyzer builds the report and holds the settings that
+  apply after collection (its settings panel). The tour has 11 steps.
+- Live demo: the live session record sits under the step card on every
+  step, and the column on the right holds the signal lamps alone, which stay
+  in view while the step scrolls. Before, the record shared that column
+  with the lamps and moved under the card for one step only.
+- CSV files (`summary.csv`, `event-log.csv`, `extensions.csv`, and the
+  annotations' Export CSV in the report and on `/analyze/`): a text cell
+  that begins with `=`, `+`, `-`, `@`, a tab or a carriage return is written
+  with a leading apostrophe (`'`), so a spreadsheet reads it as text instead
+  of running it as a formula. Numbers, negative ones included, are written
+  unchanged. `event-log.csv` (participant and trial IDs) and
+  `extensions.csv` (participant IDs) now quote a value that holds a comma, a
+  quote or a line break, as `summary.csv` does.
 - Replay viewer: the stage shows the participant's whole recorded viewport,
   scaled to fit on both axes. Before, it took the available width only, and a
   tall recording ran below the window. **1:1** shows the recorded page at
@@ -65,13 +97,16 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   fixed 640 px, so a tall replay scrolled inside it), the viewer fits the
   page's window, and its **Fullscreen** control works there, the offline
   single file included.
-- Experiment assets: an image a replay shows on many elements (a card game's
-  card art on every card) is now stored once in the report's replay file
+- Experiment assets: an image a replay shows on many elements (a stimulus
+  image shown on every trial) is now stored once in the report's replay file
   (`replay/<id>.replay.js`), however many elements show it, and the viewer
   puts it back on each element when the replay loads; the recordings
   themselves are unchanged. A `srcset` keeps its images inline.
 
 ### Fixed
+- `/analyze/`: a new report opens on its first participant; when that one
+  has no replay recording and another has, the replay card stays on the
+  first participant with one.
 - `/analyze/`: "Export config" writes only the settings that differ from the
   CLI's defaults, plus the participant-ID field. Before, it wrote every
   default key and replaced your own `dataDir`, `filePattern` and `outputDir`
@@ -82,6 +117,19 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   said the session was never recorded. It now says why no replay is shown and
   names the replay files. The analyze page's replay card gives the reason
   too, and does the same for a replay file that could not be loaded.
+
+### Removed
+- Two options of undocumented deep-import paths: `renderIndexHtml`
+  (`src/cli/renderers/html-index-core.js`) no longer reads
+  `inlineReplayModels`, which embedded replay models in the page, and
+  `fontFaceCss` (`src/cli/renderers/font-face-css.js`) no longer takes a
+  third `display` argument; its faces always use `font-display: block`, the
+  default before. Nothing in the package passed either, and the report is
+  unchanged. A call that still passes one gets the default page, or
+  `block`.
+- Live demo site: `report-frame.js` and `replay-host.js` are no longer
+  published at the site's root. The analyze page's bundle holds them, and
+  the tour never loaded them.
 
 ## [0.12.0] — 2026-10-07
 

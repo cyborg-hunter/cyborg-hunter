@@ -28,8 +28,12 @@ matters.
    the editor to its source view, paste, and save:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter/dist/ch-qualtrics.js" data-participant-id="${e://Field/ResponseID}" data-debug></script>
+   <script src="https://unpkg.com/cyborg-hunter/dist/ch-qualtrics.js" data-participant-id="${e://Field/ResponseID}" data-qualtrics-survey-id="${e://Field/SurveyID}" data-debug></script>
    ```
+
+   The second pipe gives the tag the survey's ID, so each survey opened in
+   the tab keeps a session of its own even when the page address does not
+   show the ID ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)).
 
    Open the header source again after saving: if the tag is gone, the
    licence strips scripts (see [Requirements](#requirements)). For a launched
@@ -264,17 +268,20 @@ every case the survey goes on.
 of the survey would continue the same session instead of starting over.
 Every survey on your Qualtrics domain shares that storage. Under the New
 Survey Taking Experience `ch-qualtrics.js` therefore keeps one session per survey,
-named by the survey ID in the page address (`/jfe/form/SV_…`). A second
-survey opened in the same tab starts a session of its own, even under the
-same participant ID.
+named by the tag's `data-qualtrics-survey-id`: the tag copied in
+[Setup](#setup) pipes `${e://Field/SurveyID}` into it, and Qualtrics fills
+this pipe in the header, as it does `ResponseID`. When the attribute is
+missing, or holds a pipe Qualtrics did not fill, the survey ID in the page
+address (`/jfe/form/SV_…`) names the survey instead. A second survey opened
+in the same tab starts a session of its own, even under the same
+participant ID.
 
-If your survey's address does not show its ID (for example a custom link that
-does not redirect), add `data-qualtrics-survey-id="${e://Field/SurveyID}"` to
-the `ch-qualtrics.js` tag (Qualtrics fills this pipe in the header, as it does
-`ResponseID`). Without an ID, every survey in the tab would share one
-session, and the `data-debug` summary says so. Preview is such a case: it
-runs the survey in frames whose address (`/jfe/preview/app`) has no ID. The legacy layout does not keep
-a session per survey yet.
+Without an ID in either place, every survey in the tab would share one
+session, and the `data-debug` summary says so: a tag without the attribute
+on a survey whose address does not show its ID (for example a custom link
+that does not redirect) is such a case. Preview runs the survey in frames
+whose address (`/jfe/preview/app`) has no ID, so there only the attribute
+names the survey. The legacy layout does not keep a session per survey yet.
 
 One case stays shared: the same participant ID taking the same survey again
 in the same tab (a retake) would continue the first response's session. With
@@ -424,5 +431,5 @@ participant ID, continue one session), and the CLI reads the
 | Console: "The Qualtrics payload was reduced"; CLI: "Qualtrics payload was reduced" | The summary was over the cap | Nothing to fix ([Payload size](#payload-size)) |
 | Console: "Cyborg Hunter could not write to Qualtrics embedded data" | Qualtrics' setter failed (nothing was written at that submit; the next write carries a note), or the payload failed its check (an error record was written in its place) | [Open an issue](https://github.com/cyborg-hunter/cyborg-hunter/issues) with the console message and your `<script>` tag; never attach participant data |
 | Badge: `submits missed ×n`; CLI: "a Qualtrics page was submitted before Cyborg Hunter's page-submit hook was in place" | A page was submitted before the header ran again; `ch-qualtrics.js` wrote it at the next header run, so nothing was lost | Nothing to fix; add the [final-page line](#the-final-page) so the last page is covered too |
-| Console summary: "no survey id in the address or data-qualtrics-survey-id" | The page address has no `SV_…` ID | Add `data-qualtrics-survey-id="${e://Field/SurveyID}"` ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)) |
+| Console summary: "no survey id in the address or data-qualtrics-survey-id" | The tag has no `data-qualtrics-survey-id`, or Qualtrics did not fill its pipe, and the page address has no `SV_…` ID | Put `data-qualtrics-survey-id="${e://Field/SurveyID}"` back on the tag ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)) |
 | Badge: `page 1` on a later page | The page was reloaded: the badge counts pages since the last load | Nothing to fix; the payload keeps the earlier pages |

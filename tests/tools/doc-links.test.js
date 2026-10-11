@@ -148,3 +148,16 @@ describe('docs/qualtrics.md scripts match the Qualtrics harness', () => {
     assert.ok(blocks.includes(line[1].trim()), 'docs/qualtrics.md does not quote the harness final-page line');
   });
 });
+
+// The tag a researcher copies in Setup carries the survey's ID as well as the
+// response's, so a survey whose address hides its ID still gets a session of
+// its own.
+describe('docs/qualtrics.md install snippet', () => {
+  it('pipes the survey ID into data-qualtrics-survey-id', () => {
+    const tags = [...read('docs/qualtrics.md').matchAll(/```html\n([\s\S]*?)```/g)]
+      .map((m) => m[1].trim())
+      .filter((b) => b.includes('dist/ch-qualtrics.js'));
+    assert.strictEqual(tags.length, 1, 'expected one ch-qualtrics.js tag in an html block');
+    assert.ok(tags[0].includes('data-qualtrics-survey-id="${e://Field/SurveyID}"'), tags[0]);
+  });
+});

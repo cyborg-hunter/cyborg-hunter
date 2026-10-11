@@ -1,5 +1,6 @@
-// What the Pages assembly copies from demo/: the Playwright specs and the
-// analyze page's build inputs stay out of the public site.
+// What the Pages assembly copies from demo/: the Playwright specs, the
+// analyze page's build inputs and the two scripts its bundle already holds
+// stay out of the public site.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
@@ -18,4 +19,11 @@ test('the copy filter keeps the runtime files and leaves out tests and build inp
   assert.equal(at('tests'), false);
   assert.equal(at('tests', 'demo.spec.js'), false);
   assert.equal(at('testsuite.js'), true, 'only the tests folder, not a name that starts with it');
+});
+
+test('the scripts only the analyze bundle uses are not copied; the tour\'s are', () => {
+  const at = (...p) => isRuntimeFile(join(DEMO_DIR, ...p));
+  assert.equal(at('report-frame.js'), false);
+  assert.equal(at('replay-host.js'), false);
+  assert.equal(at('demo.js'), true);
 });

@@ -12,10 +12,10 @@ const record = (createdAt) => ({ createdAt, files: [
   { path: 'examples/example-1.json', blob: new Blob(['{}']) },
 ] });
 
-test('a fresh record becomes one file entry per stored file, each File named and dated', async () => {
+test('a fresh record becomes one file entry per stored file, each File named and dated and marked as the hand-off\'s', async () => {
   const entries = handoffEntries(record(1000), 6000);
-  assert.deepEqual(entries.map((e) => [e.path, e.file.name, e.file.lastModified]),
-    [['DEMO-ab12.json', 'DEMO-ab12.json', 1000], ['examples/example-1.json', 'example-1.json', 1000]]);
+  assert.deepEqual(entries.map((e) => [e.path, e.file.name, e.file.lastModified, e.handoff]),
+    [['DEMO-ab12.json', 'DEMO-ab12.json', 1000, true], ['examples/example-1.json', 'example-1.json', 1000, true]]);
   assert.equal(await entries[0].file.text(), '{"participantId":"DEMO-ab12"}');
 });
 

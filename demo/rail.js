@@ -4,6 +4,8 @@
 // its rows; light()/acknowledge() then update that remembered state without
 // needing the container passed back in each time.
 
+import { escHtml } from './util.js';
+
 var rowsByKey = {};
 var listEl = null;
 var awaitingNoteEl = null;
@@ -26,11 +28,10 @@ function renderGroupRows(rows, rowClass) {
  */
 export function renderRail(container, opts) {
   var groups = opts.groups;
-  var intro = opts.intro;
 
   var html = '<h3>Tracked signals</h3>';
   html += '<p class="sub awaiting-note">awaiting your session</p>';
-  html += '<p class="sub">' + intro + '</p>';
+  html += '<p class="sub" title="' + escHtml(opts.introTitle) + '">' + escHtml(opts.intro) + '</p>';
   html += '<ul class="check awaiting">';
   html += '<li class="hint">Detectors</li>' + renderGroupRows(groups.detectors);
   html += '<li class="hint">Guard</li>' + renderGroupRows(groups.guard, 'guardrow');

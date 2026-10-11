@@ -12,6 +12,8 @@
 // { [participantId]: annotation }, keyed by the RAW participant id (a rail
 // row's data-pid): the report's sanitized ids are many-to-one.
 
+import { csvCell } from '../../shared/csv-cell.js';
+
 export var ANNOTATION_LABELS = ['include', 'exclude', 'flag'];
 export var ANNOTATIONS_FORMAT = 'cyborg-hunter-annotations';
 // The longest note kept: the report's note field stops there, and a longer
@@ -19,12 +21,6 @@ export var ANNOTATIONS_FORMAT = 'cyborg-hunter-annotations';
 export var NOTE_MAX_LENGTH = 2000;
 // How many ids of each kind the import message names before it counts the rest.
 var MESSAGE_IDS = 10;
-
-// summary-csv-core.js's quoting, and a carriage return quoted too.
-function csvCell(value) {
-  var s = String(value == null ? '' : value);
-  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
 
 function own(map, id) {
   return Object.prototype.hasOwnProperty.call(map, id) ? map[id] : null;

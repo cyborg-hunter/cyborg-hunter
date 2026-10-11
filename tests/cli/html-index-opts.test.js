@@ -1,7 +1,8 @@
 // tests/cli/html-index-opts.test.js
-// The three demo-mode opts for the in-browser report. Contract: ALL opts
-// absent ⇒ byte-identical to the HTML snapshots (that test enforces it);
-// each opt present ⇒ the specific emission below.
+// The opts the analyze page's in-page report passes (renderInPageHtml in
+// report-core.js). Contract: ALL opts absent ⇒ byte-identical to the HTML
+// snapshots (that test enforces it); each opt present ⇒ the specific
+// emission below.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
@@ -41,57 +42,28 @@ test('imageSources with a missing plot omits that img entirely', async () => {
   assert.ok(!html.includes('images/typing_profile_'));
 });
 
-// `inlineReplayModels` holds VIEWER MODELS (html-index-core.js:40), so the
-// shape below is a viewer model's: `tier` at the top level, `segments`, and
-// no `metadata` block — a viewer model has never had one in any version.
-// These tests used to pass a model with a v1-shaped `metadata` block, which
-// is why the demo branch that read the tier out of one looked pinned while it
-// in fact resolved to "trace" for every model the demo could ever have
-// passed.
-test('inlineReplayModels embeds models, renders the replay section, and short-circuits the loader', async () => {
+// The report embeds no replay models: a replay loads from its own file
+// (replay/<id>.replay.js) when the analyst asks for it, and the analyze page
+// shows replays outside the report. An `inlineReplayModels` opt is not read.
+test('an inlineReplayModels opt embeds nothing: the page is the default one', async () => {
   const model = { schemaVersion: 2, tier: 'dom', segments: [] };
   const html = await renderIndexHtml(summaries, triage, [p], config, false, {
     inlineReplayModels: { [PID]: model },
   });
-  assert.ok(html.includes('window.__chReplay'));
-  assert.ok(html.includes(JSON.stringify({ [PID]: model }).replace(/</g, '\\u003c')));
-  // The replay SECTION must render even though participant.replay is unset.
-  // Real markup: renderReplaySection emits a .replay-block with a
-  // .replay-mount, marked data-replay-preloaded instead of data-replay-src
-  // when the model came from inlineReplayModels rather than a real artifact.
-  assert.ok(html.includes('data-replay-preloaded="true"'));
-  assert.ok(html.includes('class="replay-mount"'));
-  assert.ok(html.includes('(dom tier)'));  // the model's own tier flows into the badge text
-  // Loader short-circuit — pin the functional line itself (the preloaded-first
-  // window.__chReplay lookup), so deleting the short-circuit fails this test
-  // even while the data attribute above still renders.
-  assert.ok(html.includes('const preloaded = (window.__chReplay || {})[pid];'));
-});
-
-test('inlineReplayModels without a matching participant renders without throwing and omits the replay section', async () => {
-  // Regression: the demo-model lookup keys off the triage row, so a model can
-  // exist for a pid with no participant object. renderReplaySection used to
-  // crash on participant.participantId; now it must skip the section.
-  const model = { schemaVersion: 2, tier: 'dom', segments: [] };
-  const html = await renderIndexHtml(summaries, triage, [], config, false, {
-    inlineReplayModels: { [PID]: model },
-  });
+  // The lazy loader reads window.__chReplay, which the replay file fills;
+  // nothing in the page assigns it.
+  assert.ok(!html.includes('window.__chReplay ='));
   assert.ok(!html.includes('data-replay-preloaded'));
-  assert.ok(!html.includes('Session replay'));
+  assert.ok(!html.includes('const preloaded'));
+  assert.strictEqual(html, await renderIndexHtml(summaries, triage, [p], config, false, {}));
 });
 
-test('adversarial inlineReplayModels payload cannot break out of the inline script tag', async () => {
-  const model = { schemaVersion: 2, tier: 'dom', segments: [],
-    payload: '</script><!--"boom' };
-  const html = await renderIndexHtml(summaries, triage, [p], config, false, {
-    inlineReplayModels: { [PID]: model },
-  });
-  const m = html.match(/window\.__chReplay = (.*);<\/script>/);
-  assert.ok(m, 'preloaded models script is present');
-  assert.ok(!m[1].includes('<'), 'no raw < survives inside the embedded JSON');
-  assert.ok(m[1].includes('\\u003c/script>'), 'script closer neutralized via \\u003c escape');
-  assert.ok(m[1].includes('\\u003c!--'), 'comment opener neutralized via \\u003c escape');
-  assert.deepEqual(JSON.parse(m[1]), { [PID]: model }, 'escaping round-trips losslessly');
+test('a triage row with no participant object renders without a replay section', async () => {
+  // The participants array is caller-supplied, so a triage row can lack one;
+  // the page still renders, with nothing said about a replay.
+  const html = await renderIndexHtml(summaries, triage, [], config, false, {});
+  assert.ok(html.includes('class="participant"'));
+  assert.ok(!html.includes('Session replay'));
 });
 
 test('adversarial imageSources value cannot break out of the src/href attributes', async () => {
@@ -128,13 +100,13 @@ test('replayShownExternally:true suppresses the replay section entirely; absent/
   }
 });
 
-test('demo mode guards history.replaceState; default does not', async () => {
-  const demo = await renderIndexHtml(summaries, triage, [p], config, false,
+test('the in-page report (imageSources) guards history.replaceState; default does not', async () => {
+  const inPage = await renderIndexHtml(summaries, triage, [p], config, false,
     { imageSources: { [PID]: {} } });
-  assert.ok(/try\s*\{[^}]*history\.replaceState/.test(demo));
+  assert.ok(/try\s*\{[^}]*history\.replaceState/.test(inPage));
   const plain = await renderIndexHtml(summaries, triage, [p], config, false, {});
   assert.ok(!/try\s*\{[^}]*history\.replaceState/.test(plain));
   // The bare call must still be present on the default path — the guard is
-  // additive in demo mode, not a replacement for the underlying call.
+  // additive in the in-page report, not a replacement for the underlying call.
   assert.ok(plain.includes("history.replaceState(null, '', `#p-${sanitized}`);"));
 });

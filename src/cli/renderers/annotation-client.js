@@ -45,8 +45,12 @@ export const ANNOTATION_BUILDERS_JS = String.raw`
       var ANNOTATIONS_FORMAT = 'cyborg-hunter-annotations';
       var NOTE_MAX_LENGTH = 2000;
       var MESSAGE_IDS = 10;
+      // Mirrors src/shared/csv-cell.js, which the module imports.
       function csvCell(value) {
-        var s = String(value == null ? '' : value);
+        if (value == null) return '';
+        if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+        var s = String(value);
+        if (/^[=+\-@\t\r]/.test(s) && !Number.isFinite(Number(s))) s = "'" + s;
         return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
       }
       function own(map, id) {
