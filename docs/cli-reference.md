@@ -1,5 +1,5 @@
 # CLI Reference
-What a successful run looks like — the HTML report for the bundled four-participant synthetic dataset ([worked-example.md](worked-example.md)):
+What a successful run looks like — the HTML report for the bundled dataset of four sessions recorded on the demo ([worked-example.md](worked-example.md)):
 
 ![HTML report: tier-sorted participant list on the left; per-signal counts, score breakdown, paste evidence, and typing profile for the selected participant.](assets/report-example.png)
 

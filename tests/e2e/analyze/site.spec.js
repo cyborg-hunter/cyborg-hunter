@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
-  pilotFiles, cliPilotTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, PILOT_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
+  sampleFiles, cliSampleTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
 
 test('the top bar names the page and links the demo, GitHub and the offline file; the files step has no policy paragraph', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -28,20 +28,20 @@ test('the top bar names the page and links the demo, GitHub and the offline file
   await assertOnlyAllowed(page, seen, allow);
 });
 
-test('dropped synthetic pilot: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
+test('dropped demo sessions: same triage order as the sample, zip tree matches the CLI', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
   const seen = await guardNetwork(page, allow);
   await page.goto('/analyze/');
   await waitReady(page);
-  await page.setInputFiles('[data-role="file-input"]', pilotFiles());
+  await page.setInputFiles('[data-role="file-input"]', sampleFiles());
   await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
   await expect(page.locator('[data-role="counts"]')).toContainText('4 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
-  await expect(page.locator('[data-role="id-field"]')).toHaveValue('subject_ID');
+  await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   await buildReport(page);
-  expect(await railOrder(page)).toEqual(PILOT_ORDER);
+  expect(await railOrder(page)).toEqual(SAMPLE_ORDER);
   const zip = await downloadZip(page);
-  const cli = cliPilotTree();
+  const cli = cliSampleTree();
   try {
     const isText = (n) => /\.(csv|md|json|html|js)$/.test(n);
     expect(zip.names.filter(isText)).toEqual(cli.names.filter(isText));
@@ -50,7 +50,7 @@ test('dropped synthetic pilot: same triage order as the sample, zip tree matches
     }
     const pngs = zip.names.filter((n) => n.endsWith('.png'));
     expect(pngs.length).toBeGreaterThanOrEqual(3);
-    expect(pngs.every((n) => /^images\/(trajectories|session_timeline|typing_profile)_SYN-(HARD-03|SOFT-02|CLEAN-01|GENERATED-04)\.png$/.test(n))).toBe(true);
+    expect(pngs.every((n) => /^images\/(trajectories|session_timeline|typing_profile)_DEMO-(9mop|bsq6|681w|a3f3)\.png$/.test(n))).toBe(true);
     const cliPngs = cli.names.filter((n) => n.endsWith('.png'));
     // With node-canvas on the CLI side the zip's index.html is the CLI-identical render: compare it byte for byte.
     expect(cli.text('index.html')).toMatch(/<code class="mono run-id">[0-9a-f]{16}<\/code>/);
@@ -67,10 +67,10 @@ test('the report iframe runs its own scripts and tells the page which participan
   await page.click('[data-action="sample"]');
   await buildReport(page);
   const frame = reportFrame(page);
-  await frame.locator('.cohort-row[data-pid="SYN-CLEAN-01"]').click();
-  await expect(frame.locator('#p-SYN-CLEAN-01')).toBeVisible();
-  await expect(frame.locator('#p-SYN-HARD-03')).toBeHidden();
-  await expect.poll(() => page.evaluate(() => window.__chAnalyze.state.selected)).toBe('SYN-CLEAN-01');
+  await frame.locator('.cohort-row[data-pid="DEMO-a3f3"]').click();
+  await expect(frame.locator('#p-DEMO-a3f3')).toBeVisible();
+  await expect(frame.locator('#p-DEMO-9mop')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__chAnalyze.state.selected)).toBe('DEMO-a3f3');
   await assertOnlyAllowed(page, seen, allow);
 });
 
@@ -170,14 +170,14 @@ test('a setting on the results re-analyses in place: no file is read again, and 
   await waitReady(page);
   await loadSample(page);
   await buildReport(page);
-  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 1 soft, 2 clean');
-  // SYN-SOFT-02's saved soft score is 11: a threshold of 12 makes it clean.
-  await page.fill('[name="softScoreThreshold"]', '12');
+  await expect(page.locator('[data-role="summary"]')).toContainText('2 hard, 1 soft, 1 clean');
+  // DEMO-681w's saved soft score is 6: a threshold of 7 makes it clean.
+  await page.fill('[name="softScoreThreshold"]', '7');
   await page.press('[name="softScoreThreshold"]', 'Tab');
-  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 3 clean', { timeout: 60000 });
+  await expect(page.locator('[data-role="summary"]')).toContainText('2 hard, 0 soft, 2 clean', { timeout: 60000 });
   await expect(page.locator('section[data-step="results"]')).toBeVisible();
   const zip = await downloadZip(page);
-  expect(zip.text('triage.md')).toMatch(/SYN-SOFT-02 \| clean/);
+  expect(zip.text('triage.md')).toMatch(/DEMO-681w \| clean/);
   await assertOnlyAllowed(page, seen, allow);
 });
 
@@ -239,18 +239,18 @@ test('annotations made in the report frame are kept by the page through a re-ana
   await loadSample(page);
   await buildReport(page);
   const frame = reportFrame(page);
-  await frame.locator('#p-SYN-HARD-03').getByRole('button', { name: 'Exclude' }).click();
-  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
+  await frame.locator('#p-DEMO-9mop').getByRole('button', { name: 'Exclude' }).click();
+  await expect(frame.locator('.cohort-row[data-pid="DEMO-9mop"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
   // The glyph drawn in the frame (its CSS and its charset are the report's own).
-  expect(await frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark').evaluate((el) => getComputedStyle(el, '::before').content)).toBe('"✗"');
+  expect(await frame.locator('.cohort-row[data-pid="DEMO-9mop"] .annot-mark').evaluate((el) => getComputedStyle(el, '::before').content)).toBe('"✗"');
   await expect(frame.locator('.annot-count')).toHaveText('1 of 4 reviewed');
   // The frame cannot download: its exports are the page's.
   await expect(frame.getByRole('button', { name: 'Export CSV' })).toHaveCount(0);
-  await page.fill('[name="softScoreThreshold"]', '12');
+  await page.fill('[name="softScoreThreshold"]', '7');
   await page.press('[name="softScoreThreshold"]', 'Tab');
-  await expect(page.locator('[data-role="summary"]')).toContainText('1 hard, 0 soft, 3 clean', { timeout: 60000 });
-  await expect(frame.locator('.cohort-row[data-pid="SYN-HARD-03"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
+  await expect(page.locator('[data-role="summary"]')).toContainText('2 hard, 0 soft, 2 clean', { timeout: 60000 });
+  await expect(frame.locator('.cohort-row[data-pid="DEMO-9mop"] .annot-mark')).toHaveAttribute('data-label', 'exclude');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="annotations-csv"]')]);
-  expect(readFileSync(await csv.path(), 'utf8').split('\n')[1]).toMatch(/^SYN-HARD-03,hard,[^,]+,exclude,/);
+  expect(readFileSync(await csv.path(), 'utf8').split('\n')[1]).toMatch(/^DEMO-9mop,hard,[^,]+,exclude,/);
   await assertOnlyAllowed(page, seen, allow);
 });

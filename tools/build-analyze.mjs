@@ -4,9 +4,9 @@
 // papaparse + fflate) to a string; pass 2 bundles the page (main.js) with that
 // string as a virtual module, so the page creates its worker from a blob URL
 // and never loads a second file. The replay viewer client, the report fonts
-// and the synthetic-pilot sample are baked in the same way: the page's policy
-// forbids fetching them. platform 'browser' is the gate against a Node-only
-// import creeping into a core.
+// and the bundled sessions (examples/demo-sessions) are baked in the same
+// way: the page's policy forbids fetching them. platform 'browser' is the
+// gate against a Node-only import creeping into a core.
 // Run via `npm run demo:analyze`; ANALYZE_OUTDIR redirects the output (tests).
 import esbuild from 'esbuild';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -16,11 +16,14 @@ import { buildFontFaceCss } from '../src/cli/renderers/report-fonts.js';
 import { inlineSafeJson, inlineSrcHazards } from '../src/shared/inline-safe.js';
 
 const OUT = process.env.ANALYZE_OUTDIR || 'demo/analyze';
-const SAMPLE_DIR = 'examples/synthetic-pilot';
+const SAMPLE_DIR = 'examples/demo-sessions';
 
+// The bundled sessions, minified (the committed files are pretty-printed, as
+// the demo saves them), each under its own file name: the page lists them
+// as files beside what the analyst dropped.
 function sampleData() {
-  const files = readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => /\.csv$/i.test(f)).sort()
-    .map((f) => ({ path: 'data/' + f, text: readFileSync(join(SAMPLE_DIR, 'data', f), 'utf8') }));
+  const files = readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => /\.json$/i.test(f)).sort()
+    .map((f) => ({ path: f, text: JSON.stringify(JSON.parse(readFileSync(join(SAMPLE_DIR, 'data', f), 'utf8'))) }));
   files.push({ path: 'cyborg-hunter.config.json', text: readFileSync(join(SAMPLE_DIR, 'cyborg-hunter.config.json'), 'utf8') });
   return { files };
 }

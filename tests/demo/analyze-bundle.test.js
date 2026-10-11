@@ -21,7 +21,10 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 test('carries the worker source, the viewer client, the fonts and the sample', () => {
   assert.ok(bundle.includes('initChReplayViewer'), 'viewer client baked in');
   assert.ok(bundle.includes('@font-face'), 'fonts baked in');
-  assert.ok(bundle.includes('SYN-HARD-03') && bundle.includes('subject_ID'), 'sample data + its config baked in');
+  // The config's text is a string in the worker's source, and that source is
+  // a string in the page bundle: it is there escaped twice.
+  const configText = readFileSync('examples/demo-sessions/cyborg-hunter.config.json', 'utf8');
+  assert.ok(bundle.includes('DEMO-9mop') && bundle.includes(JSON.stringify(JSON.stringify(configText)).slice(1, -1)), 'sample data + its config baked in');
   assert.ok(bundle.includes('self.onmessage') || bundle.includes('self.postMessage'), 'worker loop baked in');
 });
 

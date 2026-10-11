@@ -1,6 +1,6 @@
 // demo/analyze/page.js
 // The page's steps over one worker: files (each drop or file choice adds to
-// the list and checks it again; or the sample) → run → results. All
+// the list and checks it again; so does the sample) → run → results. All
 // participant data stays in the worker (File handles go over,
 // the worker reads the bytes one file at a time); this module only holds
 // what the page shows: counts, warnings, the report HTML, the zip chunks,
@@ -10,14 +10,15 @@
 // dropped file itself and transfers the bytes, for every check and run.
 //
 // The worker's messages carry no run id (worker-entry.js), so the page runs
-// ONE operation at a time: while a check, a run or a re-analysis is in
-// flight the controls (the settings too) that would start another are
-// disabled, and a run that fails throws away the zip chunks it had already
-// streamed before a retry is offered.
+// ONE operation at a time: while a sample request, a check, a run or a
+// re-analysis is in flight the controls (the settings too) that would start
+// another are disabled, and a run that fails throws away the zip chunks it
+// had already streamed before a retry is offered.
 import { swapIframe } from '../report-frame.js';
 import { collectDropped, filesFromInput } from './drop.js';
 import { createReplayCard } from './replay-card.js';
 import { mergeEntries, removeEntry } from './files-panel.js';
+import { baseName, CONFIG_NAME } from './classify-files.js';
 import { createSettingsPanel, settingsFromConfig, configFromSettings, settingsKey, REINGEST_KEYS } from './settings-panel.js';
 import { exportConfig } from './export-config.js';
 import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
@@ -72,9 +73,9 @@ export function createPage(root, worker, opts) {
   // handed over (addFiles), whose fonts are not the analyst's experiment
   // assets (droppedAssetCount) and stay out of the table and the counts
   // (renderFiles); emptied with the list.
-  var state = { step: 'files', entries: [], dropCount: 0, sample: false, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
+  var state = { step: 'files', entries: [], dropCount: 0, checked: null, idField: null, idSuggested: null, idPicked: null, result: null,
     zipParts: [], zipUrl: null, selected: null, assets: null, limits: null, runId: null, annotations: null, settingsWritten: null, handoffPaths: new Set() };
-  var pending = {};        // the awaited 'checked' or 'done' reply: { resolve, reject }
+  var pending = {};        // the awaited 'checked', 'done' or 'sample' reply: { resolve, reject }
   var replayWaiters = [];  // replay requests in the order sent; the worker answers in order
   var replayCard = null;
   var reportUrl = null;
@@ -119,7 +120,7 @@ export function createPage(root, worker, opts) {
 
   function send(msg, transfer) { worker.postMessage(msg, transfer || []); }
   function waitFor(type) { return new Promise(function (resolve, reject) { pending[type] = { resolve: resolve, reject: reject }; }); }
-  function busy() { return !!(pending.checked || pending.done); }
+  function busy() { return !!(pending.checked || pending.done || pending.sample); }
   function goTo(name) {
     state.step = name;
     root.querySelectorAll('section.step').forEach(function (s) { s.hidden = s.dataset.step !== name; });
@@ -160,8 +161,8 @@ export function createPage(root, worker, opts) {
     if (stallTimer) { timers.clear(stallTimer); stallTimer = null; }
     q(root, 'stall-hint').hidden = true;
   }
-  // (Re)starts the wait: called when a check or run is sent, and on each of
-  // its progress messages.
+  // (Re)starts the wait: called when a sample request, a check or a run is
+  // sent, and on each of its progress messages.
   function armStallHint() {
     hideStallHint();
     stallTimer = timers.set(function () { stallTimer = null; q(root, 'stall-hint').hidden = false; }, stallHintMs);
@@ -173,9 +174,10 @@ export function createPage(root, worker, opts) {
 
   // Every failure lands here, from the worker ({ type: 'error', phase }) or
   // from the page's own code. A replay failure leaves the results alone; a
-  // check failure goes back to an empty files step; a run or re-analysis
-  // failure goes back to the file list with its partial zip discarded and
-  // the run control enabled for a retry.
+  // check failure goes back to an empty files step; a failed sample request
+  // leaves the list as it was (the sample's files were not added yet); a run
+  // or re-analysis failure goes back to the file list with its partial zip
+  // discarded and the run control enabled for a retry.
   function recover(phase, message, warnings) {
     showError(message);
     q(root, 'rerun-status').hidden = true;
@@ -210,11 +212,11 @@ export function createPage(root, worker, opts) {
 
   // A failure of the worker itself (a script error outside a job, a message
   // that cannot be read, a worker the browser killed) carries no phase: it is
-  // charged to whatever is in flight, so a pending check or run cannot leave
-  // the page busy for good. The worker is then replaced by a fresh one from
-  // opts.createWorker, since a dead worker would swallow the retry. The new
-  // one holds no run, so replays need the report built again.
-  function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : replayWaiters.length ? 'replay' : null; }
+  // charged to whatever is in flight, so a pending sample request, check or
+  // run cannot leave the page busy for good. The worker is then replaced by a
+  // fresh one from opts.createWorker, since a dead worker would swallow the
+  // retry. The new one holds no run, so replays need the report built again.
+  function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : pending.sample ? 'sample' : replayWaiters.length ? 'replay' : null; }
   function workerFailed(message) {
     var phase = inFlight();
     var restarted = replaceWorker();
@@ -274,8 +276,8 @@ export function createPage(root, worker, opts) {
   // (a transferred buffer is gone from this side). A file that cannot be read
   // fails the step like a worker error would.
   function sendWithFiles(msg) {
-    if (state.sample || !(opts && opts.transferBytes)) {
-      msg.files = state.sample ? [] : state.entries.map(function (e) { return { path: e.path, file: e.file }; });
+    if (!(opts && opts.transferBytes)) {
+      msg.files = state.entries.map(function (e) { return { path: e.path, file: e.file }; });
       send(msg);
       return;
     }
@@ -287,9 +289,9 @@ export function createPage(root, worker, opts) {
     });
   }
 
-  // A replaced cohort (Start over, the sample, files after the sample, a
-  // failed check): its next check writes the settings as a first one does,
-  // with no note, and takes the suggested Participant ID field.
+  // A replaced cohort (Start over, a failed check): its next check writes
+  // the settings as a first one does, with no note, and takes the suggested
+  // Participant ID field.
   function forgetSettings() {
     state.settingsWritten = null; state.idField = null; state.idSuggested = null; state.idPicked = null;
   }
@@ -308,7 +310,7 @@ export function createPage(root, worker, opts) {
     var reply = waitFor('checked');
     updateControls();
     armStallHint();
-    sendWithFiles({ type: 'check', sample: state.sample });
+    sendWithFiles({ type: 'check' });
     var checked = await reply;
     state.checked = checked;
     renderFiles(checked);
@@ -380,10 +382,10 @@ export function createPage(root, worker, opts) {
   }
 
   // The recognised-files table (one row per file, what it was read as, and
-  // a Remove control; the sample has no file list of its own to edit), the
-  // counts by kind, and where the settings came from. The fonts the tour
-  // handed over stay in the list the worker reads, for the replay, but not
-  // in the table or the counts: one line under the table says they are there.
+  // a Remove control), the counts by kind, and where the settings came from.
+  // The fonts the tour handed over stay in the list the worker reads, for
+  // the replay, but not in the table or the counts: one line under the table
+  // says they are there.
   function renderFiles(checked) {
     var rows = q(root, 'file-rows');
     rows.innerHTML = '';
@@ -397,15 +399,13 @@ export function createPage(root, worker, opts) {
       var kind = document.createElement('td');
       kind.textContent = KIND_LABELS[f.kind] || f.kind;
       var act = document.createElement('td');
-      if (!state.sample) {
-        var b = document.createElement('button');
-        b.className = 'secondary';
-        b.dataset.action = 'remove-file';
-        b.dataset.path = f.path;
-        b.textContent = 'Remove';
-        b.setAttribute('aria-label', 'Remove ' + f.path);
-        act.appendChild(b);
-      }
+      var b = document.createElement('button');
+      b.className = 'secondary';
+      b.dataset.action = 'remove-file';
+      b.dataset.path = f.path;
+      b.textContent = 'Remove';
+      b.setAttribute('aria-label', 'Remove ' + f.path);
+      act.appendChild(b);
       tr.appendChild(name); tr.appendChild(kind); tr.appendChild(act);
       rows.appendChild(tr);
     });
@@ -436,7 +436,7 @@ export function createPage(root, worker, opts) {
     updateControls();
     armStallHint();
     var config = effectiveConfig();
-    sendWithFiles({ type: 'run', sample: state.sample, config: config, participantIdField: state.idField });
+    sendWithFiles({ type: 'run', config: config, participantIdField: state.idField });
     var done = await reply;
     state.ranWith = { config: config, idField: state.idField };
     showResults(done);
@@ -470,7 +470,7 @@ export function createPage(root, worker, opts) {
     updateControls();
     armStallHint();
     var msg = { type: type, config: config, participantIdField: state.idField };
-    if (type === 'run') { msg.sample = state.sample; sendWithFiles(msg); } else send(msg);
+    if (type === 'run') sendWithFiles(msg); else send(msg);
     var done = await reply;
     status.hidden = true;
     state.ranWith = { config: config, idField: state.idField };
@@ -574,7 +574,7 @@ export function createPage(root, worker, opts) {
   function reset() {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return;
-    state.entries = []; state.sample = false; state.checked = null; state.result = null; state.selected = null;
+    state.entries = []; state.checked = null; state.result = null; state.selected = null;
     state.runId = null; state.annotations = null; state.handoffPaths.clear();
     forgetSettings();
     q(root, 'annotations-status').textContent = '';
@@ -602,12 +602,10 @@ export function createPage(root, worker, opts) {
   }
 
   // Each drop or file choice ADDS to the list (files-panel.js), and the list
-  // is checked again. Files added after the sample replace it: the sample is
-  // not a file list, and its settings start over (forgetSettings).
+  // is checked again.
   function addFiles(entries) {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
-    if (state.sample) { state.sample = false; state.entries = []; forgetSettings(); }
     state.dropCount++;
     state.entries = mergeEntries(state.entries, entries, state.dropCount);
     // The hand-off's files under the paths they are listed by: mergeEntries
@@ -629,16 +627,41 @@ export function createPage(root, worker, opts) {
     if (!state.entries.length || !listed) { reset(); return Promise.resolve(); }
     return check();
   }
+  // Load sample data ADDS the bundled sessions to the list, as a drop does:
+  // the worker hands over their text, each becomes a File under its own
+  // name, and a name already listed is not added twice (the tour's examples
+  // arrive by the hand-off under these same names). The sample's config
+  // comes only to an empty list: a cohort keeps the settings it brought, or
+  // the ones the analyst set. The sessions are keyed by participantId, so
+  // beside files keyed by another field one side reads as unknown until it
+  // is removed.
   function loadSample() {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
-    forgetSettings();
-    state.sample = true; state.entries = []; state.handoffPaths.clear(); return check();
+    var empty = !state.entries.length;
+    // In flight like a check (busy): a drop, a file choice or another click
+    // is refused until the answer, and a worker failure settles the request
+    // (recover) with the list as it was.
+    var reply = waitFor('sample');
+    updateControls();
+    armStallHint();
+    send({ type: 'sample' });
+    return reply.then(function (msg) {
+      var listed = {};
+      state.entries.forEach(function (e) { listed[baseName(e.path)] = true; });
+      var entries = [];
+      msg.files.forEach(function (f) {
+        var name = baseName(f.path);
+        if (listed[name] || (name === CONFIG_NAME && !empty)) return;
+        entries.push({ path: name, file: new File([f.text], name, { type: 'application/json' }) });
+      });
+      return addFiles(entries);
+    });
   }
   // Opened from the demo with nothing to hand over (main.js): the files step
   // says so above the drop zone, until a drop, the sample or Start over.
   function handoffEmpty() {
-    if (state.entries.length || state.sample) return;   // a drop or the sample came first
+    if (state.entries.length) return;   // a drop came first
     q(root, 'handoff-empty').hidden = false;
   }
 

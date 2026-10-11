@@ -387,8 +387,10 @@ The settings are the ones a report can apply after collection: the
 soft-score threshold, the score weights, the ID, integrity and
 session-report fields, and the platform ID field. Changing one on the results
 re-analyses at once, without dropping the files again. "Load sample data"
-runs the whole pipeline on the bundled synthetic pilot first, so you can see
-what you get before dropping real data. "Export config" writes a
+adds four sessions recorded on the demo tour (three by the author, one by an
+AI agent) to the files already listed, so you can see what you get before
+dropping real data, or beside data recorded under `participantId` (the
+one-line setup, the demo tour). "Export config" writes a
 `cyborg-hunter.config.json` with every setting that differs from the CLI's
 defaults, so `cyborg-hunter report` in a folder whose `data/` holds the
 same files (or whose `dataDir` points at them) builds the same report.

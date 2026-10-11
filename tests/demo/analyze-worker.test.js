@@ -53,6 +53,13 @@ function concat(chunks) {
 }
 
 const fileEntry = (dir, name, path) => ({ path: path || name, file: new File([readFileSync(dir + '/' + name)], name) });
+// The bundled sessions as the page sends them after a `sample` reply: each
+// file's bytes (the shape a page opened from file: sends).
+async function sampleEntries(w) {
+  w.send({ type: 'sample' });
+  const { files } = await w.next('sample');
+  return files.map((f) => ({ path: f.path, bytes: new TextEncoder().encode(f.text).buffer }));
+}
 
 test('announces itself with the baked assets and the tested cohort size', () => {
   const w = startWorker();
@@ -71,16 +78,26 @@ test('the worker source reaches no network and no Node API', () => {
   assert.doesNotMatch(workerSrc, NODE_IMPORT);
 });
 
+test('sample hands over the bundled files as text, under their own names', async () => {
+  const w = startWorker();
+  w.send({ type: 'sample' });
+  const { files } = await w.next('sample');
+  assert.deepEqual(files.map((f) => f.path), ['DEMO-681w.json', 'DEMO-9mop.json', 'DEMO-a3f3.json', 'DEMO-bsq6.json', 'cyborg-hunter.config.json']);
+  assert.equal(JSON.parse(files[0].text).participantId, 'DEMO-681w');
+});
+
 test('check on the sample finds four participant files and the id field its config names', async () => {
   const w = startWorker();
-  w.send({ type: 'check', sample: true });
+  const files = await sampleEntries(w);
+  w.send({ type: 'check', files });
   const checked = await w.next('checked', 'error');
   assert.equal(checked.type, 'checked', checked.message);
-  assert.deepEqual(checked.counts, { participant: 4, replay: 0, assets: 0, ignored: 0 });
+  // JSON files go to both lists: ingest tells a recording by its content.
+  assert.deepEqual(checked.counts, { participant: 4, replay: 4, assets: 0, ignored: 0 });
   assert.equal(checked.configFound, true);
-  assert.equal(checked.config.participantIdField, 'subject_ID');
+  assert.equal(checked.config.participantIdField, 'participantId');
   assert.deepEqual(checked.configWarnings, []);
-  assert.equal(checked.idSuggestion.suggested, 'subject_ID');
+  assert.equal(checked.idSuggestion.suggested, 'participantId');
   assert.equal(checked.sampled, 4);
 });
 
@@ -99,17 +116,15 @@ test('check skips replay recordings when it suggests the id field: a DEMO sessio
   assert.equal(checked.recordings, 1);
 });
 
-test('check skips replay recordings when it suggests the id field: jsPsych CSVs and one replay, no config', async () => {
-  const pilot = 'examples/synthetic-pilot/data';
-  const files = readdirSync(pilot).filter((f) => f.endsWith('.csv')).map((f) => fileEntry(pilot, f, 'data/' + f))
-    .concat([fileEntry('tests/fixtures/demo', 'DEMO-FIXT-replay-1785352263344.json', 'replays/DEMO-FIXT-replay-1785352263344.json')]);
+test('check skips replay recordings when it suggests the id field: a jsPsych CSV and one replay, no config', async () => {
+  const files = [fileEntry('tests/cli/fixtures', 'conj-disj-sample.csv', 'data/conj-disj-sample.csv'),
+    fileEntry('tests/fixtures/demo', 'DEMO-FIXT-replay-1785352263344.json', 'replays/DEMO-FIXT-replay-1785352263344.json')];
   const w = startWorker();
   w.send({ type: 'check', files });
   const checked = await w.next('checked', 'error');
   assert.equal(checked.type, 'checked', checked.message);
-  assert.equal(checked.idSuggestion.suggested, 'subject_ID');
-  assert.deepEqual(checked.idSuggestion.candidates[0], { field: 'subject_ID', reason: 'known name' });
-  assert.equal(checked.sampled, 4);
+  assert.deepEqual(checked.idSuggestion, { suggested: 'subjectId', candidates: [{ field: 'subjectId', reason: 'constant within each file, unique across files' }] });
+  assert.equal(checked.sampled, 1);
   assert.equal(checked.recordings, 1);
 });
 
@@ -136,9 +151,9 @@ test('check tells what it read each file as: data, recording, asset, config, ign
 
 test('run on the sample streams a zip of the full report and returns the in-page report', async () => {
   const w = startWorker();
-  w.send({ type: 'check', sample: true });
+  w.send({ type: 'check', files: await sampleEntries(w) });
   const checked = await w.next('checked');
-  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
   const done = await w.next('done', 'error');
   assert.equal(done.type, 'done', done.message);
   const zip = concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk));
@@ -146,14 +161,36 @@ test('run on the sample streams a zip of the full report and returns the in-page
   const files = unzipSync(zip);
   for (const f of REPORT_FILES) assert.ok(files[f], f + ' is in the zip');
   for (const f of ['summary.csv', 'triage.md', 'event-log.csv']) assert.equal(done.files[f], strFromU8(files[f]), f);
-  assert.deepEqual(done.participants.map((p) => p.participantId).sort(), ['SYN-CLEAN-01', 'SYN-GENERATED-04', 'SYN-HARD-03', 'SYN-SOFT-02']);
-  assert.deepEqual(done.triageOrder.slice().sort(), ['SYN-CLEAN-01', 'SYN-GENERATED-04', 'SYN-HARD-03', 'SYN-SOFT-02']);
-  assert.equal(done.cursorLine, 'Pointer verdicts: 1 highly suspicious, 0 suspicious, 0 clean, 3 not assessed (4 sessions; 3 recorded without device facts)');
-  assert.match(done.files['triage.md'], /\| SYN-GENERATED-04 \| clean \| 0 \| pointer verdict: highly suspicious \(automation flag; trials clicked without movement 2\/4\) \|/);
-  assert.equal(done.configUsed.participantIdField, 'subject_ID');
-  assert.match(done.html, /SYN-HARD-03/);
+  assert.deepEqual(done.participants.map((p) => p.participantId).sort(), ['DEMO-681w', 'DEMO-9mop', 'DEMO-a3f3', 'DEMO-bsq6']);
+  assert.deepEqual(done.triageOrder.slice().sort(), ['DEMO-681w', 'DEMO-9mop', 'DEMO-a3f3', 'DEMO-bsq6']);
+  assert.equal(done.cursorLine, 'Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 2 not assessed (4 sessions; 2 recorded without device facts)');
+  assert.match(done.files['triage.md'], /\| DEMO-bsq6 \| \*\*HARD\*\* \| 21 \| 2 paste events; 2 copy events; 1 tab-away ≥10s; fast typing on 3 trials; 44 synthetic insertions; pointer verdict: highly suspicious \(clicks without a path 12\/12\) \|/);
+  assert.equal(done.configUsed.participantIdField, 'participantId');
+  assert.match(done.html, /DEMO-9mop/);
   const phases = new Set(w.messages.filter((m) => m.type === 'progress').map((m) => m.phase));
   assert.ok(phases.has('ingest') && phases.has('report'), [...phases].join(','));
+});
+
+// The sample added to a cohort already listed, as the page adds it: without
+// its config. The cohort's CSV is keyed by subjectId, the sessions by
+// participantId; no id field is in every file, so the check suggests none,
+// and a run under participantId reads the CSV's participant as unknown.
+test('beside a CSV keyed by another field, the sample reads under participantId and the CSV\'s participant is unknown', async () => {
+  const w = startWorker();
+  const files = async () => [fileEntry('tests/cli/fixtures', 'conj-disj-sample.csv'),
+    ...(await sampleEntries(w)).filter((f) => f.path !== 'cyborg-hunter.config.json')];
+  w.send({ type: 'check', files: await files() });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.equal(checked.configFound, false);
+  assert.equal(checked.idSuggestion.suggested, null);
+  w.send({ type: 'run', files: await files(), config: checked.config, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.ok(done.warnings.some((x) => /conj-disj-sample\.csv/.test(x.file)
+    && x.warnings.some((t) => /field "participantId" not found.*defaulted to "unknown"/.test(t))), JSON.stringify(done.warnings));
+  assert.deepEqual(done.participants.map((p) => p.participantId).sort(), ['DEMO-681w', 'DEMO-9mop', 'DEMO-a3f3', 'DEMO-bsq6', 'unknown']);
+  assert.ok(done.triageOrder.includes('unknown'), done.triageOrder.join(','));
 });
 
 test('a run with a recording serves the same styled replay model the zip carries', async () => {
@@ -251,15 +288,16 @@ test('reanalyze before any run is an error, not a silent no-op', async () => {
 // so its configUsed keeps those, whatever the page sends.
 test('reanalyze keeps the keys ingest read under the run, whatever the page sends', async () => {
   const w = startWorker();
-  w.send({ type: 'check', sample: true });
+  const files = await sampleEntries(w);
+  w.send({ type: 'check', files });
   const checked = await w.next('checked');
-  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
   const first = await w.next('done', 'error');
   assert.equal(first.type, 'done', first.message);
-  w.send({ type: 'reanalyze', config: { ...checked.config, qualtricsField: 'other_column', singleParticipant: 'SYN-HARD-03' }, participantIdField: 'trial_index' });
+  w.send({ type: 'reanalyze', config: { ...checked.config, qualtricsField: 'other_column', singleParticipant: 'DEMO-9mop' }, participantIdField: 'another_field' });
   const second = await w.next('done', 'error');
   assert.equal(second.type, 'done', second.message);
-  assert.equal(second.configUsed.participantIdField, 'subject_ID');
+  assert.equal(second.configUsed.participantIdField, 'participantId');
   assert.equal(second.configUsed.qualtricsField, first.configUsed.qualtricsField);
   assert.equal('singleParticipant' in second.configUsed, 'singleParticipant' in first.configUsed);
   assert.deepEqual(second.participants.map((p) => p.participantId), first.participants.map((p) => p.participantId));
@@ -269,16 +307,17 @@ test('reanalyze keeps the keys ingest read under the run, whatever the page send
 // way finishes over the state it started with instead of failing half-way.
 test('a reset while the report renders does not turn the render into an error', async () => {
   const w = startWorker();
-  w.send({ type: 'check', sample: true });
+  const files = await sampleEntries(w);
+  w.send({ type: 'check', files });
   const checked = await w.next('checked');
-  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
   assert.equal((await w.next('done', 'error')).type, 'done');
-  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'subject_ID' });
+  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'participantId' });
   await w.next('zip');
   w.send({ type: 'reset' });
   const end = await w.next('done', 'error');
   assert.equal(end.type, 'done', end.message);
-  w.send({ type: 'replay', participantId: 'SYN-HARD-03' });
+  w.send({ type: 'replay', participantId: 'DEMO-9mop' });
   assert.equal((await w.next('replay-model', 'error')).type, 'error', 'the reset still let go of the run');
 });
 
@@ -338,14 +377,15 @@ test('reanalyze under the same config gives the first report again, file for fil
 // report.
 test('done carries the run id, and a re-analysis keeps it', async () => {
   const w = startWorker();
-  w.send({ type: 'check', sample: true });
+  const files = await sampleEntries(w);
+  w.send({ type: 'check', files });
   const checked = await w.next('checked', 'error');
-  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
   const first = await w.next('done', 'error');
   assert.equal(first.type, 'done', first.message);
   assert.match(first.runId, /^[0-9a-f]{16}$/);
   assert.ok(first.html.includes('<code class="mono run-id">' + first.runId + '</code>'), 'the in-page report shows it');
-  w.send({ type: 'reanalyze', config: { ...checked.config, scoreWeights: { paste: 1 } }, participantIdField: 'subject_ID' });
+  w.send({ type: 'reanalyze', config: { ...checked.config, scoreWeights: { paste: 1 } }, participantIdField: 'participantId' });
   const second = await w.next('done', 'error');
   assert.equal(second.type, 'done', second.message);
   assert.equal(second.runId, first.runId);
@@ -355,12 +395,13 @@ test('done carries the run id, and a re-analysis keeps it', async () => {
 // score, in triage order: the same score summary.csv carries.
 test('done lists each participant\'s tier and triage score, in triage order', async () => {
   const w = startWorker();
-  w.send({ type: 'check', sample: true });
+  const files = await sampleEntries(w);
+  w.send({ type: 'check', files });
   const checked = await w.next('checked', 'error');
-  w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+  w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
   const done = await w.next('done', 'error');
   assert.equal(done.type, 'done', done.message);
-  assert.deepEqual(done.triageRows.map((r) => [r.participantId, r.tier]), [['SYN-HARD-03', 'hard'], ['SYN-SOFT-02', 'soft'], ['SYN-CLEAN-01', 'clean'], ['SYN-GENERATED-04', 'clean']]);
+  assert.deepEqual(done.triageRows.map((r) => [r.participantId, r.tier]), [['DEMO-9mop', 'hard'], ['DEMO-bsq6', 'hard'], ['DEMO-681w', 'soft'], ['DEMO-a3f3', 'clean']]);
   const scores = Object.fromEntries(done.files['summary.csv'].trim().split('\n').slice(1).map((l) => l.split(',')).map((c) => [c[0], Number(c[2])]));
   for (const r of done.triageRows) assert.equal(r.triageScore, scores[r.participantId], r.participantId);
 });
@@ -415,11 +456,11 @@ test('a recording with fields of the wrong shape, which the viewer keeps, does n
 });
 
 test('dropped files sent as bytes (a page opened from file:) check and run as File handles do', async () => {
-  const dir = 'examples/synthetic-pilot';
-  const paths = readdirSync(dir + '/data').filter((f) => f.endsWith('.csv')).sort().map((f) => 'data/' + f).concat(['cyborg-hunter.config.json']);
-  const asFiles = () => paths.map((p) => fileEntry(dir, p, 'pilot/' + p));
+  const dir = 'examples/demo-sessions';
+  const paths = readdirSync(dir + '/data').filter((f) => f.endsWith('.json')).sort().map((f) => 'data/' + f).concat(['cyborg-hunter.config.json']);
+  const asFiles = () => paths.map((p) => fileEntry(dir, p, 'sessions/' + p));
   // A fresh ArrayBuffer per message, as the page reads one for each.
-  const asBytes = () => paths.map((p) => ({ path: 'pilot/' + p, bytes: new Uint8Array(readFileSync(dir + '/' + p)).buffer }));
+  const asBytes = () => paths.map((p) => ({ path: 'sessions/' + p, bytes: new Uint8Array(readFileSync(dir + '/' + p)).buffer }));
   const outcome = async (files) => {
     const w = startWorker();
     w.send({ type: 'check', files: files() });
@@ -432,8 +473,8 @@ test('dropped files sent as bytes (a page opened from file:) check and run as Fi
   };
   const viaBytes = await outcome(asBytes);
   assert.deepEqual(viaBytes, await outcome(asFiles));
-  assert.equal(viaBytes.checked.idSuggestion.suggested, 'subject_ID', 'the config was read from its bytes');
-  assert.deepEqual(viaBytes.triageOrder, ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01', 'SYN-GENERATED-04']);
+  assert.equal(viaBytes.checked.idSuggestion.suggested, 'participantId', 'the config was read from its bytes');
+  assert.deepEqual(viaBytes.triageOrder, ['DEMO-9mop', 'DEMO-bsq6', 'DEMO-681w', 'DEMO-a3f3']);
 });
 
 test('reset lets go of the last run: its replays are no longer served', async () => {
@@ -486,9 +527,10 @@ test('plots reach the zip and the in-page report as the same PNG bytes', { skip:
   };
   try {
     const w = startWorker();
-    w.send({ type: 'check', sample: true });
+    const files = await sampleEntries(w);
+    w.send({ type: 'check', files });
     const checked = await w.next('checked');
-    w.send({ type: 'run', sample: true, config: checked.config, participantIdField: 'subject_ID' });
+    w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
     const done = await w.next('done', 'error');
     assert.equal(done.type, 'done', done.message);
     const zipped = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));

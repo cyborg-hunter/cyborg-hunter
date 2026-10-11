@@ -303,10 +303,10 @@ export const BACK_LABEL = 'Go back';
 /** The last step's files, in two download batches (a Save button per file,
  * and one "Save all into a folder" for all five where the browser has a
  * folder picker; no zip): the session built in this tab (`key`,
- * built by demo.js's buildDownloadFile) and the two example participants the
- * site serves (`href`). A session file's card shows the name it is saved
- * under (demo.js sessionFileName); its `filename` here is the pattern, shown
- * only for a recording this browser could not make. The hand-off to the
+ * built by demo.js's buildDownloadFile) and the two sessions the site serves
+ * (`href`), recorded on this tour. A session file's card shows the name it is
+ * saved under (demo.js sessionFileName); its `filename` here is the pattern,
+ * shown only for a recording this browser could not make. The hand-off to the
  * analyzer passes the same files, and the page's fonts (HANDOFF_ASSETS). */
 export const DOWNLOAD_BATCHES = [
   {
@@ -323,10 +323,10 @@ export const DOWNLOAD_BATCHES = [
   {
     heading: 'Two example participants',
     files: [
-      { href: 'assets/example-1.json', filename: 'example-1.json', label: 'Example 1',
-        description: 'pasted an answer twice' },
-      { href: 'assets/example-2.json', filename: 'example-2.json', label: 'Example 2',
-        description: 'a clean session' },
+      { href: 'assets/DEMO-bsq6.json', filename: 'DEMO-bsq6.json', label: 'An AI agent',
+        description: 'a GPT agent ran this tour from a browser sidebar' },
+      { href: 'assets/DEMO-681w.json', filename: 'DEMO-681w.json', label: 'The author',
+        description: 'the author ran this tour' },
     ],
   },
 ];

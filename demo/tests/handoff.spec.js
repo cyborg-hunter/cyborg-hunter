@@ -77,14 +77,14 @@ async function visitorReplay(page, answer) {
 test('"Open in the analyzer web app" hands over the five files and the fonts: the files listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
   test.setTimeout(120000);
   await fastForwardToFiles(page);
-  const allow = siteAllowlist(baseURL).concat([baseURL + '/assets/example-1.json', baseURL + '/assets/example-2.json'],
+  const allow = siteAllowlist(baseURL).concat([baseURL + '/assets/DEMO-bsq6.json', baseURL + '/assets/DEMO-681w.json'],
     HANDOFF_ASSETS.map((path) => baseURL + '/' + path));
   const seen = await guardNetwork(page, allow);
   const participantId = await openInAnalyzer(page);
   const rows = await page.locator('[data-role="file-rows"] tr').evaluateAll((trs) =>
     trs.map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent)));
   expect(rows.map(([path]) => path).filter((p) => p !== participantId + '.json' && !p.startsWith(participantId + '-replay-')).sort())
-    .toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
+    .toEqual(['cyborg-hunter.config.json', 'DEMO-bsq6.json', 'DEMO-681w.json'].sort());
   expect(rows.filter(([, kind]) => kind === 'experiment asset')).toEqual([]);
   expect(await assetsChecked(page)).toEqual([...HANDOFF_ASSETS].sort());
   await expect(page.locator('[data-role="handoff-assets"]')).toHaveText('(The demo page\'s fonts were included so the replay renders in them.)');
@@ -99,7 +99,7 @@ test('"Open in the analyzer web app" hands over the five files and the fonts: th
   const [config] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="export-config"]')]);
   expect(JSON.parse(readFileSync(await config.path(), 'utf8'))).not.toHaveProperty('assetsDir');
   await buildReport(page);
-  expect((await railOrder(page)).sort()).toEqual([participantId, 'example-1', 'example-2'].sort());
+  expect((await railOrder(page)).sort()).toEqual([participantId, 'DEMO-bsq6', 'DEMO-681w'].sort());
   // The report's load-time pick is an example without a recording: the replay
   // card stays on the visitor's, the only participant with one.
   await reportSelected(page);
@@ -108,6 +108,26 @@ test('"Open in the analyzer web app" hands over the five files and the fonts: th
   await selectVisitorReplay(page, participantId);
   await expect(page.locator('[data-role="asset-note"]')).toHaveText('Experiment assets: 6 of 6 fonts matched.');
   await assertOnlyAllowed(page, seen, allow);
+});
+
+// ---------------------------------------------------------------------------
+// Load sample data after the hand-off, on the files step the hand-off lands
+// on (the results step hides it): the button adds the two sessions the tour
+// did not bring, leaves the two it did (same names) and the config, and
+// keeps the visitor's own: five participants, one of each, no duplicate id.
+// The counts line read 3 data files before the click: the visitor's session
+// and the two examples; the recording is counted apart.
+// ---------------------------------------------------------------------------
+test('Load sample data after the hand-off adds the two sessions the tour did not bring: five participants, no duplicate id', async ({ page }) => {
+  test.setTimeout(120000);
+  await fastForwardToFiles(page);
+  const participantId = await openInAnalyzer(page);
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
+  await page.click('[data-action="sample"]');
+  await expect(page.locator('[data-role="counts"]')).toContainText('5 data files');
+  await buildReport(page);
+  expect((await railOrder(page)).sort()).toEqual([participantId, 'DEMO-681w', 'DEMO-9mop', 'DEMO-a3f3', 'DEMO-bsq6'].sort());
+  await expect(page.locator('section[data-step="results"]')).not.toContainText('duplicate participantId');
 });
 
 // ---------------------------------------------------------------------------
@@ -419,7 +439,7 @@ test('a refused hand-off keeps the visitor on the files step, says why, and enab
 // ---------------------------------------------------------------------------
 test('a data file the hand-off cannot fetch fails the whole hand-off: the visitor stays, is told, and nothing is stored', async ({ page, baseURL }) => {
   await fastForwardToFiles(page);
-  await page.route(baseURL + '/assets/example-1.json', (route) => route.fulfill({ status: 404, body: 'not found' }));
+  await page.route(baseURL + '/assets/DEMO-bsq6.json', (route) => route.fulfill({ status: 404, body: 'not found' }));
   const button = page.locator('[data-action="open-analyzer"]');
   await button.click();
   const note = page.locator('[data-role="handoff-note"]');

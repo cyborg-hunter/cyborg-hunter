@@ -1,0 +1,6 @@
+{
+  "dataDir": "./data",
+  "filePattern": "*.json",
+  "participantIdField": "participantId",
+  "outputDir": "./report"
+}

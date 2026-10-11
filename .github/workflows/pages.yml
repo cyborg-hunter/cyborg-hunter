@@ -19,6 +19,8 @@ on:
   pull_request:
     paths:
       - 'demo/**'
+      - 'examples/demo-sessions/**'
+      - 'README.md'
       - 'src/**'
       - 'scripts/**'
       - 'packages/**'
@@ -35,6 +37,8 @@ on:
       - main
     paths:
       - 'demo/**'
+      - 'examples/demo-sessions/**'
+      - 'README.md'
       - 'src/**'
       - 'scripts/**'
       - 'packages/**'

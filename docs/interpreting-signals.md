@@ -22,7 +22,7 @@ The **tier** (`HARD` / `soft` / `clean`) is the screening verdict:
 
 `triage.md` sorts tier-first, then by triage score within a tier. Three consequences worth internalizing:
 
-1. **A HARD participant can rank above a soft participant with a higher score.** In the bundled [worked example](worked-example.md), the HARD row scores 18 and the soft row below it scores 21. That ordering is intentional: hard evidence (something crossed a count threshold) outranks any accumulation of soft evidence. Don't re-sort by score.
+1. **A HARD participant can rank above a soft participant with a higher score.** In the bundled [worked example](worked-example.md) the scores happen to agree with the tiers (45 and 21 on the HARD rows, 13 on the soft one), but a participant whose only evidence is two pastes would be HARD with a score of 10 and still rank above that soft row. That ordering is intentional: hard evidence (something crossed a count threshold) outranks any accumulation of soft evidence. Don't re-sort by score.
 2. **The triage score is blind to most signals.** Synthetic insertions, AI-extension detections, keyboard shortcuts, viewport shifts, zoom changes, and foreign inputs appear in the reason column but add zero to the score. A participant with "1015 synthetic insertions" and no clipboard/tab-away/sidebar activity scores 0. If a diagnostic signal matters for your study, filter `summary.csv` on its column; don't expect the ranking to do it.
 3. **Thresholds are per-participant.** Since 0.6.0 the library saves each participant's effective config, and the CLI scores each participant against their *own* saved cutoffs (tab-away duration, typing speed, soft threshold). Two participants with identical behavior can bin differently if they ran under different presets. The bin labels in the triage reason ("≤5s / 5–10s" for a strict-preset participant) reflect this.
 
@@ -40,7 +40,7 @@ Each tell has innocent causes. A page that dispatches its own clicks (a script t
 
 **How to read it:** a viewport-width shift means *the usable width changed*: the participant resized the window, docked something, or a sidebar-style panel opened or closed. That makes it a **diagnostic** signal, useful context but never scored, because window resizing is ordinary behavior. The scored sibling is the **sidebar** signal (`sidebarGap`), which uses different evidence (the `outerWidth − innerWidth` gap and layout compression) specific to a panel eating space *inside* the window. In practice:
 
-- Viewport shifts alone, without sidebar events: usually the participant adjusting their window. The clean participant in the worked example has exactly this pattern.
+- Viewport shifts alone, without sidebar events: usually the participant adjusting their window.
 - Sidebar events (they score 3× in triage and weigh into the soft score) corroborated by viewport shifts around the same timestamps: consistent with a browser AI panel opening. Check the session timeline, where both lanes share one time axis.
 - Counts on pre-0.6.1 data run higher for the same behavior, because un-debounced dragging logged one event per frame. Don't compare raw counts across library versions.
 

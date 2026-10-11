@@ -7,6 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import Papa from 'papaparse';
 import { ingest, fsReader } from '../../src/cli/ingest.js';
 import { ingestFiles, migrateArtifact, artifactKind } from '../../src/cli/ingest-core.js';
 import { webGunzip, webSha256 } from '../../demo/analyze/web-deps.js';
@@ -43,11 +44,12 @@ describe('ingestFiles over readers', () => {
   });
 
   it('reads a participant CSV exactly once', async () => {
-    const csv = memReader('p1.csv', readFileSync('examples/synthetic-pilot/data/sim-SYN-CLEAN-01.csv'));
+    const text = readFileSync('tests/cli/fixtures/conj-disj-sample.csv');
+    const csv = memReader('p1.csv', text);
+    const ids = [...new Set(Papa.parse(String(text), { header: true, skipEmptyLines: true }).data.map((r) => r.subjectId))].sort();
     const { participants } = await ingestFiles({ participantFiles: [csv], replayFiles: [csv] },
-      { dataDir: '.', filePattern: '*.csv', participantIdField: 'subject_ID' }, webDeps);
-    assert.strictEqual(participants.length, 1);
-    assert.strictEqual(participants[0].participantId, 'SYN-CLEAN-01');
+      { dataDir: '.', filePattern: '*.csv', participantIdField: 'subjectId' }, webDeps);
+    assert.deepStrictEqual(participants.map((p) => p.participantId).sort(), ids);
     assert.strictEqual(csv.reads, 1);
   });
 

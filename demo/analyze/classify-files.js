@@ -7,7 +7,7 @@ import { ASSET_EXTENSIONS } from '../../src/cli/asset-match.js';
 
 export var CONFIG_NAME = 'cyborg-hunter.config.json';
 
-function baseName(path) { var i = path.lastIndexOf('/'); return i < 0 ? path : path.slice(i + 1); }
+export function baseName(path) { var i = path.lastIndexOf('/'); return i < 0 ? path : path.slice(i + 1); }
 function extOf(name) {
   var lower = name.toLowerCase();
   if (lower.endsWith('.json.gz')) return '.json.gz';

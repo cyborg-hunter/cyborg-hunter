@@ -152,22 +152,21 @@ test('peek: an object with trials keeps the top-level and metadata reading, what
 });
 
 test("cyborg-hunter's own per-trial columns are never offered as the id, whatever the column order", async () => {
-  // The synthetic pilot with its id column renamed to a name nobody knows and
-  // moved to the end, where jsPsych's addProperties columns land after the
-  // extension's integrity* columns: those are constant per file and, on a
-  // small cohort, unique across files too.
-  const { readFileSync, readdirSync } = await import('node:fs');
-  const dir = 'examples/synthetic-pilot/data/';
+  // A jsPsych CSV with the extension's columns, its id column renamed to a
+  // name nobody knows and moved to the end, where jsPsych's addProperties
+  // columns land after the extension's: cyborgHunterVersion is constant per
+  // file, as the id is, yet the extension's columns are never offered.
+  const { readFileSync } = await import('node:fs');
   const peeks = [];
   const Papa = (await import('papaparse')).default;
-  for (const f of readdirSync(dir).filter((n) => n.endsWith('.csv')).sort()) {
-    const rows = Papa.parse(readFileSync(dir + f, 'utf8'), { header: true, skipEmptyLines: true }).data;
-    const fields = Object.keys(rows[0]).filter((k) => k !== 'subject_ID').concat('worker');
-    const moved = rows.map((r) => ({ ...r, worker: r.subject_ID }));
+  for (const f of ['tests/cli/fixtures/conj-disj-sample.csv']) {
+    const rows = Papa.parse(readFileSync(f, 'utf8'), { header: true, skipEmptyLines: true }).data;
+    const fields = Object.keys(rows[0]).filter((k) => k !== 'subjectId').concat('worker');
+    const moved = rows.map((r) => ({ ...r, worker: r.subjectId }));
     peeks.push(await peekParticipantFile(reader(f, Papa.unparse(moved, { columns: fields }))));
   }
   assert.equal(peeks[0].keys.at(-1), 'worker', 'the id column is last');
-  assert.ok(peeks[0].keys.includes('integrityCopyCount') && peeks[0].keys.includes('cyborgHunterVersion'));
+  assert.ok(peeks[0].keys.includes('integrityPasteCount') && peeks[0].keys.includes('cyborgHunterVersion'));
   const r = suggestIdField(peeks);
   assert.equal(r.suggested, 'worker');
   assert.deepEqual(r.candidates.map((c) => c.field), ['worker']);

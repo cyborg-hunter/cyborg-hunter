@@ -41,13 +41,11 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   adds 69 bytes for the device facts, so Qualtrics sessions read "not
   collected" while the automation flag still comes through. Sessions
   recorded before 0.14 show the checks as "not recorded" and are not
-  assessed (docs/upgrading.md). The analyzer's sample has a fourth session,
-  SYN-GENERATED-04, recorded as 0.14.0 data: its pointer verdict is highly
-  suspicious (the automation flag, and two of its four trials clicked
-  without pointer movement), and its other two trials move in straight
-  lines before they click (efficiency 1.000, deviation 0.0, n = 2). The
-  sample's three other sessions keep their 0.6.1 shape, show the checks as
-  not recorded and are not assessed.
+  assessed (docs/upgrading.md). The bundled dataset's agent session,
+  DEMO-bsq6, reads highly suspicious: all twelve of its first clicks with a
+  known position arrived without a path. The two sessions recorded on the
+  earlier tour, before the device facts existed, show the checks as not
+  recorded and are not assessed.
 
 ### Changed
 - `computeMouseMetrics` (each trial's `mouseMetrics`) measures path length
@@ -56,7 +54,21 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   it says that `pathEfficiency` covers the whole trial (the cursor section's
   efficiency is per movement) and that direction changes and speed variance
   depend on the sampling interval.
+- The bundled example dataset is four sessions recorded on the demo tour
+  (`examples/demo-sessions/`), three by the author and one by a GPT agent
+  driving Chrome from a sidebar; the CLI's worked example, the README table,
+  the analyzer's "Load sample data" and the demo's two example participants
+  read it. "Load sample data" adds the sessions to the files already listed
+  instead of replacing them: a session already listed by name is left out,
+  the sample's config comes only to an empty list (a cohort keeps the config
+  and settings it has), and each added file can be removed like any other.
+  The sessions are read under the cohort's participant-ID field: beside
+  files keyed by another field, one side reads as `unknown` until it is
+  removed.
 
+### Removed
+- The synthetic pilot (`examples/synthetic-pilot/`) and the demo's generated
+  example participants, with their generators.
 ## [0.13.0] — 2026-10-10
 
 The demo tour and the analyze page after two review rounds: a ten-step tour
