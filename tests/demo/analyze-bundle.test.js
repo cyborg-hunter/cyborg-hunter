@@ -56,12 +56,12 @@ test('carries the measured cohort size and names its fixture', () => {
   assert.ok(bundle.includes(TESTED_FIXTURE), 'fixture text baked in');
 });
 
-test('reaches no network and no Node API', () => {
+test('reaches no other address and no Node API', () => {
   assert.equal(bundle.includes('registry.npmjs.org'), false, 'update check is unreachable');
   // ESM imports as well as require(): esbuild keeps either form when a
   // built-in is marked external, so both must be absent.
   assert.equal(NODE_IMPORT.test(bundle), false);
-  assert.equal(/fetch\(\s*["'`]\.\//.test(bundle), false, 'no fetch of the page\'s own files');
+  assert.equal(/fetch\(\s*["'`]\.\//.test(bundle), false, 'no fetch of a literal relative path (the sample is fetched by a URL built from the page address)');
 });
 
 test('can be inlined into a <script> for the offline file', () => {

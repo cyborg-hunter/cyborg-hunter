@@ -102,6 +102,12 @@ export function createPage(root, worker, opts) {
   // cancelled or restarted, since a large cohort can be slow and still finish.
   var stallHintMs = opts && opts.stallHintMs ? opts.stallHintMs : 60000;
   var stallTimer = null;
+  // The sample's recordings (main.js): names and version baked at build time;
+  // offline from file:, where fetch has no origin to allow; base is the page's
+  // URL the names resolve against. Absent in an older build: the sample is the
+  // trackers only.
+  var sampleRecordings = opts && opts.sampleRecordings && opts.sampleRecordings.names && opts.sampleRecordings.names.length ? opts.sampleRecordings : null;
+  var fetchingSample = false;   // the recordings' fetch, after the worker's reply: in flight like the request itself
   // True while the error on screen is the watchdog's: a selection that
   // arrives late proves the report rendered after all, and clears it.
   var watchdogErrorShown = false;
@@ -120,13 +126,20 @@ export function createPage(root, worker, opts) {
 
   function send(msg, transfer) { worker.postMessage(msg, transfer || []); }
   function waitFor(type) { return new Promise(function (resolve, reject) { pending[type] = { resolve: resolve, reject: reject }; }); }
-  function busy() { return !!(pending.checked || pending.done || pending.sample); }
+  function busy() { return !!(pending.checked || pending.done || pending.sample || fetchingSample); }
   function goTo(name) {
     state.step = name;
     root.querySelectorAll('section.step').forEach(function (s) { s.hidden = s.dataset.step !== name; });
     q(root, 'settings').hidden = !state.checked || (name !== 'files' && name !== 'results');
   }
   function updateControls() {
+    // The files step's inputs while a sample request, a check or a run is on
+    // its way: the drop handler refuses meanwhile, and these say so.
+    var filesBusy = busy();
+    root.querySelector('[data-action="sample"]').disabled = filesBusy;
+    q(root, 'file-input').disabled = filesBusy;
+    q(root, 'dir-input').disabled = filesBusy;
+    q(root, 'dropzone').classList.toggle('busy', filesBusy);
     // A file the check read as data, as the counts line says: the classifier's
     // participant list also holds every JSON recording.
     runButton.disabled = busy() || !state.checked || kindCount(state.checked, 'data') === 0;
@@ -216,7 +229,7 @@ export function createPage(root, worker, opts) {
   // run cannot leave the page busy for good. The worker is then replaced by a
   // fresh one from opts.createWorker, since a dead worker would swallow the
   // retry. The new one holds no run, so replays need the report built again.
-  function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : pending.sample ? 'sample' : replayWaiters.length ? 'replay' : null; }
+  function inFlight() { return pending.done ? 'run' : pending.checked ? 'check' : (pending.sample || fetchingSample) ? 'sample' : replayWaiters.length ? 'replay' : null; }
   function workerFailed(message) {
     var phase = inFlight();
     var restarted = replaceWorker();
@@ -595,6 +608,7 @@ export function createPage(root, worker, opts) {
     q(root, 'file-input').value = ''; q(root, 'dir-input').value = '';
     q(root, 'files-panel').hidden = true;
     q(root, 'handoff-assets').hidden = true;
+    q(root, 'sample-recordings').hidden = true;
     state.dropCount = 0;
     goTo('files');
     clearError();
@@ -634,7 +648,8 @@ export function createPage(root, worker, opts) {
   // comes only to an empty list: a cohort keeps the settings it brought, or
   // the ones the analyst set. The sessions are keyed by participantId, so
   // beside files keyed by another field one side reads as unknown until it
-  // is removed.
+  // is removed. The recordings are not in the bundle: on the site they are
+  // fetched now, inside this same request; from file: the line offers them.
   function loadSample() {
     q(root, 'handoff-empty').hidden = true;
     if (busy()) return Promise.resolve();
@@ -647,16 +662,66 @@ export function createPage(root, worker, opts) {
     armStallHint();
     send({ type: 'sample' });
     return reply.then(function (msg) {
-      var listed = {};
-      state.entries.forEach(function (e) { listed[baseName(e.path)] = true; });
-      var entries = [];
-      msg.files.forEach(function (f) {
-        var name = baseName(f.path);
-        if (listed[name] || (name === CONFIG_NAME && !empty)) return;
-        entries.push({ path: name, file: new File([f.text], name, { type: 'application/json' }) });
-      });
-      return addFiles(entries);
+      fetchingSample = true;
+      updateControls();
+      return fetchSampleRecordings().then(function (fetched) {
+        fetchingSample = false;
+        var listed = {};
+        state.entries.forEach(function (e) { listed[baseName(e.path)] = true; });
+        var entries = [];
+        msg.files.concat(fetched.files).forEach(function (f) {
+          var name = baseName(f.path);
+          if (listed[name] || (name === CONFIG_NAME && !empty)) return;
+          listed[name] = true;
+          entries.push({ path: name, file: new File([f.text], name, { type: 'application/json' }) });
+        });
+        showSampleRecordingsLine(fetched.failed);
+        return addFiles(entries);
+      }, function (e) { fetchingSample = false; updateControls(); throw e; });
     });
+  }
+  // The recordings named at build time, fetched from the page's own origin
+  // (the policy allows it). One that fails (a non-2xx answer, a network
+  // error) is left out and named on the line; the others and the trackers
+  // are still added. From file: nothing is fetched.
+  function fetchSampleRecordings() {
+    var sr = sampleRecordings;
+    if (!sr || sr.offline || !sr.fetch) return Promise.resolve({ files: [], failed: [] });
+    return Promise.all(sr.names.map(function (name) {
+      var url = new URL('sample/' + name, sr.base).href;
+      return Promise.resolve().then(function () { return sr.fetch(url); }).then(function (res) {
+        if (!res || !res.ok) throw new Error('HTTP ' + (res && res.status));
+        return res.text();
+      }).then(function (text) { return { path: name, text: text }; }, function () { return { path: name, failed: true }; });
+    })).then(function (results) {
+      return { files: results.filter(function (r) { return !r.failed; }),
+        failed: results.filter(function (r) { return r.failed; }).map(function (r) { return r.path; }) };
+    });
+  }
+  // The line under the counts: from file:, the three downloads (the release
+  // of this version holds them); on the site, the recordings that could not
+  // be fetched. Hidden otherwise, and by Start over.
+  function showSampleRecordingsLine(failed) {
+    var line = q(root, 'sample-recordings');
+    line.textContent = '';
+    line.hidden = true;
+    var sr = sampleRecordings;
+    if (!sr) return;
+    if (sr.offline) {
+      line.appendChild(document.createTextNode('The sessions’ replay recordings are not in this file. Download '));
+      sr.names.forEach(function (name, i) {
+        var a = document.createElement('a');
+        a.href = 'https://github.com/cyborg-hunter/cyborg-hunter/releases/download/v' + sr.version + '/' + name;
+        a.setAttribute('download', name);
+        a.textContent = name;
+        line.appendChild(a);
+        line.appendChild(document.createTextNode(i < sr.names.length - 1 ? ', ' : ', then drop them here.'));
+      });
+      line.hidden = false;
+    } else if (failed.length) {
+      line.textContent = 'Replay recordings not fetched: ' + failed.join(', ') + '. Their sessions show no replay.';
+      line.hidden = false;
+    }
   }
   // Opened from the demo with nothing to hand over (main.js): the files step
   // says so above the drop zone, until a drop, the sample or Start over.

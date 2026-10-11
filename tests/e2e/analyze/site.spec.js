@@ -36,6 +36,7 @@ test('dropped demo sessions: same triage order as the sample, zip tree matches t
   await page.setInputFiles('[data-role="file-input"]', sampleFiles().concat(sampleRecordingFiles()));
   await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
   await expect(page.locator('[data-role="counts"]')).toContainText('4 data files');
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 replay recordings');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   await buildReport(page);

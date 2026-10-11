@@ -86,7 +86,111 @@ async function toResults(t) {
   document.querySelector('iframe.analyze-report').dispatchEvent(new win.Event('load'));
 }
 
-test('the page declares the no-network policy verbatim, before anything else in <head>', () => {
+// The sample's recordings: on the site they are fetched after the worker's
+// reply (the names and the version are baked); from file: they are offered as
+// the release's downloads. A stub fetch answers from a table and records the
+// URLs asked.
+const RECORDINGS = ['DEMO-681w.replay.json', 'DEMO-a3f3.replay.json', 'DEMO-bsq6.replay.json'];
+function fetchStub(answers) {
+  const asked = [];
+  const fn = (url) => {
+    asked.push(url);
+    const name = url.slice(url.lastIndexOf('/') + 1);
+    const a = answers[name] || { ok: true, status: 200, text: '{"schema_version":2,"participant_id":"' + name.slice(0, 9) + '"}' };
+    if (a.reject) return Promise.reject(new Error('network'));
+    return Promise.resolve({ ok: a.ok, status: a.status, text: async () => a.text });
+  };
+  fn.asked = asked;
+  return fn;
+}
+const recordingOpts = (fetch, extra) => ({ sampleRecordings: { names: RECORDINGS, version: '0.14.0', offline: false,
+  base: 'https://example.test/analyze/', fetch, ...(extra || {}) } });
+const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
+
+test('Load sample data on the site fetches the three recordings after the worker’s reply and lists them beside the trackers', async () => {
+  const fetch = fetchStub({});
+  const t = boot(recordingOpts(fetch));
+  action('sample').click();
+  await tick();
+  assert.deepEqual(fetch.asked, [], 'nothing fetched before the worker answers');
+  t.emit(SAMPLE);
+  await settle();
+  assert.deepEqual(fetch.asked, RECORDINGS.map((n) => 'https://example.test/analyze/sample/' + n));
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.concat(RECORDINGS).sort());
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+test('a recording that cannot be fetched is left out: the trackers are listed, the line names it', async () => {
+  const fetch = fetchStub({ 'DEMO-a3f3.replay.json': { ok: false, status: 404, text: '' }, 'DEMO-bsq6.replay.json': { reject: true } });
+  const t = boot(recordingOpts(fetch));
+  action('sample').click();
+  await tick();
+  t.emit(SAMPLE);
+  await settle();
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.concat(['DEMO-681w.replay.json']).sort());
+  assert.equal(role('sample-recordings').hidden, false);
+  assert.equal(role('sample-recordings').textContent,
+    'Replay recordings not fetched: DEMO-a3f3.replay.json, DEMO-bsq6.replay.json. Their sessions show no replay.');
+});
+
+test('from file: nothing is fetched; the line offers the three recordings as the release’s downloads', async () => {
+  const fetch = fetchStub({});
+  const t = boot(recordingOpts(fetch, { offline: true }));
+  action('sample').click();
+  await tick();
+  t.emit(SAMPLE);
+  await settle();
+  assert.deepEqual(fetch.asked, []);
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.slice().sort());
+  const line = role('sample-recordings');
+  assert.equal(line.hidden, false);
+  assert.deepEqual([...line.querySelectorAll('a')].map((a) => [a.getAttribute('href'), a.textContent, a.getAttribute('download')]),
+    RECORDINGS.map((n) => ['https://github.com/cyborg-hunter/cyborg-hunter/releases/download/v0.14.0/' + n, n, n]));
+  assert.match(line.textContent, /^The sessions’ replay recordings are not in this file\. Download DEMO-681w\.replay\.json, DEMO-a3f3\.replay\.json, DEMO-bsq6\.replay\.json, then drop them here\.$/);
+});
+
+test('the fetch is part of the sample request: the files step’s inputs are disabled until the recordings are in, and Start over hides the line', async () => {
+  const releases = [];   // one resolver per fetch, released together below
+  const fetch = (url) => new Promise((resolve) => { releases.push(() => resolve({ ok: true, status: 200, text: async () => '{"schema_version":2}' })); });
+  const t = boot(recordingOpts(fetch));
+  assert.equal(action('sample').disabled, false);
+  action('sample').click();
+  await tick();
+  assert.equal(action('sample').disabled, true);
+  assert.equal(role('file-input').disabled, true);
+  assert.equal(role('dir-input').disabled, true);
+  assert.ok(role('dropzone').classList.contains('busy'));
+  t.emit(SAMPLE);
+  await settle();
+  assert.equal(action('sample').disabled, true, 'still in flight while the recordings are fetched');
+  assert.equal(releases.length, 3);
+  releases.forEach((r) => r());
+  await settle();
+  // The check went out with the files: in flight until its reply.
+  assert.equal(t.sent.filter((m) => m.type === 'check').length, 1);
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(action('sample').disabled, false);
+  assert.equal(role('file-input').disabled, false);
+  assert.ok(!role('dropzone').classList.contains('busy'));
+  // Start over hides the line (shown here by a failed fetch on the next click).
+  action('reset').click();
+  await settle();
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+test('without baked recordings (an older build) Load sample data behaves as before', async () => {
+  const t = boot();
+  await loadSample(t);
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.slice().sort());
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+test('the page declares its policy verbatim, before anything else in <head>', () => {
   const head = html.slice(html.indexOf('<head>') + 6, html.indexOf('</head>'));
   const metas = head.match(/<meta[^>]*>/g);
   assert.equal(metas[1], '<meta http-equiv="Content-Security-Policy" content="' + PAGE_CSP + '">');

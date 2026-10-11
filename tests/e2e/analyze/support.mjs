@@ -51,6 +51,7 @@ import { gzipSync } from 'node:zlib';
 import { join, resolve, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unzipSync, strFromU8 } from 'fflate';
+import { sampleRecordingNames } from '../../../tools/sample-recordings.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(__dirname, '..', '..', '..');
@@ -143,7 +144,8 @@ export async function assertOnlyAllowed(page, seen, allow) {
   expect(await cspViolations(page), 'security policy violations (attempted loads)').toEqual([]);
   expect(popups.get(page) || [], 'windows the page opened').toEqual([]);
 }
-export const siteAllowlist = (baseURL) => [baseURL + '/analyze/', baseURL + '/analyze/index.html', baseURL + '/analyze/analyze.bundle.js'];
+export const siteAllowlist = (baseURL) => [baseURL + '/analyze/', baseURL + '/analyze/index.html', baseURL + '/analyze/analyze.bundle.js']
+  .concat(sampleRecordingNames(join(SAMPLE_DIR, 'data')).map((n) => baseURL + '/analyze/sample/' + n));
 
 // Ready: the worker's ready message has reached the page (page.js keeps its
 // limits); nothing on screen shows it.

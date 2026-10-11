@@ -3,8 +3,10 @@
 // boot files, through sample load, report build and the zip download; and
 // the same for the offline single file opened from disk, through dropped
 // files, which requests nothing but itself.
+import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip, sampleFiles, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, OFFLINE_FILE } from './support.mjs';
+import { VERSION } from '../../../src/shared/constants.js';
+import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip, sampleFiles, sampleRecordingFiles, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, OFFLINE_FILE } from './support.mjs';
 
 test('the page makes no request beyond its own files, sample → report → zip', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -12,8 +14,20 @@ test('the page makes no request beyond its own files, sample → report → zip'
   await page.goto('/analyze/');
   await waitReady(page);
   await loadSample(page);
+  await expect(page.locator('[data-role="counts"]')).toContainText('4 data files');
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 replay recordings');
   await buildReport(page);
   expect(await railOrder(page)).toEqual(SAMPLE_ORDER);
+  // The three recordings are the sample's: the card lists every participant,
+  // the three with a recording enabled and DEMO-9mop's option disabled "(no
+  // replay)"; the agent's plays.
+  await reportSelected(page);
+  const options = await page.locator('[data-role="replay-select"] option').evaluateAll((os) => os.map((o) => [o.value, o.textContent, o.disabled]));
+  expect(options.sort()).toEqual([['DEMO-681w', 'DEMO-681w', false], ['DEMO-9mop', 'DEMO-9mop (no replay)', true],
+    ['DEMO-a3f3', 'DEMO-a3f3', false], ['DEMO-bsq6', 'DEMO-bsq6', false]]);
+  await page.selectOption('[data-role="replay-select"]', 'DEMO-bsq6');
+  await page.click('[data-action="load-replay"]');
+  await expect(page.locator('[data-role="replay-mount"] iframe')).toBeVisible({ timeout: 20000 });
   const zip = await downloadZip(page);
   expect(zip.names).toContain('triage.md');
   await assertOnlyAllowed(page, seen, allow);
@@ -32,6 +46,12 @@ test('the offline single file works from file:// and makes no request at all', a
   await page.setInputFiles('[data-role="file-input"]', sampleFiles());
   await expect(page.locator('[data-role="counts"]')).toContainText('4 data files');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
+  // The sample's recordings are not in the file: the click offers them as
+  // this version's release downloads, and fetches nothing.
+  await page.click('[data-action="sample"]');
+  await expect(page.locator('[data-role="sample-recordings"]')).toContainText('then drop them here');
+  const hrefs = await page.locator('[data-role="sample-recordings"] a').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
+  expect(hrefs).toEqual(sampleRecordingFiles().map((p) => 'https://github.com/cyborg-hunter/cyborg-hunter/releases/download/v' + VERSION + '/' + basename(p)));
   await buildReport(page);
   expect(await railOrder(page)).toEqual(SAMPLE_ORDER);
   const zip = await downloadZip(page);

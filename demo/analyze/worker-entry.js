@@ -1,6 +1,6 @@
 // demo/analyze/worker-entry.js
 // Everything the analyze page computes runs here, off the main thread, from a
-// blob-URL worker (so it inherits the page's no-network policy). The CLI's own
+// blob-URL worker (so it inherits the page's policy). The CLI's own
 // cores do the work: ingestFiles over the dropped files, buildReport into a
 // streaming zip, renderInPageHtml for the report iframe, buildViewerModel +
 // applyAssetMap for one replay at a time. Nothing is fetched: the viewer

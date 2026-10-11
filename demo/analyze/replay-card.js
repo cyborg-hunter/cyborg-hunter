@@ -15,7 +15,7 @@ export function createReplayCard(container, assets, requestModel) {
   card.className = 'replay-card';
   card.innerHTML =
     '<h3>Session replay</h3>' +
-    '<p class="hint" data-role="replay-policy">Replays play from the dropped data only. External stylesheets and images are never fetched (this page cannot reach the network); drop the experiment’s CSS and image files with the data for styled replays, or use the CLI.</p>' +
+    '<p class="hint" data-role="replay-policy">Replays play from the listed files only. External stylesheets and images are never fetched (the page requests nothing beyond its own site, and the offline file nothing at all); drop the experiment’s CSS and image files with the data for styled replays, or use the CLI.</p>' +
     '<p><select data-role="replay-select"></select> <button class="secondary" data-action="load-replay">Load replay</button> <span class="hint" data-role="asset-note"></span></p>' +
     '<div data-role="replay-mount"></div>';
   container.appendChild(card);
