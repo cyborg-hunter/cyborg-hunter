@@ -5,6 +5,14 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-10-11
+
+Replays for the sample: the bundled example dataset now carries the replay
+recordings of three of its four sessions, so `cyborg-hunter report` there
+plays them, and the analyzer's Load sample data fetches them from the site
+(the offline file offers them as release downloads). Nothing changes in
+collected data, configuration or the report's contents.
+
 ### Added
 - `examples/demo-sessions/`: the replay recordings of three of the four
   sessions (`DEMO-<id>.replay.json`, 1.7–2.3 MB each), so `cyborg-hunter
