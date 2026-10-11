@@ -10,7 +10,7 @@ class CyborgHunterExtension {
     // and package.json). Hand-bumped on each release; if you forget, the
     // jsPsych developer console shows a stale number — the actual version
     // attached to data is read from window.CyborgHunter.VERSION at runtime.
-    version: '0.11.0',
+    version: '0.12.0',
     data: { integrity: { type: 'object' } }
   };
 
