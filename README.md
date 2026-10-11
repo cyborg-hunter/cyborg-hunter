@@ -235,7 +235,7 @@ Run the test suite with `npm test`. Before publishing, run `scripts/check-public
 
 ```bibtex
 @software{konuk_cyborg_hunter,
-  author  = {Konuk, Can and Btesh, Victor and Nunez, Jose Luis},
+  author  = {Konuk, Can and Btesh, Victor and Nunes, Jose Luiz},
   title   = {cyborg-hunter: detecting AI-tool use in browser-based behavioral experiments},
   year    = {2026},
   version = {0.14.0},
