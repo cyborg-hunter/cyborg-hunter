@@ -5,6 +5,15 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-10-10
+
+Cursor dynamics in the report: a pointer verdict per session (clean,
+suspicious, highly suspicious, or not assessed, with its reason) from what
+the browser reports and from first clicks that arrive without a path, the
+tells shown and the movement shape measured. The bundled example dataset is
+now four sessions recorded on the demo tour, one of them by an AI agent, and
+the analyzer's Load sample data adds them to the files already listed.
+
 ### Added
 - Report (CLI and `/analyze/`): a "Cursor dynamics" section for each
   session that opens with its pointer verdict (clean, suspicious, highly
