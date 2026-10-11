@@ -128,7 +128,7 @@ test('switching participant tears down the viewer and mounts the right replay', 
     await expect(page.locator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT-B"]')).toHaveCount(1);
     await expect(page.locator('iframe.replay-host-frame')).toHaveCount(1);
     const host = page.frameLocator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT-B"]');
-    await expect(host.locator('.replay-note').filter({ hasText: 'no-network policy' })).toContainText('1 external stylesheet(s) cannot be fetched', { timeout: 30000 });
+    await expect(host.locator('.replay-note').filter({ hasText: 'requests nothing from other addresses' })).toContainText('1 external stylesheet(s) cannot be fetched', { timeout: 30000 });
     await expect(host.locator('.replay-css-btn')).toHaveCount(0);
     // Selecting in the report switches the dropdown too, and tears the viewer down.
     await reportFrame(page).locator('.cohort-row[data-pid="DEMO-FIXT"]').click();

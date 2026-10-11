@@ -5,6 +5,33 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+### Added
+- `examples/demo-sessions/`: the replay recordings of three of the four
+  sessions (`DEMO-<id>.replay.json`, 1.7–2.3 MB each), so `cyborg-hunter
+  report` there plays them. They are the tour's recordings without what the
+  recording browser's extensions added to the page; `DEMO-a3f3`'s shows
+  `Copy Copy` where its paste was, with nothing typed after it. The
+  recordings carry the browser line (Chrome on a Mac) and each session's
+  start time and viewport, nothing else that identifies.
+- `/analyze/`: "Load sample data" on the site fetches the three recordings
+  after adding the trackers, inside the same request, so the report's replay
+  card plays them; a recording that cannot be fetched is named on a line and
+  left out. The offline file offers the three as this version's release
+  downloads instead, with "then drop them here". The page's policy allows
+  its own origin (`connect-src 'self'`); the offline file's still allows none.
+- The GitHub release carries the three recordings beside the offline analyzer.
+
+### Changed
+- Live demo: the visitor's id is drawn again when it would be one of the
+  bundled sessions' (`DEMO-9mop`, `DEMO-bsq6`, `DEMO-681w`, `DEMO-a3f3`).
+
+### Fixed
+- `/analyze/`: the files step's inputs (Load sample data, choose files, choose
+  a folder, the drop zone) are disabled while a request is on its way; before,
+  they looked available and a drop was silently refused.
+- Docs: `event-log.csv` holds the events recorded during a trial; the
+  reference said every tab-away.
+
 ## [0.14.0] — 2026-10-10
 
 Cursor dynamics in the report: a pointer verdict per session (clean,

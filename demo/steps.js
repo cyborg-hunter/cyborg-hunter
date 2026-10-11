@@ -331,6 +331,10 @@ export const DOWNLOAD_BATCHES = [
   },
 ];
 
+/** The bundled dataset's session ids (examples/demo-sessions): the visitor's
+ * own id is drawn again when it would take one of these (participant-id.js). */
+export const BUNDLED_IDS = ['DEMO-9mop', 'DEMO-bsq6', 'DEMO-681w', 'DEMO-a3f3'];
+
 /** The tour's own typefaces (demo.css @font-face), handed to the analyzer
  * with the files so a replay of this page renders in them. Not offered as
  * downloads: they are not study data. */

@@ -698,10 +698,10 @@
         omittedSheets + ' external stylesheet(s) are fetched from their origins (network requests leave this machine).');
       header.appendChild(fetchedNote);
     } else if (omittedSheets > 0 && noExternalCss) {
-      // The host forbids network access, so no fetch is offered; say why the
-      // sheet is missing and what would supply it.
+      // The host fetches nothing from other addresses, so no fetch is offered;
+      // say why the sheet is missing and what would supply it.
       header.appendChild(el('span', 'replay-note',
-        omittedSheets + ' external stylesheet(s) cannot be fetched under this page\u2019s no-network policy. ' +
+        omittedSheets + ' external stylesheet(s) cannot be fetched: this page requests nothing from other addresses. ' +
         'Drop the experiment\u2019s CSS and image files with the data, or use the CLI, to play this replay styled.'));
     } else if (omittedSheets > 0) {
       var cssNote = el('span', 'replay-note',

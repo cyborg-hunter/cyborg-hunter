@@ -238,7 +238,7 @@ same four counts; T is `total` and K is `total` minus `withDeviceFacts`.
 
 ### `event-log.csv`
 
-Every clipboard, drop, synthetic-insertion, and tab-away event in chronological order:
+Every clipboard, drop, synthetic-insertion, and tab-away event recorded during a trial, in chronological order (a tab-away between trials counts in the session's totals and has no row here):
 
 | Column | Description |
 |---|---|

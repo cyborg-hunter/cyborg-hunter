@@ -15,7 +15,9 @@
 //      under demo/analyze/ but index.html and the built bundle, and the two
 //      scripts only that bundle uses.
 //   4. Copy the files step's two example participants from
-//      examples/demo-sessions/data/ into assets/.
+//      examples/demo-sessions/data/ into assets/, and the sample's replay
+//      recordings (`*.replay.json`) into analyze/sample/, where the analyze
+//      page fetches them.
 //   5. Copy the report's typefaces, which demo.css loads for the tour.
 //   6. Write the analyze page as one offline file,
 //      .demo-site/analyze/cyborg-hunter-analyze.html (bundle inlined, policy

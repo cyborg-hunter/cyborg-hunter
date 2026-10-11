@@ -4,9 +4,11 @@
 // papaparse + fflate) to a string; pass 2 bundles the page (main.js) with that
 // string as a virtual module, so the page creates its worker from a blob URL
 // and never loads a second file. The replay viewer client, the report fonts
-// and the bundled sessions (examples/demo-sessions) are baked in the same
-// way: the page's policy forbids fetching them. platform 'browser' is the
-// gate against a Node-only import creeping into a core.
+// and the bundled sessions' trackers (examples/demo-sessions) are baked in the
+// same way, so the offline file carries them too; the sessions' replay
+// recordings are not: the site serves them and the page fetches them on Load
+// sample data. platform 'browser' is the gate against a Node-only import
+// creeping into a core.
 // Run via `npm run demo:analyze`; ANALYZE_OUTDIR redirects the output (tests).
 import esbuild from 'esbuild';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
