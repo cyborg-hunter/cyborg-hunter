@@ -8,8 +8,8 @@ authors:
     given-names: Can
   - family-names: Btesh
     given-names: Victor
-  - family-names: Nunez
-    given-names: Jose Luis
+  - family-names: Nunes
+    given-names: Jose Luiz
 repository-code: https://github.com/cyborg-hunter/cyborg-hunter
 abstract: >-
   A JavaScript library and CLI for detecting AI-tool use during browser-based

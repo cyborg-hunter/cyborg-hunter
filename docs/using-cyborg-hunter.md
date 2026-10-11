@@ -387,7 +387,7 @@ The settings are the ones a report can apply after collection: the
 soft-score threshold, the score weights, the ID, integrity and
 session-report fields, and the platform ID field. Changing one on the results
 re-analyses at once, without dropping the files again. "Load sample data"
-adds four sessions recorded on the demo tour (three by the author, one by an
+adds four sessions recorded on the demo tour (three by a human tester, one by an
 AI agent) to the files already listed, so you can see what you get before
 dropping real data, or beside data recorded under `participantId` (the
 one-line setup, the demo tour). "Export config" writes a

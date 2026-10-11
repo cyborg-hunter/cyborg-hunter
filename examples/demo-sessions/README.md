@@ -1,6 +1,6 @@
 # demo-sessions
 
-Four sessions recorded on this project's demo tour (the public demo at the repository's Pages site), for running `cyborg-hunter report` before you have data of your own. Three were recorded by the project's author and one by a GPT agent driving Chrome from a browser sidebar. One session per triage tier and the agent's:
+Four sessions recorded on this project's demo tour (the public demo at the repository's Pages site), for running `cyborg-hunter report` before you have data of your own. Three were recorded by Mira, a human tester, and one by a GPT agent driving Chrome from a browser sidebar. One session per triage tier and the agent's:
 
 | file | who | tour | recording | what it shows |
 |---|---|---|---|---|

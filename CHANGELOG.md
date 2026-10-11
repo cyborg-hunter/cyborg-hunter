@@ -64,7 +64,7 @@ the analyzer's Load sample data adds them to the files already listed.
   efficiency is per movement) and that direction changes and speed variance
   depend on the sampling interval.
 - The bundled example dataset is four sessions recorded on the demo tour
-  (`examples/demo-sessions/`), three by the author and one by a GPT agent
+  (`examples/demo-sessions/`), three by Mira, a human tester, and one by a GPT agent
   driving Chrome from a sidebar; the CLI's worked example, the README table,
   the analyzer's "Load sample data" and the demo's two example participants
   read it. "Load sample data" adds the sessions to the files already listed

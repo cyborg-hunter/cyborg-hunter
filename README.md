@@ -10,7 +10,7 @@ Optional companion deterrence modules ship in the same package (`ch.js` bundles 
 
 ### Example: what a report looks like
 
-The bundled dataset (`examples/demo-sessions/`, four sessions recorded on the demo tour: three by the author, one by a GPT agent) triages like this:
+The bundled dataset (`examples/demo-sessions/`, four sessions recorded on the demo tour: three by Mira, a human tester, one by a GPT agent) triages like this:
 
 | Rank | Participant | Tier | Score | Reason |
 |------|-------------|------|-------|--------|
@@ -235,7 +235,7 @@ Run the test suite with `npm test`. Before publishing, run `scripts/check-public
 
 ```bibtex
 @software{konuk_cyborg_hunter,
-  author  = {Konuk, Can and Btesh, Victor and Nunez, Jose Luis},
+  author  = {Konuk, Can and Btesh, Victor and Nunes, Jose Luiz},
   title   = {cyborg-hunter: detecting AI-tool use in browser-based behavioral experiments},
   year    = {2026},
   version = {0.14.0},
