@@ -40,6 +40,13 @@ test('keeps every other directive of the page policy unchanged', () => {
     "font-src data:; frame-src blob:; worker-src blob:; connect-src 'none'; form-action 'none'; base-uri 'none'");
 });
 
+test('the offline file allows no connection, where the page allows its own origin', () => {
+  // The page fetches the sample's recordings from its site; the file has no
+  // origin and offers them as downloads instead.
+  assert.ok(index.includes("connect-src 'self';"), 'the page policy allows its own origin');
+  assert.ok(policyOf(buildOfflineHtml(index, bundle)).includes("connect-src 'none'"));
+});
+
 test('declares the charset before the inlined script', () => {
   // The bundle carries non-ASCII text; a file opened from disk has no HTTP
   // header to name its encoding, so the meta tag must come first.

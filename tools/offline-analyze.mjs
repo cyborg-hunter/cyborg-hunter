@@ -28,6 +28,9 @@ export function buildOfflineHtml(indexHtml, bundleSrc) {
   let out = indexHtml;
   out = replaceOnce(out, SCRIPT, '<script type="module">' + inlineSafeSrc(bundleSrc) + '</script>');
   out = replaceOnce(out, "script-src 'self' 'unsafe-inline' blob:;", "script-src 'unsafe-inline' blob:;");
+  // The page fetches the sample's recordings from its own origin; the file has
+  // none, and offers them as downloads instead (page.js).
+  out = replaceOnce(out, "connect-src 'self';", "connect-src 'none';");
   out = replaceOnce(out, '<a href="./' + OFFLINE_NAME + '" download>offline version</a>',
     '<span>You are using the offline file.</span>');
   out = replaceOnce(out, '<a href="../">live demo</a>', '<a href="' + SITE + '">live demo</a>');

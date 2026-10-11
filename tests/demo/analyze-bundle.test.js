@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { inlineSrcHazards } from '../../src/shared/inline-safe.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
 import { NODE_IMPORT } from '../cli/node-import-pattern.js';
+import { VERSION } from '../../src/shared/constants.js';
 
 let dir, bundle;
 before(() => {
@@ -34,6 +35,16 @@ test('carries the worker source, the viewer client, the fonts and the sample', (
   assert.ok(bundle.includes(twice('"participantId":"DEMO-bsq6"')), 'the tracker baked in, found as the recording would be');
   assert.ok(!bundle.includes(twice('"participant_id":"DEMO-bsq6"')), 'no recording baked in');
   assert.ok(bundle.length < 2.5e6, 'the bundle stays under 2.5 MB: ' + bundle.length);
+});
+
+test('carries the recordings’ names and the version for the page, not their files', () => {
+  // Baked for the page: what to fetch on the site, and which release holds
+  // the downloads for the offline file. (That the recordings' JSON is not
+  // baked is the first test's check; not repeated here.)
+  // The page's module is baked at the page level (escaped once, by
+  // inlineSafeJson, which leaves these characters alone): the exact object.
+  const baked = JSON.stringify({ names: ['DEMO-681w.replay.json', 'DEMO-a3f3.replay.json', 'DEMO-bsq6.replay.json'], version: VERSION });
+  assert.ok(bundle.includes(baked), 'names and version baked for the page: ' + baked);
 });
 
 // The size the page shows is a measurement (tests/browser/analyze/load-measure.mjs),

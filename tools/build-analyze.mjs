@@ -14,6 +14,8 @@ import { join } from 'node:path';
 import { readReplayClientSrc } from '../src/cli/renderers/replay-client-source.js';
 import { buildFontFaceCss } from '../src/cli/renderers/report-fonts.js';
 import { inlineSafeJson, inlineSrcHazards } from '../src/shared/inline-safe.js';
+import { VERSION } from '../src/shared/constants.js';
+import { sampleRecordingNames } from './sample-recordings.mjs';
 
 const OUT = process.env.ANALYZE_OUTDIR || 'demo/analyze';
 const SAMPLE_DIR = 'examples/demo-sessions';
@@ -27,6 +29,12 @@ function sampleData() {
     .map((f) => ({ path: f, text: JSON.stringify(JSON.parse(readFileSync(join(SAMPLE_DIR, 'data', f), 'utf8'))) }));
   files.push({ path: 'cyborg-hunter.config.json', text: readFileSync(join(SAMPLE_DIR, 'cyborg-hunter.config.json'), 'utf8') });
   return { files };
+}
+
+// The recordings' names and the version: the page fetches `sample/<name>` on
+// the site, and from file: links to the release's assets for this version.
+function sampleRecordings() {
+  return { names: sampleRecordingNames(join(SAMPLE_DIR, 'data')), version: VERSION };
 }
 
 // Virtual modules: `import x from 'virtual:name'` resolves to a baked default
@@ -78,7 +86,7 @@ export async function buildWorkerSrc(shared = sharedModules()) {
 
 export async function buildAnalyze() {
   const shared = sharedModules();
-  const baked = virtual({ ...shared, 'virtual:worker-src': await buildWorkerSrc(shared) });
+  const baked = virtual({ ...shared, 'virtual:worker-src': await buildWorkerSrc(shared), 'virtual:sample-recordings': sampleRecordings() });
   const page = await esbuild.build({
     entryPoints: ['demo/analyze/main.js'], bundle: true, format: 'esm', platform: 'browser',
     write: false, logLevel: 'silent', plugins: [baked.plugin],
