@@ -33,7 +33,8 @@
 //     done          the in-page report html and what the page lists beside it;
 //                   runId: the run id (report-core.js runIdOf); triageRows: each
 //                   participant's tier and triage score in triage order
-//                   (for the annotation export)
+//                   (for the annotation export); cursorLine: the run's
+//                   pointer-verdicts sentence (report-core.js)
 //     replay-model  { participantId, model }
 //     error         { phase, message, warnings? }, phase 'ingest' or the type of
 //                   the message that failed: 'check' | 'run' | 'reanalyze' |
@@ -210,7 +211,7 @@ async function renderRun(state, config) {
   });
   zip.end();
   var html = await renderInPageHtml(built, participants, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, bytesToBase64: bytesToBase64 });
-  post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts, runId: built.runId,
+  post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts, runId: built.runId, cursorLine: built.cursorLine,
     participants: participants.map(function (p) {
       var has = !!(p.replay && p.replay.recording);
       return { participantId: p.participantId, hasReplay: has,

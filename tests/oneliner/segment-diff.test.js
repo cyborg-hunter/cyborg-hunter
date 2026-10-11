@@ -57,6 +57,17 @@ describe('segment differ', () => {
     assert.deepStrictEqual(s1.counters, { pasteCount: 2, copyCount: 0, dropCount: 0 });
     assert.deepStrictEqual(s1.score, m.getSessionScore());
   });
+  it('carries device on segment 0 only, and only when the report has it', () => {
+    const device = { maxTouchPoints: 5, coarsePointer: true, webdriver: false };
+    const m = fakeMonitor();
+    m.session.device = device;
+    const d = createSegmentDiffer(m);
+    const s0 = d.cut(meta(0));
+    const s1 = d.cut(meta(1));
+    assert.deepStrictEqual(s0.device, device);
+    assert.ok(!('device' in s1));
+    assert.ok(!('device' in createSegmentDiffer(fakeMonitor()).cut(meta(0))));
+  });
   it('folds only non-empty gap reports into the segment', () => {
     const m = fakeMonitor();
     const d = createSegmentDiffer(m);

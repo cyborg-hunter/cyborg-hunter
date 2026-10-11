@@ -494,6 +494,7 @@ export function createPage(root, worker, opts) {
     goTo('results');
     q(root, 'summary').textContent = done.triageOrder.length + ' participants: ' + done.counts.flaggedHard + ' hard, ' +
       done.counts.flaggedSoft + ' soft, ' + done.counts.clean + ' clean. Zip: ' + Math.round(done.zipBytes / 1024) + ' KB.';
+    q(root, 'cursor-line').textContent = done.cursorLine || '';
     listWarnings(q(root, 'run-warnings'), done.warnings.concat(done.reportWarnings));
     // The participant the last report had selected, if this one lists them:
     // the new report opens on them (its script selects the row #p-<id> names

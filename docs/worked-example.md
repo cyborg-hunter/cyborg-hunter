@@ -1,6 +1,6 @@
 # Worked example: the synthetic-pilot dataset
 
-The repo bundles a three-participant synthetic dataset at [`examples/synthetic-pilot/`](../examples/synthetic-pilot/) — one participant per triage tier — so you can run the full pipeline and practice reading its outputs before your own data is on the line. Each section below walks one output in reading order (the triage table, the event log, the summary CSV, the plots), and the dataset is built so the classic misreadings each show up once: a hard-flagged participant who ranks above a higher-scoring soft one, two different scores that are easy to conflate, and a clean participant whose reason column is not empty. Every number is hand-authored by `generate-fixture.mjs`; **no real participant, anonymized or otherwise, is behind any of it**. The files are shaped exactly like what the jsPsych extension saves with v0.6.1 (per-trial `integrity` cells, `integritySession` + `integrityScore` on the last row), so the CLI treats them like real data.
+The repo bundles a four-participant synthetic dataset at [`examples/synthetic-pilot/`](../examples/synthetic-pilot/) — one participant per triage tier, plus a generated session the pointer verdict reads as highly suspicious (its browser set the automation flag, two of its trials move in straight lines before they click, and the other two are clicked with no pointer movement) — so you can run the full pipeline and practice reading its outputs before your own data is on the line. Each section below walks one output in reading order (the triage table, the event log, the summary CSV, the plots), and the dataset is built so the classic misreadings each show up once: a hard-flagged participant who ranks above a higher-scoring soft one, two different scores that are easy to conflate, and a clean participant whose reason column is not empty. Every number is hand-authored by `generate-fixture.mjs`; **no real participant, anonymized or otherwise, is behind any of it**. The files are shaped exactly like what the jsPsych extension saves (per-trial `integrity` cells, `integritySession` + `integrityScore` on the last row): with v0.6.1 for the three tier sessions, and with 0.14.0 for the generated one, which adds the session's device facts and the viewport coordinates and provenance of each click. The CLI treats them like real data.
 
 ## Run it
 
@@ -15,12 +15,12 @@ open report/index.html
 The console prints the tier counts before rendering:
 
 ```
-Found 3 participants
+Found 4 participants
 
 Analyzing...
   Hard-flagged (hard signal crossed its count threshold): 1
   Soft-flagged (library soft score >= its threshold):     1
-  Clean:                                                  1
+  Clean:                                                  2
 ```
 
 No ingest warnings appear. On your own data, warnings at this point are the first thing to fix; the usual causes are a wrong `participantIdField` ([quickstart § 5](quickstart.md#5-generate-the-report)) or, in manual mode, a missing `finalize()` call ([advanced-integration.md → Manual mode](advanced-integration.md#manual-mode)).
@@ -28,20 +28,23 @@ No ingest warnings appear. On your own data, warnings at this point are the firs
 ## triage.md — where review starts
 
 ```
-| Rank | Participant  | Tier     | Score | Reason |
-|------|--------------|----------|-------|--------|
-| 1    | SYN-HARD-03  | **HARD** | 18    | 2 paste events; 1 copy events; 3 tab-aways ≥10s; 2 flickers ≤3s; fast typing on 1 trials |
-| 2    | SYN-SOFT-02  | soft     | 21    | 3 copy events; 1 tab-away ≥10s; 2 tab-aways 3–10s; 1 sidebar event |
-| 3    | SYN-CLEAN-01 | clean    | 0     | 1 flicker ≤3s; 1 layout shifts |
+| Rank | Participant      | Tier     | Score | Reason |
+|------|------------------|----------|-------|--------|
+| 1    | SYN-HARD-03      | **HARD** | 18    | 2 paste events; 1 copy events; 3 tab-aways ≥10s; 2 flickers ≤3s; fast typing on 1 trials |
+| 2    | SYN-SOFT-02      | soft     | 21    | 3 copy events; 1 tab-away ≥10s; 2 tab-aways 3–10s; 1 sidebar event |
+| 3    | SYN-CLEAN-01     | clean    | 0     | 1 flicker ≤3s; 1 layout shifts |
+| 4    | SYN-GENERATED-04 | clean    | 0     | pointer verdict: highly suspicious (automation flag; trials clicked without movement 2/4) |
 ```
 
-Three things this table teaches:
+Four things this table teaches:
 
 **Rank 1 has a *lower* score than rank 2.** The list orders tier-first: HARD, then soft, then clean, with the score only breaking ties within a tier. SYN-HARD-03 crossed a hard count threshold (2 pastes ≥ the standard preset's paste threshold of 2), and hard evidence outranks any accumulation of soft evidence. If you sort by score and review top-down, you will review the wrong participant first.
 
 **The Score is the CLI's ranking heuristic, not the library's soft score.** With the default weights, Score = 5×paste + 5×copy + 3×sidebar + 1×(tab-aways longer than the participant's cutoff); `scoreWeights` in the config can change them ([configuration.md](configuration.md#report-score-weights-scoreweights)). Check the arithmetic against the reasons: SYN-HARD-03 is 2×5 + 1×5 + 3×1 = 18 (the two flickers and the fast typing contribute 0); SYN-SOFT-02 is 3×5 + 3×1 + 1×3 = 21. The library's soft score is a different number with different weights; [interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers) untangles the two.
 
 **Clean rows still carry reasons.** SYN-CLEAN-01's 800 ms flicker and single viewport-width shift are ordinary behavior (a notification, a window resize). The reason column reports everything observed, scored or not, so "clean with minor notes" and "nothing at all" are distinguishable.
+
+**A session with a highly suspicious pointer verdict can still be clean.** SYN-GENERATED-04 is a generated session. Its verdict comes from the automation flag and from two of its four trials being clicked with no pointer movement; the tier is the library's, and it reads clean because the session has no paste, copy or long tab-away. It scores 0 and ranks after SYN-CLEAN-01 because the two tie. The verdict is in the rail cell, the tile, the triage reason and the `cursorVerdict` column, and it ranks nothing at the default weights; at a `cursor` weight of 1 (`{ "scoreWeights": { "cursor": 1 } }`) the verdict's level, 2, becomes the session's score and ranks it first within the clean tier, never out of it. What each tell records and its innocent causes: [interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers).
 
 ## event-log.csv — read the actual evidence
 
@@ -61,30 +64,41 @@ Fluent, over-complete prose arriving via the clipboard mid-trial, right after 15
 
 One row per participant, every signal a column. The columns to look at first:
 
-| Column | SYN-CLEAN-01 | SYN-SOFT-02 | SYN-HARD-03 |
-|---|---|---|---|
-| `hardTriggered` | no | no | YES |
-| `authoritative_soft_score` | 0 | 11 | 7 |
-| `totalPasteEvents` / `totalCopyEvents` | 0 / 0 | 0 / 3 | 2 / 1 |
-| `totalTabAways` (long/medium/flicker) | 1 (0/0/1) | 3 (1/2/0) | 5 (3/0/2) |
-| `sidebar_event_count` | 0 | 1 | 0 |
-| `layout_shift_count` | 1 | 0 | 0 |
+| Column | SYN-CLEAN-01 | SYN-SOFT-02 | SYN-HARD-03 | SYN-GENERATED-04 |
+|---|---|---|---|---|
+| `hardTriggered` | no | no | YES | no |
+| `authoritative_soft_score` | 0 | 11 | 7 | 0 |
+| `totalPasteEvents` / `totalCopyEvents` | 0 / 0 | 0 / 3 | 2 / 1 | 0 / 0 |
+| `totalTabAways` (long/medium/flicker) | 1 (0/0/1) | 3 (1/2/0) | 5 (3/0/2) | 0 (0/0/0) |
+| `sidebar_event_count` | 0 | 1 | 0 | 0 |
+| `layout_shift_count` | 1 | 0 | 0 | 0 |
+| `cursorVerdict` | not assessed | not assessed | not assessed | highly suspicious |
+| `cursorTells` | (empty) | (empty) | (empty) | `automation flag; trials clicked without movement 2/4` |
+| `cursorChecksRecorded` / `cursorFactCount` | 0 / (empty) | 0 / (empty) | 0 / (empty) | 3 / 2 |
+| `cursorWebdriver` | (empty) | (empty) | (empty) | YES |
+| `cursorZeroMoveTrials` | (empty) | (empty) | (empty) | 2/4 |
+| `cursorClicks` / `cursorMovements` | 0 / 6 | 0 / 6 | 0 / 6 | 4 / 4 |
+| `cursorSampleIntervalMs` | 287.5 | 300 | 312.5 | 60 |
+| `cursorEfficiencyMedian` | 0.898 | 0.900 | 0.883 | 1.000 |
+| `cursorMaxDeviationPxMedian` | 60.2 | 72.3 | 84.9 | 0.0 |
 
 `authoritative_soft_score` is the library's own accumulated soft score, read from the saved session report. SYN-SOFT-02 sits at 11 against the standard threshold of 6, hence the soft flag. Note SYN-HARD-03 is *also* over the soft threshold (7 ≥ 6); the hard tier simply takes precedence. Columns are documented field-by-field in [cli-reference.md](cli-reference.md#summarycsv).
+
+The nineteen `cursor…` columns (since 0.14) carry the cursor section's numbers. The three tier sessions are 0.6.1 data: they carry no device facts and no click provenance, so `cursorChecksRecorded` is 0, the three checks are empty and `cursorVerdict` is not assessed, with the `cursorReason` "device facts and click provenance not recorded (library before 0.14)", as on any session recorded before 0.14 (the report's rail reads "pointer: not assessed"). Their movements are still measured, one per trial, sampled about 300 ms apart. SYN-GENERATED-04 is 0.14.0 data: its `cursorFactCount` of 2 counts the two checks that fired, the automation flag (`cursorWebdriver` YES) and trials clicked without pointer movement, its third and fourth (`cursorZeroMoveTrials` 2/4). Each is a tell that makes the session highly suspicious on its own: the flag always does, and 2 of 4 trials is a share of 50%. (`cursorNoPathClicks` is 0/0: more than 2 s pass between its trials, so the pointer's position is forgotten before each one and no first click has a known position before it; such a click counts only as a trial clicked without pointer movement.) Its other two trials each move in one straight line, four samples 60 ms apart in equal steps, before they click, the way a script can move a cursor: both movements have efficiency 1.000 and no deviation from the straight line, so the medians over n = 2 are 1.000 and 0.0 px. Its four movements are those two and the clicks of its third and fourth trials, each a movement of its own. The run output sums the verdicts up in one line: "Pointer verdicts: 1 highly suspicious, 0 suspicious, 0 clean, 3 not assessed (4 sessions; 3 recorded without device facts)".
 
 ## The images
 
 `report/images/` holds three plots per participant. In this dataset:
 
 - **`session_timeline_*.png`** — the whole session on one time axis. SYN-SOFT-02's is the instructive one: three tab-away bars (color-binned by duration) plus a purple sidebar-open span, including a 6.4 s tab-away *before the first trial* (during "consent"). Off-trial events are placeable because 0.6.1 keeps timestamped session-level `tabAwayEvents[]`; the footer confirms "All 3 plotted from session-level events (incl. off-trial)".
-- **`trajectories_*.png`** — per-trial mouse paths. Synthetic paths here are smooth and regular; on real data you'd compare flagged participants' paths against a few clean ones.
+- **`trajectories_*.png`** — per-trial mouse paths. Synthetic paths here are smooth and regular (SYN-GENERATED-04's are straight lines); on real data you'd compare flagged participants' paths against a few clean ones.
 - **`typing_profile_*.png`** — per-trial typing speed against the participant's own threshold. SYN-HARD-03's t3 sits at 14.2 cps against a 10 cps cutoff.
 
 One caveat specific to this fixture: the timelines print "perfNow→session-rel offset not derivable", because the synthetic files don't carry the wall-clock anchors a real jsPsych run has on every row. On real data that header line disappears.
 
 ## Where the numbers came from
 
-`generate-fixture.mjs` builds each participant from a short trial-by-trial script and computes `trialSoftScore`/`trialSignals` with the standard preset's actual weights (copy 2 capped at 2/trial, tab-away 1 capped at 2/trial, fast typing 2, sidebar 3, soft threshold 6, paste hard threshold 2). Reading the three participant definitions at the bottom of that file, next to the triage table above, is the fastest way to internalize how raw events turn into tiers and scores. Edit the definitions, `node generate-fixture.mjs`, re-run the report, and check your prediction.
+`generate-fixture.mjs` builds each participant from a short trial-by-trial script and computes `trialSoftScore`/`trialSignals` with the standard preset's actual weights (copy 2 capped at 2/trial, tab-away 1 capped at 2/trial, fast typing 2, sidebar 3, soft threshold 6, paste hard threshold 2). Reading the four participant definitions at the bottom of that file, next to the triage table above, is the fastest way to internalize how raw events turn into tiers and scores. Edit the definitions, `node generate-fixture.mjs`, re-run the report, and check your prediction.
 
 ## Next
 

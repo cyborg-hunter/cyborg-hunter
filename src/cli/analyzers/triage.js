@@ -160,6 +160,11 @@ export function generateTriageReason(summary, edgeExitCount = 0) {
   if (edgeExitCount > 0) parts.push(`${edgeExitCount} edge-exit patterns`);
   if (summary.totalSyntheticInsertions > 0) parts.push(`${summary.totalSyntheticInsertions} synthetic insertions`);
   if (summary.totalForeignInputEvents > 0) parts.push(`${summary.totalForeignInputEvents} foreign inputs`);
+  // The pointer verdict (analyzers/cursor.js), when it counts against the
+  // session — unscored unless scoreWeights.cursor is set, like the honeypot
+  // clause below.
+  const ca = summary.cursorAnalysis;
+  if (ca && ca.level > 0) parts.push(`pointer verdict: ${ca.verdict} (${ca.tells.map(t => t.short).join('; ')})`);
   // Guard-honeypot self-disclosure — a strong corroborating signal, surfaced in
   // the reason though it does not feed the score (it has no scoreWeights key).
   if (summary.honeypotAiUse) parts.push('self-reported AI use (honeypot)');

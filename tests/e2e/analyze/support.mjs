@@ -56,7 +56,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(__dirname, '..', '..', '..');
 export const OFFLINE_FILE = join(ROOT, '.demo-site', 'analyze', 'cyborg-hunter-analyze.html');
 export const PILOT_DIR = join(ROOT, 'examples', 'synthetic-pilot');
-export const PILOT_ORDER = ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01'];
+export const PILOT_ORDER = ['SYN-HARD-03', 'SYN-SOFT-02', 'SYN-CLEAN-01', 'SYN-GENERATED-04'];
 
 export const test = base.extend({
   pageErrors: [async ({ page }, use) => {
@@ -172,10 +172,19 @@ export function reportFrame(page) { return page.frameLocator('iframe.analyze-rep
 export async function reportSelected(page) {
   await expect.poll(() => page.evaluate(() => window.__chAnalyze.state.selected), { timeout: 30000 }).not.toBeNull();
 }
+// The report iframe is replaced on every re-analysis (a weight change); a
+// read that lands during the swap loses its execution context and is read
+// again from the new frame.
 export async function railOrder(page) {
-  const rows = reportFrame(page).locator('.cohort-row[data-pid]');
-  await expect(rows.first()).toBeVisible({ timeout: 30000 });
-  return rows.evaluateAll((els) => els.map((r) => r.dataset.pid));
+  for (let attempt = 0; ; attempt++) {
+    const rows = reportFrame(page).locator('.cohort-row[data-pid]');
+    await expect(rows.first()).toBeVisible({ timeout: 30000 });
+    try {
+      return await rows.evaluateAll((els) => els.map((r) => r.dataset.pid));
+    } catch (e) {
+      if (attempt >= 5 || !/Execution context was destroyed|detached|navigation/i.test(String(e))) throw e;
+    }
+  }
 }
 export async function downloadZip(page) {
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="download-zip"]')]);

@@ -83,10 +83,13 @@ export function configFromSettings(base, settings) {
   return c;
 }
 
-// One weights row per report-score signal (src/cli/analyzers/score-weights.js).
+// One weights row per report-score signal (src/cli/analyzers/score-weights.js),
+// with the signal's label and hint when the registry gives them.
 function weightRows() {
   return SCORE_SIGNALS.map(function (s) {
-    return '<tr><td><code>' + s.key + '</code></td>' +
+    var name = s.label ? s.label + ' (<code>' + s.key + '</code>)' : '<code>' + s.key + '</code>';
+    var hint = s.hint ? '<div class="hint">' + s.hint + '</div>' : '';
+    return '<tr><td>' + name + hint + '</td>' +
       '<td><input type="number" min="0" step="any" data-weight="' + s.key + '" aria-label="' + s.key + ' weight"></td>' +
       '<td><input type="number" min="0" step="1" data-max="' + s.key + '" placeholder="none" aria-label="' + s.key + ' cap"></td></tr>';
   }).join('');

@@ -248,6 +248,24 @@ describe('the payload is built from allowlists', () => {
       assert.ok(!out.json.includes('kkkk') && !out.json.includes('zzzz'));
     }
   });
+
+  it('the first segment\'s device facts come through, and the CLI reads them', () => {
+    const device = { maxTouchPoints: 0, coarsePointer: false, webdriver: true };
+    const withDevice = (pages) => {
+      const b = blob({ pages });
+      b.trials[0].integritySegment.device = { ...device, note: 'z'.repeat(300) };
+      return b;
+    };
+    const out = build(withDevice(3), MAX_CHARS);
+    assert.strictEqual(out.level, 0);
+    assert.ok(out.chars <= MAX_CHARS, String(out.chars));
+    assert.deepStrictEqual(out.payload.trials[0].integritySegment.device, device);
+    assert.deepStrictEqual(extractIntegrityData(JSON.parse(out.json), {}).session.device, device);
+    // Level 3 drops the first page; its device facts move forward with its config.
+    const three = atLevel(withDevice(8), 3);
+    assert.deepStrictEqual(three.payload.trials[0].integritySegment.device, device);
+    assert.deepStrictEqual(extractIntegrityData(JSON.parse(three.json), {}).session.device, device);
+  });
 });
 
 // Every string the payload can carry, by path ('[]' marks an array entry).
@@ -482,6 +500,22 @@ describe('the cap', () => {
       }
       assert.strictEqual(JSON.stringify(b), before);
     }
+  });
+
+  it('a trial of 2,000 clicks with provenance fields stays within the cap', () => {
+    const events = Array.from({ length: 2000 }, (_, i) => ({
+      x: 100 + i, y: 200, cx: 100 + i, cy: 50, t: i * 50, type: 'click', trusted: true, detail: 1, pointerType: 'mouse'
+    }));
+    const b = blob({ pages: 1, mouse: 2000 });
+    const plain = build(b, MAX_CHARS);
+    b.trials[0].integrity.mouseTrack = events;
+    const out = build(b, MAX_CHARS);
+    assert.strictEqual(out.level, 0);
+    assert.strictEqual(out.chars, bytes(out.json));
+    assert.ok(out.chars <= MAX_CHARS, String(out.chars));
+    assert.strictEqual(JSON.parse(out.json).cyborgHunterError, undefined);
+    // The summary leaves the mouse track out, so the new fields add nothing.
+    assert.strictEqual(out.json, plain.json);
   });
 });
 

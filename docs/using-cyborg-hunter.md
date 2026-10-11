@@ -136,8 +136,10 @@ rec.destroy();
   excepted).
   CH-core's own paste/drop content capture is a separate switch,
   `collectForPostHoc.pasteDropContent`.
-- Raw mouse coordinates (`mouseTrack`, the per-sample {x, y, t} trace the
-  report's trajectory panels draw) are recorded **by default** by the core
+- Raw mouse coordinates (`mouseTrack`, the per-sample {x, y, cx, cy, t, type}
+  trace the report's trajectory panels draw and its cursor section reads; since
+  0.14 presses, releases and clicks also carry `trusted`, `detail` and
+  `pointerType`) are recorded **by default** by the core
   monitor. Adding CH to an experiment is the decision to collect behavioural
   traces, so the default matches that decision; set
   `collectForPostHoc: { rawMouseTrack: false }` in the core config if your

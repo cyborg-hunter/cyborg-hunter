@@ -205,3 +205,26 @@ describe('the friction entry trial\'s message option is documented', () => {
     assert.match(read('docs/advanced-integration.md'), /jsPsychGuardFriction\.entryTrial\(\{\s*message:/);
   });
 });
+
+// The cursor section's numbers are on the report page and their meaning is
+// in the docs: the output tree, the columns table, the weights table, the
+// signals page and the section the report links to (#cursor-dynamics).
+describe('the cursor section is documented', () => {
+  it('docs/cli-reference.md lists cursor-limits.json and the cursor columns', () => {
+    const text = read('docs/cli-reference.md');
+    assert.ok(text.includes('cursor-limits.json'), 'no cursor-limits.json');
+    assert.ok(text.includes('cursorCenteredClicks'), 'no cursorCenteredClicks');
+  });
+
+  it('docs/configuration.md has the pointer verdict weight', () => {
+    assert.ok(read('docs/configuration.md').includes('pointer verdict'));
+  });
+
+  it('docs/signals-reference.md gives the mouse sampling as mouseThrottleMs, not 20Hz', () => {
+    assert.ok(!read('docs/signals-reference.md').includes('20Hz'));
+  });
+
+  it('docs/interpreting-signals.md has the Cursor dynamics section', () => {
+    assert.ok(read('docs/interpreting-signals.md').includes('## Cursor dynamics'));
+  });
+});

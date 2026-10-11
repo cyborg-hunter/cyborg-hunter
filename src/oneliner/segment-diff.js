@@ -15,7 +15,8 @@
 //              counters: { pasteCount, copyCount, dropCount },
 //              score: getSessionScore() verbatim,
 //              gap?: [...],                     // non-empty gap reports only
-//              config?, libraryVersion? }       // segmentIndex === 0 only
+//              config?, libraryVersion?,        // segmentIndex === 0 only
+//              device? }                        // segmentIndex === 0 only
 //
 // The CLI side (src/cli/segment-reassembly.js) concatenates the deltas back
 // into the session shape finalize() dumps.
@@ -76,6 +77,9 @@ export function createSegmentDiffer(monitor) {
       var gaps = (meta.gapReports || []).map(nonEmptyGap).filter(Boolean);
       if (gaps.length) seg.gap = gaps;
       if (meta.segmentIndex === 0) { seg.config = report.config; seg.libraryVersion = report.libraryVersion; }
+      // The device facts are read once, at startSession, and are not an
+      // array, so the first segment carries them, as it carries config.
+      if (meta.segmentIndex === 0 && report.device) seg.device = report.device;
       return seg;
     }
   };

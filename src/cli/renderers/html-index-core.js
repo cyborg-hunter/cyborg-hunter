@@ -22,7 +22,7 @@
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';
 import { listSidebarOpenings } from '../analyzers/summary.js';
-import { resolveScoreWeights, customWeightsText, formatScore } from '../analyzers/score-weights.js';
+import { resolveScoreWeights, customWeightsText, formatScore, SIGNAL_LABELS } from '../analyzers/score-weights.js';
 import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
@@ -358,6 +358,29 @@ ${fontFaceCss}    :root {
     .signal-tile.tone-zero     { color: #b8b1a0; border-color: #ebe6d8; background: transparent; }
     .signal-value { font-family: var(--ff-sora); font-size: 18px; font-weight: 700; line-height: 1; }
     .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
+
+    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-verdict cell. */
+    .cursor-details { border: 1px solid var(--line); padding: 10px 14px 12px; margin-top: 8px; }
+    .cursor-table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
+    .cursor-table:last-of-type { margin-bottom: 2px; }
+    .cursor-table caption { font-family: var(--ff-tomorrow); text-align: center; font-variant: small-caps; letter-spacing: 0.06em; font-size: 14px; color: var(--ink); padding: 2px 0 6px; }
+    .cursor-table th, .cursor-table td { padding: 5px 10px; vertical-align: top; }
+    .cursor-table th { text-align: left; font-weight: normal; width: 46%; }
+    .cursor-table tbody tr:nth-child(even) { background: rgba(26, 24, 20, 0.035); }
+    .cursor-table tr.fired th { font-weight: 600; }
+    .cursor-cell { font-family: var(--ff-tomorrow); font-size: 11px; color: var(--dim); }
+    .cursor-cell[data-level="2"] { color: var(--hard); }
+    .cursor-cell[data-level="1"] { color: var(--soft); }
+    .cursor-verdict { margin: 8px 0 4px; }
+    .verdict-badge { display: inline-block; font-family: var(--ff-tomorrow); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--line); color: var(--dim); }
+    .verdict-badge[data-level="0"] { color: var(--clean); border-color: var(--clean); }
+    .verdict-badge[data-level="1"] { color: var(--soft); border-color: var(--soft); }
+    .verdict-badge[data-level="2"] { color: #fff; background: var(--hard); border-color: var(--hard); }
+    .cursor-tells { margin: 0 0 8px 20px; padding: 0; }
+    .cursor-tells li.tell-high { font-weight: 600; }
+    .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
+    /* Closed, the summary is the block's only line: no bottom margin, so the frame sits evenly around it. */
+    .cursor-details:not([open]) > summary { margin-bottom: 0; }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -787,12 +810,18 @@ ${fontFaceCss}    :root {
       // --- Sort ---
       const sortEl = document.querySelector('.sort-wrap select');
       sortEl.addEventListener('change', () => {
-        const key = sortEl.value;  // 'score' | 'id' | 'tier'
+        const key = sortEl.value;  // 'score' | 'cursor' | 'id' | 'tier'
         const tierRank = { hard: 0, soft: 1, clean: 2 };
         const parent = rows[0]?.parentNode;
         if (!parent) return;
         const sorted = [...rows].sort((a, b) => {
           if (key === 'score') return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          // 'cursor': verdict level desc (not assessed = -1 last), then score desc.
+          if (key === 'cursor') {
+            const dc = parseInt(b.dataset.cursor, 10) - parseInt(a.dataset.cursor, 10);
+            if (dc !== 0) return dc;
+            return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+          }
           if (key === 'id')    return a.dataset.pid.localeCompare(b.dataset.pid);
           // 'tier': hard first, then soft, then clean; within tier, score desc.
           const dt = tierRank[a.dataset.tier] - tierRank[b.dataset.tier];
@@ -951,31 +980,41 @@ const SIGNALS = [
   { key: 'layoutShiftCount',         label: 'Viewport shifts', tone: 'muted',    hint: 'Viewport-width change events (recorded as layoutShifts before 0.6.1)' },
   { key: 'zoomChangeCount',          label: 'Zoom changes',    tone: 'muted',    hint: 'Browser zoom level changed during task' },
   { key: 'devToolsEventCount',       label: 'DevTools',        tone: 'muted',    hint: 'Reserved (always 0) — DevTools opens are counted under Kb shortcuts' },
-  { key: 'edgeExitCount',            label: 'Edge exits',      tone: 'muted',    hint: 'Mouse exited window through a screen edge' }
+  { key: 'edgeExitCount',            label: 'Edge exits',      tone: 'muted',    hint: 'Mouse exited window through a screen edge' },
+  { key: 'cursorLevel',              label: 'Pointer verdict', tone: 'warn',     hint: 'The pointer verdict: 0 clean, 1 suspicious, 2 highly suspicious; — when the session is not assessed (no device facts, no cursor stream, or too few clicks)' }
 ];
 
-// Renders all 16 SIGNALS as a colour-coded tile grid. Every signal renders
+// The pointer verdict's level, as the tile, the rail and its sort read it:
+// -1 (not assessed) when there is no analysis.
+const pointerLevel = (ca) => ca ? ca.level : -1;
+
+// Renders all 17 SIGNALS as a colour-coded tile grid. Every signal renders
 // (hits AND misses) so the layout is stable across participants — only firing
 // signals light up. Misses share the same footprint as hits, in the muted
 // "tone-zero" style. Cleans show all-zero, suspicious shows a few lit cells.
+// A value is a count, or a string shown as is in the tone-zero style: the
+// pointer-verdict tile reads "—" when the session is not assessed.
 function renderSignalGrid(summary, triageRow) {
   const aiExt = summary.aiExtensionCount ?? (summary.aiExtensionsFound || summary.extensionsDetected || []).length;
   const edgeExits = triageRow?.edgeExitCount ?? 0;
+  const ca = summary.cursorAnalysis;
 
   const tiles = SIGNALS.map(sig => {
     let v;
     if (sig.key === 'aiExtensionsCount')   v = aiExt;
     else if (sig.key === 'edgeExitCount')  v = edgeExits;
+    else if (sig.key === 'cursorLevel')    v = pointerLevel(ca) === -1 ? '—' : pointerLevel(ca);
     else                                   v = summary[sig.key] ?? 0;
-    return { ...sig, value: Number(v) || 0 };
+    // A highly suspicious verdict lights the tile like a hard signal.
+    return { ...sig, tone: sig.key === 'cursorLevel' && v === 2 ? 'critical' : sig.tone, value: typeof v === 'string' ? v : (Number(v) || 0) };
   });
 
   return `<div class="signal-grid" role="list">
     ${tiles.map(t => `
-      <div class="signal-tile ${t.value > 0 ? 'tone-' + t.tone : 'tone-zero'}"
+      <div class="signal-tile ${typeof t.value === 'number' && t.value > 0 ? 'tone-' + t.tone : 'tone-zero'}"
            role="listitem"
            title="${esc(t.hint)}">
-        <span class="signal-value">${t.value}</span>
+        <span class="signal-value">${esc(String(t.value))}</span>
         <span class="signal-label">${esc(t.label)}</span>
       </div>
     `).join('')}
@@ -1003,6 +1042,7 @@ function renderCohortList(triage, cohortCounts) {
       <select name="sort">
         <option value="tier" selected>Tier (hard first)</option>
         <option value="score">Score &darr;</option>
+        <option value="cursor">Pointer verdict &darr;</option>
         <option value="id">ID</option>
       </select>
     </label>
@@ -1029,6 +1069,8 @@ function renderCohortList(triage, cohortCounts) {
 //   data-score:     numeric score (defaulted to 0 if null/undefined)
 //   data-reason:    pre-lowercased reason string (search reads this so the
 //                   handler doesn't need to lowercase per keystroke)
+//   data-cursor:    the pointer verdict's level, 2…0; -1 when not assessed
+//                   (the 'cursor' sort puts those rows last)
 // The row's first span is the annotation mark, empty until the report's
 // annotation script (annotation-client.js) sets its label; the tier is read
 // from the badge at the right of the row.
@@ -1041,10 +1083,16 @@ function renderCohortRow(t) {
   // data may slip an empty string through; normalise to 'clean' for display.
   const reason = String(t.reason || 'clean');
   const reasonLower = reason.toLowerCase();
+  const ca = t.summary && t.summary.cursorAnalysis;
+  // data-cursor: the verdict's level; -1 when not assessed (sorts last).
+  const cursorLevel = pointerLevel(ca);
+  // The cell: "pointer: " and the verdict; empty without an analysis.
+  const cursorCell = !ca ? '' : `pointer: ${esc(ca.verdict)}`;
   return `<div class="cohort-row" data-pid="${esc(pid)}"
        data-sanitized="${esc(sanitized)}"
        data-tier="${tier}"
        data-score="${score}"
+       data-cursor="${cursorLevel}"
        data-reason="${esc(reasonLower)}">
     <div class="cohort-row-top">
       <span class="annot-mark" data-label=""></span>
@@ -1053,6 +1101,7 @@ function renderCohortRow(t) {
     </div>
     <div class="cohort-row-bot">
       <span class="reason-excerpt">${esc(reason)}</span>
+      <span class="cursor-cell" data-level="${cursorLevel}">${cursorCell}</span>
       <span class="tier-badge" data-tier="${tier}">${tier === 'clean' ? 'clean' : tier.toUpperCase()}</span>
     </div>
   </div>`;
@@ -1121,6 +1170,7 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     ${renderSessionBlock(s, participant)}
     ${renderPasteEvidence(participant)}
     ${imagesHtml}
+    ${renderCursorSection(s, participant, replayShownExternally)}
     ${renderReplaySection(participant, sanitized, replayShownExternally)}
   </section>`;
 }
@@ -1172,7 +1222,8 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
     // absent unless an asset map was applied, so the markup is otherwise unchanged.
     const assetNote = replay.assetNote ? `
       <p class="replay-note">${esc(replay.assetNote)}</p>` : '';
-    return `<div class="image-block replay-block" data-pid="${esc(participant.participantId)}"
+    // The id is the target of the cursor section's "open the replay" link.
+    return `<div class="image-block replay-block" id="replay-${esc(sanitized)}" data-pid="${esc(participant.participantId)}"
          data-replay-src="${esc(assetPath)}">
       <h4 class="section-heading">Session replay <span class="replay-note">(${esc(tier)} tier)</span></h4>${assetNote}
       <div class="replay-mount">
@@ -1215,6 +1266,70 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
       <h4 class="section-heading">Session replay</h4>
       <p class="replay-note">No replay artifact (recording was not enabled for this session).</p>
     </div>`;
+}
+
+// The session's cursor dynamics: the pointer verdict first — the word, then
+// the tells that decided it (a tell at the highly-suspicious level in
+// bold), or why the session is not assessed, or what a clean session was
+// judged on (its counts, which need not be 0, and the threshold they stayed
+// under) — then every check, the rules and the movement shape inside a
+// closed <details>, so the numbers are there without being the first thing
+// read. "+n more" counts trials (x.trials: the trials involved before the
+// ten-id cap), never clicks.
+function renderCursorSection(s, participant, replayShownExternally) {
+  const ca = s.cursorAnalysis;
+  if (!ca) return '';
+  const ids = (x) => x.trialIds && x.trialIds.length ? ` (${esc(x.trialIds.join(', '))}${x.trials > x.trialIds.length ? `, +${x.trials - x.trialIds.length} more` : ''})` : '';
+  const ofN = (x, unit = '') => `${x.count} of ${x.of}${unit}${ids(x)}`;
+  const check = (label, c, body) => `<tr class="${c && typeof c === 'object' && c.fired ? 'fired' : ''}"><th>${label}</th><td>${c === 'not recorded' ? 'not recorded' : body(c)}</td></tr>`;
+  const num = (v, unit, digits) => v == null ? '—' : `${digits == null ? v : v.toFixed(digits)}${unit}`;
+  const feat = (label, f, unit = '', digits) => `<tr><th>${label}</th><td>${num(f.median, unit, digits)} <span class="muted">(n = ${f.n})</span></td></tr>`;
+  const badge = `<span class="verdict-badge" data-level="${ca.level}">${esc(ca.verdict)}</span>`;
+  let verdict;
+  if (ca.level === -1) {
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${esc(ca.verdictReason)}.</span></p>`;
+  } else if (ca.level === 0) {
+    const n = ca.cursor.rules.noPathClicks, z = ca.checks.zeroMoveTrials;
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.count} of ${n.of} first clicks with a known position arrived without a path and ${z.count} of ${z.of} trials were clicked without pointer movement, both under ${Math.round(100 * ca.limits.shareSuspicious)}%; no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
+  } else {
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">because of:</span></p>
+    <ul class="cursor-tells">${ca.tells.map(t => `<li class="tell-${t.level}">${esc(t.text)}${t.trialIds.length ? ` <span class="muted">${ids(t).trim()}</span>` : ''}</li>`).join('')}</ul>`;
+  }
+  let details = '';
+  if (ca.state !== 'ok') {
+    if (ca.level !== -1) details = `<p class="muted note">${esc(ca.cursorReason)}: the other checks could not run.</p>`;
+  } else {
+    const c = ca.cursor;
+    details = `<details class="cursor-details"><summary>every check, the rules and the movement shape</summary>
+    <table class="cursor-table"><caption>browser-reported checks</caption>
+      ${check('automation flag set by the browser', ca.checks.webdriver, (w) => w.fired ? 'yes' : 'no')}
+      ${check('clicks the page’s own scripts dispatched', ca.checks.untrustedClicks, (x) => ofN(x))}
+      ${check('trials clicked without pointer movement', ca.checks.zeroMoveTrials, (x) => ofN(x))}
+    </table>
+    <table class="cursor-table"><caption>rules and movement shape</caption>
+      <tr><th>clicks that arrived without a path</th><td>${ofN(c.rules.noPathClicks, ' first clicks with a known position')}</td></tr>
+      <tr><th>clicks after a pointer jump</th><td>${ofN(c.rules.jumpClicks, ' first clicks with a known position')}</td></tr>
+      ${feat('movement duration', c.features.durationMs, ' ms', 0)}
+      ${feat('path length', c.features.pathPx, ' px', 0)}
+      ${feat('displacement', c.features.displacementPx, ' px', 0)}
+      ${feat('mean speed', c.features.speedPxS, ' px/s', 0)}
+      ${feat('efficiency (per movement)', c.features.efficiency, '', 3)}
+      ${feat('maximum deviation from the chord', c.features.maxDeviationPx, ' px', 1)}
+      ${feat('moves per trial', c.features.movesPerTrial, '', 1)}
+      ${feat('movements per trial', c.features.movementsPerTrial, '', 1)}
+      <tr><th>keyboard-activated clicks</th><td>${c.features.keyboardClicks} of ${c.clicks} clicks</td></tr>
+      <tr><th>movements · clicks</th><td>${c.movements} · ${c.clicks}</td></tr>
+      <tr><th>capped trials</th><td>${c.cappedTrials} of ${c.trials} trials</td></tr>
+    </table>
+    </details>`;
+  }
+  // Only a session with a recording gets a link to its replay, and only in
+  // the CLI report: the analyze page shows the replay in its card beside the
+  // report (replayShownExternally), and the section says nothing of it.
+  const hasRecording = !!(participant && participant.replay && participant.replay.recording);
+  const replayLink = !hasRecording || replayShownExternally ? ''
+    : `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>`;
+  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${verdict}${details}${replayLink}</div>`;
 }
 
 // Renders the participant's screenout reason as a left-bordered pull-quote.
@@ -1346,7 +1461,7 @@ function renderScoreBreakdown(t, config) {
 
   const termHtml = terms.map(([label, n]) =>
     `<span class="score-term">
-       <span class="label">${label}</span>
+       <span class="label">${SIGNAL_LABELS[label] || label}</span>
        <span class="mono contrib">+${formatScore(n)}</span>
        <span class="bar" style="width:${barFor(n)}px"></span>
      </span>`
