@@ -75,10 +75,25 @@ describe('examples/demo-sessions', () => {
     const AGENT_ANSWER = 'A productive day so far.';
     for (const f of readdirSync(join(DIR, 'data')).filter((n) => n.endsWith('.replay.json'))) {
       const raw = readFileSync(join(DIR, 'data', f), 'utf8');
-      assert.doesNotMatch(raw, /https?:\/\/|\/Users\/|localhost|file:\/\/|[\w.+-]+@[\w-]+\.[a-z]{2,}|plugin enable|salut/, f);
+      assert.doesNotMatch(raw, /\b[a-z][a-z0-9+.-]*:\/\//i, f);
+      assert.doesNotMatch(raw, /\/Users\/|localhost|[\w.+-]+@[\w-]+\.[a-z]{2,}|plugin enable|salut/, f);
       const j = JSON.parse(raw);
       assert.match(j.user_agent, /^Mozilla\/5\.0 \(Macintosh; Intel Mac OS X 10_15_7\) AppleWebKit\/537\.36 \(KHTML, like Gecko\) Chrome\/\d+\.0\.0\.0 Safari\/537\.36$/, f);
-      assert.deepEqual((j.stylesheets || []).filter((s) => s.href).map((s) => s.href), ['demo.css'], f);
+      assert.deepEqual(j.stylesheets.map((s) => s.href), ['demo.css'], f);
+      // Every keyframe's body holds the demo's three elements, and nothing is
+      // added directly under it afterwards: what a browser extension puts into
+      // the page lands there.
+      const label = (c) => c.tag + (c.attrs && c.attrs.id ? '#' + c.attrs.id : '') + (c.attrs && c.attrs.class ? '.' + c.attrs.class : '');
+      let root = null;
+      for (const s of j.segments) {
+        if (s.initial_dom) {
+          root = s.initial_dom.id;
+          assert.deepEqual(s.initial_dom.children.filter((c) => c.tag).map(label), ['div.topbar', 'div.cols', 'div#smallmode'], f + ' ' + s.label);
+        }
+        for (const e of s.events) {
+          if (e.type === 'dom.add' && root !== null && e.parent === root) assert.ok(!e.node.tag, f + ' ' + s.label + ': ' + label(e.node));
+        }
+      }
       const values = [];
       (function walk(v) {
         if (Array.isArray(v)) { v.forEach(walk); return; }
@@ -95,7 +110,12 @@ describe('examples/demo-sessions', () => {
           || TOUR_TEXTS.some((s) => s.includes(once.replace(/^ch/, '').replace(/ch$/, ''))),
           f + ': ' + v.slice(0, 60));
       }
-      if (f === 'DEMO-a3f3.replay.json') assert.equal(values.filter((v) => v === 'Copy Copy').length, 11);
+      if (f !== 'DEMO-681w.replay.json') assert.ok(values.length > 0, f);
+      if (f === 'DEMO-a3f3.replay.json') {
+        assert.equal(values.filter((v) => v === 'Copy Copy').length, 11);
+        const pastes = j.segments.flatMap((s) => s.events.filter((e) => e.type === 'clipboard.paste'));
+        assert.deepEqual(pastes.map((p) => p.len), [9]);
+      }
     }
   });
 
