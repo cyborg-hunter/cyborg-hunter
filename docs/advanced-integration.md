@@ -117,7 +117,7 @@ Either way, the navigation away (e.g. `window.location.replace(REDIRECT_URL)`) m
 
 jsPsych extensions only fire for trials whose `extensions: [...]` array lists them. There are two ways to opt in:
 
-**Recommended for most experiments — opt all trials in via a single forEach** (works even with 100+ trials):
+**Every trial — opt all trials in via a single forEach** (works even with 100+ trials):
 
 ```javascript
 // After all timeline.push() calls, just before jsPsych.run:
@@ -142,7 +142,7 @@ If `integritySession` is missing on the last row, `finalize()` either wasn't cal
 
 ### Standalone (non-jsPsych) usage
 
-If your experiment isn't jsPsych, use the library directly:
+An experiment that isn't jsPsych loads `ch.js` as well (`ch-qualtrics.js` on [Qualtrics](qualtrics.md), `ch-labjs.js` on [lab.js](labjs.md)): on a page without a framework, trials are marked with `data-ch-trial` or `CyborgHunter.mark()`, and the experiment saves `CyborgHunter.data()` ([Vanilla segmentation reference](#vanilla-segmentation-reference)). Code that drives the monitor itself, for example to screen a participant out mid-session with `shouldScreenout()` (with the one-line setup it always returns `false`), uses the library directly:
 
 ```html
 <script src="path/to/cyborg-hunter.min.js"></script>
@@ -244,10 +244,19 @@ Friction is **off by default**. Enable it with `data-guards="honeypot,friction"`
 
 Enforcement starts at a mark you place:
 
-- **jsPsych:** push `CyborgHunter.frictionEntryTrial()` into the timeline where enforcement should begin. It is a button trial that asks the participant to enter fullscreen (the click is the user gesture fullscreen needs). It uses `jsPsychHtmlButtonResponse`, so load `plugin-html-button-response.js`. Pass `{ message: '<p>…</p>' }` to replace the default text.
+- **jsPsych:** push `CyborgHunter.frictionEntryTrial()` into the timeline where enforcement should begin. It is a button trial that asks the participant to enter fullscreen (the click is the user gesture fullscreen needs). It uses `jsPsychHtmlButtonResponse`, so load `plugin-html-button-response.js`. Pass `{ message: '<p>…</p>' }` to replace the default text, heading included; the button label is fixed ("Enter fullscreen and continue").
 - **Pages without jsPsych:** put `data-ch-friction-start` on a clickable element, or call `CyborgHunter.startFriction()` from a click handler.
 
 Without a mark, friction observes only: it logs violations and shows no curtain.
+
+`jsPsychGuardFriction.entryTrial({ message })` builds the same trial as `CyborgHunter.frictionEntryTrial()` and takes the same option:
+
+```javascript
+timeline.push(jsPsychGuardFriction.entryTrial({
+  message: '<h2>This study runs in fullscreen</h2>' +
+    '<p>Keep this tab in focus until the end. Click the button below to begin.</p>'
+}));
+```
 
 To add your own data to the entry trial, spread its `data` instead of replacing it:
 

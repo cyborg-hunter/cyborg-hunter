@@ -1,6 +1,8 @@
-// The live session record: a persistently visible two-tab pane —
-// an append-only signal stream (default) and the literal session JSON. Fed by
-// demo.js from the same onSignal dispatch as the rail. Frozen at results.
+// The live session record: a two-tab pane under the step card on every
+// step — an append-only signal stream (default) and the literal session
+// JSON. Fed by demo.js from the same onSignal dispatch as the rail. Frozen at
+// results. Collapsed under the bar above it until the visitor asks for it
+// (makePaneBar below).
 //
 // A per-trial tab rail (`.lp-trials`) sits on the left of the stream/
 // JSON views, filtering the stream to one trial at a time. Rows never leave
@@ -23,8 +25,8 @@ export function formatClock(ms) {
 // Pure row builder (unit-tested without a DOM). data-trial carries the
 // filter key the rail matches against — the trialId when one exists, or the
 // 'session' sentinel for trial-less rows (viewport shifts, session-scoped
-// keyboard shortcuts). No real trialId collides with 'session' (all are
-// act1-*/act2-*), so the sentinel is safe to reuse as a literal string.
+// keyboard shortcuts). No real trialId is 'session' or 'all' (steps-shape
+// test checks it), so the sentinel is safe to reuse as a literal string.
 //
 // The trial/event cells carry their own text as a title: demo.css wraps
 // them in floored columns, with overflow hidden only as the backstop for a
@@ -39,7 +41,96 @@ export function renderRowHtml(row) {
     '</div>';
 }
 
-export function makeLivePane(mount, pid) {
+// The bar above the record (index.html's [data-role="pane-toggle"], inside
+// the slot it shares with the record): the record's label while it is
+// collapsed, and the control that keeps it open. The record shows while any
+// of three attributes on the slot is "true", set here; demo.css keys on them
+// alone, never on :hover or :focus, so the session recording captures the
+// open state as the visitor saw it and the replay lays the record out where
+// it was clicked.
+//   - data-hover: a mouse pointer is over the slot. Touch and pen do not
+//     hover; a tap opens the record through the click below.
+//   - data-focus: keyboard focus is inside the slot, so Tab walks on through
+//     the record's own controls and the record closes once focus leaves it.
+//     Decided when focus arrives: a mouse click that focuses the bar does not
+//     count, or the record would stay open after "click to hide", and a key
+//     pressed afterwards does not reopen it.
+//   - data-open: kept open by a click on the bar (for touch screens, and for
+//     a visitor who wants the record to stay put while scrolling it), or by
+//     demo.js through setOpen() on the step whose copy sends the visitor to
+//     the record.
+// aria-expanded is true while the record is kept open or holds keyboard
+// focus (not on hover, which would make it flap). The hint follows data-open
+// alone, saying what a click does, and stays out of the button's accessible
+// name: its pointer words mean nothing read aloud, and the name stays the
+// record's. sync() writes only what changed, so a hover adds one attribute
+// change to the recording, not three.
+export function makePaneBar(slot) {
+  var bar = slot.querySelector('[data-role="pane-toggle"]');
+  bar.innerHTML = escHtml(LIVE_PANE.bar) + ' <span class="hint" aria-hidden="true"></span>';
+  var hintEl = bar.querySelector('.hint');
+
+  function sync() {
+    var open = slot.dataset.open === 'true';
+    var expanded = String(open || slot.dataset.focus === 'true');
+    if (bar.getAttribute('aria-expanded') !== expanded) bar.setAttribute('aria-expanded', expanded);
+    var hint = open ? LIVE_PANE.barHintOpen : LIVE_PANE.barHintClosed;
+    if (hintEl.textContent !== hint) hintEl.textContent = hint;
+  }
+
+  // name is a dataset key: 'hover', 'focus' or 'open'. Writes nothing when
+  // the flag already has that value: every write is a change the recording
+  // carries.
+  function setFlag(name, on) {
+    if ((slot.dataset[name] === 'true') === on) return;
+    if (on) slot.dataset[name] = 'true';
+    else delete slot.dataset[name];
+    sync();
+  }
+
+  function setOpen(open) { setFlag('open', open); }
+  sync();
+
+  bar.addEventListener('click', function () {
+    setOpen(slot.dataset.open !== 'true');
+  });
+
+  // Hover follows the element the mouse is over, read from pointerover on
+  // the document rather than pointerenter on the slot: a click on a trial
+  // tab replaces the button under the pointer (renderTabs), and Chromium can
+  // then fire no pointerleave on the slot when the pointer moves off, which
+  // would leave the record open. pointerleave still covers the pointer
+  // leaving the window from the slot, where no pointerover follows.
+  document.addEventListener('pointerover', function (e) {
+    if (e.pointerType === 'mouse') setFlag('hover', slot.contains(e.target));
+  });
+  slot.addEventListener('pointerleave', function (e) {
+    if (e.pointerType === 'mouse') setFlag('hover', false);
+  });
+
+  slot.addEventListener('focusin', function (e) {
+    if (e.target.matches(':focus-visible')) setFlag('focus', true);
+  });
+  // relatedTarget is where focus went: still inside the slot when Tab moves
+  // from the bar to the record's first control. It is null when focus goes
+  // to no element in the page: past its last control, or out of the window
+  // (where activeElement stays put, so document.hasFocus() tells), but also
+  // while renderTabs replaces the focused trial tab and then focuses its
+  // successor. So a null is decided after the current task, by where focus
+  // has landed by then. Focus coming back to the window lands in the slot
+  // again through focusin.
+  slot.addEventListener('focusout', function (e) {
+    if (slot.contains(e.relatedTarget)) return;
+    if (e.relatedTarget) { setFlag('focus', false); return; }
+    setTimeout(function () {
+      if (!document.hasFocus() || !slot.contains(document.activeElement)) setFlag('focus', false);
+    }, 0);
+  });
+
+  return { setOpen: setOpen };
+}
+
+export function makeLivePane(mount) {
   var frozen = false, count = 0, currentTab = 'stream';
   // Rail state: `trials` is the ordered list of real-trial tabs (never
   // includes 'all' or 'session'); `sessionTab` is null until the first
@@ -61,8 +152,7 @@ export function makeLivePane(mount, pid) {
     '<div class="lp-stream" data-role="lp-stream"><div class="lp-cols">' +
     '<span>time</span><span>trial</span><span>event</span><span>detail</span></div></div>' +
     '<pre class="lp-json" data-role="lp-json" hidden></pre>' +
-    '</div></div>' +
-    '<p class="lp-caption">' + escHtml(LIVE_PANE.caption.replace('{{pid}}', pid)) + '</p>';
+    '</div></div>';
   var bodyEl = mount.querySelector('.lp-body');
   var trialsEl = mount.querySelector('[data-role="lp-trials"]');
   var streamEl = mount.querySelector('[data-role="lp-stream"]');
@@ -73,8 +163,12 @@ export function makeLivePane(mount, pid) {
   // click. `.lp-trial-tab` is a distinct class token from `.lp-tab` above
   // (the stream/JSON pill pair) so neither this file's own
   // querySelectorAll('.lp-tab') nor the E2E suite's `.lp-tab` locators picks
-  // up these buttons.
+  // up these buttons. A rebuild replaces the focused button too, which drops
+  // focus to the page; focus moves on to the new button with the same key, so
+  // a keyboard visitor who picks a trial keeps their place, and the record,
+  // which closes when keyboard focus leaves it (makePaneBar), stays open.
   function renderTabs() {
+    var focusedKey = trialsEl.contains(document.activeElement) ? document.activeElement.dataset.trialKey : null;
     var html = '<button class="lp-trial-tab" data-trial-key="all" aria-pressed="' +
       (activeTrial === 'all') + '" title="' + escHtml(LIVE_PANE.trials.allLabel) + '">' +
       escHtml(LIVE_PANE.trials.allLabel) + '</button>';
@@ -92,6 +186,11 @@ export function makeLivePane(mount, pid) {
         escHtml(sessionTab.label) + '</button>';
     }
     trialsEl.innerHTML = html;
+    if (focusedKey == null) return;
+    var buttons = trialsEl.querySelectorAll('.lp-trial-tab');
+    for (var i = 0; i < buttons.length; i++) {
+      if (buttons[i].dataset.trialKey === focusedKey) { buttons[i].focus(); return; }
+    }
   }
   renderTabs(); // 'All' is visible from the start, before any trial is reached
 

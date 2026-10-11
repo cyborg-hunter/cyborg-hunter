@@ -38,11 +38,6 @@
   },
   "presets": {
     "standard": {
-      "controls": {
-        "pasteHardCount": 2,
-        "tabAwayCutoffMs": 3000,
-        "typingSpeedCps": 10
-      },
       "scoring": {
         "soft": {
           "copy": {
@@ -65,36 +60,7 @@
           "foreignInput": {
             "weight": 2
           }
-        },
-        "softScoreThreshold": 6
-      }
-    },
-    "strict": {
-      "controls": {
-        "pasteHardCount": 1,
-        "tabAwayCutoffMs": 5000,
-        "typingSpeedCps": 8
-      },
-      "scoring": {
-        "soft": {
-          "tabAway": {
-            "weight": 2,
-            "maxPerTrial": 1
-          },
-          "typingSpeed": {
-            "weight": 3
-          },
-          "sidebarEvent": {
-            "weight": 2
-          },
-          "devTools": {
-            "weight": 2
-          },
-          "foreignInput": {
-            "weight": 3
-          }
-        },
-        "softScoreThreshold": 4
+        }
       }
     }
   }

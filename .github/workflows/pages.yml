@@ -121,7 +121,7 @@ jobs:
         # fail with "Executable doesn't exist".
         run: npx playwright install --with-deps chromium firefox webkit
 
-      - name: E2E (Playwright, 11-step tour + boundaries + downloads-to-CLI + variants + analyze page (three engines))
+      - name: E2E (Playwright, 10-step tour + boundaries + downloads-to-CLI + variants + analyze page (three engines))
         run: npm run test:e2e
 
   deploy:

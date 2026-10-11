@@ -14,18 +14,18 @@
 // session poll also feed live-pane.js's append-only stream + raw-JSON view
 // (paneRow()) — the rail is the demo-only curated subset, the pane is the
 // full record. Frozen (+ replay/guard finalized, rail hidden) on entering
-// the last step (your files).
+// the last step (your files). Collapsed under its bar until the visitor
+// asks for it, and opened on the step whose copy sends the visitor to it.
 
 import {
-  STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS, RAIL_INTRO,
-  RAIL_INTRO_TITLE, CODE_TABS, DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE,
-  SCORING_PANEL, SAVE_TO_FOLDER
+  STEPS, POSITIONING, CLOSING_CTA, CONFIG_CAVEAT, RAIL_GROUPS,
+  DOWNLOAD_BATCHES, HANDOFF, HANDOFF_ASSETS, REPLICATE, SCORING_PANEL, SAVE_TO_FOLDER, BACK_LABEL
 } from './steps.js';
 import { writeHandoff, clearHandoff } from './handoff.js';
 import { makeLifecycle } from './lifecycle.js';
-import { renderRail, light, acknowledge } from './rail.js';
+import { renderRail, light, setRecording, acknowledge, clearSignalBox } from './rail.js';
 import { buildPayload } from './payload.js';
-import { makeLivePane } from './live-pane.js';
+import { makeLivePane, makePaneBar } from './live-pane.js';
 import { escHtml } from './util.js';
 
 var SESSION_POLL_MS = 5000;
@@ -76,7 +76,7 @@ function fullscreenIsActive() {
 // hazard as the plugin's own exitFullscreenFnOf), only when the plugin
 // bundle never loaded — a path the demo already tolerates elsewhere
 // (handleFullscreenEntry). Idempotent: a no-op when not fullscreen, so
-// calling this after act 2 was skipped or the visitor already pressed Esc
+// calling this after the guard was skipped or the visitor already pressed Esc
 // is harmless.
 function exitFullscreenIfActive() {
   if (!fullscreenIsActive()) return;
@@ -97,7 +97,7 @@ function exitFullscreenIfActive() {
   }
 }
 
-// Step 8's 1.5s fullscreen-entry race. Calls OUR OWN requestFullscreen() —
+// Step 6's 1.5s fullscreen-entry race. Calls OUR OWN requestFullscreen() —
 // not GuardFriction.requestFullscreen(), which fires the request and
 // swallows any promise rejection — so we get a real
 // promise to race against a timeout and the 'fullscreenchange' event.
@@ -171,7 +171,6 @@ function boot() {
   // analyzer page never opened: it must not reach a later visit there.
   clearHandoff().catch(function () {});
   var participantId = randomParticipantId();
-  document.getElementById('pid').textContent = participantId;
 
   // Snapshotted ONCE at boot — later resizes rearrange layout but never
   // terminate a running session (states-and-edge-rules: 830→700→900px case).
@@ -191,8 +190,8 @@ function boot() {
 }
 
 // Row label lookup (RAIL_GROUPS -> {key: label}), used by acknowledge() so
-// the inline "✓ detected" strip text lives in one place (steps.js) rather
-// than being retyped at every signal call site.
+// the signal box's "✓ detected" line text lives in one place (steps.js)
+// rather than being retyped at every signal call site.
 var RAIL_LABELS = {};
 ['detectors', 'guard', 'recording'].forEach(function (g) {
   RAIL_GROUPS[g].forEach(function (r) { RAIL_LABELS[r.key] = r.label; });
@@ -201,7 +200,7 @@ var RAIL_LABELS = {};
 // Tab label + run order per trial: the step's own heading — the
 // human-readable name the visitor read while running that trial ("Now cheat
 // with the clipboard") — NOT the trialId the stream's trial column prints
-// ('act1-paste'), and not task.kind's slug either. Titles for trial-owning
+// ('paste'), and not task.kind's slug either. Titles for trial-owning
 // steps carry no {{placeholders}}, so they need no tpl() pass here (which
 // module scope couldn't reach anyway).
 var TRIAL_TABS = [];  // [{ id, label }] in STEPS order
@@ -222,14 +221,14 @@ function startTour(participantId, capabilities, manifest) {
     lampCounts: {},
     violations: [],
     trialReports: [],
-    // Guard act: the token GuardFriction.start() returns — needed by
+    // Guard: the token GuardFriction.start() returns — needed by
     // stop() — and per-reason violation tallies for the guard-cheat step's
     // chip row.
     guardStopToken: null,
     chipCounts: {},
     // Replay (always-on): the attached CyborgHunterReplay instance
-    // (startReplay() attempts it unconditionally at "Start"), its finalized
-    // recording — cached so the download button, the "show as text"
+    // (startReplay() attempts it unconditionally at "Start the demo"), its
+    // finalized recording — cached so the download button, the "show as text"
     // fallback and the hand-off to the analyzer always agree — and whether
     // attaching ever failed, so the files step can say so honestly instead
     // of just silently omitting the file.
@@ -243,18 +242,20 @@ function startTour(participantId, capabilities, manifest) {
   };
 
   var cardEl = document.getElementById('card');
-  var progressEl = document.getElementById('progress');
   var railEl = document.getElementById('rail');
   var colsEl = document.querySelector('.cols');
   // The CSS card treatment (background/shadow/padding) lives on this class;
   // set once here rather than in every renderStep() innerHTML string.
   cardEl.classList.add('stepcard');
 
-  renderRail(railEl, { groups: RAIL_GROUPS, intro: RAIL_INTRO, introTitle: RAIL_INTRO_TITLE });
+  renderRail(railEl, { groups: RAIL_GROUPS });
+  // The box at the top of the rail that lists what the current step
+  // detected: syncCountLamp() writes to it, renderStep() resets it.
+  var signalBoxEl = railEl.querySelector('[data-role="signal-box"]');
 
   // ----- Live session pane -----------------------------------------------
-  // Persistently visible record, fed from the same signal
-  // dispatch as the rail. buildCurrentPayload() is the SAME buildPayload(...)
+  // The record, fed from the same signal dispatch as the rail.
+  // buildCurrentPayload() is the SAME buildPayload(...)
   // call buildDownloadFile('sessionData') makes, extracted so both stay in
   // sync (DRY) — declared here as a function so it can close over `monitor`
   // below despite running after it (function declarations hoist).
@@ -262,8 +263,12 @@ function startTour(participantId, capabilities, manifest) {
   // class="card"), permanent markup under the step card in index.html's
   // [data-role="pane-slot"]; it stays there on every step.
   var paneEl = document.querySelector('[data-role="live-pane"]');
-  state.pane = makeLivePane(paneEl, participantId);
+  state.pane = makeLivePane(paneEl);
   state.t0 = performance.now();
+  // The bar above the record, which stays collapsed until the slot is
+  // hovered, focused or clicked open (live-pane.js makePaneBar); goTo()
+  // opens it on the debrief step.
+  var paneBar = makePaneBar(document.querySelector('[data-role="pane-slot"]'));
 
   // opts.final is the download seam's flag ONLY (buildDownloadFile passes
   // it for 'sessionData') — with it set, and once the last step has
@@ -298,14 +303,14 @@ function startTour(participantId, capabilities, manifest) {
   // 5s poll (pollSessionSignals -> syncCountLamp -> acknowledge()), which
   // would see the sidebar/viewport artifact our OWN fullscreen exit there
   // produces (exitFullscreenIfActive(), goTo()'s last-step block below) and
-  // announce a false "✓ detected" strip for a detection the visitor never
+  // announce a false "✓ detected" line for a detection the visitor never
   // produced. Safe to retire for good: the rail is already hidden
   // permanently from that step onward, and the monitor itself keeps recording
   // regardless (finalizing the payload is not this wiring's job).
   var lampWiringActive = false;
   var lampWiringRetired = false;
   var sessionPollId = null;
-  // Step 6 (autotype)'s char-by-char animation runs its own setInterval,
+  // Step 5 (autotype)'s char-by-char animation runs its own setInterval,
   // outside the library entirely — tracked here so goTo() can cancel a
   // still-running animation on navigation (Back/Continue are both valid
   // mid-animation, per "advance is always available"), instead of leaving it
@@ -348,7 +353,7 @@ function startTour(participantId, capabilities, manifest) {
     if (count > (state.lampCounts[key] || 0)) {
       state.lampCounts[key] = count;
       light(key, count, { hard: hard });
-      if (label) acknowledge(cardEl, label);
+      if (label) acknowledge(signalBoxEl, label);
     }
   }
 
@@ -489,8 +494,8 @@ function startTour(participantId, capabilities, manifest) {
   monitor.startSession();
   // Recorder-like bridge for makeLifecycle's optional recorder param.
   // A live proxy rather than passing state.recorder directly: the replay
-  // recorder only attaches inside the "Start" click (startReplay()), which
-  // runs AFTER this lifecycle is constructed — reading state.recorder at
+  // recorder only attaches inside the "Start the demo" click (startReplay()),
+  // which runs AFTER this lifecycle is constructed — reading state.recorder at
   // call time lets the very first trial (step 2) get bracketed too.
   var recorderBridge = {
     startTrial: function (opts) { if (state.recorder) state.recorder.startTrial(opts); },
@@ -501,7 +506,7 @@ function startTour(participantId, capabilities, manifest) {
   // Tab-close hygiene: don't leave the poll running into page teardown.
   window.addEventListener('pagehide', stopLampWiring);
 
-  // Act-2 violations (GuardFriction is a separate global, not part of the
+  // Guard violations (GuardFriction is a separate global, not part of the
   // CyborgHunter monitor). Counts each violation the moment it starts, for
   // an immediately responsive lamp.
   if (window.GuardFriction && typeof window.GuardFriction.onViolation === 'function') {
@@ -509,8 +514,8 @@ function startTour(participantId, capabilities, manifest) {
       // Recorded for the payload's guardFriction.violations[] regardless of
       // lamp-wiring state (see handleTrialReport's comment above — same reasoning).
       state.violations.push(violation);
-      // Violation chips (type × count) live only in the guard-cheat step's
-      // task panel — tally + repaint them only while that step is showing.
+      // Violation chips (type × count) live only on the guard-cheat step,
+      // under its copy — tally + repaint them only while that step is showing.
       var currentTask = STEPS[state.stepIndex].task;
       if (violation.phase === 'start' && currentTask && currentTask.kind === 'guard-cheat') {
         state.chipCounts[violation.reason] = (state.chipCounts[violation.reason] || 0) + 1;
@@ -531,7 +536,7 @@ function startTour(participantId, capabilities, manifest) {
     });
   }
 
-  // ----- guard act -------------------------------------------------
+  // ----- guard -----------------------------------------------------
 
   // Standalone GuardFriction.start() — not the jsPsych entryTrial() helper,
   // since this demo never spins up a jsPsych instance. Only called after
@@ -577,7 +582,7 @@ function startTour(participantId, capabilities, manifest) {
   // ----- No-trap guarantee -----------------------------------------------
   // The End button must stay REACHABLE while the guard's violation overlay
   // is up — a visitor who exits fullscreen and refuses to re-enter must
-  // still be able to end the act. GuardFriction's overlay is a fixed
+  // still be able to end the guard. GuardFriction's overlay is a fixed
   // inset-0 curtain at z-index 2147483647 (int max) appended to
   // document.body at the first violation; it paints over and
   // pointer-intercepts everything beneath it, including the in-card
@@ -598,8 +603,13 @@ function startTour(participantId, capabilities, manifest) {
   function onEndGuardClick() {
     // finalizeGuard → GuardFriction.stop(): ends any active violation
     // (emitting its phase:'end', which unfloats via the handler below) and
-    // hides the overlay — so ending the act mid-violation is clean.
+    // hides the overlay — so ending the guard mid-violation is clean.
     finalizeGuard();
+    // Fullscreen stays until the files step, where the session is finalised
+    // first: leaving it here, while the monitor still records, makes the
+    // window's width change read as a sidebar opening (a false sidebar event
+    // and lamp). Leaving at the end of the guard returns once the library
+    // tells a fullscreen change from a sidebar.
     goTo(state.stepIndex + 1);
   }
 
@@ -643,7 +653,7 @@ function startTour(participantId, capabilities, manifest) {
     var note = cardEl.querySelector('.fallback-note');
     if (note) {
       note.textContent = (step.task && step.task.fallbackNote) ||
-        "Fullscreen didn't engage in time, so Act 2's enforcement can't run in this browser. Skip ahead; everything else in the tour still works.";
+        "Fullscreen didn't engage in time, so the guard can't run in this browser. Skip ahead; everything else in the tour still works.";
       note.hidden = false;
     }
     if (!cardEl.querySelector('a[data-key="skipToScores"]')) {
@@ -654,7 +664,7 @@ function startTour(participantId, capabilities, manifest) {
     }
   }
 
-  // Drives step 8's fullscreen-entry race. A guard API absence (bundle
+  // Drives step 6's fullscreen-entry race. A guard API absence (bundle
   // failed to load) is treated the same as a failed race — fallback + skip,
   // never a throw — since advancing into guard-cheat with no guard running
   // would silently pretend enforcement is active when it isn't.
@@ -681,16 +691,15 @@ function startTour(participantId, capabilities, manifest) {
   // ----- replay (always-on) ------------------------------------------
 
   // Attaches the standalone replay recorder unconditionally, called from the
-  // "Start" click before goTo(1) opens step 2's trial — recorderBridge reads
-  // state.recorder live, so as long as this finishes first, the very first
-  // trial gets bracketed too. The REC pill shows immediately regardless of
-  // whether attach actually succeeds (replay is on by default); a
-  // failure keeps the tour degrading gracefully and marks
-  // state.replayUnavailable so the files step can say so honestly instead
-  // of just silently dropping the file.
+  // "Start the demo" click before goTo(1) opens step 2's trial —
+  // recorderBridge reads state.recorder live, so as long as this finishes
+  // first, the very first trial gets bracketed too. The rail's replay lamp
+  // starts pulsing (the cue that the session records) only once the
+  // recorder has attached and started, so it never claims a recording that
+  // is not being made; a failure leaves the lamp steady, keeps the tour
+  // degrading gracefully and marks state.replayUnavailable so the files
+  // step can say so honestly instead of just silently dropping the file.
   function startReplay() {
-    var recEl = document.getElementById('rec');
-    if (recEl) recEl.hidden = false;
     try {
       if (!window.CyborgHunterReplay || typeof window.CyborgHunterReplay.attach !== 'function') {
         throw new Error('CyborgHunterReplay unavailable');
@@ -701,10 +710,14 @@ function startTour(participantId, capabilities, manifest) {
         autoSave: { mode: 'none' }
       });
       state.recorder.startSession();
+      setRecording(true);
     } catch (err) {
       console.warn('cyborg-hunter demo: replay attach failed, continuing without a recording', err);
       state.recorder = null;
       state.replayUnavailable = true;
+      // Steady again if an earlier Start lit it: a new attach first
+      // discards the recorder already running, so nothing records now.
+      setRecording(false);
     }
   }
 
@@ -731,23 +744,8 @@ function startTour(participantId, capabilities, manifest) {
     return substitute(str, manifest.signals, version);
   }
 
-  function guardedActIndex() {
-    return STEPS.findIndex(function (s) { return s.act === 'act2'; });
-  }
-
   function scoresIndex() {
     return STEPS.findIndex(function (s) { return s.id === 'signals-to-scores'; });
-  }
-
-  // .eyebrow .act2 (demo.css) colors the "Act 2" prefix red — it's a
-  // descendant selector, so act2 steps need that prefix wrapped in its own span.
-  function renderEyebrow(step) {
-    if (step.act !== 'act2') return step.eyebrow;
-    var idx = step.eyebrow.indexOf('·');
-    if (idx === -1) return step.eyebrow;
-    var prefix = step.eyebrow.slice(0, idx).trim();
-    var rest = step.eyebrow.slice(idx);
-    return '<span class="act2">' + prefix + '</span> ' + rest;
   }
 
   // The name a session file is saved under: buildDownloadFile writes it and
@@ -855,11 +853,13 @@ function startTour(participantId, capabilities, manifest) {
     dlg.showModal();
   }
 
-  // The last step's documentation-style walkthrough (REPLICATE.sections),
-  // numbered headings with copyable code blocks. code may carry {{version}} — tpl()
+  // The last step's documentation-style walkthrough: its heading
+  // (REPLICATE.title), then the numbered sections (REPLICATE.sections) with
+  // copyable code blocks. code may carry {{version}} — tpl()
   // substitutes before escaping, same order as everywhere else code renders.
   function renderReplicateSection() {
     var html = '<div class="replicate">';
+    html += '<h2 class="replicate-title">' + escHtml(REPLICATE.title) + '</h2>';
     REPLICATE.sections.forEach(function (s) {
       html += '<h3>' + s.n + '. ' + escHtml(s.heading) + '</h3>';
       html += '<p>' + escHtml(s.text) + '</p>';
@@ -870,7 +870,7 @@ function startTour(participantId, capabilities, manifest) {
     return html;
   }
 
-  // "Open in the analyzer": the files the batches offer and the page's
+  // "Open in the analyzer web app": the files the batches offer and the page's
   // fonts, stored for the analyze page (handoff.js), which this tab then
   // opens. The navigation waits for the write, so no popup blocker is
   // involved, and Back returns to the tour. If a data file cannot be
@@ -1006,10 +1006,9 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // The last step's panel: the hand-off to the analyzer first, with the
-  // line that leaving the page ends the session; then "Save all into a
-  // folder" where the browser has a folder picker; then the two download
-  // batches, each a heading and an even grid of cards; then the
+  // The last step's panel: the hand-off to the analyzer first; then "Save
+  // all into a folder" where the browser has a folder picker; then the two
+  // download batches, each a heading and an even grid of cards; then the
   // command-line walkthrough.
   function renderDownloadsPanel(task) {
     // scramble coupling: same .jspsych-content convention as renderTaskPanel
@@ -1017,11 +1016,10 @@ function startTour(participantId, capabilities, manifest) {
     // getJsPsychContent()'s match, so this class keeps the downloads panel a
     // valid scramble target too (moot in practice: guard is long stopped by
     // this step, but the class is applied uniformly regardless of step).
-    var parts = ['<div class="task jspsych-content">', '<p class="label">' + task.kind + '</p>'];
+    var parts = ['<div class="task jspsych-content">'];
     parts.push(
       '<div class="handoff"><button class="btn" data-action="open-analyzer">' + escHtml(HANDOFF.buttonLabel) + '</button>' +
       '<span class="hint">' + escHtml(HANDOFF.buttonHint) + '</span></div>' +
-      '<p class="hint" data-role="leave-hint">' + escHtml(HANDOFF.leaveHint) + '</p>' +
       '<p class="rule" data-role="handoff-note" role="status" hidden></p>'
     );
     if ('showDirectoryPicker' in window) {
@@ -1046,22 +1044,6 @@ function startTour(participantId, capabilities, manifest) {
     parts.push(renderReplicateSection());
     parts.push(renderClosingCta());
     return parts.join('');
-  }
-
-  // Step 2's "what this looks like in your code" split (CODE_TABS): two
-  // pill tabs, same active/hidden pattern as live-pane.js's stream/JSON tabs.
-  function renderCodeTabs() {
-    var order = ['jspsych', 'plainjs'];
-    var html = '<p class="hint">' + escHtml(CODE_TABS.caption) + '</p>';
-    html += '<div class="code-tabs">' + order.map(function (key) {
-      var active = key === CODE_TABS.defaultTab ? ' active' : '';
-      return '<button class="code-tab' + active + '" data-tab="' + key + '">' + escHtml(CODE_TABS[key].label) + '</button>';
-    }).join('') + '</div>';
-    html += order.map(function (key) {
-      var hidden = key === CODE_TABS.defaultTab ? '' : ' hidden';
-      return '<pre data-role="code-pane" data-tab="' + key + '"' + hidden + '><code>' + escHtml(CODE_TABS[key].code) + '</code></pre>';
-    }).join('');
-    return html;
   }
 
   // Config-as-source snippets: both built from the manifest's real values,
@@ -1102,7 +1084,7 @@ function startTour(participantId, capabilities, manifest) {
     }, null, 2);
   }
 
-  // Step 10's scoring panel: the visitor's soft score so far (filled in by
+  // Step 9's scoring panel: the visitor's soft score so far (filled in by
   // fillLiveScore(), which reads the monitor), the note on what the
   // analyzer's settings panel changes afterwards, and the two
   // config-as-source snippets above. This function only builds the static
@@ -1121,11 +1103,11 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // Step 10: fills the panel's one text node, [data-role="live-score"],
+  // Step 9: fills the panel's one text node, [data-role="live-score"],
   // with the soft score so far: the library's own number from
   // monitor.getSessionReport() (the standard preset this session runs
   // under), checked against the manifest's threshold for that preset.
-  // Called fresh from goTo() every time step 10 renders, so a return visit
+  // Called fresh from goTo() every time step 9 renders, so a return visit
   // shows the score as it stands then.
   function fillLiveScore(manifest) {
     var scoreEl = cardEl.querySelector('[data-role="live-score"]');
@@ -1135,7 +1117,7 @@ function startTour(participantId, capabilities, manifest) {
       (session.softScore || 0) + ' (flags at ' + manifest.signals.softScoreThreshold + ' or above).';
   }
 
-  // Step 8's guard entry: the library's own entry message rendered VERBATIM
+  // Step 6's guard entry: the library's own entry message rendered VERBATIM
   // (truth-by-construction — never a drifting copy of it), with its own
   // button wired to the existing fullscreen-entry flow. Not wrapped in
   // .jspsych-content: the guard curtain never scrambles this step (it isn't
@@ -1150,7 +1132,7 @@ function startTour(participantId, capabilities, manifest) {
     );
   }
 
-  // ----- Step 6: autotype ------------------------------------------------
+  // ----- Step 5: autotype ------------------------------------------------
   // Drives synthetic insertion + fast typing FOR REAL, not just visually.
   // src/core/signals/typing.js flags an 'input' event as synthetic when it
   // carries inputType 'insertText' and arrives more than syntheticGapMs
@@ -1200,22 +1182,43 @@ function startTour(participantId, capabilities, manifest) {
     if (!task) return '';
     if (task.kind === 'downloads') return renderDownloadsPanel(task);
     if (task.kind === 'fullscreen-entry') return renderGuardEntryPanel();
-    // scramble coupling: GuardFriction's obfuscateContent() only touches
-    // getJsPsychContent()'s match (.jspsych-content / .jspsych-display-element
-    // / #jspsych-content) — this class makes every task panel a valid target,
-    // not just Act 2's, so a violation during any step scrambles the task.
-    var parts = ['<div class="task jspsych-content">', '<p class="label">' + task.kind + '</p>'];
-    // The actual question text (baseline's `prompt`, clipboard-cheat's
-    // `question`) gets the plain bold .question treatment; .rule is
-    // reserved for callout-style copy (the guard's fallback-note).
-    var questionText = task.prompt || task.question;
-    if (questionText) parts.push('<p class="question">' + tpl(questionText) + '</p>');
+    // Leaving the tab and opening a sidebar happen outside the page: the
+    // step's text is the whole task, so there is no panel (and no empty grey
+    // box). The step's trial still opens from its trialId in goTo().
+    if (task.kind === 'tab-away') return '';
+    // The guard step (step 7) has no panel either: its copy is what the guard
+    // scrambles (renderStep gives it .jspsych-content), so the step adds only
+    // its End button, which doubles as the step's primary action (steps.js
+    // sets primaryLabel for it, but renderStep() suppresses the normal
+    // .btnrow primary for guard-cheat so there's only the one button). The
+    // button sits outside the scramble target, so its legibility never
+    // depends on scramble/blur context; its row is as wide as the text
+    // column, so the button centres under the text (demo.css .endguard-row).
+    if (task.kind === 'guard-cheat') {
+      return '<div class="endguard-row"><button class="endguard" data-action="end-guard">' +
+        tpl(STEPS[state.stepIndex].primaryLabel) + '</button></div>';
+    }
+    var parts = [];
+    // The text to copy (clipboard-cheat): a bordered block of its own ahead
+    // of the panel, so it sits between the step's text and the box it is
+    // pasted into, outside the grey panel.
     if (task.kind === 'copy-paste') {
       parts.push(
         '<div class="answerchip"><code>' + escHtml(task.providedAnswer) + '</code>' +
         '<span class="hint">copy this, then paste it below</span></div>'
       );
     }
+    // scramble coupling: GuardFriction's obfuscateContent() only touches
+    // getJsPsychContent()'s match (the page's first .jspsych-content, else
+    // .jspsych-display-element / #jspsych-content) — this class makes every
+    // task panel a valid target, so a violation during any step scrambles
+    // the task.
+    parts.push('<div class="task jspsych-content">');
+    // The actual question text (baseline's `prompt`, clipboard-cheat's
+    // `question`) gets the plain bold .question treatment; .rule is
+    // reserved for callout-style copy (the guard's fallback-note).
+    var questionText = task.prompt || task.question;
+    if (questionText) parts.push('<p class="question">' + tpl(questionText) + '</p>');
     if (task.kind === 'type-answer' || task.kind === 'copy-paste') {
       parts.push('<textarea rows="3" placeholder="Type your answer here"></textarea>');
     }
@@ -1230,61 +1233,49 @@ function startTour(participantId, capabilities, manifest) {
       parts.push('<p class="hint">Target pastes: ' + task.targetPastes + '</p>');
     }
     parts.push('</div>');
-    // End-guard button (step 9): a sibling OUTSIDE .jspsych-content — its
-    // legibility can never depend on scramble/blur context — doubling as
-    // this step's primary action (steps.js sets primaryLabel for it, but
-    // renderStep() suppresses the normal .btnrow primary for guard-cheat so
-    // there's only the one button).
-    if (task.kind === 'guard-cheat') {
-      parts.push('<button class="endguard" data-action="end-guard">' + tpl(STEPS[state.stepIndex].primaryLabel) + '</button>');
-    }
     return parts.join('');
-  }
-
-  function renderSecondary(step) {
-    if (!step.secondary) return '';
-    return step.secondary.map(function (s) {
-      if (s.kind === 'link') {
-        return '<a href="#" class="skip" data-key="' + s.key + '">' + s.label + '</a>';
-      }
-      return '';
-    }).join(' ');
   }
 
   function renderStep(i) {
     var step = STEPS[i];
     var html = '';
-    html += '<p class="eyebrow">' + renderEyebrow(step) + '</p>';
+    html += '<p class="eyebrow" data-role="step-label">' + step.eyebrow + '</p>';
     html += '<h2>' + tpl(step.title) + '</h2>';
-    html += '<div class="stepcopy">' + tpl(step.body) + '</div>';
-    // Violation chips render OUTSIDE the task panel deliberately: the panel
-    // carries .jspsych-content, and GuardFriction's obfuscateContent() walks
-    // and scrambles every text node inside its match — a chip row nested in
-    // there would scramble its own "you triggered X" text the instant it's
-    // written (confirmed while verifying: the chip text came back as
-    // ciphertext). Chips need to stay legible while a violation is live.
-    if (step.task && step.task.kind === 'guard-cheat') {
+    // The guard step has no task panel, so its copy is what the guard
+    // scrambles: GuardFriction's obfuscateContent() takes the page's first
+    // .jspsych-content, and on this step the copy is the only one. Leaving
+    // fullscreen or focus scrambles and hides the paragraphs, as the copy
+    // says.
+    var isGuardStep = !!(step.task && step.task.kind === 'guard-cheat');
+    html += '<div class="stepcopy' + (isGuardStep ? ' jspsych-content' : '') + '">' + tpl(step.body) + '</div>';
+    // Violation chips render under the copy, OUTSIDE it, deliberately:
+    // obfuscateContent() walks and scrambles every text node inside its
+    // match — a chip row nested in there would scramble its own "you
+    // triggered X" text the instant it's written (confirmed while
+    // verifying: the chip text came back as ciphertext). Chips need to stay
+    // legible while a violation is live.
+    if (isGuardStep) {
       html += '<div class="violations" data-role="violation-chips"></div>';
     }
     html += renderTaskPanel(step.task);
-    if (step.showCodeTabs) html += renderCodeTabs();
     // The scoring step: the soft score so far + config-as-source snippets.
     // task: null for this step, so this is a sibling of the (empty) task
     // panel.
     if (step.id === 'signals-to-scores') html += renderScoringPanel(manifest);
     html += '<div class="btnrow">';
-    if (i > 0) html += '<a href="#" class="skip" data-action="back">Back</a>';
+    if (i > 0) html += '<button class="btn btn-back" data-action="back">← ' + escHtml(BACK_LABEL) + '</button>';
     // guard-cheat's primary lives on the end-guard button rendered above
-    // (outside the scramble wrapper) instead of here — never both. Steps
+    // (outside the scramble target) instead of here — never both. Steps
     // with primaryLabel: null (guard-entry) render no primary at all; the
     // entry box carries the library's own button.
     if (step.primaryLabel && !(step.task && step.task.kind === 'guard-cheat')) {
       html += '<button class="btn" data-action="primary">' + tpl(step.primaryLabel) + '</button>';
     }
     html += '</div>';
-    var secondary = renderSecondary(step);
-    if (secondary) html += '<p class="secondary">' + secondary + '</p>';
     cardEl.innerHTML = html;
+    // A new step starts with an empty signal box: the box holds what this
+    // step detects, the lamps under it keep the count across steps.
+    clearSignalBox(signalBoxEl);
   }
 
   var filesIndex = STEPS.findIndex(function (s) { return s.id === 'your-files'; });
@@ -1324,6 +1315,9 @@ function startTour(participantId, capabilities, manifest) {
     // Repaints from state.chipCounts (not a reset) so Back-then-forward into
     // guard-cheat shows the tally already accumulated this session.
     if (step.task && step.task.kind === 'guard-cheat') renderViolationChips();
+    // The debrief step's copy sends the visitor to the record, so it opens
+    // there with no hover; every other step leaves it as the visitor left it.
+    if (step.id === 'guard-debrief') paneBar.setOpen(true);
     // The scoring step: fill in the soft score so far against the new panel
     // markup renderStep() just wrote.
     if (step.id === 'signals-to-scores') fillLiveScore(manifest);
@@ -1332,8 +1326,8 @@ function startTour(participantId, capabilities, manifest) {
       // interactive step, so this reflects the complete session. The
       // pane/replay/guard are all one-way finalizations from here on — the
       // tour proper is done — and the rail (a demo-only "current session"
-      // instrument) retires with them; the live pane stays visible, frozen,
-      // as the historical record.
+      // instrument) retires with them; the live pane stays under the card,
+      // frozen, as the historical record.
       // Snapshotted ONCE: re-reading on every entry (e.g. a visitor who goes
       // Back then forward) would let the exit's own sidebar/viewport
       // artifact (exitFullscreenIfActive(), below) slip into a LATER read
@@ -1343,13 +1337,15 @@ function startTour(participantId, capabilities, manifest) {
       if (!state.sessionReport) state.sessionReport = monitor.getSessionReport();
       state.pane.freeze();
       finalizeReplay();
+      // The recording has ended, so the replay lamp stops pulsing with it.
+      setRecording(false);
       finalizeGuard();
       // AFTER finalizeGuard() deliberately: exiting fullscreen under an
       // armed guard logs a false 'not_fullscreen' violation (the plugin now
       // refuses that outright — exitFullscreen()'s own guard — but this
-      // ordering is the real guarantee, not the refusal). Step 8's copy
-      // already promises fullscreen is no longer required once the guarded
-      // act ends; this makes that literal on the way to the files.
+      // ordering is the real guarantee, not the refusal). Step 7's copy
+      // already promises fullscreen is no longer required once the guard
+      // ends; this makes that literal on the way to the files.
       exitFullscreenIfActive();
       // One-way latch (see the docblock at lampWiringActive's declaration):
       // must retire AFTER the sessionReport snapshot above, not before —
@@ -1361,17 +1357,9 @@ function startTour(participantId, capabilities, manifest) {
     // takes the full width instead (.cols.full, demo.css). Follows the rail,
     // so it would drop again if the rail ever showed.
     colsEl.classList.toggle('full', railEl.hidden);
-    progressEl.textContent = 'Step ' + (i + 1) + ' of ' + STEPS.length;
   }
 
   cardEl.addEventListener('click', function (e) {
-    var codeTabBtn = e.target.closest('.code-tab');
-    if (codeTabBtn) {
-      var tabKey = codeTabBtn.dataset.tab;
-      cardEl.querySelectorAll('.code-tab').forEach(function (b) { b.classList.toggle('active', b === codeTabBtn); });
-      cardEl.querySelectorAll('[data-role="code-pane"]').forEach(function (p) { p.hidden = p.dataset.tab !== tabKey; });
-      return;
-    }
     var back = e.target.closest('[data-action="back"]');
     if (back) { e.preventDefault(); goTo(state.stepIndex - 1); return; }
     var autotypeBtn = e.target.closest('[data-action="autotype"]');
@@ -1383,8 +1371,9 @@ function startTour(participantId, capabilities, manifest) {
     var primary = e.target.closest('[data-action="primary"]');
     if (primary) {
       var currentStep = STEPS[state.stepIndex];
-      // "Start" is the trigger point for the always-on replay — must run
-      // before goTo(1) below so the first trial (step 2) is bracketed.
+      // "Start the demo" is the trigger point for the always-on replay —
+      // must run before goTo(1) below so the first trial (step 2) is
+      // bracketed.
       if (currentStep.id === 'intro') startReplay();
       if (state.stepIndex < STEPS.length - 1) goTo(state.stepIndex + 1);
       return;
@@ -1422,13 +1411,12 @@ function startTour(participantId, capabilities, manifest) {
     var link = e.target.closest('a[data-key]');
     if (link) {
       e.preventDefault();
-      if (link.dataset.key === 'skipToGuardedAct') goTo(guardedActIndex());
-      else if (link.dataset.key === 'skipToScores') goTo(scoresIndex());
+      if (link.dataset.key === 'skipToScores') goTo(scoresIndex());
     }
   });
 
   // Back from the analyzer can restore this page from the back/forward cache
-  // as it was left, with "Open in the analyzer" still disabled by the click
+  // as it was left, with "Open in the analyzer web app" still disabled by the click
   // that left it. Enable it again.
   window.addEventListener('pageshow', function (e) {
     if (!e.persisted) return;

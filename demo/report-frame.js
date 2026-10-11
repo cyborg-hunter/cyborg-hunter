@@ -14,7 +14,7 @@ var IFRAME_LOAD_TIMEOUT_MS = 5000;
 
 // Swaps the report iframe to freshly-built HTML via a Blob URL. The OLD url
 // is revoked only once the NEW document's `load` fires — a visible frame
-// never points at a revoked url (spec §7.3). Any failure — the iframe firing
+// never points at a revoked url. Any failure — the iframe firing
 // `error`, or `load` never firing within the load timeout — revokes the
 // FRESH url instead (the old one, if any, is left alone and still showing)
 // and calls onFail rather than onload.

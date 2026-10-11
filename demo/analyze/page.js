@@ -246,7 +246,6 @@ export function createPage(root, worker, opts) {
     var msg = ev.data || {};
     if (msg.type === 'ready') {
       state.assets = msg.assets; state.limits = msg.limits;
-      q(root, 'tested-size').textContent = String(msg.limits.testedParticipants);
       // The report's fonts for the page itself, from the bundle (font-src data:
       // only: nothing is fetched). The report and the replay host inline them too.
       if (!fontsInstalled) { var style = document.createElement('style'); style.textContent = msg.assets.fontFaceCss; document.head.appendChild(style); fontsInstalled = true; }
@@ -303,7 +302,6 @@ export function createPage(root, worker, opts) {
     q(root, 'files-panel').hidden = false;
     q(root, 'file-rows').innerHTML = '';
     q(root, 'handoff-assets').hidden = true;
-    q(root, 'config-source').textContent = '';
     q(root, 'counts').innerHTML = '<span class="hint">Reading the files…</span>';
     listWarnings(q(root, 'check-warnings'), []);
     q(root, 'size-warning').hidden = true;
@@ -357,7 +355,7 @@ export function createPage(root, worker, opts) {
     var dataFiles = kindCount(checked, 'data');
     if (tested && dataFiles > tested) {
       q(root, 'size-warning-text').textContent = 'This cohort has ' + dataFiles + ' data files, more than the ' + tested +
-        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here, or use the CLI, which is not limited by browser memory.';
+        ' participants this page was tested with. It may be slow or fail in some browsers. You can still build the report here (in a 2023-or-later browser), or use the CLI, which is not limited by browser memory.';
       q(root, 'size-warning').hidden = false;
     }
     updateControls();
@@ -420,9 +418,6 @@ export function createPage(root, worker, opts) {
       (ignored ? countSpan(ignored, 'ignored', 'ignored') : '') +
       (unreadable ? countSpan(unreadable, 'unreadable', 'unreadable') : '');
     q(root, 'handoff-assets').hidden = shown.length === (checked.files || []).length;
-    q(root, 'config-source').textContent = checked.configPath
-      ? 'Settings from ' + checked.configPath + ', over the defaults.'
-      : 'Settings: the defaults (no cyborg-hunter.config.json among the files).';
   }
 
   // The config this page's settings stand for (the check's merged config,
@@ -531,7 +526,6 @@ export function createPage(root, worker, opts) {
       });
     }
     replayCard.setParticipants(done.participants);
-    settingsPanel.setPhases(done.phases);
     reportFirstSelection = true;
     reportReopened = cardOnReopen;
     reportPosted = false;

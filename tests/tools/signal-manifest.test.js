@@ -47,43 +47,19 @@ describe('buildManifest', () => {
   });
 });
 
-// Presets block: both presets, presets.{standard,strict}, are emitted with
-// each preset's thresholds and its verbatim soft-scoring map, and pinned
-// here against constants.js so the demo's numbers can never drift from the
-// library's real presets (there is no hand-mirrored table in demo JS).
-// Step 10's snippet reads presets.standard.scoring.soft.
+// Presets block: the standard preset's soft-scoring map, the one value the
+// page reads from it (step 9's snippet reads presets.standard.scoring.soft),
+// checked here against constants.js so the demo's weights can never drift
+// from the library's real preset (there is no hand-mirrored table in demo JS).
 describe('buildManifest presets block (the demo\'s scoring source)', () => {
   const m = buildManifest();
 
-  it('emits both presets regardless of the top-level preset', () => {
-    assert.deepStrictEqual(Object.keys(m.presets).sort(), ['standard', 'strict']);
-    assert.deepStrictEqual(Object.keys(buildManifest('strict').presets).sort(), ['standard', 'strict']);
+  it('carries the standard preset alone, regardless of the top-level preset', () => {
+    assert.deepStrictEqual(Object.keys(m.presets), ['standard']);
+    assert.deepStrictEqual(Object.keys(buildManifest('strict').presets), ['standard']);
   });
 
-  for (const name of ['standard', 'strict']) {
-    it(`${name}: controls match the library's effective thresholds`, () => {
-      const effective = { ...DEFAULT_THRESHOLDS, ...PRESETS[name].thresholds };
-      assert.deepStrictEqual(m.presets[name].controls, {
-        pasteHardCount: PRESETS[name].scoring.hard.paste.countThreshold,
-        tabAwayCutoffMs: effective.tabAwayDurationMs,
-        typingSpeedCps: effective.typingSpeedCps,
-      });
-    });
-
-    it(`${name}: soft scoring map + threshold are verbatim from constants.js`, () => {
-      assert.deepStrictEqual(m.presets[name].scoring.soft, PRESETS[name].scoring.soft);
-      assert.strictEqual(
-        m.presets[name].scoring.softScoreThreshold,
-        PRESETS[name].scoring.softScoreThreshold
-      );
-    });
-  }
-
-  it('strict has no soft.copy — the gating scoring.js applies', () => {
-    // scoring.js only scores a signal whose key exists in scoring.soft;
-    // strict scores copy as HARD-only. A hand-added copy entry here would
-    // make the demo show a soft term the library never computes.
-    assert.strictEqual(PRESETS.strict.scoring.soft.copy, undefined);
-    assert.strictEqual(m.presets.strict.scoring.soft.copy, undefined);
+  it('carries only the standard soft-scoring map, verbatim from constants.js', () => {
+    assert.deepStrictEqual(m.presets.standard, { scoring: { soft: PRESETS.standard.scoring.soft } });
   });
 });

@@ -145,8 +145,10 @@ export async function assertOnlyAllowed(page, seen, allow) {
 }
 export const siteAllowlist = (baseURL) => [baseURL + '/analyze/', baseURL + '/analyze/index.html', baseURL + '/analyze/analyze.bundle.js'];
 
+// Ready: the worker's ready message has reached the page (page.js keeps its
+// limits); nothing on screen shows it.
 export async function waitReady(page) {
-  await expect(page.locator('[data-role="tested-size"]')).not.toHaveText('…', { timeout: 30000 });
+  await expect.poll(() => page.evaluate(() => !!(window.__chAnalyze && window.__chAnalyze.state.limits)), { timeout: 30000 }).toBe(true);
 }
 export async function loadSample(page) {
   await page.click('[data-action="sample"]');

@@ -20,7 +20,7 @@ if (typeof document !== 'undefined') {
   // if it fails. From file: the page reads dropped files itself (page.js).
   window.__chAnalyze = createPage(document.body, createAnalyzeWorker(),
     { createWorker: createAnalyzeWorker, transferBytes: location.protocol === 'file:' });   // exposed for the end-to-end tests
-  // Opened by the demo's "Open in the analyzer": its files wait in this
+  // Opened by the demo's "Open in the analyzer web app": its files wait in this
   // browser's IndexedDB (../handoff.js) and join the list as a drop would.
   // The hash goes first, so a reload starts with an empty list. Nothing
   // stored, or a record older than the hand-off's ten minutes: the files

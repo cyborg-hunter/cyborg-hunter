@@ -17,14 +17,14 @@ test('formatClock renders m:ss.d', () => {
   assert.equal(formatClock(125300), '2:05.3');
 });
 test('renderRowHtml escapes visitor-triggered detail text', () => {
-  const html = renderRowHtml({ tMs: 1000, trial: 'act1-paste', event: 'paste #1', detail: '"<script>x</script>"', hard: true });
+  const html = renderRowHtml({ tMs: 1000, trial: 'paste', event: 'paste #1', detail: '"<script>x</script>"', hard: true });
   assert.ok(html.includes('&lt;script&gt;'));
   assert.ok(!html.includes('<script>'));
   assert.ok(html.includes('hard'));
 });
 test('renderRowHtml stamps data-trial with the trialId (the rail\'s filter key)', () => {
-  const html = renderRowHtml({ tMs: 1000, trial: 'act1-paste', event: 'paste #1', detail: null });
-  assert.ok(html.includes('data-trial="act1-paste"'));
+  const html = renderRowHtml({ tMs: 1000, trial: 'paste', event: 'paste #1', detail: null });
+  assert.ok(html.includes('data-trial="paste"'));
 });
 test('renderRowHtml stamps data-trial="session" for a trial-less row', () => {
   const html = renderRowHtml({ tMs: 1000, trial: null, event: 'viewport_shift', detail: null });

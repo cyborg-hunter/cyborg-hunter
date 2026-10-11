@@ -51,8 +51,8 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
   files: [{ path: 'a.csv', kind: 'data' }, { path: 'b.csv', kind: 'data' }, { path: 'c.json', kind: 'data' }, { path: 'cyborg-hunter.config.json', kind: 'config' }],
   configPath: 'cyborg-hunter.config.json' };
 // CHECKED.config with the settings panel's keys at their defaults: what a run sends.
-const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null, phaseScope: null,
-  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false, trajectoryDisplayOrder: 'rule' };
+const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null,
+  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
@@ -80,10 +80,27 @@ test('the page declares the no-network policy verbatim, before anything else in 
   assert.equal(/<link[^>]+rel="stylesheet"|<script[^>]+src="http|@import|url\(http/i.test(html), false, 'no external resource');
 });
 
-test('ready shows the tested cohort size and installs the baked fonts', () => {
-  boot();
-  assert.equal(role('tested-size').textContent, '150');
+test('ready keeps the tested cohort size and installs the baked fonts', () => {
+  const t = boot();
+  assert.equal(t.page.state.limits.testedParticipants, 150);
   assert.ok([...document.head.querySelectorAll('style')].some((s) => s.textContent === '@font-face{}'));
+});
+
+// The top bar says what the page is and links the offline file; the files
+// step carries no paragraph about the policy (the meta tag above is the policy).
+// What the page needs is said only by the cohort-size warning (below).
+test('the top bar: the name and the three links; no policy paragraph, no browser note', () => {
+  boot();
+  const bar = document.querySelector('.topbar');
+  assert.equal(bar.querySelector('.brand').textContent, 'cyborg-hunter · report generator');
+  assert.deepEqual([...bar.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href'), a.hasAttribute('download')]), [
+    ['live demo', '../', false],
+    ['GitHub', 'https://github.com/cyborg-hunter/cyborg-hunter#readme', false],
+    ['offline version', './cyborg-hunter-analyze.html', true],
+  ]);
+  assert.equal(html.includes('2023-or-later'), false);
+  assert.equal(html.includes('Nothing leaves your browser'), false);
+  assert.deepEqual([...document.querySelectorAll('.policy')].map((el) => el.dataset.role), ['size-warning']);
 });
 
 test('sample → check: counts, id candidates (deduplicated), config warnings', async () => {
@@ -94,7 +111,6 @@ test('sample → check: counts, id candidates (deduplicated), config warnings', 
   assert.equal(role('files-panel').hidden, false);
   // Counted by what the check read each file as.
   assert.equal(role('counts').textContent, '3 data files0 replay recordings0 experiment assets1 config file');
-  assert.equal(role('config-source').textContent, 'Settings from cyborg-hunter.config.json, over the defaults.');
   assert.deepEqual([...role('id-field').options].map((o) => o.value), ['subject_ID', 'run_id']);
   assert.equal(role('id-field').value, 'subject_ID');
   assert.equal(role('check-warnings').textContent, 'unknown key "dataDri"');
@@ -616,7 +632,7 @@ test('a worker failure with several replay requests outstanding settles them all
 const checkedWith = (n) => ({ ...CHECKED, counts: { participant: n, replay: 0, assets: 0, ignored: 0 },
   files: Array.from({ length: n }, (_, i) => ({ path: 'p' + i + '.csv', kind: 'data' })) });
 
-test('a cohort above the tested size shows a warning with its size; the run stays allowed', async () => {
+test('a cohort above the tested size shows a warning with its size and the browser the page needs; the run stays allowed', async () => {
   const t = boot();
   action('sample').click(); await tick();
   t.emit(checkedWith(151)); await tick();
@@ -627,6 +643,8 @@ test('a cohort above the tested size shows a warning with its size; the run stay
   assert.match(warning.textContent, /slow or fail/);
   // Only what is known: the CLI runs outside the browser, nothing is promised about size.
   assert.match(warning.textContent, /the CLI, which is not limited by browser memory\./);
+  assert.equal(role('size-warning-text').textContent, 'This cohort has 151 data files, more than the 150 participants this page was tested with. ' +
+    'It may be slow or fail in some browsers. You can still build the report here (in a 2023-or-later browser), or use the CLI, which is not limited by browser memory.');
   assert.equal(action('run').disabled, false);
 });
 
@@ -951,14 +969,13 @@ test('the table lists what each file was read as, with Remove; removing the last
   await tick();
   const rows = () => [...role('file-rows').querySelectorAll('tr')].map((tr) => [...tr.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent));
   assert.deepEqual(rows(), [['study/a.csv', 'participant data'], ['study/cyborg-hunter.config.json', 'settings']]);
-  assert.equal(role('config-source').textContent, 'Settings from study/cyborg-hunter.config.json, over the defaults.');
   assert.equal(role('file-rows').querySelector('[data-path="study/a.csv"]').getAttribute('aria-label'), 'Remove study/a.csv');
   role('file-rows').querySelector('[data-path="study/cyborg-hunter.config.json"]').click();
   await until(() => t.sent.length === 2);
   assert.deepEqual(t.sent[1].files.map((f) => f.path), ['study/a.csv']);
   t.emit({ ...CHECKED, configFound: false, configPath: null, files: [{ path: 'study/a.csv', kind: 'data' }] });
   await tick();
-  assert.equal(role('config-source').textContent, 'Settings: the defaults (no cyborg-hunter.config.json among the files).');
+  assert.match(role('counts').textContent, /0 config files/);
   role('file-rows').querySelector('[data-path="study/a.csv"]').click();
   await tick();
   assert.deepEqual(t.sent.at(-1), { type: 'reset' }, 'nothing left to check: the page starts over');
@@ -993,6 +1010,14 @@ const setField = (name, value) => {
   if (el.type === 'checkbox') el.checked = value; else el.value = value;
   form.dispatchEvent(new win.Event('change', { bubbles: true }));
 };
+// A weight input has no name, only its signal's key.
+const setWeight = (key, value) => {
+  const form = role('settings-form');
+  form.querySelector('[data-weight="' + key + '"]').value = value;
+  form.dispatchEvent(new win.Event('change', { bubbles: true }));
+};
+const weightInput = (key) => role('settings-form').querySelector('[data-weight="' + key + '"]');
+const thresholdInput = () => role('settings-form').elements.namedItem('softScoreThreshold');
 const downloads = () => [...document.querySelectorAll('[data-action="download"], [data-action="download-zip"]')];
 
 test('the settings show from the first check on, and a run sends their config', async () => {
@@ -1003,20 +1028,64 @@ test('the settings show from the first check on, and a run sends their config', 
   assert.equal(role('settings-form').querySelector('fieldset > legend').textContent, 'Settings');
   assert.ok(role('id-field').closest('label'), 'the id field has its label');
   setField('softScoreThreshold', '4');
-  setField('phaseInclude', 'game, practice');
+  setWeight('paste', '9');
   assert.equal(t.sent.length, 1, 'no run before Build');
   action('run').click();
   await tick();
   assert.deepEqual(t.sent[1].config.scoring, { softScoreThreshold: 4 });
-  assert.deepEqual(t.sent[1].config.phaseScope, { include: ['game', 'practice'] });
+  assert.deepEqual(t.sent[1].config.scoreWeights, { paste: 9 });
+});
+
+test('the threshold says what it is for, the weights are open under their sentence with Cap explained in its title, no paragraph explains the panel, and no field sets a phase or the trajectory order', async () => {
+  const t = boot();
+  await toCheck(t);
+  const form = role('settings-form');
+  const line = thresholdInput().closest('p');
+  const hint = thresholdInput().closest('label').nextElementSibling;
+  assert.equal(hint.parentElement, line, 'on the field\'s own line, after it');
+  assert.equal(hint.className, 'hint');
+  assert.equal(hint.textContent, 'The score at or above which a participant is flagged as suspicious in the triage list.');
+  const details = form.querySelector('details');
+  assert.equal(details.hasAttribute('open'), true, 'open until the analyst closes it');
+  assert.equal(details.querySelector('summary').textContent,
+    'Score weights: choose how much importance to give to each of the potential signals in estimating the participant\'s suspiciousness score.');
+  assert.deepEqual([...details.querySelectorAll('th')].map((th) => [th.textContent, th.title]),
+    [['Signal', ''], ['Weight', ''], ['Cap', 'the most events of one kind that count toward the ranking score']]);
+  assert.equal(form.querySelectorAll('p.hint').length, 0);
+  for (const name of ['phaseInclude', 'phaseExclude', 'trajectoryDisplayOrder']) assert.equal(form.elements.namedItem(name), null, name);
+  assert.equal(role('phase-hint'), null);
+});
+
+// The phase scope and the trajectory order are the CLI's: a dropped config
+// that sets them keeps them through the analyst's changes, into the run and
+// the export, though the panel shows neither.
+test('a dropped config\'s phase scope and trajectory order reach the run and the export through a change to the panel', async () => {
+  const t = boot();
+  t.page.addFiles(dropped());
+  await until(() => t.sent.length === 1);
+  t.emit({ ...CHECKED, config: { participantIdField: 'participantId', phaseScope: { exclude: ['practice'] }, trajectoryDisplayOrder: 'time' } });
+  await tick();
+  setField('softScoreThreshold', '4');
+  action('run').click();
+  await tick();
+  const sent = t.sent.at(-1);
+  assert.equal(sent.type, 'run');
+  assert.deepEqual([sent.config.scoring, sent.config.phaseScope, sent.config.trajectoryDisplayOrder],
+    [{ softScoreThreshold: 4 }, { exclude: ['practice'] }, 'time']);
+  const made = [];
+  const saved = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  try {
+    action('export-config').click();
+    assert.deepEqual(JSON.parse(await made.at(-1).text()), { scoring: { softScoreThreshold: 4 }, phaseScope: { exclude: ['practice'] },
+      trajectoryDisplayOrder: 'time', participantIdField: 'subject_ID' });
+  } finally { URL.createObjectURL = saved; }
 });
 
 // Every drop checks the whole list again, and each check returns the merged
 // config: the panel is written from it only when its values differ from the
 // ones it was last written from, so a drop of more data keeps what the
 // analyst set. A replacement after the first check says so under the list.
-const weightInput = (key) => role('settings-form').querySelector('[data-weight="' + key + '"]');
-const thresholdInput = () => role('settings-form').elements.namedItem('softScoreThreshold');
 const checkNotes = () => [...role('check-warnings').children].map((li) => li.textContent);
 
 test('a drop keeps the analyst\'s settings unless its config differs, and a replacement says so', async () => {
@@ -1439,24 +1508,6 @@ describe('a re-analysis keeps the analyst\'s place', () => {
   });
 });
 
-// Phase scope reads a trial without a phase as "default" (the worker lists
-// it among the phases): the hint says so.
-test('the phase hint lists the phases the run found, and what "default" stands for', async () => {
-  const t = boot();
-  await toCheck(t);
-  assert.equal(role('phase-hint').textContent, '');
-  action('run').click();
-  await tick();
-  t.emit({ ...DONE, phases: ['main', 'warmup'] });
-  await tick();
-  assert.equal(role('phase-hint').textContent, 'Phases in the data: main, warmup');
-  setField('softScoreThreshold', '2');
-  await tick();
-  t.emit({ ...DONE, phases: ['default', 'main'] });
-  await tick();
-  assert.equal(role('phase-hint').textContent, 'Phases in the data: default, main (default: the trials with no phase)');
-});
-
 test('Export config on the results writes the settings, not the config the run sent the worker', async () => {
   const t = boot();
   await toCheck(t);
@@ -1557,7 +1608,7 @@ test('the fonts the tour hands over are neither listed nor counted; a line under
   assert.deepEqual(tableRows(), FILES.map((f) => f.path));
   assert.equal(role('counts').textContent, '3 data files1 replay recording0 experiment assets1 config file');
   assert.equal(line().hidden, false);
-  assert.equal(line().textContent, 'The demo page\'s fonts were included so the replay renders in them.');
+  assert.equal(line().textContent, '(The demo page\'s fonts were included so the replay renders in them.)');
   assert.ok(role('files-panel').contains(line()));
 
   // A stylesheet of the analyst's own is listed and counted; the line stays.

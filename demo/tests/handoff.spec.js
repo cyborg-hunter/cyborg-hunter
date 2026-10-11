@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { test, expect, fastForwardToFiles, pid } from './helpers.mjs';
+import { test, expect, fastForwardToFiles, pid, startTour, primaryButton, walkToGuardEntry, openPane } from './helpers.mjs';
 import { guardNetwork, assertOnlyAllowed, siteAllowlist, buildReport, railOrder, reportSelected, waitReady } from '../../tests/e2e/analyze/support.mjs';
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
 import { HANDOFF_ASSETS } from '../steps.js';
@@ -25,7 +25,7 @@ const V2_FIXTURES = resolve(__dirname, '..', '..', 'packages', 'sessionrecording
 const viewerModelFromFixture = (name) =>
   buildViewerModel(JSON.parse(readFileSync(join(V2_FIXTURES, name + '.json'), 'utf8')));
 
-// From the files step: "Open in the analyzer", until the analyze page lists
+// From the files step: "Open in the analyzer web app", until the analyze page lists
 // the five files (the hash dropped once read). The fonts that come with them
 // are in the page's list but not in its table, and a line under the table
 // says they were included. Returns the visitor's id, read on the tour
@@ -74,7 +74,7 @@ async function visitorReplay(page, answer) {
 // recording's stylesheet names them by, so the visitor's replay renders in
 // them.
 // ---------------------------------------------------------------------------
-test('"Open in the analyzer" hands over the five files and the fonts: the files listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
+test('"Open in the analyzer web app" hands over the five files and the fonts: the files listed as dropped, built, fonts matched, nothing requested beyond the site', async ({ page, baseURL }) => {
   test.setTimeout(120000);
   await fastForwardToFiles(page);
   const allow = siteAllowlist(baseURL).concat([baseURL + '/assets/example-1.json', baseURL + '/assets/example-2.json'],
@@ -87,11 +87,11 @@ test('"Open in the analyzer" hands over the five files and the fonts: the files 
     .toEqual(['cyborg-hunter.config.json', 'example-1.json', 'example-2.json']);
   expect(rows.filter(([, kind]) => kind === 'experiment asset')).toEqual([]);
   expect(await assetsChecked(page)).toEqual([...HANDOFF_ASSETS].sort());
-  await expect(page.locator('[data-role="handoff-assets"]')).toHaveText('The demo page\'s fonts were included so the replay renders in them.');
+  await expect(page.locator('[data-role="handoff-assets"]')).toHaveText('(The demo page\'s fonts were included so the replay renders in them.)');
   await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 replay recording');
   await expect(page.locator('[data-role="counts"]')).toContainText('0 experiment assets');
-  await expect(page.locator('[data-role="config-source"]')).toContainText('cyborg-hunter.config.json');
+  await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   // The fonts are the tour's, not experiment files the visitor dropped: no
   // assets hint, and the exported config names no assets folder.
@@ -138,21 +138,21 @@ for (const [how, answer] of [
 }
 
 // ---------------------------------------------------------------------------
-// Replay viewer: keycast overlay (walkthrough item 8) + DOM-tier
-// reconstruction (walkthrough item 12's regression pin). Types the real
-// answer ('Canberra') at baseline so trial 0's recording carries real
+// Replay viewer: keycast overlay + DOM-tier reconstruction (a regression
+// check). Types an answer
+// ('Canberra') at baseline so trial 0's recording carries real
 // keydown/keyup events (keys:'full' is the recorder default) AND a real
 // input value to reconstruct, then presses play over that segment in the
 // replay viewer's own mount and checks a keycast chip appears.
 //
-// History: item 8(b) found that DOM-tier input-value playback did NOT land
+// History: DOM-tier input-value playback once did NOT land
 // visibly in the demo's own replay — the report iframe is sandbox=
 // "allow-scripts" (deliberately opaque-origin), and nesting the replay's
 // OWN reconstruction iframe (sandbox="allow-same-origin") inside that forced
 // it opaque too (a double-sandbox intersection), so contentDocument access
-// failed and the reconstruction froze at the first frame. Item 8 shipped
-// keycast as the workaround (drawn in the OUTER document, unaffected).
-// Item 12 fixes the root cause: the replay now mounts in its OWN same-origin
+// failed and the reconstruction froze at the first frame. Keycast shipped
+// first as the workaround (drawn in the OUTER document, unaffected).
+// The fix for the root cause: the replay now mounts in its OWN same-origin
 // viewer-host iframe (.replay-host-frame), a SIBLING of the report iframe
 // rather than nested inside it, so its inner reconstruction frame
 // (.replay-frame) is only one sandbox deep and stays same-origin. The
@@ -172,7 +172,7 @@ test('replay: keycast overlay shows a chip during typed playback; DOM-tier recon
   await expect(hostMount.locator('.replay-keycast .replay-key-chip').first()).toBeVisible({ timeout: 5000 });
   await hostMount.locator('.replay-play').click(); // stop
 
-  // Regression pin (item 12): seek past the typed segment (seek() clamps to
+  // Regression check: seek past the typed segment (seek() clamps to
   // the trial's own duration, so an overshoot lands exactly at its end) and
   // read the reconstructed field one level deeper, inside the DOM-tier
   // reconstruction iframe itself — this is what came back blank before the
@@ -201,7 +201,52 @@ test('replay: keycast overlay shows a chip during typed playback; DOM-tier recon
 });
 
 // ---------------------------------------------------------------------------
-// Replay viewer: self-explanatory buffer-cap note (walkthrough item 9).
+// The record under the step card opens on hover through attributes on its
+// slot (live-pane.js makePaneBar), which the recording carries: clicks inside
+// a record the mouse opened, and never kept open, replay against the record
+// laid out as the visitor saw it, and pass the viewer's alignment self-check.
+// Read from the step-3 trial ("paste"), where the clicks are.
+// ---------------------------------------------------------------------------
+test('replay: clicks inside the record opened by hover pass the alignment self-check', async ({ page }) => {
+  test.setTimeout(120000);
+  await startTour(page); // -> baseline (step 2)
+  await primaryButton(page).click(); // -> clipboard-cheat (step 3)
+  for (const control of ['.lp-tab[data-tab="json"]', '.lp-tab[data-tab="stream"]',
+    '[data-role="lp-trials"] [data-trial-key="baseline"]', '[data-role="lp-trials"] [data-trial-key="all"]']) {
+    await openPane(page);
+    await page.locator(control).click();
+    await page.mouse.move(0, 0);
+    await expect(page.locator('[data-role="live-pane"]')).toBeHidden();
+  }
+  await walkToGuardEntry(page); // -> guard-entry (step 6)
+  await page.locator('[data-action="enter-fullscreen"]').click();
+  await expect(page.locator('[data-role="step-label"]')).toHaveText('Step 7 of 10', { timeout: 5000 });
+  await page.locator('.endguard').click(); // -> guard-debrief (step 8)
+  await primaryButton(page).click(); // -> signals-to-scores (step 9)
+  await primaryButton(page).click(); // -> your files (step 10)
+
+  const participantId = await openInAnalyzer(page);
+  await buildReport(page);
+  await selectVisitorReplay(page, participantId);
+  await page.click('[data-action="load-replay"]');
+  const host = page.frameLocator('iframe.replay-host-frame[data-participant-id="' + participantId + '"]');
+  const mount = host.locator('#ch-replay-mount');
+  await mount.locator('.replay-stage').waitFor({ timeout: 30000 });
+
+  const segments = await mount.locator('.replay-segment-select option').allTextContents();
+  const paste = segments.findIndex((label) => label.includes('— paste'));
+  expect(paste).toBeGreaterThanOrEqual(0);
+  await mount.evaluate((m, i) => m._chReplayDebug.selectSegment(i), paste);
+  await expect.poll(() => mount.evaluate((m) => m._chReplayDebug.frameReady())).toBe(true);
+  await mount.evaluate((m) => m._chReplayDebug.seek(999999)); // clamps to the trial's end
+  const checks = await mount.evaluate((m) => m._chReplayDebug.getChecks());
+  // The four clicks inside the record, and the click that left step 3.
+  expect(checks.filter((c) => c.type === 'mouse.click')).toHaveLength(5);
+  expect(checks.filter((c) => c.status !== 'ok')).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Replay viewer: self-explanatory buffer-cap note.
 // The demo's own recording never crosses the cap, so this mounts the v2
 // `truncated` fixture (a `recording.capture_stopped` event that states its
 // own cap, limit_events: 12) through the same direct-mount path as the
@@ -231,8 +276,8 @@ test('replay: buffer-cap note explains itself when captureStopped is set', async
 });
 
 // ---------------------------------------------------------------------------
-// Replay viewer: continuous whole-session playback, default ON
-// (walkthrough item 10). The v2 `segment-bounds` fixture has two short
+// Replay viewer: continuous whole-session playback, default ON.
+// The v2 `segment-bounds` fixture has two short
 // segments (480ms, 400ms), so a play from segment 1 reaches segment 2 well
 // inside the timeout. Mounted in the analyzer's same-origin viewer host,
 // where DOM-tier reconstruction works (the opaque report iframe would freeze
@@ -363,7 +408,7 @@ test('a refused hand-off keeps the visitor on the files step, says why, and enab
   await expect(note).toContainText('could not be prepared for the analyzer');
   await expect(note.locator('a[href="analyze/"]')).toHaveCount(1);
   await expect(button).toBeEnabled();
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
 });
 
 // ---------------------------------------------------------------------------
@@ -382,13 +427,13 @@ test('a data file the hand-off cannot fetch fails the whole hand-off: the visito
   await expect(note).toContainText('could not be prepared for the analyzer');
   await expect(button).toBeEnabled();
   await expect(page).toHaveURL(baseURL + '/');
-  await expect(page.locator('#card h2')).toHaveText('Your files');
+  await expect(page.locator('#card > h2')).toHaveText('Your files');
   await expect.poll(() => recordStored(page)).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
 // Back from the analyzer can restore the tour from the back/forward cache as
-// it was left, with "Open in the analyzer" disabled by the click that left.
+// it was left, with "Open in the analyzer web app" disabled by the click that left.
 // The restore's pageshow (persisted) enables it again. Playwright's Chromium
 // runs without that cache, so the test dispatches the event itself.
 // ---------------------------------------------------------------------------

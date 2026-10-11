@@ -26,7 +26,8 @@ test('inlines the bundle and drops self from the policy', () => {
   assert.ok(out.includes("script-src 'unsafe-inline' blob:;"));
   assert.ok(out.includes('img-src blob: data:;'));
   assert.equal(out.includes("'self'"), false);
-  assert.ok(out.includes('You are using the offline file.'));
+  // The top bar's link to this very file says where the reader is instead.
+  assert.ok(out.includes('<a href="https://github.com/cyborg-hunter/cyborg-hunter#readme">GitHub</a><span>You are using the offline file.</span>'));
   assert.equal(out.includes('href="../"'), false);
   assert.ok(out.includes('href="https://cyborg-hunter.github.io/cyborg-hunter/">live demo</a>'));
   assert.equal(OFFLINE_NAME, 'cyborg-hunter-analyze.html');
@@ -84,7 +85,7 @@ for (const marker of [
   '<meta charset="utf-8">',
   '<script type="module" src="./analyze.bundle.js"></script>',
   "script-src 'self' 'unsafe-inline' blob:;",
-  '<a href="./' + OFFLINE_NAME + '" download>Download this page as a single offline file</a>',
+  '<a href="./' + OFFLINE_NAME + '" download>offline version</a>',
   '<a href="../">live demo</a>',
 ]) {
   test('refuses an index.html without ' + marker, () => {

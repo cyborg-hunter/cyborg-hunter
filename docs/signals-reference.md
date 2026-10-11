@@ -83,7 +83,19 @@ The `strict` preset overrides several of these (`typingSpeedCps: 8`, `tabAwayDur
 
 ## Enabling and disabling signals
 
-All signals are on by default except `keystrokeDynamics`, which is off by default in `permissive` and `standard` presets and on in `strict`. Override per signal:
+All signals are on by default except `keystrokeDynamics`, which is off by default in `permissive` and `standard` presets and on in `strict`. Override per signal, with the one-line setup in `window.CyborgHunterConfig` above the ch.js tag ([Configuration beyond data-*](advanced-integration.md#configuration-beyond-data-)):
+
+```javascript
+window.CyborgHunterConfig = {
+  preset: 'standard',
+  signals: {
+    keystrokeDynamics: false,  // off by default; see note below
+    mouseTracking: false       // disable to reduce data volume
+  }
+};
+```
+
+In manual mode, pass the same options to `CyborgHunter.init()`:
 
 ```javascript
 CyborgHunter.init({

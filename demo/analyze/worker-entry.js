@@ -31,8 +31,7 @@
 //     progress      { phase: 'check' | 'ingest' | 'report', done, total, label? }
 //     zip           { chunk } — the report zip, in order, buffer transferred
 //     done          the in-page report html and what the page lists beside it;
-//                   phases: the trial phases in the data, sorted; runId: the
-//                   run id (report-core.js runIdOf); triageRows: each
+//                   runId: the run id (report-core.js runIdOf); triageRows: each
 //                   participant's tier and triage score in triage order
 //                   (for the annotation export)
 //     replay-model  { participantId, model }
@@ -219,24 +218,10 @@ async function renderRun(state, config) {
         replayError: p.replay && p.replay.error ? (p.replay.reason || p.replay.error) : null };
     }),
     warnings: state.warnings, reportWarnings: built.warnings, assetReport: state.assetReport,
-    phases: phasesOf(participants), files: fileTexts, configUsed: config, zipBytes: zip.bytes,
+    files: fileTexts, configUsed: config, zipBytes: zip.bytes,
     triageRows: built.triage.map(function (t) {
       return { participantId: t.participantId, tier: t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean', triageScore: t.score };
     }) });
-}
-
-// The trial phases in the data, for the settings panel's phase-scope hint,
-// named as phase scope names them: a trial without a phase is 'default'
-// (src/cli/analyzers/phase-scope.js).
-function phasesOf(participants) {
-  var seen = Object.create(null), out = [];
-  participants.forEach(function (p) {
-    (p.trials || []).forEach(function (t) {
-      var phase = (t && t.phase) ?? 'default';
-      if (typeof phase === 'string' && phase && !seen[phase]) { seen[phase] = true; out.push(phase); }
-    });
-  });
-  return out.sort();
 }
 
 function replay(msg) {

@@ -161,3 +161,47 @@ describe('docs/qualtrics.md install snippet', () => {
     assert.ok(tags[0].includes('data-qualtrics-survey-id="${e://Field/SurveyID}"'), tags[0]);
   });
 });
+
+// The one-line file is the integration a reader meets first: the overview
+// pages show the ch.js tag before they mention the jsPsych extension, which
+// belongs to manual mode and per-trial params.
+describe('the one-line setup comes before the jsPsych extension', () => {
+  for (const file of ['README.md', 'docs/using-cyborg-hunter.md']) {
+    it(file + ' shows dist/ch.js before any jsPsychCyborgHunter', () => {
+      const text = read(file);
+      const tag = text.indexOf('dist/ch.js');
+      const extension = text.indexOf('jsPsychCyborgHunter');
+      assert.ok(tag >= 0, 'no dist/ch.js in ' + file);
+      assert.ok(extension === -1 || tag < extension, 'jsPsychCyborgHunter appears before dist/ch.js in ' + file);
+    });
+  }
+});
+
+// With the one-line setup the monitor's options go in
+// window.CyborgHunterConfig, and CyborgHunter.init() logs an error and
+// records nothing, so the pages that show how to set options show the
+// CyborgHunterConfig form before manual mode's init() call.
+describe('monitor options: CyborgHunterConfig comes before CyborgHunter.init()', () => {
+  for (const file of ['docs/configuration.md', 'docs/signals-reference.md']) {
+    it(file + ' shows window.CyborgHunterConfig before any CyborgHunter.init(', () => {
+      const text = read(file);
+      const config = text.indexOf('window.CyborgHunterConfig');
+      const init = text.indexOf('CyborgHunter.init(');
+      assert.ok(config >= 0, 'no window.CyborgHunterConfig in ' + file);
+      assert.ok(init === -1 || config < init, 'CyborgHunter.init( appears before window.CyborgHunterConfig in ' + file);
+    });
+  }
+});
+
+// The entry trial's text is an option of the call that builds it: the
+// quickstart shows it on the one-line file's call, the friction section on
+// the guard extension's.
+describe('the friction entry trial\'s message option is documented', () => {
+  it('docs/quickstart.md passes a message to CyborgHunter.frictionEntryTrial()', () => {
+    assert.match(read('docs/quickstart.md'), /CyborgHunter\.frictionEntryTrial\(\{\s*message:/);
+  });
+
+  it('docs/advanced-integration.md passes a message to the guard extension\'s entry trial', () => {
+    assert.match(read('docs/advanced-integration.md'), /jsPsychGuardFriction\.entryTrial\(\{\s*message:/);
+  });
+});

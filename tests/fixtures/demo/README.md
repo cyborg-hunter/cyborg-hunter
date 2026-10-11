@@ -36,12 +36,13 @@ Two files are frozen and one is regenerable:
 - `cyborg-hunter.config.json`: the config the demo hands out verbatim
   (`{ dataDir, filePattern, participantIdField }`). It carries no participant id.
 
-The replay and the session are NOT a 1:1 trial mapping — the recorder and the
-integrity monitor bracket trials under different schemes, so the replay (8
-segments: the five act-1 tasks, the two act-2 steps, and a trailing implicit
-`__session__`) does not line up trial-for-trial with the session's six. `ingest`
-attaches the replay by `participant_id` alone, which is all the fixture relies
-on.
+The replay and the session are NOT a 1:1 trial mapping — they come from two
+runs of the tour, and the recorder and the integrity monitor bracket trials
+under different schemes, so the replay (7 segments: the ten-step tour's six
+trials `baseline`, `paste`, `tabaway`, `autotype`, `guard-entry` and `guard`,
+and a trailing implicit `__session__`) does not line up trial-for-trial with
+the session's six (an earlier tour's `act1-*`/`act2-*` ids). `ingest` attaches
+the replay by `participant_id` alone, which is all the fixture relies on.
 
 ## Session profile (frozen — what's in DEMO-FIXT.json)
 
@@ -76,8 +77,8 @@ stable id, so every occurrence of the captured id is replaced with `DEMO-FIXT`.
 
 For the replay, `gen-demo-fixture.mjs` does this automatically: a whole-file
 string swap of the full `DEMO-xxxx` token (distinctive enough that collisions
-are impossible) covers the top-level `participant_id` and the pid text the
-topbar renders into each segment's DOM snapshot. `ingest.js`'s
+are impossible) covers the top-level `participant_id` and any pid text the
+page renders into the segments' DOM snapshots. `ingest.js`'s
 `attachReplayArtifacts()` cross-checks the embedded `participant_id` against the
 filename/participant record, so those must agree or the replay silently fails to
 attach; the generator asserts the old id appears nowhere before writing.
@@ -123,4 +124,6 @@ rewritten to the new capture's numbers. If the payload assembler
 tests' assertions to fit a broken fixture.
 
 First captured 2026-07-29 (session + v1 replay); replay regenerated 2026-08-12
-(v2).
+(v2), 2026-10-07 (the ten-step tour) and 2026-10-09 (the revised tour: the
+signal box at the top of the rail, the collapsed session record under its
+bar, Back as a button, the recording cue on the rail's replay lamp).
