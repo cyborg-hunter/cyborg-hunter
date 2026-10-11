@@ -981,8 +981,10 @@ describe('resume after a stop: a keyframe segment in the same recording', () => 
     assert.equal(restored.initial_dom.id, 1);
     assert.ok(JSON.stringify(restored.initial_dom).includes('changed-while-away'),
       'the keyframe shows the DOM as it was on return');
-    assert.deepEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache' } });
-    assert.deepEqual(recording.segments.slice(0, 2).map(s => s.extensions), [null, null]);
+    // Every keyframe states <html>'s attributes (root_attrs; this page's
+    // <html> has none); a continuation states nothing.
+    assert.deepEqual(restored.extensions, { 'cyborg-hunter': { restored_from: 'bfcache', root_attrs: {} } });
+    assert.deepEqual(recording.segments.slice(0, 2).map(s => s.extensions), [{ 'cyborg-hunter': { root_attrs: {} } }, null]);
   });
 
   it('a conforming player resolves every patch across the restore', () => {

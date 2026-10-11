@@ -1,19 +1,20 @@
 // tests/demo/steps-shape.test.js
-// Structural contract the engine relies on: 12 steps, known ids in order,
-// every step has eyebrow/title/body, no tier vocabulary before step 10
-// (G2 guard).
+// Structural contract the engine relies on: 11 steps, known ids in order,
+// every step has eyebrow/title/body and counts itself against the total, no
+// tier vocabulary before step 10 (G2 guard), and the last step's files.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STEPS, RAIL_GROUPS, CODE_TABS, REPLICATE, FINISH_VARIANTS } from '../../demo/steps.js';
+import { STEPS, RAIL_GROUPS, CODE_TABS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF } from '../../demo/steps.js';
 
 const IDS = ['intro','baseline','clipboard-cheat','tab-away','browser-rearrange',
   'autotype','guard-entry','guard-cheat','guard-debrief',
-  'signals-to-scores','results','replicate-locally'];
+  'signals-to-scores','your-files'];
 
 test('step map', () => {
-  assert.equal(STEPS.length, 12);
+  assert.equal(STEPS.length, 11);
   assert.deepEqual(STEPS.map(s => s.id), IDS);
   for (const s of STEPS) { assert.ok(s.eyebrow && s.title && s.body, s.id); }
+  STEPS.forEach((s, i) => assert.ok(s.eyebrow.endsWith('Step ' + (i + 1) + ' of ' + STEPS.length), s.id + ': ' + s.eyebrow));
 });
 test('G2: no tier vocabulary in steps 2-9', () => {
   // G2 (spec §2) covers steps 2-9; step 1 may NAME the product ("triage report") without narrating scores.
@@ -29,5 +30,13 @@ test('rail has three tab-away bins', () => {
 test('exports the engine consumes exist', () => {
   assert.ok(CODE_TABS.jspsych && CODE_TABS.plainjs);
   assert.ok(Array.isArray(REPLICATE.sections) && REPLICATE.sections.length >= 3);
-  assert.ok(FINISH_VARIANTS.full && FINISH_VARIANTS.act2Skipped && FINISH_VARIANTS.zeroLamp);
+});
+test('the last step offers five files in two batches: the session built here, the examples the site serves', () => {
+  assert.deepEqual(DOWNLOAD_BATCHES.map((b) => b.files.map((f) => f.key || f.href)),
+    [['sessionData', 'replay', 'config'], ['assets/example-1.json', 'assets/example-2.json']]);
+  for (const b of DOWNLOAD_BATCHES) {
+    assert.ok(b.heading);
+    for (const f of b.files) assert.ok(f.label && f.filename && f.description, f.filename);
+  }
+  assert.ok(HANDOFF.buttonLabel && HANDOFF.buttonHint && HANDOFF.failed);
 });

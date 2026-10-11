@@ -476,8 +476,18 @@ describe('replay artifact ingest', () => {
         dataDir: d, filePattern: '*.json',
         integrityField: 'integrity', participantIdField: 'participantId',
       });
-      assert.ok(participants.every(p => p.replay === null),
-        'per-session mapping is ambiguous — attach nothing rather than guess');
+      // The per-session mapping is ambiguous: attach nothing rather than
+      // guess, and say why where the report shows the replay.
+      assert.strictEqual(participants.length, 2);
+      for (const p of participants) {
+        assert.strictEqual(p.replay.recording, undefined, 'nothing attached');
+        assert.strictEqual(p.replay.error, 'ambiguous');
+        assert.strictEqual(p.replay.file, null);
+        assert.strictEqual(p.replay.reason,
+          '2 records share the participant id "PM" and 2 replays claim it (PM-replay-1751600000000.json, PM-replay-1751600999999.json), ' +
+          'so which replay belongs to which session cannot be told and none is shown. ' +
+          'Give each session its own participant id, or put the sessions in separate data folders.');
+      }
       assert.ok(warnings.some(w => String(w.warnings).match(/cannot associate/i)));
     } finally { rmSync(d, { recursive: true, force: true }); }
   });

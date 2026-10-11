@@ -95,7 +95,7 @@ const payload = CyborgHunter.getSessionReport();
 };
 
 /**
- * Step-11 scoring panel (demo.js's renderScoringPanel/wireScoringPanel):
+ * Step-10 scoring panel (demo.js's renderScoringPanel/wireScoringPanel):
  * per-signal weight editors + two config-as-source snippets. Field order/
  * labels here; the live numbers come from signal-manifest.json (never
  * hand-typed) so a preset change can't silently drift from what's shown.
@@ -117,14 +117,14 @@ export const SCORING_PANEL = {
 };
 
 /**
- * The 12-step script. Advance is never blocked; every task is an invitation.
+ * The 11-step script. Advance is never blocked; every task is an invitation.
  * act: intro | act1 | act2 | bridge | finale
  */
 export const STEPS = [
   {
     id: 'intro',
     act: 'intro',
-    eyebrow: 'Step 1 of 12',
+    eyebrow: 'Step 1 of 11',
     title: 'What this is',
     body: `
 <p>cyborg-hunter is an open-source toolkit for online behavioral research:
@@ -134,23 +134,25 @@ command-line tool that turns those records into a triage report a reviewer
 can read in minutes. It exists because participants increasingly answer
 studies with an AI in a second window, and self-report doesn't catch that.</p>
 <p>This demo makes you the participant. You'll trigger the signals yourself,
-watch them being recorded, run into the enforcement mode, and end with a
-real report built from your own session. Two instruments on this page are
-demo-only: the signal lamps on the right and the live session record below
+watch them being recorded, run into the enforcement mode, and end with your
+session's files, one click away from a real report built from them in the
+analyzer. Two instruments on this page are demo-only: the signal lamps on
+the right and the live session record below
 them. The lamps show a curated handful of what cyborg-hunter records; the
 full list is in docs/signals-reference.md. The recording itself is the
 actual product, behaving exactly as it does in a study.</p>
-<p>The tour runs in five parts: Act 1 (steps 2 through 6) lets you try every
+<p>The tour runs in four parts: Act 1 (steps 2 through 6) lets you try every
 trick unguarded, while everything is still recorded; Act 2 (steps 7 through
 9) puts the same tricks under enforcement; step 10 turns the recorded
-signals into scores; step 11 hands you a report built from your own
-session; step 12 walks through reproducing it on your own machine.</p>
+signals into scores; step 11 hands you your session's files, to open in the
+analyzer, which builds the report in your browser, or to save and run
+through the command-line tool yourself.</p>
 <p>Recording starts the moment you click Start: mouse movement is sampled,
 not tracked pixel by pixel, and keystroke rhythm and tab switches are
-recorded as well. Everything still stays in this browser tab. No server, no
-upload; the session recording (REC, top bar) is kept in memory so the final
-report can include a replay, and it leaves only if you download it
-yourself.</p>`.trim(),
+recorded as well. Everything stays in this browser. No server, no upload;
+the session recording (REC, top bar) is kept in memory so your report can
+include a replay, and it leaves this tab only if you save it or open it in
+the analyzer, a page of this same site.</p>`.trim(),
     positioning: true,
     task: null,
     primaryLabel: 'Start',
@@ -159,7 +161,7 @@ yourself.</p>`.trim(),
   {
     id: 'baseline',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 2 of 12',
+    eyebrow: 'Act 1 · Unguarded · Step 2 of 11',
     title: 'Answer a question normally',
     body: `
 <p>Type your answer to the question below the way you normally would. This
@@ -180,7 +182,7 @@ source code, with the cyborg-hunter wiring around it.</p>`.trim(),
   {
     id: 'clipboard-cheat',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 3 of 12',
+    eyebrow: 'Act 1 · Unguarded · Step 3 of 11',
     title: 'Now cheat with the clipboard',
     body: `
 <p>Suppose you don't know the answer and an AI does. Play that participant:
@@ -203,7 +205,7 @@ the words.</p>`.trim(),
   {
     id: 'tab-away',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 4 of 12',
+    eyebrow: 'Act 1 · Unguarded · Step 4 of 11',
     title: 'Leave the tab, three ways',
     body: `
 <p>Imagine an AI app open in another window. Switch away and come back
@@ -222,7 +224,7 @@ of each absence either way.</p>`.trim(),
   {
     id: 'browser-rearrange',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 5 of 12',
+    eyebrow: 'Act 1 · Unguarded · Step 5 of 11',
     title: 'Dock an AI beside the task',
     body: `
 <p>The modern cheat doesn't always leave the tab. Browsers now ship AI
@@ -239,7 +241,7 @@ continues, whatever shape the window takes.</p>`.trim(),
   {
     id: 'autotype',
     act: 'act1',
-    eyebrow: 'Act 1 · Unguarded · Step 6 of 12',
+    eyebrow: 'Act 1 · Unguarded · Step 6 of 11',
     title: 'Let something else type',
     body: `
 <p>Press the button and watch the field fill itself: text appearing with no
@@ -265,7 +267,7 @@ not automatic verdicts.</p>`.trim(),
   {
     id: 'guard-entry',
     act: 'act2',
-    eyebrow: 'Act 2 · Guarded · Step 7 of 12',
+    eyebrow: 'Act 2 · Guarded · Step 7 of 11',
     title: 'The other approach: prevention',
     body: `
 <p>Everything so far was detection: record quietly, report later. The guard
@@ -289,7 +291,7 @@ until you do.</p>`.trim(),
   {
     id: 'guard-cheat',
     act: 'act2',
-    eyebrow: 'Act 2 · Guarded · Step 8 of 12',
+    eyebrow: 'Act 2 · Guarded · Step 8 of 11',
     title: 'Try the same tricks',
     body: `
 <p>Tab away. Press Esc. Click another window. Each attempt logs a violation
@@ -306,7 +308,7 @@ that, fullscreen is no longer required.</p>`.trim(),
   {
     id: 'guard-debrief',
     act: 'act2',
-    eyebrow: 'Act 2 · Guarded · Step 9 of 12',
+    eyebrow: 'Act 2 · Guarded · Step 9 of 11',
     title: 'What enforcement left behind',
     body: `
 <p>The guard is off. Scroll the session record: every violation from the
@@ -321,7 +323,7 @@ logged each attempt.</p>`.trim(),
   {
     id: 'signals-to-scores',
     act: 'bridge',
-    eyebrow: 'Step 10 of 12',
+    eyebrow: 'Step 10 of 11',
     title: 'From signals to scores',
     body: `
 <p>Everything you triggered is now rows in a session file. The library
@@ -347,57 +349,78 @@ cutoff (a flicker under that cutoff scores nothing). A hard trigger, a
 detected AI extension, and an edge exit do not add to this score; they
 show up in the row's reason text instead, next to whatever did.</p>`.trim(),
     task: null,
-    primaryLabel: 'Build my report →',
+    primaryLabel: 'See your files →',
     secondary: null,
   },
   {
-    id: 'results',
+    id: 'your-files',
     act: 'finale',
-    eyebrow: 'Step 11 of 12',
-    title: 'Your report',
+    eyebrow: 'Step 11 of 11',
+    title: 'Your files',
     body: `
-<p>Built here in the browser, from your session only. This is the same
-report the CLI produces: the analyzers, renderer, and plotting code are
-identical (your browser's canvas draws the plots, so fonts and edges may
-differ slightly from the CLI's files). Two example participants sit beside
-you so the triage list reads as it would in a real study. Each
-participant's detail pane also breaks their score into the same four
-weighted terms from the last step, shown as bars that sum to the total.</p>`.trim(),
-    task: null,
-    primaryLabel: 'Replicate it locally →',
-    secondary: null,
-  },
-  {
-    id: 'replicate-locally',
-    act: 'finale',
-    eyebrow: 'Step 12 of 12',
-    title: 'Run it yourself',
-    body: `
-<p>The report you just saw came from three files. Download them, then build
-the same report on your own machine: the same steps you'd run on real study
+<p>Your session is now three files: the session data, the replay recording
+and a config. Two example participants come with them, so the triage list
+reads as it would in a real study. Open them all in the analyzer, which
+builds the report right here in your browser and lets you change the
+analysis settings and watch the report follow. Or save them and build the
+same report with the command-line tool, the way you would with real study
 data.</p>`.trim(),
     task: { kind: 'downloads', trialId: null },
-    primaryLabel: 'Done',
+    primaryLabel: null, // the step's own action is the panel's "Open in the analyzer"
     secondary: null,
   },
 ];
 
-/** Downloads metadata for step 12 (kinds handled by the engine). */
-export const DOWNLOAD_FILES = [
-  { key: 'sessionData', filename: 'DEMO-<id>.json', label: 'Session data',
-    description: 'your trials and session record', savedLabel: 'Saved ✓' },
-  { key: 'replay', filename: 'DEMO-<id>-replay-<epoch>.json', label: 'Replay',
-    description: 'your session recording', savedLabel: 'Saved ✓' },
-  { key: 'config', filename: 'cyborg-hunter.config.json', label: 'Config',
-    description: 'the scoring config the report used', savedLabel: 'Saved ✓' },
+/** The last step's files, in two download batches (a Save link per file and
+ * a "Save all" per batch, no zip): the session built in this tab (`key`,
+ * built by demo.js's buildDownloadFile) and the two example participants the
+ * site serves (`href`). A session file's card shows the name it is saved
+ * under (demo.js sessionFileName); its `filename` here is the pattern, shown
+ * only for a recording this browser could not make. The hand-off to the
+ * analyzer passes the same files. */
+export const DOWNLOAD_BATCHES = [
+  {
+    heading: 'Your session',
+    files: [
+      { key: 'sessionData', filename: 'DEMO-<id>.json', label: 'Session data',
+        description: 'your trials and session record', savedLabel: 'Saved ✓' },
+      { key: 'replay', filename: 'DEMO-<id>-replay-<epoch>.json', label: 'Replay',
+        description: 'your session recording', savedLabel: 'Saved ✓' },
+      { key: 'config', filename: 'cyborg-hunter.config.json', label: 'Config',
+        description: 'the analysis settings for all five files', savedLabel: 'Saved ✓' },
+    ],
+  },
+  {
+    heading: 'Two example participants',
+    files: [
+      { href: 'assets/example-1.json', filename: 'example-1.json', label: 'Example 1',
+        description: 'pasted an answer twice' },
+      { href: 'assets/example-2.json', filename: 'example-2.json', label: 'Example 2',
+        description: 'a clean session' },
+    ],
+  },
 ];
 
-/** Step-12 documentation-style walkthrough. Rendered as numbered sections
- * with copyable code blocks (engine renders section.code in <pre><code>). */
+/** The last step's one-click hand-off to the analyze page (demo/handoff.js).
+ * `failed` is first-party HTML: the step shows it when the browser refuses to
+ * store the files. */
+export const HANDOFF = {
+  buttonLabel: 'Open in the analyzer →',
+  buttonHint: 'The files below, kept in this browser: nothing is uploaded.',
+  failed: 'This browser would not keep the files for the analyzer. Save them ' +
+    'below and drop them on <a href="analyze/">the analyzer</a> instead.',
+};
+
+/** The last step's documentation-style walkthrough. Rendered as numbered
+ * sections with copyable code blocks (engine renders section.code in
+ * <pre><code>). */
 export const REPLICATE = {
   sections: [
-    { n: 1, heading: 'Save the three files into one empty folder',
-      text: 'Use the buttons above. Browsers sometimes block multi-download; if a file is blocked, use its "show as text" link and save manually.',
+    { n: 1, heading: 'Save the five files into one empty folder',
+      text: 'Use "Save all" on each batch above, or the Save button of each file. After the first file of a "Save all", ' +
+        'your browser may ask whether this site may download several files: allow it, or save the rest with their own ' +
+        'Save buttons. If a session file is still blocked, use its "show as text" link and save the text yourself; for an ' +
+        'example file, right-click its Save link and choose "Save link as".',
       code: null },
     { n: 2, heading: 'Install Node.js if you don’t have it',
       text: 'Node 18 or newer. Check with:',
@@ -405,7 +428,7 @@ export const REPLICATE = {
     { n: 3, heading: 'Build the report',
       text: 'npx downloads cyborg-hunter automatically the first time it runs, ' +
         'so nothing needs installing beforehand. In a terminal, from the ' +
-        'folder with the three files:',
+        'folder with the five files:',
       code: 'cd <that folder>\nnpx cyborg-hunter@{{version}} report' },
     { n: 4, heading: 'Open it',
       text: 'The CLI writes cyborg-hunter-report/ next to your files:',
@@ -423,38 +446,7 @@ export const CONFIG_CAVEAT =
   "This config matches the demo's data shape. A real study likely needs " +
   "participantIdField 'subject_ID' and filePattern '*.csv' (see quickstart §6).";
 
-/** Results-screen walkthrough, branched on how the session went. */
-export const FINISH_VARIANTS = {
-  full: {
-    headline: 'Reading your report',
-    body: 'Each item below traces back to something you did in the last twelve steps.',
-    bullets: [
-      'Your tier and the reason for it: the pasted text that decided it is in the row detail.',
-      'The session timeline: your tab-aways as marked spans, your guard violations in red.',
-      'Your mouse trajectories, one panel per trial. The Session replay panel below reconstructs the same session in motion.',
-      'Act 1 and Act 2 side by side: the same tricks, recorded quietly vs. blocked and logged.',
-    ],
-  },
-  act2Skipped: {
-    headline: 'Reading your report (Act 1 only)',
-    body: 'You skipped the guarded act, so there is no enforcement data; Act 1 alone still makes a complete report.',
-    bullets: [
-      'Your tier and the reason for it: the pasted text that decided it is in the row detail.',
-      'The session timeline: your tab-aways as marked spans with exact durations.',
-      'Curious what the guard would have logged? docs/advanced-integration.md covers friction.',
-    ],
-  },
-  zeroLamp: {
-    headline: 'A clean report',
-    body: 'Triggering nothing still produces a real result: a clean report records the absence of activity, not an absence of data.',
-    bullets: [
-      'Your rows are few and unremarkable: no pastes, no long absences, no violations.',
-      'Go back and try the Act 1 steps for real, or keep this as a baseline to compare against.',
-    ],
-  },
-};
-
-/** Closing call-to-action on the replicate screen. */
+/** Closing call-to-action on the last step. */
 export const CLOSING_CTA = {
   primaryLabel: 'Get started in your experiment',
   primaryHref: 'https://github.com/cyborg-hunter/cyborg-hunter/blob/main/docs/quickstart.md',

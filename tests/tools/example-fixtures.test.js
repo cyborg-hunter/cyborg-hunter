@@ -1,6 +1,6 @@
 // tests/tools/example-fixtures.test.js
 // (1) Determinism: regenerating produces byte-identical output (protects the
-// committed copy from drift). (2) CLI-ingestible: the real pipeline reads
+// committed copies from drift). (2) CLI-ingestible: the real pipeline reads
 // them, example-1 lands HARD-leaning, example-2 CLEAN, and both carry enough
 // mouse data for the trajectory renderer. (3, sanctioned extra) all three
 // plot CORES draw non-trivially over both extracted examples — the whole
@@ -8,7 +8,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
@@ -18,17 +20,24 @@ import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js
 import { drawTypingProfile } from '../../src/cli/renderers/typing-profile-core.js';
 import { makeRecordingCanvasFactory } from '../cli/recording-canvas.js';
 
-const OUT = 'demo/assets/example-participants.json';
+// One file per example participant, named after it: the demo offers each for
+// download and hands both to the analyzer.
+const DIR = 'demo/assets';
+const NAMES = ['example-1.json', 'example-2.json'];
+const readExamples = () => NAMES.map((n) => JSON.parse(readFileSync(join(DIR, n), 'utf8')));
 
-test('generator is deterministic and matches the committed file', () => {
-  const committed = readFileSync(OUT, 'utf8');
-  const regenerated = execFileSync('node', ['tools/gen-example-fixtures.mjs', '--stdout']).toString();
-  assert.equal(regenerated, committed);
+test('generator is deterministic and matches the committed files', () => {
+  const out = mkdtempSync(join(tmpdir(), 'ch-examples-'));
+  try {
+    execFileSync('node', ['tools/gen-example-fixtures.mjs', '--out', out]);
+    for (const n of NAMES) assert.equal(readFileSync(join(out, n), 'utf8'), readFileSync(join(DIR, n), 'utf8'), n);
+  } finally { rmSync(out, { recursive: true, force: true }); }
 });
 
 test('examples are CLI-ingestible with the intended tiers and mouse data', () => {
   const config = { outputDir: '.', participantIdField: 'participantId' };
-  const [ex1, ex2] = JSON.parse(readFileSync(OUT, 'utf8'));
+  const [ex1, ex2] = readExamples();
+  assert.deepEqual([ex1.participantId, ex2.participantId], ['example-1', 'example-2'], 'each file is named after its participant');
   const ps = [extractIntegrityData(ex1, config), extractIntegrityData(ex2, config)];
   for (const p of ps) {
     assert.ok(p.trials.length >= 3);
@@ -48,7 +57,7 @@ test('examples are CLI-ingestible with the intended tiers and mouse data', () =>
 // non-null canvas plus a real amount of drawing (>50 calls) per example.
 test('all three plot cores draw non-trivially over both examples', () => {
   const config = { outputDir: '.', participantIdField: 'participantId' };
-  const [ex1, ex2] = JSON.parse(readFileSync(OUT, 'utf8'));
+  const [ex1, ex2] = readExamples();
   const ps = [extractIntegrityData(ex1, config), extractIntegrityData(ex2, config)];
   const triage = rankTriage(
     computeSummary(ps, config), detectEdgeExits(ps, config), config

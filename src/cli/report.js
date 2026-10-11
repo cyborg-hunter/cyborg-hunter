@@ -8,7 +8,7 @@
 
 import { join } from 'path';
 import { loadConfig } from './config.js';
-import { ingest } from './ingest.js';
+import { ingest, nodeDeps } from './ingest.js';
 import { buildReport } from './report-core.js';
 import { VERSION } from '../shared/constants.js';
 import { checkForUpdate, formatUpdateNotice, formatCollectedVersionNotice } from './update-check.js';
@@ -142,6 +142,7 @@ export async function run(args) {
   await buildReport(participants, config, {
     sink, log: console.log, warn: console.warn, createCanvas, encodePng,
     replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss(), assetMap,
+    sha256: nodeDeps.sha256,
   });
 
   console.log(`\nReport written to ${config.outputDir}/`);

@@ -334,6 +334,8 @@ function ingestQualtricsExport(text, path, config, participants, warnings) {
 // `participant.replay`:
 //   { recording, file, meta }            — parsed and attached
 //   { error: 'parse_failed', reason }    — artifact exists but unreadable
+//   { error: 'ambiguous', reason }       — several records share the id and
+//                                          several replays claim it: none attached
 //   null                                 — no artifact (silent unless meta
 //                                          says one went to 'download')
 // `entries`: readers for the replay directory's files. `participantPassFiles`:
@@ -612,11 +614,17 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
     }
     // Duplicate records for this id + multiple owned artifacts: the
     // per-session mapping is genuinely ambiguous. Attach nothing rather
-    // than knowingly mis-associate a session's replay.
+    // than knowingly mis-associate a session's replay. The participant
+    // carries the reason too: the report's replay section and the analyze
+    // page's replay card read it, and with no replay at all they would say
+    // the session was never recorded.
     if (idCounts[p.participantId] > 1 && owned.length > 1) {
       warnings.push({ file: dir,
         warnings: [`Cannot associate ${owned.length} replay artifacts with ${idCounts[p.participantId]} duplicate records of "${p.participantId}" — none attached. Separate the sessions into distinct data dirs (or ids) to view their replays.`] });
-      p.replay = null;
+      p.replay = { error: 'ambiguous', file: null,
+        reason: `${idCounts[p.participantId]} records share the participant id "${p.participantId}" and ${owned.length} replays claim it ` +
+          `(${owned.map((c) => c.file).sort().join(', ')}), so which replay belongs to which session cannot be told and none is shown. ` +
+          'Give each session its own participant id, or put the sessions in separate data folders.' };
       continue;
     }
     // Latest-session pick tolerates non-ISO start times in third-party

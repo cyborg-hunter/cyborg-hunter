@@ -74,10 +74,9 @@ jobs:
           node tools/gen-signal-manifest.mjs
           git diff --exit-code demo/signal-manifest.json
 
-      - name: Build library dist/ + demo preview bundle + analyze bundle
+      - name: Build library dist/ + analyze bundle
         run: |
           node build.js
-          node tools/build-preview-core.mjs
           node tools/build-analyze.mjs
 
       - name: Assemble demo site (demo/* minus tests/, plus dist/)
@@ -102,7 +101,7 @@ jobs:
           popd >/dev/null
 
       - name: npm-pin resolvability (soft — pinned version may not be published yet)
-        # The "Replicate locally" screen stamps this version into its npx
+        # The demo's "Your files" step stamps this version into its npx
         # line. On a PR the pinned version legitimately may not be on npm
         # yet (release ordering: 0.7.2 publish precedes the Pages deploy
         # that uses it), so this warns rather than blocks. The deploy job
@@ -122,7 +121,7 @@ jobs:
         # fail with "Executable doesn't exist".
         run: npx playwright install --with-deps chromium firefox webkit
 
-      - name: E2E (Playwright, 12-step tour + boundaries + downloads-to-CLI + variants + analyze page (three engines))
+      - name: E2E (Playwright, 11-step tour + boundaries + downloads-to-CLI + variants + analyze page (three engines))
         run: npm run test:e2e
 
   deploy:
@@ -148,10 +147,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Build library dist/ + demo preview bundle + analyze bundle
+      - name: Build library dist/ + analyze bundle
         run: |
           node build.js
-          node tools/build-preview-core.mjs
           node tools/build-analyze.mjs
 
       - name: Assemble demo site (demo/* minus tests/, plus dist/)
@@ -159,7 +157,7 @@ jobs:
 
       - name: npm-pin resolvability (hard gate)
         # Unlike the PR-side check, this has no fallback: deploy must not
-        # ship a "Replicate locally" screen whose pinned npx version 404s.
+        # ship a "Your files" step whose pinned npx version 404s.
         run: npm view cyborg-hunter@$(node -p "require('./package.json').version") version
 
       - name: Upload Pages artifact

@@ -360,6 +360,17 @@ describe('html-index replay section', () => {
       'one unloadable artifact must not cost the cohort its report');
   });
 
+  // ── State 2c: found, but not attached (two sessions under one id) ─────────
+  it('says why a replay is not shown when two sessions share an id and their replays cannot be told apart', async () => {
+    const html = await render({
+      participantId: 'P1', trials: [{ integrityReplayMeta: { saved_to: 'server', tier: 'dom' } }],
+      replay: { error: 'ambiguous', file: null,
+        reason: '2 records share the participant id "P1" and 2 replays claim it (P1-replay-1.json, P1-replay-2.json), so which replay belongs to which session cannot be told and none is shown. Give each session its own participant id, or put the sessions in separate data folders.' },
+    });
+    assert.match(html, /Replay not shown: 2 records share the participant id &quot;P1&quot; and 2 replays claim it \(P1-replay-1\.json, P1-replay-2\.json\)/);
+    assert.doesNotMatch(html, /corrupted|could not be loaded|recording was not enabled|No replay artifact on disk|file: unknown/i);
+  });
+
   // ── State 3: absent, with the saved_to reason ─────────────────────────────
   it('renders a placeholder with the saved_to reason when absent', async () => {
     const html = await render({

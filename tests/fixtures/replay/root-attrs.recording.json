@@ -1,0 +1,53 @@
+{
+  "schema_version": 2,
+  "recorder": { "name": "cyborg-hunter-replay", "version": "0.13.0" },
+  "host": null,
+  "participant_id": "ROOT-ATTRS",
+  "recording_started_at": "2026-10-05T12:00:00.000Z",
+  "recording_started_at_perf": 1000,
+  "user_agent": "hand-authored fixture",
+  "viewport": { "w": 1000, "h": 640, "dpr": 1, "scale": 1, "offset_x": 0, "offset_y": 0 },
+  "observed_root": null,
+  "stylesheets": [
+    { "id": 1, "kind": "inline", "css": ":root { --card-w: 40px; } .card { width: var(--card-w); height: 20px; }", "media": null }
+  ],
+  "stylesheet_events": [],
+  "viewport_changes": [],
+  "rng": null,
+  "rng_calls": null,
+  "ended_at_perf": 6000,
+  "end_reason": "finished",
+  "truncated": false,
+  "extensions": {
+    "cyborg-hunter": {
+      "tier": "dom",
+      "root_attr_events": [
+        { "t": 1500, "name": "style", "value": "--card-w: 80px;" },
+        { "t": 2500, "name": "data-theme", "value": "dark" },
+        { "t": 3500, "name": "lang", "value": null }
+      ]
+    }
+  },
+  "segments": [
+    {
+      "index": 0, "label": "first", "plugin": null,
+      "t_start": null, "t_dom_ready": null, "t_load": 0, "t_end": 3000,
+      "initial_dom": { "id": 1, "kind": "element", "tag": "body", "attrs": {}, "children": [
+        { "id": 2, "kind": "element", "tag": "div", "attrs": { "id": "card", "class": "card" }, "children": [] }
+      ] },
+      "initial_state": null,
+      "events": [],
+      "host_data": null,
+      "extensions": { "cyborg-hunter": { "root_attrs": { "lang": "en", "style": "--card-w: 120px;", "onload": "alert(1)" } } }
+    },
+    {
+      "index": 1, "label": "second", "plugin": null,
+      "t_start": null, "t_dom_ready": null, "t_load": 3000, "t_end": 5000,
+      "initial_dom": null,
+      "initial_state": null,
+      "events": [ { "type": "dom.attr", "t": 4000, "node": 2, "name": "data-x", "value": "1" } ],
+      "host_data": null,
+      "extensions": null
+    }
+  ]
+}

@@ -119,6 +119,7 @@ rec.destroy();
 | `keyframeEvery` | `10` | DOM tier only. At most this many segments per full snapshot: one keyframe plus up to `keyframeEvery - 1` segments recorded as deltas against it. A fresh snapshot is also taken sooner whenever the mutations since the last one have grown to rival its size, so this setting is the fallback for a DOM that barely changes, and it bounds how far a viewer must replay forward to reach a given segment. `1` snapshots every segment (the jsPsych adapter forces this, since the display is wiped between trials). `null` leaves only the size trigger. Must be a number; anything else disables the fallback and warns. |
 | `maxGuardViolations` | `40` | Session-wide cap on recorded guard-friction violations. Each `start` entry carries a full DOM snapshot, and the per-trial caps cannot see a session-level array. Past the ceiling later violations are not recorded and a capture failure says so once. Set `null` to disable. |
 | `maxViewportChanges` | `2000` | Session-wide cap on recorded viewport/zoom geometry changes (a drag-resize produces up to two per frame). Same forward-only bound and single capture-failure note. Set `null` to disable. |
+| `maxRootAttrEvents` | `2000` | DOM tier only. Session-wide cap on recorded changes to `<html>`'s own attributes, such as CSS variables a page sets with `document.documentElement.style.setProperty` (one entry per attribute each time the page changes it; changes made in the same task count once). It counts entries, not bytes: a 600-character style rewritten 2000 times is about 1.3 MB. Same forward-only bound and single capture-failure note, but every keyframe restates `<html>`'s attributes in full, so past the ceiling the replay's `<html>` is out of date only until the next keyframe. Set `null` to disable. |
 
 ### Privacy model
 
@@ -227,7 +228,10 @@ file is recognised by its contents under any filename and attaches by the
 `participant_id` inside it, and a jsPsych v1 recording is converted to v2
 on the way in (see **Replay artifacts** in `docs/cli-reference.md`). Each participant's pane gains a **Session replay** section with
 a lazy-loaded viewer: trial selector, play/pause/speed, scrub bar, cursor
-trail, click ripples, away-bands, an event marker lane, and — for
+trail, click ripples, away-bands, an event marker lane, size controls (the
+participant's whole recorded viewport, scaled to fit the window, or the
+detail pane in the report, by default; **1:1** for its own pixel size;
+**Fullscreen**), and — for
 `dom`-tier recordings — a sandboxed reconstruction of the page (scripts
 are blocked by both the iframe sandbox and a restrictive CSP; a
 participant-injected image URL can still fire a GET when the analyst
@@ -353,13 +357,30 @@ Unknown flags now exit with an error rather than silently falling back to the co
 ### In the browser, without installing anything
 
 [cyborg-hunter.github.io/cyborg-hunter/analyze/](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)
-builds the same report in your browser: drop the data files (or a folder),
-confirm the participant-ID field the page suggests, and download the report
-as a `.zip` with the CLI's output layout, or `summary.csv`, `triage.md` and
-`event-log.csv` on their own. "Load sample data" runs the whole pipeline on
-the bundled synthetic pilot first, so you can see what you get before
-dropping real data. "Export config" writes the `cyborg-hunter.config.json`
-the run used, ready for the CLI.
+builds the same report in your browser. Add the data files, the replay
+recordings, your `cyborg-hunter.config.json` and the experiment's CSS and
+image files, in one drop or several (a folder at a time is fine); the page
+lists every file with what it read it as, and you can remove any of them.
+Confirm the participant-ID field the page suggests, adjust the settings if
+you need to, and download the report as a `.zip` with the CLI's output
+layout, or `summary.csv`, `triage.md` and `event-log.csv` on their own.
+The settings are the ones a report can apply after collection: the score
+weights, the soft-score threshold, the phase scope, the ID, integrity and
+session-report fields, and two display options. Changing one on the results
+re-analyses at once, without dropping the files again. "Load sample data"
+runs the whole pipeline on the bundled synthetic pilot first, so you can see
+what you get before dropping real data. "Export config" writes a
+`cyborg-hunter.config.json` with every setting that differs from the CLI's
+defaults, so `cyborg-hunter report` in a folder whose `data/` holds the
+same files (or whose `dataDir` points at them) builds the same report.
+
+The report's annotations (Include, Exclude, Flag and a note; see
+[Annotating participants](#annotating-participants)) work the same way on
+this page. The page keeps them in this browser under the report's run id, so
+they stay through a re-analysis with other settings, and the results step
+has the exports (`annotations.csv`, `annotations.json`) and the import. The
+report itself runs sealed off in its frame, where it can neither store nor
+download anything.
 
 **Nothing leaves your browser.** Every web page can declare a security policy
 that the browser enforces. This page's policy has four parts: no data requests
@@ -476,6 +497,27 @@ cyborg-hunter-report/
 ```
 
 Visual renderers depend on `node-canvas` (Cairo bindings). If `npm install canvas` failed (typically a pkg-config / Cairo issue), the CLI prints platform-specific install hints and renders the text outputs without images.
+
+### Annotating participants
+
+The report's top bar names its run, for example `run 3f9c2a7b1d4e8a60 ·
+2026-10-05 14:03 UTC`. The id is a hash of the participant ids, so a report
+rebuilt from the same files keeps it, whatever the settings. In each
+participant's header, **Include**, **Exclude** and **Flag** record your
+decision and the note field (up to 2,000 characters) your reason. Pressing
+the chosen label again clears it; a participant without a label is not
+reviewed. The keys `i`, `e` and `f` do the same for the participant selected
+in the rail. The rail shows each label beside the participant and, at the
+bottom, how many are reviewed.
+
+The report keeps the annotations in this browser, under its run id, so they
+are there when you open the same `index.html` again. **Export JSON** saves
+them to a file, and **Import…** reads such a file back into a report of the
+same participants (entries for other participants are listed, not applied).
+**Export CSV** writes one row per participant in triage order:
+`participantId, tier, triageScore, label, note, annotatedAt, runId`. Tick
+"count unreviewed as included" to write `include` for everyone you did not
+label, for an exclusion list.
 
 ## Optional: DOM protection utilities
 

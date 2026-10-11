@@ -1,12 +1,12 @@
 // tests/demo/playground.test.js
-// DOM-free unit tests for the config playground's two pure pieces:
-// makeDebounced (generic coalescing timer) and recomputeSignals (the
-// pre-pass that rewrites raw session/trial data as if the participant had
-// been screened under different settings — see playground.js's docblock for
-// why config overrides alone can't move EITHER tier boundary).
+// DOM-free unit tests for the scoring step's pure pieces: makeDebounced
+// (generic coalescing timer) and recomputeSignals (the pre-pass that
+// rewrites raw session/trial data as if the participant had been screened
+// under different settings — see playground.js's docblock for why config
+// overrides alone can't move EITHER tier boundary).
 //
 // Scoring weights come from the committed demo/signal-manifest.json's
-// presets block — the same data path the browser playground uses — which
+// presets block — the same data path the scoring step uses — which
 // tests/tools/signal-manifest.test.js pins against src/shared/constants.js.
 // The tier-flip tests run the RECOMPUTED payloads through the REAL pipeline
 // (extract → summary → triage) so a recompute that writes the right-looking
@@ -26,13 +26,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = JSON.parse(readFileSync(join(here, '..', '..', 'demo', 'signal-manifest.json'), 'utf8'));
 const STD = MANIFEST.presets.standard.scoring;
 const STRICT = MANIFEST.presets.strict.scoring;
-const FIXTURE_PATH = join(here, '..', '..', 'demo', 'assets', 'example-participants.json');
-
+// One example participant, as the demo serves it (demo/assets/<id>.json).
 function loadExample(id) {
-  const examples = JSON.parse(readFileSync(FIXTURE_PATH, 'utf8'));
-  const p = examples.find((x) => x.participantId === id);
-  assert.ok(p, `fixture is missing ${id}`);
-  return p;
+  return JSON.parse(readFileSync(join(here, '..', '..', 'demo', 'assets', id + '.json'), 'utf8'));
 }
 
 // One payload through the real CLI pipeline -> its triage entry.
@@ -269,9 +265,9 @@ test('recomputeSignals: empty/missing payloads list is handled', () => {
 
 // ── mergePlaygroundConfig (walkthrough item 7, CODEX override contract) ──
 // { weights, controls, preset } -> one canonical { preset, controls,
-// scoring } view. Step 11's live-score readout, results.js's initial-render
-// persistence seam, and step 12's own playground all resolve through this
-// single merge — pinned here so a signature drift can't silently desync them.
+// scoring } view. The scoring step's live-score readout resolves through
+// this single merge — pinned here so a signature drift can't silently
+// desync it.
 
 test('mergePlaygroundConfig: empty/untouched overrides reproduce the manifest\'s own default preset verbatim', () => {
   const merged = mergePlaygroundConfig(MANIFEST, { weights: {}, controls: null, preset: null });

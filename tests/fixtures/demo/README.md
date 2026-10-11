@@ -2,8 +2,8 @@
 
 Purpose-made synthetic artifact (spec: "purpose-made synthetic artifacts...
 internal research bench traces are NOT used as-is"). The three files are the
-output of the live demo tour (`demo/index.html`): the same three files the
-"Replicate locally" step offers for download. Every field comes from the actual
+output of the live demo tour (`demo/index.html`): the three session files the
+"Your files" step offers for download. Every field comes from the actual
 library code running in a real page; none of it is hand-written. Only identity
 fields are rewritten after capture (see "The participant-id rewrite").
 

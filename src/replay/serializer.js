@@ -94,6 +94,12 @@ function segmentExtensions(trial) {
     ext = ext || {};
     ext['cyborg-hunter'] = Object.assign({ implicit: true }, ext['cyborg-hunter']);
   }
+  // <html>'s attributes at this keyframe (root-attrs.js), CH's own fact, so
+  // it overwrites a host value of the same name.
+  if (trial.rootAttrs) {
+    ext = ext || {};
+    ext['cyborg-hunter'] = Object.assign({}, ext['cyborg-hunter'], { root_attrs: Object.assign({}, trial.rootAttrs) });
+  }
   return ext;
 }
 
@@ -185,6 +191,9 @@ export function serialize(state, opts) {
     // forbids vendor events in the stream), so they live here with their
     // times converted like every other session-scoped CH array.
     guard_violations: convertTimes(state.guardViolations, s0),
+    // <html>'s attribute changes (root-attrs.js), on the wire clock; the
+    // keyframe snapshots ride the segments (segmentExtensions above).
+    root_attr_events: convertTimes(state.rootAttrEvents, s0),
     capture_failures: convertTimes(state.captureFailures, s0),
     capture_stopped: !!state.captureStopped,
     // Spec §8 redaction is a property of the file, but the mechanism enforcing

@@ -1,9 +1,8 @@
 // src/cli/renderers/font-face-css.js
 // The one @font-face formatter for the report's embedded typefaces. Pure (no
-// fs), so both callers share it: the CLI (report-fonts.js reads the WOFF2
-// files from disk) and the browser demo (demo/results.js fetches the same
-// files and gets this through the preview-core bundle). Each manifest entry
-// ({ family, weight, path }) becomes one rule with a base64 data URI.
+// fs): report-fonts.js reads the WOFF2 files from disk and formats them here,
+// for the CLI report and the analyze page's baked fonts alike. Each manifest
+// entry ({ family, weight, path }) becomes one rule with a base64 data URI.
 //
 // display: 'block' for the CLI report — everything is inline, so a face is
 // never late and must never swap in after a fallback flash.

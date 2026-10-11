@@ -1,9 +1,9 @@
 // src/cli/renderers/replay-styles.js
 // The replay viewer's CSS (.replay-* rules), shared by the CLI report
-// (html-index-core.js puts it in the report's second <style>) and the demo's
-// replay-host iframe (demo/replay-host.js, which receives it from results.js
-// through the preview-core bundle). One copy: the demo used to keep a
-// hand-synced duplicate, which had drifted. Rules reference the report's
+// (html-index-core.js puts it in the report's second <style>) and the
+// analyze page's replay host (demo/replay-host.js, which receives it from the
+// page's worker). One copy: the demo used to keep a hand-synced duplicate,
+// which had drifted. Rules reference the report's
 // tokens (--ink, --surface, --line, --bg, --dim, --hard and the --ff-* font
 // stacks); a host document must declare them.
 
@@ -58,4 +58,18 @@ export const REPLAY_STYLES_CSS = `    /* Replay viewer (see replay-viewer.client
                     padding: 5px 6px; pointer-events: none; flex-wrap: wrap; }
     .replay-media-badge { font: 11px/1.2 var(--ff-tomorrow);
                     background: rgba(0,137,123,0.85); color: #fff; padding: 2px 7px;
-                    border-radius: 3px; white-space: nowrap; }`;
+                    border-radius: 3px; white-space: nowrap; }
+    /* Size controls: 1:1 keeps the recorded pixel size and the stage scrolls
+       inside its box; fullscreen gives the whole viewer the screen. */
+    .replay-size, .replay-fullscreen {
+      padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
+      color: var(--ink); border-radius: 4px; cursor: pointer;
+      font-family: var(--ff-recursive); font-size: 13px; }
+    .replay-size[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+    .replay-stage-wrap.replay-actual { overflow: auto; }
+    .replay-viewer:fullscreen { background: var(--surface); padding: 12px 16px; overflow: auto; scrollbar-gutter: stable both-edges; }
+    /* In fullscreen the stage, its lane and its scrubber stand in the middle
+       of the screen when the height binds; at 1:1 the stage's box does. */
+    .replay-viewer:fullscreen .replay-stage, .replay-viewer:fullscreen .replay-lane,
+    .replay-viewer:fullscreen .replay-scrub, .replay-viewer:fullscreen .replay-stage-wrap.replay-actual {
+      margin-left: auto; margin-right: auto; }`;

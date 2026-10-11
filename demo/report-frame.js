@@ -1,7 +1,7 @@
 // demo/report-frame.js
-// The report frame shared by the demo's results step (results.js) and the
-// analyze page (analyze/page.js): a sandboxed Blob-URL iframe swap, and the
-// script-end escape every inline <script> the two pages build goes through.
+// The analyze page's report frame (analyze/page.js): a sandboxed Blob-URL
+// iframe swap, and the script-end escape every inline <script> the page and
+// its replay host (replay-host.js) build goes through.
 //
 // Like everything under demo/, this file cannot import from src/: only
 // demo/* and dist/ are copied into the deployed site
@@ -18,12 +18,15 @@ var IFRAME_LOAD_TIMEOUT_MS = 5000;
 // `error`, or `load` never firing within the load timeout — revokes the
 // FRESH url instead (the old one, if any, is left alone and still showing)
 // and calls onFail rather than onload.
-// opts (optional): { className, title } of the iframe, and loadTimeoutMs
-// (default IFRAME_LOAD_TIMEOUT_MS); the defaults are the demo's own.
+// opts (optional): { className, title } of the iframe, loadTimeoutMs
+// (default IFRAME_LOAD_TIMEOUT_MS), and hash, a fragment the new document
+// opens at; the defaults are the demo's own. The hash goes on the frame's
+// src only: the url returned (the one to revoke later) stays bare.
 export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
   var className = (opts && opts.className) || 'results-frame';
   var title = (opts && opts.title) || 'Your cyborg-hunter report';
   var loadTimeoutMs = (opts && opts.loadTimeoutMs) || IFRAME_LOAD_TIMEOUT_MS;
+  var hash = (opts && opts.hash) || '';
   var iframe = container.querySelector('iframe.' + className);
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -36,6 +39,11 @@ export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
     // etc.), so the most restrictive sandbox that still runs the report is
     // the right default.
     iframe.setAttribute('sandbox', 'allow-scripts');
+    // The report's figures may go fullscreen, and nothing else is granted.
+    // The allowlist is '*' because the framed document's origin is opaque,
+    // which no named origin matches: Firefox and WebKit refuse the default
+    // ('src') for it, Chromium does not (measured 2026-10-05).
+    iframe.setAttribute('allow', 'fullscreen *');
     iframe.title = title;
     container.appendChild(iframe);
   }
@@ -64,7 +72,7 @@ export function swapIframe(container, html, prevUrl, onload, onFail, opts) {
   var watchdogId = setTimeout(function () { onError(new Error('report iframe: load timed out')); }, loadTimeoutMs);
   iframe.addEventListener('load', onLoad);
   iframe.addEventListener('error', onError);
-  iframe.src = url;
+  iframe.src = url + hash;
   return url;
 }
 

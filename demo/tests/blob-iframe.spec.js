@@ -1,8 +1,9 @@
 // demo/tests/blob-iframe.spec.js
-// The one mechanism §7.3 stakes the payoff on, verified on all three
-// engines: blob: URL into sandbox="allow-scripts" iframe — scripts execute,
-// data-URI images render. Runs against a minimal inline harness page (not
-// the full tour) so Firefox/WebKit stay fast.
+// The one mechanism the analyze page's report frame stakes on
+// (demo/report-frame.js swapIframe), verified on all three engines: blob:
+// URL into sandbox="allow-scripts" iframe — scripts execute, data-URI images
+// render. Runs against a minimal inline harness page (not the full tour) so
+// Firefox/WebKit stay fast.
 import { test, expect } from '@playwright/test';
 
 const PNG1x1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
