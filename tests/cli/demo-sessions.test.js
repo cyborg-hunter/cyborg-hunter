@@ -73,13 +73,24 @@ describe('examples/demo-sessions', () => {
     // only other typed text.
     const AUTOTYPE = 'No one is typing this. It is being inserted.';
     const AGENT_ANSWER = 'A productive day so far.';
+    // The agent pasted the tour's answer into a field that already held "ch",
+    // so its values can carry a "ch" at either end, and one holds that paste
+    // twice over: the check strips both before matching the tour's text.
+    const isTourText = (typed) => {
+      const half = typed.slice(0, typed.length / 2);
+      const once = typed === half + half ? half : typed;
+      return AUTOTYPE.startsWith(typed) || AGENT_ANSWER.startsWith(typed)
+        || TOUR_TEXTS.some((s) => s.includes(once.replace(/^ch/, '').replace(/ch$/, '')));
+    };
     for (const f of readdirSync(join(DIR, 'data')).filter((n) => n.endsWith('.replay.json'))) {
       const raw = readFileSync(join(DIR, 'data', f), 'utf8');
       assert.doesNotMatch(raw, /\b[a-z][a-z0-9+.-]*:\/\//i, f);
+      assert.doesNotMatch(raw, /\b(?:data|javascript|blob|about|mailto):/i, f);
       assert.doesNotMatch(raw, /\/Users\/|localhost|[\w.+-]+@[\w-]+\.[a-z]{2,}|plugin enable|salut/, f);
       const j = JSON.parse(raw);
       assert.match(j.user_agent, /^Mozilla\/5\.0 \(Macintosh; Intel Mac OS X 10_15_7\) AppleWebKit\/537\.36 \(KHTML, like Gecko\) Chrome\/\d+\.0\.0\.0 Safari\/537\.36$/, f);
       assert.deepEqual(j.stylesheets.map((s) => s.href), ['demo.css'], f);
+      assert.deepEqual(j.stylesheet_events, [], f);
       // Every keyframe's body holds the demo's three elements, and nothing is
       // added directly under it afterwards: what a browser extension puts into
       // the page lands there.
@@ -99,22 +110,28 @@ describe('examples/demo-sessions', () => {
         if (Array.isArray(v)) { v.forEach(walk); return; }
         if (v && typeof v === 'object') { if (v.type === 'input.value') values.push(String(v.value)); for (const k in v) walk(v[k]); }
       })(j);
-      // The agent pasted the tour's answer into a field that already held "ch",
-      // so its values can carry a "ch" at either end, and one holds that paste
-      // twice over: the check strips both before matching the tour's text.
       for (const v of values) {
-        const typed = v.endsWith('▏') ? v.slice(0, -1) : v;
-        const half = typed.slice(0, typed.length / 2);
-        const once = typed === half + half ? half : typed;
-        assert.ok(v === 'Copy Copy' || AUTOTYPE.startsWith(typed) || AGENT_ANSWER.startsWith(typed)
-          || TOUR_TEXTS.some((s) => s.includes(once.replace(/^ch/, '').replace(/ch$/, ''))),
-          f + ': ' + v.slice(0, 60));
+        assert.ok(v === 'Copy Copy' || isTourText(v.endsWith('▏') ? v.slice(0, -1) : v), f + ': ' + v.slice(0, 60));
       }
+      // The keys pressed on each field spell what was typed there whatever its
+      // value reads: one-character keys without ctrl, meta or alt, in order,
+      // pass the same check.
+      const keyed = {};
+      for (const s of j.segments) {
+        for (const e of s.events) {
+          if (e.type === 'key.down' && e.key.length === 1 && !e.mods.ctrl && !e.mods.meta && !e.mods.alt) keyed[e.target] = (keyed[e.target] || '') + e.key;
+        }
+      }
+      for (const t in keyed) assert.ok(isTourText(keyed[t]), f + ': keys on ' + t + ': ' + keyed[t].slice(0, 60));
       if (f !== 'DEMO-681w.replay.json') assert.ok(values.length > 0, f);
       if (f === 'DEMO-a3f3.replay.json') {
-        assert.equal(values.filter((v) => v === 'Copy Copy').length, 11);
+        assert.equal(values.filter((v) => v === 'Copy Copy').length, 1);
         const pastes = j.segments.flatMap((s) => s.events.filter((e) => e.type === 'clipboard.paste'));
         assert.deepEqual(pastes.map((p) => p.len), [9]);
+        // On the pasted field, the paste's chord and the Tab that left it only.
+        const fieldKeys = j.segments.flatMap((s) => s.events)
+          .filter((e) => e.type.startsWith('key.') && e.target === pastes[0].target).map((e) => e.type + ' ' + e.key);
+        assert.deepEqual(fieldKeys, ['key.down Meta', 'key.down v', 'key.up Meta', 'key.up v', 'key.down Tab']);
       }
     }
   });
