@@ -28,7 +28,11 @@ test('carries the worker source, the viewer client, the fonts and the sample', (
   assert.ok(bundle.includes('self.onmessage') || bundle.includes('self.postMessage'), 'worker loop baked in');
   // The recordings are fetched on the site, never baked: their JSON is absent
   // (the trackers spell the id camel-case; a recording spells it participant_id).
-  assert.ok(!bundle.includes('"participant_id":"DEMO-bsq6"'), 'no recording baked in');
+  // Both are looked for escaped twice, as the config above; the tracker's
+  // form being there shows the recording's would be found if it were.
+  const twice = (s) => JSON.stringify(JSON.stringify(s).slice(1, -1)).slice(1, -1);
+  assert.ok(bundle.includes(twice('"participantId":"DEMO-bsq6"')), 'the tracker baked in, found as the recording would be');
+  assert.ok(!bundle.includes(twice('"participant_id":"DEMO-bsq6"')), 'no recording baked in');
   assert.ok(bundle.length < 2.5e6, 'the bundle stays under 2.5 MB: ' + bundle.length);
 });
 
