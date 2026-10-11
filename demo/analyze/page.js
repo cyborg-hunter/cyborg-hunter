@@ -656,10 +656,11 @@ export function createPage(root, worker, opts) {
     var empty = !state.entries.length;
     // In flight like a check (busy): a drop, a file choice or another click
     // is refused until the answer. A worker failure while the worker answers
-    // settles the request (recover) with the list as it was; one while the
-    // recordings are fetched shows its error, and once the fetch settles the
-    // files are added and checked on the replacement worker. The last
-    // request's line goes as this one starts.
+    // settles the request (recover) with the list as it was. One while the
+    // recordings are fetched shows its error; once the fetch settles, the
+    // files are added and checked on the replacement worker the page has
+    // made (the error is cleared when that check starts). The last request's
+    // line goes as this one starts.
     q(root, 'sample-recordings').hidden = true;
     var reply = waitFor('sample');
     updateControls();

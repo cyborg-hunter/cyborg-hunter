@@ -118,7 +118,7 @@ function refusedInReconstruction(r) {
 export const requested = (seen) => seen.filter((r) => !refusedInReconstruction(r)).map((r) => r.url());
 
 // Waits, at most 2 s per request, for every recorded request outside the
-// boot files to finish or fail (r.response() resolves either way; null on a
+// allowed files to finish or fail (r.response() resolves either way; null on a
 // failure). One still open after that counts as requested, which it is.
 export async function settleRequests(seen, allow) {
   const open = seen.filter((r) => !isLocal(r.url()) && !(allow || []).includes(r.url()));

@@ -8,17 +8,18 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ### Added
 - `examples/demo-sessions/`: the replay recordings of three of the four
   sessions (`DEMO-<id>.replay.json`, 1.7–2.3 MB each), so `cyborg-hunter
-  report` there plays them. They are the tour's recordings without what the
-  recording browser's extensions added to the page; `DEMO-a3f3`'s shows
-  `Copy Copy` where its paste was, with nothing typed after it. The
-  recordings carry the browser line (Chrome on a Mac) and each session's
-  start time and viewport, nothing else that identifies.
+  report` there plays them. They are the tour's recordings, with the
+  stylesheet URL made the relative `demo.css` and without what the recording
+  browser's extensions added to the page; `DEMO-a3f3`'s shows `Copy Copy`
+  where its paste was, with nothing typed after it. The recordings carry the
+  browser line (Chrome on a Mac) and each session's start time and viewport,
+  nothing else that identifies.
 - `/analyze/`: "Load sample data" on the site fetches the three recordings
-  after adding the trackers, inside the same request, so the report's replay
-  card plays them; a recording that cannot be fetched is named on a line and
-  left out. The offline file offers the three as this version's release
-  downloads instead, with "then drop them here". The page's policy allows
-  its own origin (`connect-src 'self'`); the offline file's still allows none.
+  with the trackers, inside the same request, so the report's replay card
+  plays them; a recording that cannot be fetched is named on a line and left
+  out. The offline file offers the three as this version's release downloads
+  instead, with "then drop them here". The page's policy allows its own
+  origin (`connect-src 'self'`); the offline file's still allows none.
 - The GitHub release carries the three recordings beside the offline analyzer.
 
 ### Changed

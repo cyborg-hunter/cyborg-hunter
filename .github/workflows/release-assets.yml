@@ -1,7 +1,8 @@
 # .github/workflows/release-assets.yml
 # On a version tag: build the site exactly as pages.yml does and attach the
-# analyze page's offline single file to the GitHub release for that tag,
-# creating the release first when none exists yet.
+# analyze page's offline single file and the sample's three replay recordings
+# to the GitHub release for that tag, creating the release first when none
+# exists yet.
 name: Release assets
 
 on:
