@@ -10,7 +10,7 @@ Optional companion deterrence modules ship in the same package (`ch.js` bundles 
 
 ### Example: what a report looks like
 
-The bundled dataset (`examples/demo-sessions/`, four sessions recorded on the demo tour: three by the author, one by a GPT agent) triages like this:
+The bundled dataset (`examples/demo-sessions/`, four sessions recorded on the demo tour: three by Mira, a human tester, one by a GPT agent) triages like this:
 
 | Rank | Participant | Tier | Score | Reason |
 |------|-------------|------|-------|--------|
