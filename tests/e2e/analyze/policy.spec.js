@@ -1,7 +1,8 @@
 // tests/e2e/analyze/policy.spec.js
 // The policy itself, not the page's code: every other spec asserts that the
-// page as written makes no request, which a change that weakened the policy
-// would pass as long as it requested nothing new. Here the test makes the
+// page as written requests nothing beyond its own files (the sample's
+// recordings included), which a change that weakened the policy would pass
+// as long as it requested nothing new. Here the test makes the
 // attempts the page never makes, a fetch and an image from a sentinel server,
 // inside every context that runs code: the page, the report frame, the
 // replay host, the viewer's reconstruction frame and the analysis worker.

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
 
 const PAGE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; " +
-  "img-src blob: data:; font-src data:; frame-src blob:; worker-src blob:; connect-src 'none'; " +
+  "img-src blob: data:; font-src data:; frame-src blob:; worker-src blob:; connect-src 'self'; " +
   "form-action 'none'; base-uri 'none'";
 const html = readFileSync(new URL('../../demo/analyze/index.html', import.meta.url), 'utf8');
 
@@ -86,7 +86,203 @@ async function toResults(t) {
   document.querySelector('iframe.analyze-report').dispatchEvent(new win.Event('load'));
 }
 
-test('the page declares the no-network policy verbatim, before anything else in <head>', () => {
+// The sample's recordings: on the site they are fetched after the worker's
+// reply (the names and the version are baked); from file: they are offered as
+// the release's downloads. A stub fetch answers from a table and records the
+// URLs asked.
+const RECORDINGS = ['DEMO-681w.replay.json', 'DEMO-a3f3.replay.json', 'DEMO-bsq6.replay.json'];
+function fetchStub(answers) {
+  const asked = [];
+  const fn = (url) => {
+    asked.push(url);
+    const name = url.slice(url.lastIndexOf('/') + 1);
+    const a = answers[name] || { ok: true, status: 200, text: '{"schema_version":2,"participant_id":"' + name.slice(0, 9) + '"}' };
+    if (a.reject) return Promise.reject(new Error('network'));
+    return Promise.resolve({ ok: a.ok, status: a.status, text: async () => a.text });
+  };
+  fn.asked = asked;
+  return fn;
+}
+const recordingOpts = (fetch, extra) => ({ sampleRecordings: { names: RECORDINGS, version: '0.14.0', offline: false,
+  base: 'https://example.test/analyze/', fetch, ...(extra || {}) } });
+const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
+
+test('Load sample data on the site fetches the three recordings after the worker’s reply and lists them beside the trackers', async () => {
+  const fetch = fetchStub({});
+  const t = boot(recordingOpts(fetch));
+  action('sample').click();
+  await tick();
+  assert.deepEqual(fetch.asked, [], 'nothing fetched before the worker answers');
+  t.emit(SAMPLE);
+  await settle();
+  assert.deepEqual(fetch.asked, RECORDINGS.map((n) => 'https://example.test/analyze/sample/' + n));
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.concat(RECORDINGS).sort());
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+test('a recording that cannot be fetched is left out: the trackers are listed, the line names it', async () => {
+  const fetch = fetchStub({ 'DEMO-a3f3.replay.json': { ok: false, status: 404, text: '' }, 'DEMO-bsq6.replay.json': { reject: true } });
+  const t = boot(recordingOpts(fetch));
+  action('sample').click();
+  await tick();
+  t.emit(SAMPLE);
+  await settle();
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.concat(['DEMO-681w.replay.json']).sort());
+  assert.equal(role('sample-recordings').hidden, false);
+  assert.equal(role('sample-recordings').textContent,
+    'Replay recordings not fetched: DEMO-a3f3.replay.json, DEMO-bsq6.replay.json. Their sessions show no replay.');
+});
+
+test('from file: nothing is fetched; the line offers the three recordings as the release’s downloads', async () => {
+  const fetch = fetchStub({});
+  const t = boot(recordingOpts(fetch, { offline: true }));
+  action('sample').click();
+  await tick();
+  t.emit(SAMPLE);
+  await settle();
+  assert.deepEqual(fetch.asked, []);
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.slice().sort());
+  const line = role('sample-recordings');
+  assert.equal(line.hidden, false);
+  assert.deepEqual([...line.querySelectorAll('a')].map((a) => [a.getAttribute('href'), a.textContent, a.getAttribute('download')]),
+    RECORDINGS.map((n) => ['https://github.com/cyborg-hunter/cyborg-hunter/releases/download/v0.14.0/' + n, n, n]));
+  assert.match(line.textContent, /^The sessions’ replay recordings are not in this file\. Download DEMO-681w\.replay\.json, DEMO-a3f3\.replay\.json, DEMO-bsq6\.replay\.json, then drop them here\.$/);
+});
+
+test('the fetch is part of the sample request: the files step’s inputs are disabled until the recordings are in, and Start over hides the line', async () => {
+  // One resolver per fetch, released together below; DEMO-bsq6's answers 404,
+  // so the line is up when Start over is clicked.
+  const releases = [];
+  const fetch = (url) => new Promise((resolve) => { releases.push(() => resolve(url.endsWith('/DEMO-bsq6.replay.json')
+    ? { ok: false, status: 404, text: async () => '' } : { ok: true, status: 200, text: async () => '{"schema_version":2}' })); });
+  const t = boot(recordingOpts(fetch));
+  assert.equal(action('sample').disabled, false);
+  action('sample').click();
+  await tick();
+  assert.equal(action('sample').disabled, true);
+  assert.equal(role('file-input').disabled, true);
+  assert.equal(role('dir-input').disabled, true);
+  assert.ok(role('dropzone').classList.contains('busy'));
+  t.emit(SAMPLE);
+  await settle();
+  assert.equal(action('sample').disabled, true, 'still in flight while the recordings are fetched');
+  assert.equal(role('file-input').disabled, true);
+  assert.ok(role('dropzone').classList.contains('busy'));
+  assert.equal(releases.length, 3);
+  releases.forEach((r) => r());
+  await settle();
+  // The check went out with the files: in flight until its reply.
+  assert.equal(t.sent.filter((m) => m.type === 'check').length, 1);
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(action('sample').disabled, false);
+  assert.equal(role('file-input').disabled, false);
+  assert.equal(role('dir-input').disabled, false);
+  assert.ok(!role('dropzone').classList.contains('busy'));
+  // Start over hides the line DEMO-bsq6's failed fetch put up.
+  assert.equal(role('sample-recordings').hidden, false);
+  action('reset').click();
+  await settle();
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+// A fetch that answers per name: { ok, status } from the table, a 200 for any
+// other; a name the table marks `hold` waits until released (release()).
+function fetchTable(answers) {
+  const asked = [];
+  const held = [];
+  const fn = (url) => {
+    asked.push(url);
+    const a = answers[url.slice(url.lastIndexOf('/') + 1)] || { ok: true, status: 200 };
+    const res = { ok: a.ok, status: a.status, text: async () => (a.ok ? '{"schema_version":2}' : '') };
+    return a.hold ? new Promise((resolve) => held.push(() => resolve({ ok: true, status: 200, text: async () => '{"schema_version":2}' }))) : Promise.resolve(res);
+  };
+  fn.asked = asked;
+  fn.release = () => held.splice(0).forEach((r) => r());
+  return fn;
+}
+
+test('a new sample request hides the last request’s line from its start', async () => {
+  const answers = { 'DEMO-a3f3.replay.json': { ok: false, status: 404 } };
+  const fetch = fetchTable(answers);
+  const t = boot(recordingOpts(fetch));
+  await loadSample(t);
+  await settle();
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(role('sample-recordings').hidden, false, 'DEMO-a3f3 was not fetched');
+  answers['DEMO-a3f3.replay.json'] = { hold: true };
+  action('sample').click();
+  await tick();
+  assert.equal(role('sample-recordings').hidden, true, 'hidden while the worker answers');
+  t.emit(SAMPLE);
+  await settle();
+  assert.equal(role('sample-recordings').hidden, true, 'hidden while the recording is fetched');
+  fetch.release();
+  await settle();
+  assert.equal(role('sample-recordings').hidden, true, 'fetched this time');
+});
+
+test('a check that fails takes the recordings line with the list: the next drop shows no stale line', async () => {
+  const t = boot(recordingOpts(fetchStub({}), { offline: true }));
+  await loadSample(t);
+  await settle();
+  assert.equal(role('sample-recordings').hidden, false);
+  t.emit({ type: 'error', phase: 'check', message: 'A file could not be read.' });
+  await settle();
+  assert.equal(role('files-panel').hidden, true);
+  t.page.addFiles([{ path: 'own.csv', file: new File(['x'], 'own.csv') }]);
+  await settle();
+  t.emit({ ...CHECKED, files: [{ path: 'own.csv', kind: 'data' }] });
+  await settle();
+  assert.equal(role('files-panel').hidden, false);
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+test('a recording URL that cannot be built counts as not fetched, and the request still ends', async () => {
+  const fetch = fetchStub({});
+  const t = boot(recordingOpts(fetch, { base: 'not a URL' }));
+  await loadSample(t);
+  await settle();
+  assert.deepEqual(fetch.asked, []);
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.slice().sort());
+  assert.equal(role('sample-recordings').textContent,
+    'Replay recordings not fetched: DEMO-681w.replay.json, DEMO-a3f3.replay.json, DEMO-bsq6.replay.json. Their sessions show no replay.');
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(action('sample').disabled, false, 'no longer busy');
+});
+
+test('recordings already listed are not fetched again: a second click fetches nothing and reports no failure', async () => {
+  const answers = {};
+  const fetch = fetchTable(answers);
+  const t = boot(recordingOpts(fetch));
+  await loadSample(t);
+  await settle();
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(fetch.asked.length, 3);
+  RECORDINGS.forEach((n) => { answers[n] = { ok: false, status: 503 }; });
+  await loadSample(t);
+  await settle();
+  assert.equal(fetch.asked.length, 3, 'nothing fetched the second time');
+  assert.equal(role('sample-recordings').hidden, true);
+  assert.equal(t.sent.filter((m) => m.type === 'check').length, 2);
+});
+
+test('without baked recordings (an older build) Load sample data behaves as before', async () => {
+  const t = boot();
+  await loadSample(t);
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.slice().sort());
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+test('the page declares its policy verbatim, before anything else in <head>', () => {
   const head = html.slice(html.indexOf('<head>') + 6, html.indexOf('</head>'));
   const metas = head.match(/<meta[^>]*>/g);
   assert.equal(metas[1], '<meta http-equiv="Content-Security-Policy" content="' + PAGE_CSP + '">');
@@ -881,6 +1077,20 @@ describe('the still-working hint', () => {
     action('sample').click(); await tick();
     fireStall(clock);
     assert.equal(shown(), true);
+  });
+
+  test('a stalled fetch of the sample’s recordings shows the hint too; the recordings’ arrival hides it', async () => {
+    const clock = fakeTimers();
+    const fetch = fetchTable(Object.fromEntries(RECORDINGS.map((n) => [n, { hold: true }])));
+    const t = boot({ timers: clock, ...recordingOpts(fetch) });
+    action('sample').click(); await tick();
+    t.emit(SAMPLE); await settle();
+    assert.equal(fetch.asked.length, 3, 'the recordings are being fetched');
+    fireStall(clock);
+    assert.equal(shown(), true);
+    fetch.release(); await settle();
+    assert.equal(t.sent.filter((m) => m.type === 'check').length, 1);
+    assert.equal(shown(), false);
   });
 
   test('a stalled check shows the hint too, and its result hides it', async () => {

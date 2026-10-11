@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { join } from 'node:path';
 import * as copy from '../../demo/steps.js';
-import { STEPS, RAIL_GROUPS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS } from '../../demo/steps.js';
+import { STEPS, RAIL_GROUPS, REPLICATE, DOWNLOAD_BATCHES, HANDOFF, SAVE_TO_FOLDER, HANDOFF_ASSETS, BUNDLED_IDS } from '../../demo/steps.js';
 import { renderRail } from '../../demo/rail.js';
 
 const IDS = ['intro','baseline','clipboard-cheat','tab-away',
@@ -265,4 +265,10 @@ test('the folder hint and the walkthrough name a folder the browser accepts', ()
 });
 test('the hand-off button names the analyzer web app', () => {
   assert.equal(HANDOFF.buttonLabel, 'Open in the analyzer web app →');
+});
+test('BUNDLED_IDS are the dataset’s sessions, which the visitor’s id never takes', () => {
+  const inData = fs.readdirSync(join('examples', 'demo-sessions', 'data'))
+    .filter((f) => /^DEMO-[a-z0-9]{4}\.json$/.test(f)).map((f) => f.slice(0, -5)).sort();
+  assert.deepEqual(BUNDLED_IDS.slice().sort(), inData);
+  for (const f of DOWNLOAD_BATCHES.flatMap((b) => b.files).filter((f) => f.href)) assert.ok(BUNDLED_IDS.includes(f.filename.slice(0, -5)), f.filename);
 });

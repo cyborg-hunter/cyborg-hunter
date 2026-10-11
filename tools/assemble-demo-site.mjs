@@ -15,7 +15,9 @@
 //      under demo/analyze/ but index.html and the built bundle, and the two
 //      scripts only that bundle uses.
 //   4. Copy the files step's two example participants from
-//      examples/demo-sessions/data/ into assets/.
+//      examples/demo-sessions/data/ into assets/, and the sample's replay
+//      recordings (`*.replay.json`) into analyze/sample/, where the analyze
+//      page fetches them.
 //   5. Copy the report's typefaces, which demo.css loads for the tour.
 //   6. Write the analyze page as one offline file,
 //      .demo-site/analyze/cyborg-hunter-analyze.html (bundle inlined, policy
@@ -29,12 +31,14 @@ import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildOfflineHtml, OFFLINE_NAME } from './offline-analyze.mjs';
+import { sampleRecordingNames } from './sample-recordings.mjs';
 import { DOWNLOAD_BATCHES } from '../demo/steps.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..');
+export const ROOT = join(__dirname, '..');
 const SITE_DIR = join(ROOT, '.demo-site');
 export const DEMO_DIR = join(ROOT, 'demo');
+export const SAMPLE_SITE_DIR = 'analyze/sample';   // where the page fetches the sample's recordings
 
 // Imported by the analyze page and bundled into analyze.bundle.js; the tour
 // does not load them. Add a demo/ module here when only the analyze page
@@ -102,6 +106,10 @@ function main() {
   for (const f of DOWNLOAD_BATCHES.flatMap((b) => b.files).filter((f) => f.href)) {
     cpSync(join(SESSIONS_DIR, f.filename), join(SITE_DIR, f.href));
   }
+  // The sample's replay recordings, fetched by the page on Load sample data
+  // (the bundle bakes their names, not their files).
+  mkdirSync(join(SITE_DIR, SAMPLE_SITE_DIR), { recursive: true });
+  for (const name of sampleRecordingNames(SESSIONS_DIR)) cpSync(join(SESSIONS_DIR, name), join(SITE_DIR, SAMPLE_SITE_DIR, name));
   // The report's typefaces (WOFF2 + each family's OFL.txt + the manifest),
   // copied from their one committed home rather than duplicated under demo/.
   // demo.css loads them by URL for the tour itself.

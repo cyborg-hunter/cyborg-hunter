@@ -115,8 +115,10 @@ test('"Open in the analyzer web app" hands over the five files and the fonts: th
 // on (the results step hides it): the button adds the two sessions the tour
 // did not bring, leaves the two it did (same names) and the config, and
 // keeps the visitor's own: five participants, one of each, no duplicate id.
-// The counts line read 3 data files before the click: the visitor's session
-// and the two examples; the recording is counted apart.
+// The counts line reads 3 data files and 1 replay recording before the
+// click (the visitor's session and the two examples; the visitor's
+// recording), and 5 data files and 4 replay recordings after it (the three
+// recordings the sample fetches on this site join the visitor's).
 // ---------------------------------------------------------------------------
 test('Load sample data after the hand-off adds the two sessions the tour did not bring: five participants, no duplicate id', async ({ page }) => {
   test.setTimeout(120000);
@@ -125,6 +127,7 @@ test('Load sample data after the hand-off adds the two sessions the tour did not
   await expect(page.locator('[data-role="counts"]')).toContainText('3 data files');
   await page.click('[data-action="sample"]');
   await expect(page.locator('[data-role="counts"]')).toContainText('5 data files');
+  await expect(page.locator('[data-role="counts"]')).toContainText('4 replay recordings');
   await buildReport(page);
   expect((await railOrder(page)).sort()).toEqual([participantId, 'DEMO-681w', 'DEMO-9mop', 'DEMO-a3f3', 'DEMO-bsq6'].sort());
   await expect(page.locator('section[data-step="results"]')).not.toContainText('duplicate participantId');

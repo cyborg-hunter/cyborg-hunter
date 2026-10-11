@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { isRuntimeFile, DEMO_DIR } from '../../tools/assemble-demo-site.mjs';
+import { isRuntimeFile, DEMO_DIR, SAMPLE_SITE_DIR, ROOT } from '../../tools/assemble-demo-site.mjs';
+import { sampleRecordingNames } from '../../tools/sample-recordings.mjs';
 
 test('the copy filter keeps the runtime files and leaves out tests and build inputs', () => {
   const at = (...p) => isRuntimeFile(join(DEMO_DIR, ...p));
@@ -25,4 +26,12 @@ test('the scripts only the analyze bundle uses are not copied; the tour\'s are',
   assert.equal(at('report-frame.js'), false);
   assert.equal(at('replay-host.js'), false);
   assert.equal(at('demo.js'), true);
+});
+
+test('the recordings of the sample are served under analyze/sample/, by name', () => {
+  // The assembler copies examples/demo-sessions/data/*.replay.json there; the
+  // page fetches them by these names on Load sample data.
+  assert.deepEqual(sampleRecordingNames(join(ROOT, 'examples', 'demo-sessions', 'data')),
+    ['DEMO-681w.replay.json', 'DEMO-a3f3.replay.json', 'DEMO-bsq6.replay.json']);
+  assert.equal(SAMPLE_SITE_DIR, 'analyze/sample');
 });

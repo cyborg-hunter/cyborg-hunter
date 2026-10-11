@@ -1,15 +1,18 @@
 // tests/e2e/analyze/support.mjs
 // Shared fixtures for the analyze page's specs. The one thing every spec
-// asserts: the page makes no request beyond its own boot files, from before
-// goto to after the zip download. Observers, installed before goto:
+// asserts: the page makes no request beyond its own files (the sample's
+// recordings included), from before goto to after the zip download.
+// Observers, installed before goto:
 //   - the record: page.on('request') sees every request any frame of the
-//     page makes (the report and replay frames included); after boot the
-//     only URLs allowed are the boot files and blob:/data: ones (the worker,
-//     the report and replay frames, the downloads). Chromium also reports a
+//     page makes (the report and replay frames included); the only URLs
+//     allowed are the page's own files (siteAllowlist: the boot files and
+//     the sample's recordings) and blob:/data: ones (the worker, the report
+//     and replay frames, the downloads). Chromium also reports a
 //     load a policy refused, as a request that then fails with 'csp'; those
 //     count too, except in the viewer's reconstruction frame (below);
-//   - the guard: a page.route catch-all that lets only the boot files
-//     through. Not used for file:// loads, which some engines do not route;
+//   - the guard: a page.route catch-all that lets only the page's own
+//     files through. Not used for file:// loads, which some engines do not
+//     route;
 //   - the popups: any window the page or its frames open. The policy does
 //     not cover navigation, so the page's code must never open one; the
 //     page's own navigations are in the record;
@@ -51,6 +54,7 @@ import { gzipSync } from 'node:zlib';
 import { join, resolve, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unzipSync, strFromU8 } from 'fflate';
+import { sampleRecordingNames } from '../../../tools/sample-recordings.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(__dirname, '..', '..', '..');
@@ -114,7 +118,7 @@ function refusedInReconstruction(r) {
 export const requested = (seen) => seen.filter((r) => !refusedInReconstruction(r)).map((r) => r.url());
 
 // Waits, at most 2 s per request, for every recorded request outside the
-// boot files to finish or fail (r.response() resolves either way; null on a
+// allowed files to finish or fail (r.response() resolves either way; null on a
 // failure). One still open after that counts as requested, which it is.
 export async function settleRequests(seen, allow) {
   const open = seen.filter((r) => !isLocal(r.url()) && !(allow || []).includes(r.url()));
@@ -143,7 +147,8 @@ export async function assertOnlyAllowed(page, seen, allow) {
   expect(await cspViolations(page), 'security policy violations (attempted loads)').toEqual([]);
   expect(popups.get(page) || [], 'windows the page opened').toEqual([]);
 }
-export const siteAllowlist = (baseURL) => [baseURL + '/analyze/', baseURL + '/analyze/index.html', baseURL + '/analyze/analyze.bundle.js'];
+export const siteAllowlist = (baseURL) => [baseURL + '/analyze/', baseURL + '/analyze/index.html', baseURL + '/analyze/analyze.bundle.js']
+  .concat(sampleRecordingNames(join(SAMPLE_DIR, 'data')).map((n) => baseURL + '/analyze/sample/' + n));
 
 // Ready: the worker's ready message has reached the page (page.js keeps its
 // limits); nothing on screen shows it.
@@ -191,8 +196,13 @@ export async function downloadZip(page) {
   const files = unzipSync(new Uint8Array(readFileSync(await download.path())));
   return { names: Object.keys(files).sort(), text: (n) => strFromU8(files[n]) };
 }
-export const sampleFiles = () => readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => f.endsWith('.json')).sort().map((f) => join(SAMPLE_DIR, 'data', f))
+export const sampleFiles = () => readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => f.endsWith('.json') && !f.endsWith('.replay.json')).sort()
+  .map((f) => join(SAMPLE_DIR, 'data', f))
   .concat([join(SAMPLE_DIR, 'cyborg-hunter.config.json')]);
+// The three recordings beside the trackers, fetched on the site and dropped
+// from file: by the tests that want them.
+export const sampleRecordingFiles = () => readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => f.endsWith('.replay.json')).sort()
+  .map((f) => join(SAMPLE_DIR, 'data', f));
 
 // The time a report was built is the one part of index.html that differs
 // between two runs over the same files (the run id is the cohort's own).

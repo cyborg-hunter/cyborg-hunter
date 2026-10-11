@@ -32,5 +32,5 @@ test('without the opt no postMessage is emitted', async () => {
 test('the viewer client honours opts.noExternalCss', () => {
   const src = readFileSync('src/cli/renderers/replay-viewer.client.js', 'utf8');
   assert.match(src, /opts && opts\.noExternalCss/);
-  assert.match(src, /cannot be fetched under this page/);
+  assert.match(src, /cannot be fetched: this page requests nothing from other addresses/);
 });

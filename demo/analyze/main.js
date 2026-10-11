@@ -2,6 +2,7 @@
 // inherits this page's policy), then the page state machine over it, and the
 // files the demo's last step left for it (analyze/#from-demo).
 import workerSrc from 'virtual:worker-src';
+import sampleRecordings from 'virtual:sample-recordings';
 import { createPage } from './page.js';
 import { takeHandoff, handoffEntries } from '../handoff.js';
 
@@ -19,7 +20,12 @@ if (typeof document !== 'undefined') {
   // createPage owns the worker's events, and replaces it through the factory
   // if it fails. From file: the page reads dropped files itself (page.js).
   window.__chAnalyze = createPage(document.body, createAnalyzeWorker(),
-    { createWorker: createAnalyzeWorker, transferBytes: location.protocol === 'file:' });   // exposed for the end-to-end tests
+    { createWorker: createAnalyzeWorker, transferBytes: location.protocol === 'file:',
+      // The sample's recordings: fetched from the site on Load sample data;
+      // from file: offered as the release's downloads (page.js).
+      sampleRecordings: { names: sampleRecordings.names, version: sampleRecordings.version,
+        offline: location.protocol === 'file:', base: location.href,
+        fetch: typeof fetch === 'function' ? fetch.bind(window) : null } });   // exposed for the end-to-end tests
   // Opened by the demo's "Open in the analyzer web app": its files wait in this
   // browser's IndexedDB (../handoff.js) and join the list as a drop would.
   // The hash goes first, so a reload starts with an empty list. Nothing

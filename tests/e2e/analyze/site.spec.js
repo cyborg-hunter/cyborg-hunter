@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
-  sampleFiles, cliSampleTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
+  sampleFiles, sampleRecordingFiles, cliSampleTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
 
 test('the top bar names the page and links the demo, GitHub and the offline file; the files step has no policy paragraph', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -33,9 +33,10 @@ test('dropped demo sessions: same triage order as the sample, zip tree matches t
   const seen = await guardNetwork(page, allow);
   await page.goto('/analyze/');
   await waitReady(page);
-  await page.setInputFiles('[data-role="file-input"]', sampleFiles());
+  await page.setInputFiles('[data-role="file-input"]', sampleFiles().concat(sampleRecordingFiles()));
   await expect(page.locator('[data-role="files-panel"]')).toBeVisible();
   await expect(page.locator('[data-role="counts"]')).toContainText('4 data files');
+  await expect(page.locator('[data-role="counts"]')).toContainText('3 replay recordings');
   await expect(page.locator('[data-role="counts"]')).toContainText('1 config file');
   await expect(page.locator('[data-role="id-field"]')).toHaveValue('participantId');
   await buildReport(page);
@@ -127,7 +128,7 @@ test('switching participant tears down the viewer and mounts the right replay', 
     await expect(page.locator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT-B"]')).toHaveCount(1);
     await expect(page.locator('iframe.replay-host-frame')).toHaveCount(1);
     const host = page.frameLocator('iframe.replay-host-frame[data-participant-id="DEMO-FIXT-B"]');
-    await expect(host.locator('.replay-note').filter({ hasText: 'no-network policy' })).toContainText('1 external stylesheet(s) cannot be fetched', { timeout: 30000 });
+    await expect(host.locator('.replay-note').filter({ hasText: 'requests nothing from other addresses' })).toContainText('1 external stylesheet(s) cannot be fetched', { timeout: 30000 });
     await expect(host.locator('.replay-css-btn')).toHaveCount(0);
     // Selecting in the report switches the dropdown too, and tears the viewer down.
     await reportFrame(page).locator('.cohort-row[data-pid="DEMO-FIXT"]').click();

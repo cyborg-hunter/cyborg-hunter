@@ -386,11 +386,13 @@ layout, or `summary.csv`, `triage.md` and `event-log.csv` on their own.
 The settings are the ones a report can apply after collection: the
 soft-score threshold, the score weights, the ID, integrity and
 session-report fields, and the platform ID field. Changing one on the results
-re-analyses at once, without dropping the files again. "Load sample data"
-adds four sessions recorded on the demo tour (three by a human tester, one by an
-AI agent) to the files already listed, so you can see what you get before
-dropping real data, or beside data recorded under `participantId` (the
-one-line setup, the demo tour). "Export config" writes a
+re-analyses at once, without dropping the files again.
+"Load sample data" adds four sessions recorded on the demo tour (three by a
+human tester, one by an AI agent) to the files already listed, and on the
+site fetches three of their replay recordings then, so the report plays
+them; the offline file offers the recordings as downloads to drop in. So you
+can see what you get before dropping real data, or beside data recorded
+under `participantId` (the one-line setup, the demo tour). "Export config" writes a
 `cyborg-hunter.config.json` with every setting that differs from the CLI's
 defaults, so `cyborg-hunter report` in a folder whose `data/` holds the
 same files (or whose `dataDir` points at them) builds the same report.
@@ -405,7 +407,9 @@ download anything.
 
 **Nothing leaves your browser.** Every web page can declare a security policy
 that the browser enforces. This page's policy has four parts: no data requests
-(`connect-src 'none'`), no images, scripts, fonts or frames from other
+except to its own site, where Load sample data fetches the sample's three
+recordings (`connect-src 'self'`; the offline file allows none), no images,
+scripts, fonts or frames from other
 addresses (`default-src 'none'` with only local sources allowed), no form
 submissions (`form-action 'none'`), and no `<base>` element that could point
 the page's own links elsewhere (`base-uri 'none'`). The browser enforces these

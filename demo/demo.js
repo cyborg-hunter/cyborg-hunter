@@ -27,17 +27,11 @@ import { renderRail, light, setRecording, acknowledge, clearSignalBox } from './
 import { buildPayload } from './payload.js';
 import { makeLivePane, makePaneBar } from './live-pane.js';
 import { escHtml } from './util.js';
+import { randomParticipantId } from './participant-id.js';
 
 var SESSION_POLL_MS = 5000;
 
 console.log('cyborg-hunter demo · library', (window.CyborgHunter && CyborgHunter.VERSION) || 'unknown');
-
-function randomParticipantId() {
-  // Math.random() === 0 renders as the 1-char string '0' (no decimal point),
-  // which would slice down to only 3 characters without padding — padEnd to
-  // 6 chars first so the slice below always has 4 to take.
-  return 'DEMO-' + Math.random().toString(36).padEnd(6, '0').slice(2, 6);
-}
 
 // Resolves {{path.to.value}} against `signals` (signal-manifest.json's
 // `signals` object — see steps.js's docblock) and the special {{version}}
