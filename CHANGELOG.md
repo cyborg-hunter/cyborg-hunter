@@ -6,6 +6,81 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ## [Unreleased]
 
 ### Added
+- Report (CLI and `/analyze/`): a "Cursor dynamics" section for each
+  session that opens with its pointer verdict (clean, suspicious, highly
+  suspicious, or not assessed with the reason) and the tells that decided
+  it: the automation flag set by the browser (`navigator.webdriver`), clicks
+  the page's own scripts dispatched (`isTrusted` false), clicks that arrived
+  without a path (a first pointer click whose movement has at most one
+  sample and starts 20 px or more from where the pointer was last seen,
+  judged from 4 first clicks with a known position before them), and
+  trials clicked without pointer movement. Beneath, in a closed details block, are
+  every check with its count, its denominator and up to ten trial ids,
+  clicks after a pointer jump and the shape of each movement (duration,
+  path length, displacement, speed, efficiency and deviation, as medians
+  with their n).
+  With it come a "Pointer verdict" tile ("—" when the session is not
+  assessed), a rail cell ("pointer: highly suspicious") and its sort option,
+  a clause in the triage reason, nineteen `cursor…` columns at the end of
+  `summary.csv` (no existing header changes), a new file,
+  `cursor-limits.json`, with the constants the section judged with, their
+  meanings and the verdicts over the cohort, and one line in the run output,
+  "Pointer verdicts: H highly suspicious, S suspicious, C clean, U not
+  assessed (…)", which `/analyze/` prints under its results summary. A new
+  `scoreWeights` key, `cursor` (default 0, shown in the analyzer's settings
+  as "pointer verdict (cursor)"), adds the weight times the verdict's level
+  (suspicious 1, highly suspicious 2) to the triage score; the tier is
+  unchanged, and the CLI warns when the weight is on and some sessions carry
+  no device facts. The thresholds behind the verdict are provisional.
+  For the checks the monitor now records the session's device facts
+  (`device: { maxTouchPoints, coarsePointer, webdriver }`), viewport
+  coordinates (`cx`, `cy`) on every mouse sample, and `trusted`, `detail`
+  and `pointerType` on every click, press and release. One trial of 2,000
+  moves grows from 84,878 to 119,978 bytes of JSON, one of 2,000 clicks from
+  86,878 to 217,978; the Qualtrics write still leaves the mouse track out and
+  adds 69 bytes for the device facts, so Qualtrics sessions read "not
+  collected" while the automation flag still comes through. Sessions
+  recorded before 0.14 show the checks as "not recorded" and are not
+  assessed (docs/upgrading.md). The bundled dataset's agent session,
+  DEMO-bsq6, reads highly suspicious: all twelve of its first clicks with a
+  known position arrived without a path. The two sessions recorded on the
+  earlier tour, before the device facts existed, show the checks as not
+  recorded and are not assessed.
+
+### Changed
+- `computeMouseMetrics` (each trial's `mouseMetrics`) measures path length
+  and displacement with the geometry the report's cursor section uses; its
+  outputs are unchanged. Its comment no longer gives bot and human ranges:
+  it says that `pathEfficiency` covers the whole trial (the cursor section's
+  efficiency is per movement) and that direction changes and speed variance
+  depend on the sampling interval.
+- The bundled example dataset is four sessions recorded on the demo tour
+  (`examples/demo-sessions/`), three by the author and one by a GPT agent
+  driving Chrome from a sidebar; the CLI's worked example, the README table,
+  the analyzer's "Load sample data" and the demo's two example participants
+  read it. "Load sample data" adds the sessions to the files already listed
+  instead of replacing them: a session already listed by name is left out,
+  the sample's config comes only to an empty list (a cohort keeps the config
+  and settings it has), and each added file can be removed like any other.
+  The sessions are read under the cohort's participant-ID field: beside
+  files keyed by another field, one side reads as `unknown` until it is
+  removed.
+
+### Removed
+- The synthetic pilot (`examples/synthetic-pilot/`) and the demo's generated
+  example participants, with their generators.
+## [0.13.0] — 2026-10-10
+
+The demo tour and the analyze page after two review rounds: a ten-step tour
+with the live session record under the card and a last step, Your files,
+that hands the session to the analyzer; one Files & settings step there,
+with a settings panel; annotations (Include, Exclude, Flag) kept by run id in
+the report and on the page; 1:1 and fullscreen views of figures. Also:
+recordings carry the attributes of the html element, each Qualtrics survey
+keeps a session of its own, one CSV cell writer for every CSV file, and the
+docs lead with the one-line setup.
+
+### Added
 - Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
   14:03 UTC`). The id is a hash of each participant's id, trial count, and
   first and last trial timestamps. A report rebuilt from the same files keeps
@@ -65,46 +140,6 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   by hand (advanced-integration.md). The message replaces the default
   text, heading included; the button keeps its label, "Enter fullscreen and
   continue".
-- Report (CLI and `/analyze/`): a "Cursor dynamics" section for each
-  session that opens with its pointer verdict (clean, suspicious, highly
-  suspicious, or not assessed with the reason) and the tells that decided
-  it: the automation flag set by the browser (`navigator.webdriver`), clicks
-  the page's own scripts dispatched (`isTrusted` false), clicks that arrived
-  without a path (a first pointer click whose movement has at most one
-  sample and starts 20 px or more from where the pointer was last seen,
-  judged from 4 first clicks with a known position before them), and
-  trials clicked without pointer movement. Beneath, in a closed details block, are
-  every check with its count, its denominator and up to ten trial ids,
-  clicks after a pointer jump and the shape of each movement (duration,
-  path length, displacement, speed, efficiency and deviation, as medians
-  with their n).
-  With it come a "Pointer verdict" tile ("—" when the session is not
-  assessed), a rail cell ("pointer: highly suspicious") and its sort option,
-  a clause in the triage reason, nineteen `cursor…` columns at the end of
-  `summary.csv` (no existing header changes), a new file,
-  `cursor-limits.json`, with the constants the section judged with, their
-  meanings and the verdicts over the cohort, and one line in the run output,
-  "Pointer verdicts: H highly suspicious, S suspicious, C clean, U not
-  assessed (…)", which `/analyze/` prints under its results summary. A new
-  `scoreWeights` key, `cursor` (default 0, shown in the analyzer's settings
-  as "pointer verdict (cursor)"), adds the weight times the verdict's level
-  (suspicious 1, highly suspicious 2) to the triage score; the tier is
-  unchanged, and the CLI warns when the weight is on and some sessions carry
-  no device facts. The thresholds behind the verdict are provisional.
-  For the checks the monitor now records the session's device facts
-  (`device: { maxTouchPoints, coarsePointer, webdriver }`), viewport
-  coordinates (`cx`, `cy`) on every mouse sample, and `trusted`, `detail`
-  and `pointerType` on every click, press and release. One trial of 2,000
-  moves grows from 84,878 to 119,978 bytes of JSON, one of 2,000 clicks from
-  86,878 to 217,978; the Qualtrics write still leaves the mouse track out and
-  adds 69 bytes for the device facts, so Qualtrics sessions read "not
-  collected" while the automation flag still comes through. Sessions
-  recorded before 0.14 show the checks as "not recorded" and are not
-  assessed (docs/upgrading.md). The bundled dataset's agent session,
-  DEMO-bsq6, reads highly suspicious: all twelve of its first clicks with a
-  known position arrived without a path. The two sessions recorded on the
-  earlier tour, before the device facts existed, show the checks as not
-  recorded and are not assessed.
 
 ### Changed
 - `/analyze/`: dropping and checking are one "Files & settings" step. Every
@@ -206,25 +241,12 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   (`replay/<id>.replay.js`), however many elements show it, and the viewer
   puts it back on each element when the replay loads; the recordings
   themselves are unchanged. A `srcset` keeps its images inline.
-- `computeMouseMetrics` (each trial's `mouseMetrics`) measures path length
-  and displacement with the geometry the report's cursor section uses; its
-  outputs are unchanged. Its comment no longer gives bot and human ranges:
-  it says that `pathEfficiency` covers the whole trial (the cursor section's
-  efficiency is per movement) and that direction changes and speed variance
-  depend on the sampling interval.
-- The bundled example dataset is four sessions recorded on the demo tour
-  (`examples/demo-sessions/`), three by the author and one by a GPT agent
-  driving Chrome from a sidebar; the CLI's worked example, the README table,
-  the analyzer's "Load sample data" and the demo's two example participants
-  read it. "Load sample data" adds the sessions to the files already listed
-  instead of replacing them: a session already listed by name is left out,
-  the sample's config comes only to an empty list (a cohort keeps the config
-  and settings it has), and each added file can be removed like any other.
-  The sessions are read under the cohort's participant-ID field: beside
-  files keyed by another field, one side reads as `unknown` until it is
-  removed.
 
 ### Fixed
+- Live demo: the example participant `example-1.json` (offered on the files
+  step) records its fullscreen violation as `not_fullscreen`, the reason the
+  guard records; it read `fullscreen_exit`, which the guard never records.
+  It copies and pastes the question and the answer the tour shows.
 - `/analyze/`: a new report opens on its first participant; when that one
   has no replay recording and another has, the replay card stays on the
   first participant with one.
@@ -256,8 +278,6 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
   step prints; `presets.strict`, each preset's `controls` and
   `presets.standard.scoring.softScoreThreshold` are gone.
   `signals.softScoreThreshold`, which the CLI config snippet reads, stays.
-- The synthetic pilot (`examples/synthetic-pilot/`) and the demo's generated
-  example participants, with their generators.
 
 ## [0.12.0] — 2026-10-07
 
