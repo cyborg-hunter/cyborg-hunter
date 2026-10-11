@@ -33,7 +33,8 @@ describe('examples/demo-sessions', () => {
   after(() => rmSync(out, { recursive: true, force: true }));
 
   test('four files, one participant each, triaged in the documented order with the documented tiers and scores', () => {
-    assert.deepEqual(readdirSync(join(DIR, 'data')).sort(), ['DEMO-681w.json', 'DEMO-9mop.json', 'DEMO-a3f3.json', 'DEMO-bsq6.json']);
+    assert.deepEqual(readdirSync(join(DIR, 'data')).sort(),
+      ['DEMO-681w.json', 'DEMO-681w.replay.json', 'DEMO-9mop.json', 'DEMO-a3f3.json', 'DEMO-a3f3.replay.json', 'DEMO-bsq6.json', 'DEMO-bsq6.replay.json']);
     const rows = readFileSync(join(out, 'triage.md'), 'utf8').split('\n').filter((l) => /^\| \d+ \|/.test(l))
       .map((l) => l.split('|').map((c) => c.trim()));
     assert.deepEqual(rows.map((r) => [r[2], r[3], r[4]]),
@@ -58,8 +59,48 @@ describe('examples/demo-sessions', () => {
     assert.deepEqual(ORDER.map((id) => col(byId[id], 'authoritative_soft_score')), ['12', '10', '6', '3']);
   });
 
+  test('the three recordings are attached to their sessions; DEMO-9mop has none', () => {
+    assert.match(stdout, /replay\/ — 3 session replays/);
+    const written = readdirSync(join(out, 'replay')).sort();
+    assert.equal(written.length, 3);
+    for (const id of ['DEMO-681w', 'DEMO-a3f3', 'DEMO-bsq6']) assert.ok(written.some((f) => f.startsWith(id)), id);
+    assert.ok(!written.some((f) => f.startsWith('DEMO-9mop')));
+  });
+
+  test('the recordings carry no address, path or private text; the one identifying field is the browser line', () => {
+    // The redacted paste of DEMO-a3f3 reads "Copy Copy" (its event keeps the
+    // length 9); the agent's typed answer and the tour's own copy are the
+    // only other typed text.
+    const AUTOTYPE = 'No one is typing this. It is being inserted.';
+    const AGENT_ANSWER = 'A productive day so far.';
+    for (const f of readdirSync(join(DIR, 'data')).filter((n) => n.endsWith('.replay.json'))) {
+      const raw = readFileSync(join(DIR, 'data', f), 'utf8');
+      assert.doesNotMatch(raw, /https?:\/\/|\/Users\/|localhost|file:\/\/|[\w.+-]+@[\w-]+\.[a-z]{2,}|plugin enable|salut/, f);
+      const j = JSON.parse(raw);
+      assert.match(j.user_agent, /^Mozilla\/5\.0 \(Macintosh; Intel Mac OS X 10_15_7\) AppleWebKit\/537\.36 \(KHTML, like Gecko\) Chrome\/\d+\.0\.0\.0 Safari\/537\.36$/, f);
+      assert.deepEqual((j.stylesheets || []).filter((s) => s.href).map((s) => s.href), ['demo.css'], f);
+      const values = [];
+      (function walk(v) {
+        if (Array.isArray(v)) { v.forEach(walk); return; }
+        if (v && typeof v === 'object') { if (v.type === 'input.value') values.push(String(v.value)); for (const k in v) walk(v[k]); }
+      })(j);
+      // The agent pasted the tour's answer into a field that already held "ch",
+      // so its values can carry a "ch" at either end, and one holds that paste
+      // twice over: the check strips both before matching the tour's text.
+      for (const v of values) {
+        const typed = v.endsWith('▏') ? v.slice(0, -1) : v;
+        const half = typed.slice(0, typed.length / 2);
+        const once = typed === half + half ? half : typed;
+        assert.ok(v === 'Copy Copy' || AUTOTYPE.startsWith(typed) || AGENT_ANSWER.startsWith(typed)
+          || TOUR_TEXTS.some((s) => s.includes(once.replace(/^ch/, '').replace(/ch$/, ''))),
+          f + ': ' + v.slice(0, 60));
+      }
+      if (f === 'DEMO-a3f3.replay.json') assert.equal(values.filter((v) => v === 'Copy Copy').length, 11);
+    }
+  });
+
   test('nothing personal: no user-agent or address, and every paste text is the tour\'s own copy or removed', () => {
-    for (const f of readdirSync(join(DIR, 'data'))) {
+    for (const f of readdirSync(join(DIR, 'data')).filter((n) => !n.endsWith('.replay.json'))) {
       const raw = readFileSync(join(DIR, 'data', f), 'utf8');
       assert.doesNotMatch(raw, /Mozilla|https?:\/\/|\/Users\/|localhost|file:/, f);
       const j = JSON.parse(raw);

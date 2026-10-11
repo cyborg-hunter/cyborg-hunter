@@ -20,9 +20,10 @@ const SAMPLE_DIR = 'examples/demo-sessions';
 
 // The bundled sessions, minified (the committed files are pretty-printed, as
 // the demo saves them), each under its own file name: the page lists them
-// as files beside what the analyst dropped.
+// as files beside what the analyst dropped. The recordings beside them are
+// not baked (1.8–2.3 MB each): the page fetches them on the site.
 function sampleData() {
-  const files = readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => /\.json$/i.test(f)).sort()
+  const files = readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => /\.json$/i.test(f) && !/\.replay\.json$/i.test(f)).sort()
     .map((f) => ({ path: f, text: JSON.stringify(JSON.parse(readFileSync(join(SAMPLE_DIR, 'data', f), 'utf8'))) }));
   files.push({ path: 'cyborg-hunter.config.json', text: readFileSync(join(SAMPLE_DIR, 'cyborg-hunter.config.json'), 'utf8') });
   return { files };

@@ -191,8 +191,13 @@ export async function downloadZip(page) {
   const files = unzipSync(new Uint8Array(readFileSync(await download.path())));
   return { names: Object.keys(files).sort(), text: (n) => strFromU8(files[n]) };
 }
-export const sampleFiles = () => readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => f.endsWith('.json')).sort().map((f) => join(SAMPLE_DIR, 'data', f))
+export const sampleFiles = () => readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => f.endsWith('.json') && !f.endsWith('.replay.json')).sort()
+  .map((f) => join(SAMPLE_DIR, 'data', f))
   .concat([join(SAMPLE_DIR, 'cyborg-hunter.config.json')]);
+// The three recordings beside the trackers, fetched on the site and dropped
+// from file: by the tests that want them.
+export const sampleRecordingFiles = () => readdirSync(join(SAMPLE_DIR, 'data')).filter((f) => f.endsWith('.replay.json')).sort()
+  .map((f) => join(SAMPLE_DIR, 'data', f));
 
 // The time a report was built is the one part of index.html that differs
 // between two runs over the same files (the run id is the cohort's own).

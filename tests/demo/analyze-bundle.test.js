@@ -26,6 +26,10 @@ test('carries the worker source, the viewer client, the fonts and the sample', (
   const configText = readFileSync('examples/demo-sessions/cyborg-hunter.config.json', 'utf8');
   assert.ok(bundle.includes('DEMO-9mop') && bundle.includes(JSON.stringify(JSON.stringify(configText)).slice(1, -1)), 'sample data + its config baked in');
   assert.ok(bundle.includes('self.onmessage') || bundle.includes('self.postMessage'), 'worker loop baked in');
+  // The recordings are fetched on the site, never baked: their JSON is absent
+  // (the trackers spell the id camel-case; a recording spells it participant_id).
+  assert.ok(!bundle.includes('"participant_id":"DEMO-bsq6"'), 'no recording baked in');
+  assert.ok(bundle.length < 2.5e6, 'the bundle stays under 2.5 MB: ' + bundle.length);
 });
 
 // The size the page shows is a measurement (tests/browser/analyze/load-measure.mjs),
