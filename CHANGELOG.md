@@ -5,6 +5,17 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-10-10
+
+The demo tour and the analyze page after two review rounds: a ten-step tour
+with the live session record under the card and a last step, Your files,
+that hands the session to the analyzer; one Files & settings step there,
+with a settings panel; annotations (Include, Exclude, Flag) kept by run id in
+the report and on the page; 1:1 and fullscreen views of figures. Also:
+recordings carry the attributes of the html element, each Qualtrics survey
+keeps a session of its own, one CSV cell writer for every CSV file, and the
+docs lead with the one-line setup.
+
 ### Added
 - Reports: the top bar names the run (`run 3f9c2a7b1d4e8a60 · 2026-10-05
   14:03 UTC`). The id is a hash of each participant's id, trial count, and
