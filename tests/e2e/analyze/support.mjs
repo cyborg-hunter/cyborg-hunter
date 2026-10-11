@@ -1,15 +1,18 @@
 // tests/e2e/analyze/support.mjs
 // Shared fixtures for the analyze page's specs. The one thing every spec
-// asserts: the page makes no request beyond its own boot files, from before
-// goto to after the zip download. Observers, installed before goto:
+// asserts: the page makes no request beyond its own files (the sample's
+// recordings included), from before goto to after the zip download.
+// Observers, installed before goto:
 //   - the record: page.on('request') sees every request any frame of the
-//     page makes (the report and replay frames included); after boot the
-//     only URLs allowed are the boot files and blob:/data: ones (the worker,
-//     the report and replay frames, the downloads). Chromium also reports a
+//     page makes (the report and replay frames included); the only URLs
+//     allowed are the page's own files (siteAllowlist: the boot files and
+//     the sample's recordings) and blob:/data: ones (the worker, the report
+//     and replay frames, the downloads). Chromium also reports a
 //     load a policy refused, as a request that then fails with 'csp'; those
 //     count too, except in the viewer's reconstruction frame (below);
-//   - the guard: a page.route catch-all that lets only the boot files
-//     through. Not used for file:// loads, which some engines do not route;
+//   - the guard: a page.route catch-all that lets only the page's own
+//     files through. Not used for file:// loads, which some engines do not
+//     route;
 //   - the popups: any window the page or its frames open. The policy does
 //     not cover navigation, so the page's code must never open one; the
 //     page's own navigations are in the record;

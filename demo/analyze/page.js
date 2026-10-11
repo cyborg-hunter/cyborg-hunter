@@ -211,7 +211,7 @@ export function createPage(root, worker, opts) {
     if (phase === 'check' || !state.checked) {
       state.checked = null; state.entries = []; state.dropCount = 0; state.handoffPaths.clear();
       forgetSettings();
-      q(root, 'files-panel').hidden = true; goTo('files');
+      q(root, 'files-panel').hidden = true; q(root, 'sample-recordings').hidden = true; goTo('files');
     }
     else { discardZip(); goTo('files'); }
     updateControls();
@@ -655,19 +655,28 @@ export function createPage(root, worker, opts) {
     if (busy()) return Promise.resolve();
     var empty = !state.entries.length;
     // In flight like a check (busy): a drop, a file choice or another click
-    // is refused until the answer, and a worker failure settles the request
-    // (recover) with the list as it was.
+    // is refused until the answer. A worker failure while the worker answers
+    // settles the request (recover) with the list as it was; one while the
+    // recordings are fetched shows its error, and once the fetch settles the
+    // files are added and checked on the replacement worker. The last
+    // request's line goes as this one starts.
+    q(root, 'sample-recordings').hidden = true;
     var reply = waitFor('sample');
     updateControls();
     armStallHint();
     send({ type: 'sample' });
     return reply.then(function (msg) {
+      // The fetch keeps the request's stall hint (the worker sends no
+      // progress meanwhile); the check that follows hides it.
       fetchingSample = true;
       updateControls();
-      return fetchSampleRecordings().then(function (fetched) {
+      armStallHint();
+      // Nothing can change the list while busy: what is listed now is what
+      // the files below are added beside.
+      var listed = {};
+      state.entries.forEach(function (e) { listed[baseName(e.path)] = true; });
+      return fetchSampleRecordings(listed).then(function (fetched) {
         fetchingSample = false;
-        var listed = {};
-        state.entries.forEach(function (e) { listed[baseName(e.path)] = true; });
         var entries = [];
         msg.files.concat(fetched.files).forEach(function (f) {
           var name = baseName(f.path);
@@ -677,19 +686,20 @@ export function createPage(root, worker, opts) {
         });
         showSampleRecordingsLine(fetched.failed);
         return addFiles(entries);
-      }, function (e) { fetchingSample = false; updateControls(); throw e; });
+      });
     });
   }
   // The recordings named at build time, fetched from the page's own origin
-  // (the policy allows it). One that fails (a non-2xx answer, a network
+  // (the policy allows it); a name already listed is not fetched again. One
+  // that fails (a URL that cannot be built, a non-2xx answer, a network
   // error) is left out and named on the line; the others and the trackers
-  // are still added. From file: nothing is fetched.
-  function fetchSampleRecordings() {
+  // are still added. Every name settles to a result, so this never rejects.
+  // From file: nothing is fetched.
+  function fetchSampleRecordings(listed) {
     var sr = sampleRecordings;
     if (!sr || sr.offline || !sr.fetch) return Promise.resolve({ files: [], failed: [] });
-    return Promise.all(sr.names.map(function (name) {
-      var url = new URL('sample/' + name, sr.base).href;
-      return Promise.resolve().then(function () { return sr.fetch(url); }).then(function (res) {
+    return Promise.all(sr.names.filter(function (name) { return !listed[name]; }).map(function (name) {
+      return Promise.resolve().then(function () { return sr.fetch(new URL('sample/' + name, sr.base).href); }).then(function (res) {
         if (!res || !res.ok) throw new Error('HTTP ' + (res && res.status));
         return res.text();
       }).then(function (text) { return { path: name, text: text }; }, function () { return { path: name, failed: true }; });

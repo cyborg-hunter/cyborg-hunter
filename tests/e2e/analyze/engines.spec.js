@@ -1,6 +1,7 @@
 // tests/e2e/analyze/engines.spec.js
 // The guarantee the page makes, on every engine: no request beyond its own
-// boot files, through sample load, report build and the zip download; and
+// files (the sample's recordings included), through sample load, report
+// build and the zip download; and
 // the same for the offline single file opened from disk, through dropped
 // files, which requests nothing but itself.
 import { basename } from 'node:path';

@@ -153,8 +153,11 @@ test('from file: nothing is fetched; the line offers the three recordings as the
 });
 
 test('the fetch is part of the sample request: the files step’s inputs are disabled until the recordings are in, and Start over hides the line', async () => {
-  const releases = [];   // one resolver per fetch, released together below
-  const fetch = (url) => new Promise((resolve) => { releases.push(() => resolve({ ok: true, status: 200, text: async () => '{"schema_version":2}' })); });
+  // One resolver per fetch, released together below; DEMO-bsq6's answers 404,
+  // so the line is up when Start over is clicked.
+  const releases = [];
+  const fetch = (url) => new Promise((resolve) => { releases.push(() => resolve(url.endsWith('/DEMO-bsq6.replay.json')
+    ? { ok: false, status: 404, text: async () => '' } : { ok: true, status: 200, text: async () => '{"schema_version":2}' })); });
   const t = boot(recordingOpts(fetch));
   assert.equal(action('sample').disabled, false);
   action('sample').click();
@@ -166,6 +169,8 @@ test('the fetch is part of the sample request: the files step’s inputs are dis
   t.emit(SAMPLE);
   await settle();
   assert.equal(action('sample').disabled, true, 'still in flight while the recordings are fetched');
+  assert.equal(role('file-input').disabled, true);
+  assert.ok(role('dropzone').classList.contains('busy'));
   assert.equal(releases.length, 3);
   releases.forEach((r) => r());
   await settle();
@@ -175,11 +180,98 @@ test('the fetch is part of the sample request: the files step’s inputs are dis
   await settle();
   assert.equal(action('sample').disabled, false);
   assert.equal(role('file-input').disabled, false);
+  assert.equal(role('dir-input').disabled, false);
   assert.ok(!role('dropzone').classList.contains('busy'));
-  // Start over hides the line (shown here by a failed fetch on the next click).
+  // Start over hides the line DEMO-bsq6's failed fetch put up.
+  assert.equal(role('sample-recordings').hidden, false);
   action('reset').click();
   await settle();
   assert.equal(role('sample-recordings').hidden, true);
+});
+
+// A fetch that answers per name: { ok, status } from the table, a 200 for any
+// other; a name the table marks `hold` waits until released (release()).
+function fetchTable(answers) {
+  const asked = [];
+  const held = [];
+  const fn = (url) => {
+    asked.push(url);
+    const a = answers[url.slice(url.lastIndexOf('/') + 1)] || { ok: true, status: 200 };
+    const res = { ok: a.ok, status: a.status, text: async () => (a.ok ? '{"schema_version":2}' : '') };
+    return a.hold ? new Promise((resolve) => held.push(() => resolve({ ok: true, status: 200, text: async () => '{"schema_version":2}' }))) : Promise.resolve(res);
+  };
+  fn.asked = asked;
+  fn.release = () => held.splice(0).forEach((r) => r());
+  return fn;
+}
+
+test('a new sample request hides the last request’s line from its start', async () => {
+  const answers = { 'DEMO-a3f3.replay.json': { ok: false, status: 404 } };
+  const fetch = fetchTable(answers);
+  const t = boot(recordingOpts(fetch));
+  await loadSample(t);
+  await settle();
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(role('sample-recordings').hidden, false, 'DEMO-a3f3 was not fetched');
+  answers['DEMO-a3f3.replay.json'] = { hold: true };
+  action('sample').click();
+  await tick();
+  assert.equal(role('sample-recordings').hidden, true, 'hidden while the worker answers');
+  t.emit(SAMPLE);
+  await settle();
+  assert.equal(role('sample-recordings').hidden, true, 'hidden while the recording is fetched');
+  fetch.release();
+  await settle();
+  assert.equal(role('sample-recordings').hidden, true, 'fetched this time');
+});
+
+test('a check that fails takes the recordings line with the list: the next drop shows no stale line', async () => {
+  const t = boot(recordingOpts(fetchStub({}), { offline: true }));
+  await loadSample(t);
+  await settle();
+  assert.equal(role('sample-recordings').hidden, false);
+  t.emit({ type: 'error', phase: 'check', message: 'A file could not be read.' });
+  await settle();
+  assert.equal(role('files-panel').hidden, true);
+  t.page.addFiles([{ path: 'own.csv', file: new File(['x'], 'own.csv') }]);
+  await settle();
+  t.emit({ ...CHECKED, files: [{ path: 'own.csv', kind: 'data' }] });
+  await settle();
+  assert.equal(role('files-panel').hidden, false);
+  assert.equal(role('sample-recordings').hidden, true);
+});
+
+test('a recording URL that cannot be built counts as not fetched, and the request still ends', async () => {
+  const fetch = fetchStub({});
+  const t = boot(recordingOpts(fetch, { base: 'not a URL' }));
+  await loadSample(t);
+  await settle();
+  assert.deepEqual(fetch.asked, []);
+  const check = t.sent.find((m) => m.type === 'check');
+  assert.deepEqual(paths(check).sort(), SAMPLE_PATHS.slice().sort());
+  assert.equal(role('sample-recordings').textContent,
+    'Replay recordings not fetched: DEMO-681w.replay.json, DEMO-a3f3.replay.json, DEMO-bsq6.replay.json. Their sessions show no replay.');
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(action('sample').disabled, false, 'no longer busy');
+});
+
+test('recordings already listed are not fetched again: a second click fetches nothing and reports no failure', async () => {
+  const answers = {};
+  const fetch = fetchTable(answers);
+  const t = boot(recordingOpts(fetch));
+  await loadSample(t);
+  await settle();
+  t.emit(CHECKED);
+  await settle();
+  assert.equal(fetch.asked.length, 3);
+  RECORDINGS.forEach((n) => { answers[n] = { ok: false, status: 503 }; });
+  await loadSample(t);
+  await settle();
+  assert.equal(fetch.asked.length, 3, 'nothing fetched the second time');
+  assert.equal(role('sample-recordings').hidden, true);
+  assert.equal(t.sent.filter((m) => m.type === 'check').length, 2);
 });
 
 test('without baked recordings (an older build) Load sample data behaves as before', async () => {
@@ -985,6 +1077,20 @@ describe('the still-working hint', () => {
     action('sample').click(); await tick();
     fireStall(clock);
     assert.equal(shown(), true);
+  });
+
+  test('a stalled fetch of the sample’s recordings shows the hint too; the recordings’ arrival hides it', async () => {
+    const clock = fakeTimers();
+    const fetch = fetchTable(Object.fromEntries(RECORDINGS.map((n) => [n, { hold: true }])));
+    const t = boot({ timers: clock, ...recordingOpts(fetch) });
+    action('sample').click(); await tick();
+    t.emit(SAMPLE); await settle();
+    assert.equal(fetch.asked.length, 3, 'the recordings are being fetched');
+    fireStall(clock);
+    assert.equal(shown(), true);
+    fetch.release(); await settle();
+    assert.equal(t.sent.filter((m) => m.type === 'check').length, 1);
+    assert.equal(shown(), false);
   });
 
   test('a stalled check shows the hint too, and its result hides it', async () => {

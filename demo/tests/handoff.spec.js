@@ -115,9 +115,10 @@ test('"Open in the analyzer web app" hands over the five files and the fonts: th
 // on (the results step hides it): the button adds the two sessions the tour
 // did not bring, leaves the two it did (same names) and the config, and
 // keeps the visitor's own: five participants, one of each, no duplicate id.
-// The counts line read 3 data files before the click: the visitor's session
-// and the two examples; the recording is counted apart, and the three
-// recordings the sample fetches on this site.
+// The counts line reads 3 data files and 1 replay recording before the
+// click (the visitor's session and the two examples; the visitor's
+// recording), and 5 data files and 4 replay recordings after it (the three
+// recordings the sample fetches on this site join the visitor's).
 // ---------------------------------------------------------------------------
 test('Load sample data after the hand-off adds the two sessions the tour did not bring: five participants, no duplicate id', async ({ page }) => {
   test.setTimeout(120000);
