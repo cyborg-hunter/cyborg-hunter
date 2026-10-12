@@ -140,8 +140,10 @@ export function makeLivePane(mount) {
   var sessionTab = null;
   var activeTrial = 'all';
 
+  // No title of its own: the bar right above it (makePaneBar) names the
+  // record, so the head holds only the stream/JSON switch.
   mount.innerHTML =
-    '<div class="lp-head"><span class="lp-title">' + escHtml(LIVE_PANE.title) + '</span>' +
+    '<div class="lp-head">' +
     '<div class="lp-tabs">' +
     '<button class="lp-tab active" data-tab="stream">' + escHtml(LIVE_PANE.tabs.stream) + '</button>' +
     '<button class="lp-tab" data-tab="json">' + escHtml(LIVE_PANE.tabs.json) + '</button>' +
@@ -217,7 +219,9 @@ export function makeLivePane(mount) {
   // Toggles lp-off on every row that doesn't match activeTrial. 'All'
   // re-pins to the tail (the live view, same as addRow's default); picking
   // a specific trial scrolls to the TOP of that trial's rows — a visitor who
-  // selects one wants to read it from its first event, not its last.
+  // selects one wants to read it from its first event, not its last. The
+  // column heads stick to the top of the stream (demo.css), so that row
+  // lands right under them rather than behind them.
   function applyFilter() {
     var rows = streamEl.querySelectorAll('.lp-row');
     for (var i = 0; i < rows.length; i++) {
@@ -228,10 +232,10 @@ export function makeLivePane(mount) {
       streamEl.scrollTop = streamEl.scrollHeight;
       return;
     }
-    var streamRect = streamEl.getBoundingClientRect();
+    var headBottom = streamEl.querySelector('.lp-cols').getBoundingClientRect().bottom;
     for (var j = 0; j < rows.length; j++) {
       if (rows[j].dataset.trial === activeTrial) {
-        streamEl.scrollTop += rows[j].getBoundingClientRect().top - streamRect.top;
+        streamEl.scrollTop += rows[j].getBoundingClientRect().top - headBottom;
         break;
       }
     }

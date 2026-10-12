@@ -131,8 +131,11 @@ test('fullscreen on a narrow screen: the stage fits inside the viewer\'s padding
   const before = await measure(mount);
   await mount.locator('.replay-fullscreen').click();
   await expect.poll(() => mount.evaluate((m) => document.fullscreenElement === m)).toBe(true);
-  // The fullscreen refit has landed once the stage takes the screen.
-  await expect.poll(async () => (await measure(mount)).stageW).toBeGreaterThan(before.stageW);
+  // The fullscreen refit has landed once the stage changes width. Not
+  // necessarily wider: this narrow, the report stacks its rail above the
+  // detail, so the pane already gives the stage nearly the window's width,
+  // and fullscreen's own padding and gutters can leave it a little less.
+  await expect.poll(async () => (await measure(mount)).stageW).not.toBe(before.stageW);
   const fit = await mount.evaluate((m) => {
     const stage = m.querySelector('.replay-stage').getBoundingClientRect();
     return { scrollW: m.scrollWidth, clientW: m.clientWidth, stageRight: stage.right,

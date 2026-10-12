@@ -9,6 +9,10 @@
 
 export const REPLAY_STYLES_CSS = `    /* Replay viewer (see replay-viewer.client.js) — matches report house style */
     .replay-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+    /* An empty note (the alignment status of a segment with no check yet)
+       leaves the header's flow: as a flex item it still took a gap, a blank
+       extra row when it wrapped alone. Still rendered, so still a live region. */
+    .replay-header > .replay-note:empty { position: absolute; }
     .replay-badge { font-family: var(--ff-sora); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 0;
                     background: var(--ink); color: var(--surface); }
     .replay-badge[data-tier="trace"] { background: var(--surface); color: var(--ink);
@@ -21,13 +25,18 @@ export const REPLAY_STYLES_CSS = `    /* Replay viewer (see replay-viewer.client
     .replay-neutral-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
                             font-family: var(--ff-recursive); color: var(--dim); font-size: 13px; }
     .replay-lane { display: block; margin-top: 6px; border-radius: 2px; }
-    .replay-scrub { display: block; margin: 2px 0 4px; }
+    /* The playhead in the transport's ink, not the browser's blue (the lane's DOM-change markers are blue). */
+    .replay-scrub { display: block; margin: 2px 0 4px; accent-color: var(--ink); }
     .replay-ticker { font: 12px/1.3 var(--ff-majormono);
                      color: var(--dim); font-variant-numeric: tabular-nums;
                      height: 1.4em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .replay-note { font-family: var(--ff-recursive); font-size: 12px; color: var(--dim); }
     .replay-warn { color: var(--hard); }
-    .replay-pause-toggle { font-family: var(--ff-recursive); }
+    /* The toggle at the controls' 13px (it inherited the page's 16px), its box
+       flush with the row's left edge and ticked in ink. */
+    .replay-pause-toggle { font-family: var(--ff-recursive); font-size: 13px;
+                           display: inline-flex; align-items: center; gap: 6px; }
+    .replay-pause-checkbox { margin: 0; accent-color: var(--ink); }
     /* Controls share the report's flat, line-bordered button style */
     .replay-play, .replay-load-btn, .replay-css-btn, .replay-segment-select, .replay-speed {
       padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
@@ -65,6 +74,9 @@ export const REPLAY_STYLES_CSS = `    /* Replay viewer (see replay-viewer.client
       padding: 4px 10px; border: 1px solid var(--line); background: var(--surface);
       color: var(--ink); border-radius: 4px; cursor: pointer;
       font-family: var(--ff-recursive); font-size: 13px; }
+    /* The transport's selects and buttons on one height (the selects came
+       out 27px, 1:1 and Fullscreen 25px); Play keeps its own 30px. */
+    .replay-segment-select, .replay-speed, .replay-size, .replay-fullscreen { height: 28px; }
     .replay-size[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
     .replay-stage-wrap.replay-actual { overflow: auto; }
     .replay-viewer:fullscreen { background: var(--surface); padding: 12px 16px; overflow: auto; scrollbar-gutter: stable both-edges; }

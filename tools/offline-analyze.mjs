@@ -32,7 +32,7 @@ export function buildOfflineHtml(indexHtml, bundleSrc) {
   // none, and offers them as downloads instead (page.js).
   out = replaceOnce(out, "connect-src 'self';", "connect-src 'none';");
   out = replaceOnce(out, '<a href="./' + OFFLINE_NAME + '" download>offline version</a>',
-    '<span>You are using the offline file.</span>');
+    '<span class="hint">You are using the offline file.</span>');
   out = replaceOnce(out, '<a href="../">live demo</a>', '<a href="' + SITE + '">live demo</a>');
   return out;
 }
