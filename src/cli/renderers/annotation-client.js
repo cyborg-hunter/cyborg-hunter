@@ -23,10 +23,13 @@
 import { inlineSafeJson } from '../../shared/inline-safe.js';
 
 export const ANNOTATION_CSS = `    .annot { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin-top: 10px; }
+    /* One height for the row (28px): a set line box for the buttons, whose
+       glyphs come from different fonts (Flag stood 1px short), and the
+       note's resting height to match (it stood 3px below them). */
     .annot-btn { padding: 3px 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-      border-radius: 0; cursor: pointer; font-family: var(--ff-recursive); font-size: 15px; }
+      border-radius: 0; cursor: pointer; font-family: var(--ff-recursive); font-size: 15px; line-height: 20px; }
     .annot-btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
-    .annot-note { flex: 1 1 240px; min-height: 30px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 0;
+    .annot-note { flex: 1 1 240px; min-height: 28px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 0;
       background: var(--bg); color: var(--ink); font: 13px/1.3 var(--ff-recursive); resize: vertical; }
     /* The mark's slot is sized in the report's own stylesheet (html-index-core.js). */
     .annot-mark[data-label="include"]::before { content: "✓"; color: var(--clean); }

@@ -563,11 +563,12 @@ test('the record under the card opens on hover, keyboard focus or a click on its
   await expect(slot).not.toHaveAttribute('data-hover');
   await expect(pane).toBeHidden();
 
-  // So does keyboard focus: Tab from the step's last button lands on the
-  // bar, and the next Tabs walk through the record's own controls with the
-  // record open; Enter on a trial tab, which rebuilds the tabs, keeps focus
-  // on it and the record open. Tab past its last control closes it.
-  await primaryButton(page).focus();
+  // So does keyboard focus: Tab from the step's last button (Back, under the
+  // primary) lands on the bar, and the next Tabs walk through the record's own
+  // controls with the record open; Enter on a trial tab, which rebuilds the
+  // tabs, keeps focus on it and the record open. Tab past its last control
+  // closes it.
+  await backButton(page).focus();
   await page.keyboard.press('Tab');
   await expect(bar).toBeFocused();
   await expect(pane).toBeVisible();

@@ -57,6 +57,11 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
+// A character count for a live-pane detail: "1 char", "187 chars".
+function charCount(n) {
+  return n + (n === 1 ? ' char' : ' chars');
+}
+
 function fullscreenIsActive() {
   return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
 }
@@ -355,12 +360,15 @@ function startTour(participantId, capabilities, manifest) {
   // wiring in the 'tabReturn' case below scores it into (long/mid/
   // flicker) — the live pane's per-row detail string reads this SAME
   // classification rather than re-deriving the ≥10s/3s cutoffs on its own.
+  // The bins' details are their lamps' own suffixes ("tab-away 3–10s"),
+  // short enough that "12.0 s · ≥10s" stays on one line in the narrow
+  // window's detail column.
   function tabAwayBin(duration) {
-    if (duration >= 10000) return { key: 'tabAwayLong', detail: '≥10s bin' };
+    if (duration >= 10000) return { key: 'tabAwayLong', detail: '≥10s' };
     // Strict > matches the library convention: a tab-away exactly at
     // the cutoff is an unscored flicker (scoring.js:63, summary.js
     // "same `>` boundary" comment, session-timeline-core.js flicker bin).
-    if (duration > manifest.signals.tabAway.durationMs) return { key: 'tabAwayMid', detail: '3–10s bin' };
+    if (duration > manifest.signals.tabAway.durationMs) return { key: 'tabAwayMid', detail: '3–10s' };
     // ≤ the cutoff: a flicker — under-3s tab-aways read as noise (a
     // notification, a stray click), so they get their own, non-hard
     // lamp instead of going unlit as in v1.
@@ -376,12 +384,12 @@ function startTour(participantId, capabilities, manifest) {
       case 'paste':
         n = (state.lampCounts.paste || 0) + 1;
         hard = n >= manifest.signals.paste.hardCountThreshold;
-        paneRow(trialId, 'paste', '"' + truncate(d.text || '', 28) + '" · ' + d.pastedLength + ' chars', hard);
+        paneRow(trialId, 'paste', '"' + truncate(d.text || '', 28) + '" · ' + charCount(d.pastedLength), hard);
         if (!lampWiringActive) break;
         syncCountLamp('paste', n, hard, RAIL_LABELS.paste);
         break;
       case 'copy':
-        paneRow(trialId, 'copy', d.selectedLength + ' chars selected', false);
+        paneRow(trialId, 'copy', charCount(d.selectedLength) + ' selected', false);
         if (!lampWiringActive) break;
         n = (state.lampCounts.copy || 0) + 1;
         syncCountLamp('copy', n, false, RAIL_LABELS.copy);
@@ -397,7 +405,7 @@ function startTour(participantId, capabilities, manifest) {
       case 'drop':
         n = (state.lampCounts.drop || 0) + 1;
         hard = n >= manifest.signals.drop.hardCountThreshold;
-        paneRow(trialId, 'drop', '"' + truncate(d.text || '', 28) + '" · ' + d.droppedLength + ' chars', hard);
+        paneRow(trialId, 'drop', '"' + truncate(d.text || '', 28) + '" · ' + charCount(d.droppedLength), hard);
         if (!lampWiringActive) break;
         syncCountLamp('drop', n, hard, RAIL_LABELS.drop);
         break;
@@ -422,7 +430,7 @@ function startTour(participantId, capabilities, manifest) {
         syncCountLamp('foreignInput', n, false, RAIL_LABELS.foreignInput);
         break;
       case 'syntheticInsertion':
-        paneRow(trialId, 'synthetic_insertion', (d.dataLength || 0) + ' chars inserted', true);
+        paneRow(trialId, 'synthetic_insertion', charCount(d.dataLength || 0) + ' inserted', true);
         if (!lampWiringActive) break;
         n = (state.lampCounts.syntheticInsertion || 0) + 1;
         syncCountLamp('syntheticInsertion', n, true, RAIL_LABELS.syntheticInsertion);
@@ -654,7 +662,9 @@ function startTour(participantId, capabilities, manifest) {
       var secondary = document.createElement('p');
       secondary.className = 'secondary';
       secondary.innerHTML = '<a href="#" class="skip" data-key="skipToScores">Skip to "From signals to scores"</a>';
-      cardEl.appendChild(secondary);
+      // Right under the note it acts on, ahead of the button row, so the way
+      // on reads before Back rather than orphaned under it.
+      if (note) note.after(secondary); else cardEl.appendChild(secondary);
     }
   }
 
@@ -1149,6 +1159,9 @@ function startTour(participantId, capabilities, manifest) {
     var typed = '';
     var i = 0;
 
+    // Holds the button at its idle width: the shorter "Typing…" and "Typed ✓"
+    // would otherwise shrink it under the pointer that just pressed it.
+    button.style.minWidth = button.getBoundingClientRect().width + 'px';
     button.disabled = true;
     button.textContent = tpl(task.busyLabel);
     field.readOnly = true;
@@ -1257,7 +1270,6 @@ function startTour(participantId, capabilities, manifest) {
     // panel.
     if (step.id === 'signals-to-scores') html += renderScoringPanel(manifest);
     html += '<div class="btnrow">';
-    if (i > 0) html += '<button class="btn btn-back" data-action="back">← ' + escHtml(BACK_LABEL) + '</button>';
     // guard-cheat's primary lives on the end-guard button rendered above
     // (outside the scramble target) instead of here — never both. Steps
     // with primaryLabel: null (guard-entry) render no primary at all; the
@@ -1265,6 +1277,9 @@ function startTour(participantId, capabilities, manifest) {
     if (step.primaryLabel && !(step.task && step.task.kind === 'guard-cheat')) {
       html += '<button class="btn" data-action="primary">' + tpl(step.primaryLabel) + '</button>';
     }
+    // Back after the primary in the markup, as on screen: Tab reaches the
+    // next step first, never the way back.
+    if (i > 0) html += '<button class="btn btn-back" data-action="back">← ' + escHtml(BACK_LABEL) + '</button>';
     html += '</div>';
     cardEl.innerHTML = html;
     // A new step starts with an empty signal box: the box holds what this

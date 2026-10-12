@@ -190,6 +190,16 @@ ${fontFaceCss}    :root {
       font-family: var(--ff-recursive); font-size: 19.5px; font-weight: 400; letter-spacing: 0;
     }
     .search-wrap input:focus { outline: 1px solid var(--ink); border-color: var(--ink); }
+    /* The clear button Chromium draws in its own blue: a thin dim cross
+       instead, ink on hover, like the legend's close button. */
+    .search-wrap input::-webkit-search-cancel-button {
+      -webkit-appearance: none; appearance: none;
+      width: 12px; height: 12px; margin-left: 8px; cursor: pointer;
+      background: var(--dim);
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1 1l10 10M11 1L1 11' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E") center / contain no-repeat;
+              mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1 1l10 10M11 1L1 11' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .search-wrap input::-webkit-search-cancel-button:hover { background: var(--ink); }
 
     /* Filter chips — one segmented control: joined buttons, square inner
        edges, outer corners 4px. 15px with 4px 8px padding keeps four 3-digit
@@ -208,6 +218,12 @@ ${fontFaceCss}    :root {
       background: var(--ink); color: var(--surface); border-color: var(--ink);
       position: relative; z-index: 1;
     }
+    /* Keyboard focus: the tour's ring (2px ink, 2px off the edge), which
+       also shows on the ink active chip; raised above the joined chips. */
+    .topbar button:focus-visible, .filter-chip:focus-visible, .sort-wrap select:focus-visible {
+      outline: 2px solid var(--ink); outline-offset: 2px;
+    }
+    .filter-chip:focus-visible { position: relative; z-index: 2; }
 
     /* Sort selector */
     .sort-wrap { font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
@@ -274,9 +290,11 @@ ${fontFaceCss}    :root {
     }
     .tier-badge[data-tier="hard"]  { background: var(--hard);  color: white; }
     .tier-badge[data-tier="soft"]  { background: var(--soft);  color: white; }
+    /* The outline takes 1px of the padding, so a clean badge is the same
+       size as a filled one. */
     .tier-badge[data-tier="clean"] {
       background: transparent; color: var(--dim);
-      border: 1px solid var(--line); font-weight: 400;
+      border: 1px solid var(--line); font-weight: 400; padding: 1px 5px;
     }
 
     /* Detail pane base. The replay viewer is the exception to the 800px
@@ -311,7 +329,9 @@ ${fontFaceCss}    :root {
       padding-bottom: 12px; margin-bottom: 16px;
     }
     .detail-header-top { display: flex; align-items: center; gap: 12px; }
-    .detail-header-top .pid-full { font-family: var(--ff-sora); flex: 1; font-size: 13px; color: var(--ink); }
+    /* A long id (a Prolific id on a phone) wraps rather than pushing the
+       tier and the score out of the pane; the rail's copy is the one cut. */
+    .detail-header-top .pid-full { font-family: var(--ff-sora); flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; color: var(--ink); }
     .detail-header-top .score-big { font-family: var(--ff-sora); font-size: 36px; font-weight: 600; color: var(--ink); }
     .detail-header-sub { font-family: var(--ff-tomorrow); color: var(--dim); font-size: 12px; margin-top: 4px; }
     /* The optional platform-ID line is an identifier, so it stays in the ID
@@ -359,7 +379,13 @@ ${fontFaceCss}    :root {
     .signal-value { font-family: var(--ff-sora); font-size: 18px; font-weight: 700; line-height: 1; }
     .signal-label { font-family: var(--ff-recursive); font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.85; }
 
-    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-verdict cell. */
+    /* Cursor dynamics section (renderCursorSection) and the rail's pointer-verdict cell.
+       Its sentences, tells and checks are prose in the pane's Recursive at
+       13px (they fell back to the page's 16px system face); the checks'
+       values are numbers, in Sora; the verdict is a square tag, like the
+       tier pill, at its own line height. */
+    .cursor-section { font: 13px/1.45 var(--ff-recursive); }
+    .cursor-table td { font-family: var(--ff-sora); font-variant-numeric: tabular-nums; }
     .cursor-details { border: 1px solid var(--line); padding: 10px 14px 12px; margin-top: 8px; }
     .cursor-table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
     .cursor-table:last-of-type { margin-bottom: 2px; }
@@ -372,7 +398,7 @@ ${fontFaceCss}    :root {
     .cursor-cell[data-level="2"] { color: var(--hard); }
     .cursor-cell[data-level="1"] { color: var(--soft); }
     .cursor-verdict { margin: 8px 0 4px; }
-    .verdict-badge { display: inline-block; font-family: var(--ff-tomorrow); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--line); color: var(--dim); }
+    .verdict-badge { display: inline-block; font-family: var(--ff-tomorrow); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; padding: 2px 8px; border-radius: 0; border: 1px solid var(--line); color: var(--dim); line-height: normal; }
     .verdict-badge[data-level="0"] { color: var(--clean); border-color: var(--clean); }
     .verdict-badge[data-level="1"] { color: var(--soft); border-color: var(--soft); }
     .verdict-badge[data-level="2"] { color: #fff; background: var(--hard); border-color: var(--hard); }
@@ -441,11 +467,15 @@ ${fontFaceCss}    :root {
     .sig-more > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; cursor: pointer; }
     .muted { color: var(--dim); }
 
-    /* Paste evidence — list of expandable entries */
-    .paste-list { display: flex; flex-direction: column; gap: 6px; }
-    .paste-entry {
-      display: flex; gap: 8px; align-items: flex-start;
+    /* Paste evidence — list of expandable entries, in three columns
+       (toggle, trial, text): each entry's children join the list's grid, so
+       every text box starts at the same x whatever its trial id's length,
+       and a row lines up on the text's first line. */
+    .paste-list {
+      display: grid; grid-template-columns: auto auto minmax(0, 1fr);
+      gap: 6px 8px; align-items: baseline;
     }
+    .paste-entry { display: contents; }
     .paste-toggle {
       background: none; border: none; color: var(--dim);
       cursor: pointer; font-size: 14px; line-height: 1.2;
@@ -460,12 +490,20 @@ ${fontFaceCss}    :root {
       font-family: var(--ff-tomorrow);
       font-size: 12px;
       word-break: break-word; white-space: pre-wrap;
-      flex: 1; min-width: 0;  /* allow flex item to shrink and wrap correctly */
+      min-width: 0;  /* lets the text column shrink and wrap */
     }
     /* When expanded by the client script: hide preview, show full text */
     .paste-entry.expanded .paste-preview { display: none; }
     .paste-entry:not(.expanded) .paste-full { display: none; }
-    .paste-overflow { font-family: var(--ff-tomorrow); font-size: 12px; margin-top: 4px; }
+    .paste-overflow { grid-column: 1 / -1; font-family: var(--ff-tomorrow); font-size: 12px; margin-top: 4px; }
+    /* A narrow window (a phone): the text goes under its trial, at the
+       trial's indent, rather than in a sliver beside it. */
+    @media (max-width: 720px) {
+      .paste-list { row-gap: 2px; }
+      .paste-preview, .paste-full { grid-column: 2 / -1; }
+      .paste-entry + .paste-entry > .paste-toggle,
+      .paste-entry + .paste-entry > .paste-trial { margin-top: 8px; }
+    }
 
     /* Image blocks — wrapper containers so a missing PNG hides its heading too.
        Each .image-block contains a <h4 class="section-heading"> + a zoomable
@@ -565,9 +603,38 @@ ${fontFaceCss}    :root {
       color: var(--dim); font-weight: 500; font-size: 12px;
       text-transform: uppercase; letter-spacing: 0.04em;
     }
+    /* Phones: two columns would squeeze each meaning into a column a few
+       words wide, so each entry stacks, its name above its meaning, and the
+       column headings go. */
+    @media (max-width: 480px) {
+      .legend-table, .legend-table tbody, .legend-table tr, .legend-table td { display: block; }
+      .legend-table thead { display: none; }
+      .legend-table { border-top: 1px solid var(--line); }
+      .legend-table tr { padding: 6px 0; border-bottom: 1px solid var(--line); }
+      .legend-table td { padding: 0 8px; border-bottom: 0; }
+      .legend-table td:first-child { padding-bottom: 2px; }
+    }
     .legend-table td:first-child {
       color: var(--ink); font-weight: 500;
       white-space: nowrap;
+    }
+
+    /* Narrow windows (a phone, or the analyze page's report frame on one):
+       the 360px rail would leave the detail no room, so the rail stacks
+       above the detail and the page scrolls as one document. */
+    @media (max-width: 720px) {
+      body { display: block; height: auto; }
+      .topbar { flex-wrap: wrap; row-gap: 8px; }
+      .topbar h1 { flex-basis: 100%; }
+      .layout { display: block; height: auto; overflow: visible; }
+      .rail { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+      .rail-list { max-height: 50vh; }
+      .detail { overflow: visible; }
+      /* The summary keeps the row's width; verdict and badge go under it,
+         right-aligned under the score. */
+      .cohort-row-bot { flex-wrap: wrap; row-gap: 4px; align-items: center; }
+      .reason-excerpt { flex-basis: 100%; }
+      .cursor-cell { margin-left: auto; }
     }
   </style>
 </head>

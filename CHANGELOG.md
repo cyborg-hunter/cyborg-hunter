@@ -33,6 +33,12 @@ collected data, configuration or the report's contents.
 ### Changed
 - Live demo: the visitor's id is drawn again when it would be one of the
   bundled sessions' (`DEMO-9mop`, `DEMO-bsq6`, `DEMO-681w`, `DEMO-a3f3`).
+- Live demo, `/analyze/`, the HTML report and the replay viewer: a round of
+  visual polish within their existing look (spacing, alignment, control
+  heights, focus rings, ink instead of browser blue). Step 6 of the tour is
+  now titled "Added friction as a complementary feature". In the tour, Tab
+  reaches a step's primary button before "Go back". The report's and the
+  replay viewer's default output changes accordingly (snapshots updated).
 
 ### Fixed
 - `/analyze/`: the files step's inputs (Load sample data, choose files, choose
@@ -40,6 +46,16 @@ collected data, configuration or the report's contents.
   they looked available and a drop was silently refused.
 - Docs: `event-log.csv` holds the events recorded during a trial; the
   reference said every tab-away.
+- HTML report on phones: the participant list no longer runs off the right
+  edge (scores and tier badges were hidden); the rail stacks above the detail,
+  and a long participant id wraps instead of pushing the score off screen.
+- Live demo: the page shown below 820px wide is styled (it ran edge to edge
+  with browser-blue links); the config's "show as text" dialog opens centred,
+  not pinned top-left; the guard's row in the signals panel no longer reads as
+  an alarm at 0 violations; a long pasted answer shows whole.
+- `/analyze/`: the drop zone's file inputs are its two text links instead of
+  raw browser widgets; the Settings fields stay inside their box on a phone;
+  the progress bar and the annotations Import picker match the page.
 
 ## [0.14.0] — 2026-10-10
 

@@ -39,10 +39,10 @@ export const RAIL = {
 };
 
 /** Live session pane chrome (the pane itself is demo/live-pane.js). `bar`
- * labels the record while it is collapsed under the bar above it; the hint
- * after it says what a click on the bar does. */
+ * labels the record, collapsed under the bar or open below it (the record
+ * has no title of its own); the hint after it says what a click on the bar
+ * does. */
 export const LIVE_PANE = {
-  title: 'Live session record',
   bar: 'Live session record',
   barHintClosed: 'hover or click to show',
   barHintOpen: 'click to hide',
@@ -200,7 +200,7 @@ not automatic verdicts.</p>`.trim(),
     id: 'guard-entry',
     act: 'act2',
     eyebrow: 'Step 6 of 10',
-    title: 'The other approach: prevention',
+    title: 'Added friction as a complementary feature',
     body: `
 <p>On top of means to track down signals, cyborg-hunter also ships with a
 guard that is designed to make it harder for participants to cheat. Under

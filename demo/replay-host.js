@@ -45,6 +45,10 @@ html,body{ margin:0; padding:0; background:var(--surface); color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
 body{ padding:16px; }
 #ch-replay-mount{ width:100%; }
+/* The controls start on the padding, as the sides and the ticker end on it:
+   the header's top margin (room under the report's heading) made 24px here.
+   Fullscreen keeps it, over the viewer's own 12px. */
+#ch-replay-mount:not(:fullscreen) > .replay-header:first-child{ margin-top:0; }
 `;
 
 // The two inlining rules, MIRRORED from src/shared/inline-safe.js — where the
