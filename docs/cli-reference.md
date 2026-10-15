@@ -48,11 +48,28 @@ Refuses to overwrite an existing `cyborg-hunter.config.json`.
 
 ### Replay artifacts
 
-`<pid>-replay-<epoch>.json[.gz]` files are picked up automatically from
+**Recordings in your data.** Under the one-line setup the session recording
+arrives inside the data you saved, in pieces: `cyborgHunterReplay` (and
+`cyborgHunterReplayFinal` on the last row) in jsPsych and lab.js rows, JSON or
+CSV, and on pages without a framework a saved `cyborgHunterReplay` POST field
+or the `cyborgHunterReplay` of `CyborgHunter.data()`, under any file name. The
+CLI finds the pieces by their content, puts each recording back together and
+attaches it by the `participant_id` inside it. Rows a save trial saved before
+the session ended give the recording up to that point; pieces missing in
+between are left out and reported; without its first piece a recording cannot
+be rebuilt, which is reported too. A participant's recordings that follow one
+another in time (one per page, or a reload) are joined into one replay;
+recordings that overlap in time are two sessions, and the latest is shown with
+a warning. The same recording found both in the rows and as a saved file
+counts once.
+
+**Files.** `<pid>-replay-<epoch>.json[.gz]` files are picked up automatically from
 `dataDir` (or `replayDir` when set) and rendered as per-participant
 **Session replay** sections. Ownership is verified against the recording's
 embedded `participant_id`; corrupt artifacts are reported, never fatal;
-`report` prints the total size of emitted `replay/` assets.
+`report` prints the total size of emitted `replay/` assets. A `.gz` file
+that would decompress to more than 256 MB is not read and is reported (a
+participant-supplied file can be a "gzip bomb").
 
 Recordings from other producers are accepted too, since SessionRecording v2 is
 not a Cyborg Hunter format:
@@ -92,17 +109,36 @@ cyborg-hunter-report/
 ├── extensions.csv       # AI-extension + sidebar detections, one row per participant × detection
 ├── score-weights.json   # the triage-score weights this report used (defaults or scoreWeights)
 ├── cursor-limits.json   # the constants the cursor section judged with, their meanings, and the verdicts over the cohort
+├── replay/              # each participant's whole session recording, loaded by index.html (most sensitive output)
+│   └── <participantId>.replay.js
 └── images/              # canvas-rendered visuals (skipped if canvas missing)
     ├── trajectories_<participantId>.png      # per-trial mouse paths
     ├── session_timeline_<participantId>.png  # session-wide tab-away / sidebar / guard timeline
     └── typing_profile_<participantId>.png    # per-trial typing-speed distributions
 ```
 
+Every output is keyed by participant ID, which under the one-line setup is the
+platform's (Prolific, MTurk). `index.html` carries pasted texts, `event-log.csv`
+every pasted, dropped and synthetically inserted text, `summary.csv` the
+honeypot's free-text answer, and `replay/` the whole recordings (typed text
+included). Treat the folder as raw, identifiable data. The CLI writes into
+`outputDir` without deleting what an earlier run left there, so a participant
+you later exclude keeps their old files until you empty the folder.
+
+**Network.** The CLI reads and writes local files only, with one exception:
+once a day, `report` asks the npm registry for the latest version
+(`https://registry.npmjs.org/cyborg-hunter/latest`) to tell you about an update.
+The request carries no data from your study; the registry sees your IP address.
+Set `NO_UPDATE_NOTIFIER=1` (or run with `CI` set) to turn it off. Opening a
+`dom`-tier replay in `index.html` loads the recorded page's images, fonts and,
+unless you untick the box, its external stylesheets from their own addresses
+([Viewing replays](using-cyborg-hunter.md#viewing-replays)).
+
 ## Output files
 
 ### `index.html`
 
-Self-contained landing page:
+Landing page (it needs the `images/` and `replay/` folders beside it):
 
 - Dashboard with hard/soft/clean participant counts
 - Sortable triage table (click a column header to sort)

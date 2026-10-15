@@ -30,7 +30,7 @@ For production studies pin an exact version (see [README § Install](../README.m
 
 On Qualtrics, load `ch-qualtrics.js` from the survey's header: see [qualtrics.md](qualtrics.md).
 
-That is the whole integration. ch.js monitors every trial, nested timelines included, records each trial as its own segment, turns the honeypot on, and writes the integrity data into the rows your experiment already saves (`localSave`, DataPipe, your own server). You don't add an extension list, a per-trial loop or a `finalize()` call. It monitors the whole page, the trials and the time between them ([what that means for the scores](advanced-integration.md#data-format-the-rolling-snapshot)). The honeypot adds hidden bait to the page: read the [ethics and IRB note](advanced-integration.md#honeypot-ethics-and-irb-note) before launching. Already wiring the jsPsych extension by hand? See [Switching to the one-liner](advanced-integration.md#switching-to-the-one-liner).
+That is the whole integration. ch.js monitors every trial, nested timelines included, records each trial as its own segment, turns the honeypot on, records a session replay, and writes the integrity data and the replay into the rows your experiment already saves (`localSave`, DataPipe, your own server). What it collects, for your ethics protocol: [Privacy model](using-cyborg-hunter.md#privacy-model). You don't add an extension list, a per-trial loop or a `finalize()` call. It monitors the whole page, the trials and the time between them ([what that means for the scores](advanced-integration.md#data-format-the-rolling-snapshot)). The honeypot adds hidden bait to the page: read the [ethics and IRB note](advanced-integration.md#honeypot-ethics-and-irb-note) before launching. Already wiring the jsPsych extension by hand? See [Switching to the one-liner](advanced-integration.md#switching-to-the-one-liner).
 
 ### Which file
 
@@ -60,7 +60,9 @@ ch.js takes the participant ID from the first of these it finds:
 1. a URL parameter: `PROLIFIC_PID`, then `workerId` (MTurk), then `participant`. Recruitment platforms append these to your study URL;
 2. `data-participant-id="…"` on the ch.js tag;
 3. `window.CyborgHunterConfig.participantId`, set in a script above the tag;
-4. otherwise a random `ch-` + 12 hex characters, with a console warning: rows saved under it cannot be linked to the platform's records. The random ID is kept for the browser tab, so later pages of a multi-page study continue with it.
+4. otherwise a random `ch-` + 12 hex characters, with a console warning: rows saved under it cannot be linked to the platform's records.
+
+The ID found is kept in the browser tab for the pages of the same study (the same folder of your site), so a later page without the ID in its address continues with it; a study in another folder does not pick it up. When the ID comes from the URL it is the platform's own ID (Prolific's, MTurk's): it is in every row and every report output, so the data and the report identify the participant to anyone who can look the ID up. Treat them as identifiable ([Privacy model](using-cyborg-hunter.md#privacy-model)).
 
 One participant per tab: do not hard-code one ID for several participants (a session in the same tab with the same ID continues the previous one).
 
@@ -82,8 +84,8 @@ Attributes on the ch.js tag:
 | `data-preset` | `permissive`, `standard`, `strict` ([thresholds](signals-reference.md)) | `standard`; an unknown value warns and falls back to it |
 | `data-guards` | comma list of `honeypot`, `friction`; or `none` | `honeypot` |
 | `data-participant-id` | the participant's ID | see [Participant ID](#participant-id) |
-| `data-replay` | present (trace tier) or `dom` | off; see [Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner) |
-| `data-replay-src` | URL of `cyborg-hunter-replay.js` | next to `ch.js` |
+| `data-replay` | `off` (also `none`, `false`), present or `trace`, or `dom` | trace tier in `ch.js` and `ch-labjs.js`; off in `ch-qualtrics.js`. See [Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner) |
+| `data-replay-src` | URL of `cyborg-hunter-replay.js` | next to `ch-qualtrics.js` (`ch.js` and `ch-labjs.js` carry the recorder and ignore it) |
 | `data-debug` | present | off; see step 3 |
 
 Friction needs a start mark as well as `data-guards="honeypot,friction"` ([Friction](advanced-integration.md#friction)). Anything else, such as monitor options or the replay recorder's DataPipe save, goes in `window.CyborgHunterConfig` ([Configuration beyond data-*](advanced-integration.md#configuration-beyond-data-)).

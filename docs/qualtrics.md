@@ -3,7 +3,8 @@
 `ch-qualtrics.js`, the one-line setup's file for Qualtrics, runs in a survey
 from the survey's Look & Feel header. At every page submit it writes a summary of the session
 (scores, counts and event timings, never text the participant typed) into one
-embedded-data field. The CLI reads the Qualtrics CSV export directly, one
+embedded-data field. The full session, pasted text included, stays in the
+participant's browser tab (see [Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)). The CLI reads the Qualtrics CSV export directly, one
 participant per response (see [Reading the data](#reading-the-data) for the
 browser analyzer).
 
@@ -203,6 +204,11 @@ the id or class of a field typed into outside the survey (only its tag name
 and the kind of input), mouse or element traces, keystroke timings, or window
 positions.
 
+That holds for what reaches Qualtrics. The full session the summary is made
+from, pasted text, the honeypot's answer, the mouse trace and window
+positions included, is kept in the participant's browser tab between pages
+(next section) and is not cleared when the survey ends.
+
 Qualtrics refuses a page submit in which any one embedded-data value is
 longer than 20,000 bytes (UTF-8, of the value as written): the participant
 sees "Something went wrong" and cannot go on until the value is shorter.
@@ -270,7 +276,10 @@ every case the survey goes on.
 
 `ch-qualtrics.js` keeps the session in the browser tab's `sessionStorage`, so a reload
 of the survey would continue the same session instead of starting over.
-Every survey on your Qualtrics domain shares that storage. Under the New
+That is the full session (pasted text, the honeypot's answer, the mouse
+trace, window positions), kept until the tab is closed, not cleared when
+the survey ends. Every survey on your Qualtrics domain shares that storage,
+so a script in another survey opened later in the same tab could read it. Under the New
 Survey Taking Experience `ch-qualtrics.js` therefore keeps one session per survey,
 named by the tag's `data-qualtrics-survey-id`: the tag copied in
 [Setup](#setup) pipes `${e://Field/SurveyID}` into it, and Qualtrics fills

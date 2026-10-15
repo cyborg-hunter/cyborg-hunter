@@ -9,7 +9,7 @@ Two layers:
 - **Library** (the one-line file: `ch.js`, `ch-qualtrics.js` or `ch-labjs.js`; `cyborg-hunter.min.js` in manual mode) — runs in the participant's browser, records signals.
 - **CLI** (`cyborg-hunter` binary) — runs on your laptop after data collection, reads the saved data files, generates a report.
 
-The integrity monitor writes its observations into the same data file your experiment already saves (jsPsych CSV, custom JSON, whatever) and makes no network calls of its own. (The optional replay recorder saves a separate artifact; see [Session replay](#session-replay).) The CLI's job is to find your data files, parse them, and render the report.
+The integrity monitor writes its observations into the same data file your experiment already saves (jsPsych CSV, custom JSON, whatever) and makes no network calls of its own. The session recorder, on by default in `ch.js` and `ch-labjs.js`, saves its recording in that same data too ([Session replay](#session-replay)). Two of its options do use the network: the `dom` tier downloads the page's cross-origin stylesheets once at session start (to store their CSS), and the optional DataPipe save posts the recording to `pipe.jspsych.org`. Everything collected, where it is kept and where it can go: [Privacy model](#privacy-model). The CLI's job is to find your data files, parse them, and render the report.
 
 ## One-line setup
 
@@ -50,7 +50,7 @@ recordings (the record_session branch, PR #3661) are converted on the way in
 by `tools/convert/jspsych-v1-to-v2.mjs`; see `docs/v2-player-migration.md`.
 Releases before 0.8.0 recorded the earlier v1 shape.
 
-With the one-line setup, replay is `data-replay` on the tag and `CyborgHunter.replay()` in the experiment's save code: see [advanced-integration.md → Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner). The wiring below is manual mode's. The privacy, volume and viewing notes apply to both. Of the configuration options, the one-line setup sets `tier` (`data-replay`) and, on jsPsych, `autoSave` (`CyborgHunterConfig.replay`); `participantId` is the ID ch.js found, and the others keep their defaults, so to redact a field, mark it with `data-ch-redact`.
+With the one-line setup, `ch.js` and `ch-labjs.js` carry the recorder and **record by default** (`data-replay="off"` turns it off; `data-replay="dom"` chooses the page-content tier). The recording is saved with the data your experiment already saves, with no code of yours: one piece per trial in the jsPsych or lab.js rows (`cyborgHunterReplay`, and `cyborgHunterReplayFinal` on the last row), or, on a page without a framework, in a second hidden field of every POST form (`cyborgHunterReplay`) and in `CyborgHunter.data()`. The CLI puts the pieces back together. `ch-qualtrics.js` keeps replay opt-in (`data-replay`): a survey field cannot hold a recording, so it goes to your own server through `CyborgHunter.replay()`. Details: [advanced-integration.md → Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner). The wiring below is manual mode's. The privacy, volume and viewing notes apply to both. Of the configuration options, the one-line setup sets `tier` (`data-replay`) and, on jsPsych, `autoSave` (`CyborgHunterConfig.replay`); `participantId` is the ID ch.js found, and the others keep their defaults, so to redact a field, mark it with `data-ch-redact`.
 
 ### jsPsych wiring (manual mode)
 
@@ -106,15 +106,15 @@ rec.destroy();
 |---|---|---|
 | `participantId` | `'unknown'` | Written to the recording's `participant_id` and used (sanitized) in the artifact filename; the CLI attaches the replay to the participant by it. Set it to the same ID your data file uses. |
 | `tier` | `'trace'` | `'trace'` events only; `'dom'` adds initial-DOM snapshots + a mutation log (visual replay). `'canvas'` is reserved for a future canvas tier and currently records at `dom` fidelity. |
-| `keys` | `'full'` | `'full'` records key identity; `'off'` records no key events. Password fields never record identity or content regardless. |
+| `keys` | `'full'` | `'full'` records the identity of every key pressed anywhere on the page (key, code, modifiers), so typed text can be read back keystroke by keystroke, on both tiers; `'off'` records no key events. Password fields and fields matching `redactSelector` record only that a key was pressed, and when. |
 | `mouseHz` | `30` | mousemove sampling ceiling. |
-| `redactSelector` | `[data-ch-redact]` | Matching inputs record value length only. `input[type=password]` is always redacted, not overridable. |
-| `clipboardContent` | `false` | Copy/cut/paste/drop events record text length only. `true` records the clipboard text and HTML instead (the jsPsych recorder's behaviour). Fields matching `redactSelector` and password inputs stay length-only either way. |
+| `redactSelector` | `[data-ch-redact]` | Matching elements and everything inside them: text, the `value` attribute, typed keys, input values, form state and clipboard contents are withheld; value lengths and keystroke times are kept. Other attributes the page wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) are kept: they are page content, not what the participant entered. `input[type=password]` is always redacted, not overridable. A selector that is not valid CSS redacts nothing and is reported once (console and `capture_failures`). |
+| `clipboardContent` | `false` | Paste and drop events record the text length only; copy and cut record neither text nor length. `true` records the pasted or dropped text and HTML (the jsPsych recorder's behaviour). Fields matching `redactSelector` and password inputs stay length-only either way. This is the recorder's switch; the integrity monitor has its own (see [Privacy model](#privacy-model)). |
 | `keepBait` | `false` | Keep honeypot/decoy nodes in DOM captures (red-team analysis). |
 | `root` | `document.body` | Capture root for the DOM tier. |
 | `autoSave.mode` | `'none'` | `'datapipe'` (needs `experimentId`), `'download'` (participant's machine — piloting only), `'none'` (call `getRecording()` yourself; warns at startSession). See [Saving the replay to your own server](#saving-the-replay-to-your-own-server). |
 | `autoSave.experimentId` | — | Your DataPipe experiment ID. Required by `'datapipe'` mode; without it the save reports `saved_to: 'failed'`. |
-| `maxEventsPerTrial` | `50000` | Hard, per-trial cap on event count. Once a trial crosses it, that trial's capture stops (a `ch:capture_stopped` marker is written, no silent truncation); later trials in the same session record normally. Doesn't bound the size of the whole session. |
+| `maxEventsPerTrial` | `50000` | Hard, per-trial cap on event count. Once a trial crosses it, that trial's capture stops (a `recording.capture_stopped` event is written once per recording and `truncated` is set, no silent truncation); later trials in the same session record normally. Doesn't bound the size of the whole session. |
 | `maxCharsPerTrial` | `8000000` | Hard, per-trial cap measured in characters (JS string length), seeded by the trial's initial DOM snapshot. Same stop-and-mark behavior as `maxEventsPerTrial`, and the same per-trial scope; whichever cap is crossed first stops that trial. Set `null` to disable. |
 | `keyframeEvery` | `10` | DOM tier only. At most this many segments per full snapshot: one keyframe plus up to `keyframeEvery - 1` segments recorded as deltas against it. A fresh snapshot is also taken sooner whenever the mutations since the last one have grown to rival its size, so this setting is the fallback for a DOM that barely changes, and it bounds how far a viewer must replay forward to reach a given segment. `1` snapshots every segment (the jsPsych adapter forces this, since the display is wiped between trials). `null` leaves only the size trigger. Must be a number; anything else disables the fallback and warns. |
 | `maxGuardViolations` | `40` | Session-wide cap on recorded guard-friction violations. Each `start` entry carries a full DOM snapshot, and the per-trial caps cannot see a session-level array. Past the ceiling later violations are not recorded and a capture failure says so once. Set `null` to disable. |
@@ -123,56 +123,148 @@ rec.destroy();
 
 ### Privacy model
 
-- Password inputs: identity, value, and serialized DOM value are never
-  recorded — length only. Not configurable.
-- `keys: 'full'` records what was typed **into the experiment you already
-  collect responses from**; use `'off'` (manual mode) or `redactSelector`
-  (`data-ch-redact` on a field, in both setups) if the study's ethics
-  protocol requires less. This mirrors the core library's
-  GDPR-cautious stance (`keystrokeDynamics` off by default).
-- Clipboard events record lengths only **by default**. Setting
-  `clipboardContent: true` (manual mode) makes the replay stream record
-  the clipboard text and HTML too (redacted fields and password inputs
-  excepted).
-  CH-core's own paste/drop content capture is a separate switch,
-  `collectForPostHoc.pasteDropContent`.
-- Raw mouse coordinates (`mouseTrack`, the per-sample {x, y, cx, cy, t, type}
-  trace the report's trajectory panels draw and its cursor section reads; since
-  0.14 presses, releases and clicks also carry `trusted`, `detail` and
-  `pointerType`) are recorded **by default** by the core
-  monitor. Adding CH to an experiment is the decision to collect behavioural
-  traces, so the default matches that decision; set
-  `collectForPostHoc: { rawMouseTrack: false }` in the core config if your
-  protocol allows only the derived `mouseMetrics`. (Before 2026-09-02 this
-  was off by default, and reports showed "no mouse data" for everyone who
-  had not found the toggle.)
+What Cyborg Hunter collects by default, what it keeps, and where it can go.
+Your ethics protocol and consent text should cover all of it; each item
+names the switch that turns it down.
+
+**What the integrity monitor stores** (every setup):
+
+- **Pasted and dropped text, in full**, for a paste or drop anywhere on the
+  page, password fields included (`collectForPostHoc.pasteDropContent`,
+  default `true`; `false` keeps the lengths only). Pasted text can hold
+  anything from the participant's clipboard. Copy and cut record only the
+  selected length.
+- **Characters typed into fields outside the experiment** (an AI sidebar's
+  prompt, a chat widget), once you set an `experimentContainer`
+  (`collectForPostHoc.foreignInputContent`, default `true`).
+- **Raw mouse coordinates** (`mouseTrack`, the per-sample {x, y, cx, cy, t,
+  type} trace the report's trajectory panels draw and its cursor section
+  reads; since 0.14 presses, releases and clicks also carry `trusted`,
+  `detail` and `pointerType`), on by default (`collectForPostHoc:
+  { rawMouseTrack: false }` keeps only the derived `mouseMetrics`).
+- **Window and screen geometry**: the window's position on the desktop
+  (which shows the monitor layout), the window and page sizes, the screen
+  resolution and the pixel ratio, one row at session start and one each
+  time any of it changes, up to `thresholds.maxWindowPositions` (2000) rows
+  (`collectForPostHoc.windowPositionLog`, default `true`). With the
+  browser and OS version the recorder stores, this comes close to singling
+  out a device; treat it as device information when you share data.
+- **Device facts**: touch points, coarse pointer and the browser's
+  automation flag (`navigator.webdriver`), once per session. No switch.
+- **Browser extensions**: the names of known AI extensions found on the
+  page, and the tag names of custom elements any extension adds to
+  `<body>`, which can reveal installed extensions.
+- Tab switches and window blur with their UTC time, idle gaps, typing speed,
+  DevTools shortcuts. Keystroke timestamps only in the `strict` preset or
+  with `collectForPostHoc.fullKeystrokeTimestamps`.
+
+Your own `onSignal` callback receives pasted, dropped and typed text only
+when the matching switch is on; it also receives the raw DOM event, and what
+your code reads from that event is yours to declare.
+
+**What the session recorder stores** (on by default in `ch.js` and
+`ch-labjs.js`, opt-in elsewhere):
+
+- `keys: 'full'`: every key pressed **anywhere on the page**, from the
+  moment recording starts, so typed text can be read back keystroke by
+  keystroke. This includes screens that collect nothing themselves
+  (consent, instructions, demographics) and fields that are not part of the
+  experiment. Mark a field `data-ch-redact` (a name, an email, an ID typed
+  by hand) to keep its keys, value and clipboard contents out; only that a
+  key was pressed, and when, is kept. Password inputs are always redacted.
+- Pointer, scroll, touch, focus and tab visibility; the browser's user agent
+  and the viewport (size, pixel ratio, zoom).
+- Clipboard: paste and drop lengths only (`clipboardContent`).
+- On the `dom` tier (`data-replay="dom"`), the page itself: every text node
+  and attribute under `<body>`, what is typed into form fields, the
+  `value` of hidden inputs (an ID a platform passed in the URL, for
+  example), URLs with their query strings, and content a browser extension
+  injects into `<body>` (a password manager's or Grammarly's UI, an AI
+  sidebar). The contents of shadow roots and iframes are not recorded.
+- Redaction removes what the participant entered; attributes the page
+  itself wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) stay,
+  so a page that copies typed text into one of them exposes it.
+
+**When collection starts.** At page load, or when jsPsych starts, before the
+first trial: a consent screen on the same page is covered. Whether that
+pre-consent data is kept depends on your save code; in Qualtrics, data is
+written at every page submit, the consent page's included, so a participant
+who declines leaves a record in the export. If your protocol requires that
+nothing is collected before consent, put the consent form on a page that
+does not load Cyborg Hunter (on Qualtrics the header runs on every page, so
+this means a separate consent survey).
+
+**Where the data is kept in the browser.**
+
+- In page memory, for the life of the page; `destroy()` stops collection but
+  leaves the data readable by any script on the page until it unloads.
+- In the tab's `sessionStorage` (one-line setup on pages without a framework
+  and on Qualtrics): the participant ID and the session so far, pasted text
+  included, so later pages continue the session. It is not cleared when the
+  study ends; it lasts until the tab is closed and can be read by pages of
+  the same site in that tab. The recording is never stored there.
+- Nothing in cookies or `localStorage` on the participant's side.
+
+**Where it is sent.** Only where your experiment already sends its data, plus:
+
+- On a page without a framework, the one-line setup adds two hidden fields,
+  `cyborgHunterData` and `cyborgHunterReplay`, to **every POST form** the page
+  submits, whatever server the form posts to. A third-party form on the page
+  (a sign-up box, a form service) receives them too. Together they are often
+  several MB; a server with a small upload limit rejects the submission
+  ([advanced-integration.md → The hidden form field](advanced-integration.md#vanilla-segmentation-reference)).
+- The recorder's optional DataPipe save posts the recording to
+  `pipe.jspsych.org`, which forwards it to your OSF project.
+- The script tag itself loads from unpkg: the participant's IP address and
+  user agent reach the CDN, as for any script.
+
+**The participant ID.** Under the one-line setup the ID is the platform's
+(Prolific's participant ID, MTurk's worker ID) when the study URL carries one. It is the
+key of every row and of every report output (CSVs, file names, annotations),
+so the report is identifiable; treat the whole output folder as raw data.
+
+The honeypot adds hidden fields with text addressed to AI agents and records
+what an agent writes there: read its [ethics and IRB note](advanced-integration.md#honeypot-ethics-and-irb-note).
 
 ### Data volume and delivery
 
 Rough guide for a 15-trial × 60 s study at 30 Hz mouse sampling: `trace`
 ≈ 0.5–1.5 MB per participant uncompressed, `dom` ≈ 2–8 MB depending on
 page complexity (gzip shrinks both ~5×; DataPipe artifacts are saved as
-plain JSON so OSF files stay analyst-readable). Run one calibration
-session and check `integrityReplayMeta.bytes_uncompressed` before a full
-Prolific launch.
+plain JSON so OSF files stay analyst-readable). Under the one-line setup
+this size rides in your saved data: DataPipe accepts up to 32 MB per
+request; JATOS caps `submitResultData` at 5 MB, which a long study can pass
+once the recording is included (use `data-replay="off"`, or JATOS result
+files); a server you run needs a form or body limit above the session's
+size. Run one calibration session and check the size of a saved file before
+a full Prolific launch.
 
-Delivery semantics are the same as the jsPsych data itself: a participant
-who closes the tab mid-session delivers neither their CSV nor their
-replay. `end_reason: 'aborted'` is for programmatic aborts (screenouts).
-`saved_to: 'download'` means the artifact went to the **participant's**
-Downloads folder — the CLI warns loudly when it sees that in a report.
-Reloads produce distinct artifacts (`<pid>-replay-<epoch>.json`); the CLI
-uses the latest and warns.
+Delivery semantics are the same as the data itself. Under the one-line
+setup each trial's piece of the recording rides in its own row, so a save
+trial that runs before the session ends (DataPipe's) keeps every trial
+before it, and the CLI rebuilds the recording up to there; a participant
+who closes the tab mid-session delivers what was saved before that, as for
+the integrity data. A recording rebuilt without its last piece has
+`end_reason: null` (unknown); `'aborted'` is for programmatic aborts
+(screenouts). `saved_to: 'download'` means the artifact went to the
+**participant's** Downloads folder — the CLI warns loudly when it sees that
+in a report. Several recordings of one participant that follow one another
+in time (one per page of a study without a framework, or a reload) are
+joined into one replay in time order; recordings that overlap in time are
+two sessions, and the CLI shows the latest and warns.
 
 #### Saving the replay to your own server
 
-DataPipe is optional. With `autoSave: { mode: 'none' }` (the default, in the
-one-line setup, in `attach()` and in the jsPsych extension's params) the
-recorder keeps the recording in memory, and the experiment sends it
-wherever the lab stores data:
+Under the one-line setup with `ch.js` or `ch-labjs.js` there is nothing to
+do: the recording is saved with your data. This section is for
+`ch-qualtrics.js` with `data-replay`, and for manual mode. DataPipe is
+optional. With `autoSave: { mode: 'none' }` (the default, in the one-line
+setup, in `attach()` and in the jsPsych extension's params) the recorder
+keeps the recording in memory, and the experiment sends it wherever the lab
+stores data:
 
 ```javascript
-// One-line setup (data-replay on the tag), in the experiment's save code (an async function)
+// ch-qualtrics.js with data-replay, in your own upload code (an async function)
 const recording = CyborgHunter.replay();   // null when replay is off or has not started
 if (recording) {
   await fetch('https://your-lab-server.example/upload', {
@@ -235,8 +327,8 @@ if (recording) {
   `.json` name, because the CLI treats a `.gz` suffix as gzip.
 - In manual mode, at `startSession` the recorder warns "autoSave.mode is \"none\" — the
   recording will be lost unless you call getRecording() yourself." That is
-  expected with this setup. Under the one-line setup ch.js logs its own
-  reminder at load instead, naming `CyborgHunter.replay()`.
+  expected with this setup. Under `ch-qualtrics.js` with `data-replay`, ch.js
+  logs its own reminder at load instead, naming `CyborgHunter.replay()`.
 
 ### Viewing replays
 
@@ -251,10 +343,17 @@ trail, click ripples, away-bands, an event marker lane, size controls (the
 participant's whole recorded viewport, scaled to fit the window, or the
 detail pane in the report, by default; **1:1** for its own pixel size;
 **Fullscreen**), and — for
-`dom`-tier recordings — a sandboxed reconstruction of the page (scripts
-are blocked by both the iframe sandbox and a restrictive CSP; a
-participant-injected image URL can still fire a GET when the analyst
-loads the replay, which is the price of rendering remote stimuli).
+`dom`-tier recordings — a sandboxed reconstruction of the page. Scripts
+are blocked by both the iframe sandbox and a restrictive CSP, and recorded
+`<script>`, `<link>`, `<meta>` and `<base>` elements are rebuilt as inert
+placeholders. To render remote stimuli the report's viewer does load, from
+the analyst's browser, the images, fonts and CSS `url()` images the
+recorded page referenced, and its external stylesheets (the box "also fetch
+… external stylesheets from their origins" next to *Load replay*, ticked by
+default). Those hosts,
+which a participant could choose by editing their page, learn the analyst's
+IP address and when the replay was opened; no data is sent. The hosted and
+offline analyzer pages block all of these.
 
 ### Alignment guarantee
 
@@ -414,7 +513,11 @@ addresses (`default-src 'none'` with only local sources allowed), no form
 submissions (`form-action 'none'`), and no `<base>` element that could point
 the page's own links elsewhere (`base-uri 'none'`). The browser enforces these
 whatever the page's code does, so even a bug could not make the page fetch,
-post or load anything from another address. The policy does not cover
+post or load anything from another address. One gap was found in this
+guarantee and closed in 0.16: Chromium does not apply `connect-src` to a
+`<link rel="prefetch">`, so a replay whose recorded page contained one could
+make the browser request the address in it. Recorded `<link>`, `<meta>` and
+`<base>` elements are now rebuilt as inert placeholders. The policy does not cover
 navigation: a page that moved itself, or a new window, to another address
 could carry data in that address. This page's own code never navigates away
 or opens another page, and the end-to-end tests, which run the page in
@@ -515,6 +618,8 @@ cyborg-hunter-report/
 ├── event-log.csv           # chronological copy/paste/drop/tab-away events
 ├── extensions.csv          # AI-extension + sidebar detections, one row per participant × detection
 ├── score-weights.json      # the triage-score weights this report used
+├── cursor-limits.json      # the cursor section's constants and the cohort's verdicts
+├── replay/                 # each participant's whole session recording (typed text included)
 └── images/
     ├── trajectories_<participantId>.png      # per-trial mouse paths
     ├── session_timeline_<participantId>.png  # session-wide tab-away / sidebar / guard timeline

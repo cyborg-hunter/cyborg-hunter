@@ -6,21 +6,21 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 
 | Signal | Category | How it's detected | Default behavior |
 |---|---|---|---|
-| Paste | Clipboard | `paste` event listener | Records every paste; text captured |
+| Paste | Clipboard | `paste` event listener on the whole page | Records every paste; the full text is stored (`collectForPostHoc.pasteDropContent`, default on), password fields included |
 | Copy | Clipboard | `copy` event listener | Records every copy |
-| Drop | Clipboard | `drop` event on inputs | Records every drop; text captured |
+| Drop | Clipboard | `drop` event listener on the whole page | Records every drop; the full text is stored (same switch as paste) |
 | Tab-away | Focus | Visibility API + window blur/focus | All tab-aways logged; soft score fires for durations **strictly greater than** `tabAwayDurationMs` (default 3s, 5s for strict). Reports bin durations as flicker (≤ cutoff, not scored) / medium (cutoff–10s) / long (≥10s) using that **per-participant** cutoff; the 10s line is a display split, not the soft cutoff. Since 0.6.1 the session report also carries timestamped `tabAwayEvents[]` (start, duration, type, wall-clock) for every tab-away **including off-trial ones** (consent, tutorial, comprehension); pre-0.6.1 payloads keep only durations (`tabAwaySums`) for those, so timelines can count but not place them |
 | Idle gap | Focus | No input activity for N ms | Default 10s threshold |
 | Typing speed | Typing | chars/sec from input edit timestamps | Default soft threshold 10 cps |
 | Synthetic insertion | Typing | Text appears without preceding keystrokes | Default 100ms gap |
-| Foreign input | Typing | Typing lands outside the experiment container | All occurrences logged |
+| Foreign input | Typing | Typing lands outside the experiment container (needs `experimentContainer`) | All occurrences logged, with each typed character (`collectForPostHoc.foreignInputContent`, default on) |
 | Mouse track | Mouse | `mousemove` sampled at `mouseThrottleMs` (50 ms by default); every `mousedown`/`mouseup`/`click` | Cap of 2000 events per trial. Since 0.14 each sample carries viewport coordinates (`cx`, `cy`) beside the page ones (`x`, `y`) |
 | Mouse metrics | Mouse | Path efficiency, direction changes, speed variance | Computed from ≥3 move events |
 | AI extensions | Browser | DOM scan for known extension content-script selectors | 30s rescan interval |
-| Sidebar gap | Browser | `outerWidth − innerWidth` delta | 100px gap by default |
+| Sidebar gap | Browser | `innerWidth` against its rolling baseline | 100px gap by default |
 | Viewport-width shift | Browser | ResizeObserver on `<html>` (`innerWidth − clientWidth` delta) | 20px delta; debounced 250ms so one resize gesture logs one event. Recorded as `viewportWidthShifts` since 0.6.1, with `layoutShifts` kept as a deprecated alias (the signal never measured Web-Vitals CLS) |
 | Keyboard shortcuts | Browser | `keydown` listener for DevTools hotkeys (Ctrl/Cmd+Shift+I/J/C, F12) | All occurrences logged in `keyboardShortcuts` |
-| Window position | Browser | Polled `screenX`/`screenY` + resize event | 2s poll + on-resize sample |
+| Window position | Browser | Window position on the desktop (`screenX`/`screenY`), window and viewport sizes, screen resolution, pixel ratio and zoom; checked every 2 s and after a resize | One row at session start, then a row only when something changed, up to `maxWindowPositions` rows (`windowPositionsCapped` says when a change went unrecorded). Device information: see [Privacy model](using-cyborg-hunter.md#privacy-model) |
 | Zoom changes | Browser | Inferred from `devicePixelRatio` change | Diagnostic |
 | DOM mutations | Browser | `MutationObserver` for injected custom elements | Skips known-benign extension tags |
 | DevTools open | Browser | Inferred from the DevTools hotkeys above (no separate window-size heuristic) | Recorded under `keyboardShortcuts`; the `devToolsEvents` array is reserved and currently unpopulated |
@@ -91,6 +91,8 @@ Numeric defaults that apply across presets unless overridden:
 | `mouseBotMinEvents` | 3 | Minimum events needed to compute mouse metrics |
 | `tabAwayDurationMs` | 3000 | Tab-away durations longer than this add to the soft score (the `strict` preset raises it to 5000) |
 | `typingSpeedCps` | 10 | chars/sec above which typing is "fast" |
+| `windowPositionPollMs` | 2000 | How often the window geometry is checked for a change |
+| `maxWindowPositions` | 2000 | Session cap on window-geometry rows; `null` disables it |
 
 The `strict` preset overrides several of these (`typingSpeedCps: 8`, `tabAwayDurationMs: 5000`, `mouseMaxEvents: 5000`).
 
@@ -135,7 +137,9 @@ DevTools detector.
 
 The full set of toggles (matching `PRESETS.standard.signals` in `constants.js`):
 
-`paste`, `copy`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `keystrokeDynamics`.
+`paste`, `copy`, `drop`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `keystrokeDynamics`.
+
+What is stored, beside which signals run, is set by `collectForPostHoc`: `pasteDropContent` (pasted and dropped text, default on), `foreignInputContent` (characters typed outside the experiment container, default on), `rawMouseTrack` (default on), `windowPositionLog` (default on), `fullKeystrokeTimestamps` and `elementTrace` (default off). A misspelt key in `collectForPostHoc`, `signals` or `thresholds` is reported with a console warning.
 
 ## AI-extension detector
 
