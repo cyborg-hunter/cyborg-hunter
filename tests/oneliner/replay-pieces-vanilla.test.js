@@ -141,6 +141,14 @@ describe('ch.js with the bundled recorder on a page without a framework', () => 
     assert.deepStrictEqual(errors, []);
   });
 
+  it('dom tier: a page\'s own cyborgHunterData input is kept out of the recording too', async () => {
+    await start({ replay: 'dom' });
+    const f = form();
+    f.insertAdjacentHTML('beforeend', '<input type="hidden" name="cyborgHunterData">');
+    submit(f);
+    assert.equal(f.querySelector('input[name="cyborgHunterData"]').getAttribute('data-record-exclude'), '');
+  });
+
   it('a GET form gets no replay input', async () => {
     await start();
     click(el('<button>x</button>'));

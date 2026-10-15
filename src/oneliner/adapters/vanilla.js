@@ -421,6 +421,7 @@ export function installVanillaAdapter(opts) {
       return replaces;
     }
     if (!input) input = hiddenInput(form, HIDDEN_INPUT);
+    else input.setAttribute('data-record-exclude', '');   // one the page placed itself (hiddenInput)
     input.value = JSON.stringify(blob());
     setReplayInput(form);
     written = { form: form, cuts: cuts };
@@ -446,6 +447,7 @@ export function installVanillaAdapter(opts) {
       return;
     }
     if (!input) input = hiddenInput(form, REPLAY_INPUT);
+    else input.setAttribute('data-record-exclude', '');
     input.value = json;
   }
 
