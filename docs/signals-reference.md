@@ -81,6 +81,8 @@ Numeric defaults that apply across presets unless overridden:
 |---|---|---|
 | `pasteMinChars` | 0 | Records every paste regardless of length |
 | `dropMinChars` | 0 | Records every drop regardless of length |
+| `maxPasteDropChars` | 20000 | Characters of text kept per paste or drop; a longer one keeps its full length and `truncated: true`; `null` disables it |
+| `maxPasteDropCharsPerTrial` | 200000 | Characters of pasted and dropped text kept per trial; past it, later pastes and drops keep their length only (`text: ""`, `truncated: true`); `null` disables it |
 | `sidebarGapPx` | 100 | Detection threshold for sidebar opening |
 | `layoutCompressionPx` | 20 | Threshold for a viewport-width shift |
 | `viewportShiftDebounceMs` | 250 | Quiet period before a viewport-width shift is logged — one gesture = one event (added 0.6.1) |

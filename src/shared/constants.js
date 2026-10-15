@@ -9,6 +9,8 @@ export const VERSION = "0.15.0";
 export const DEFAULT_THRESHOLDS = {
   pasteMinChars: 0,            // record ALL pastes (was 20; now 0 by default)
   dropMinChars: 0,             // record ALL drops
+  maxPasteDropChars: 20000,    // text kept per paste/drop (null = no cap); the full length is always kept
+  maxPasteDropCharsPerTrial: 200000, // text kept per trial across pastes and drops (null = no cap)
   sidebarGapPx: 100,           // outerWidth - innerWidth above this = sidebar
   layoutCompressionPx: 20,     // innerWidth - clientWidth above scrollbar width
   viewportShiftDebounceMs: 250, // quiet period before a viewport-width shift is logged (one gesture = one event)

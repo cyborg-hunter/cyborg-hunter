@@ -19,6 +19,41 @@ export function attachClipboardSignals(ctx) {
   var config = ctx.config;
   var trialData = ctx.trialData;
 
+  // The pasted or dropped text to store, within the caps: at most
+  // thresholds.maxPasteDropChars of one event, and what is left of
+  // thresholds.maxPasteDropCharsPerTrial after this trial's earlier pastes
+  // and drops (null switches either cap off). One paste can be many MB, and
+  // the trial report rides with the participant's responses, so an uncapped
+  // paste could push the submission past a platform's upload limit. The
+  // caller always keeps the full length; `truncated` says text was cut.
+  function keptText(text) {
+    var limit = text.length;
+    var perEvent = config.thresholds.maxPasteDropChars;
+    var perTrial = config.thresholds.maxPasteDropCharsPerTrial;
+    if (perEvent != null) limit = Math.min(limit, perEvent);
+    if (perTrial != null) {
+      var used = 0;
+      var stored = trialData.pasteEvents.concat(trialData.dropEvents);
+      for (var i = 0; i < stored.length; i++) {
+        if (typeof stored[i].text === "string") used += stored[i].text.length;
+      }
+      limit = Math.min(limit, Math.max(0, perTrial - used));
+    }
+    return { text: text.slice(0, limit), truncated: limit < text.length };
+  }
+
+  // Adds the stored text (and `truncated` when it was cut) to the log entry
+  // and the onSignal payload alike, so both carry the same content.
+  function addText(entry, signal, text) {
+    var kept = keptText(text);
+    entry.text = kept.text;
+    signal.text = kept.text;
+    if (kept.truncated) {
+      entry.truncated = true;
+      signal.truncated = true;
+    }
+  }
+
   // ── Paste detection ──
   if (config.signals.paste) {
     ctx.addTrialListener(document, "paste", function (e) {
@@ -32,20 +67,17 @@ export function attachClipboardSignals(ctx) {
           pastedLength: pastedLength,
           isKnownInput: known
         };
-        if (config.collectForPostHoc.pasteDropContent) {
-          entry.text = text;
-        }
-        trialData.pasteEvents.push(entry);
-        ctx.sessionData.pasteCount++;
-        // The onSignal payload follows the same content switch as the trial
-        // log: pasted text is handed to the researcher's callback only when
-        // pasteDropContent is on. The raw DOM event `e` is still passed
-        // through unchanged; what a callback reads from it (e.g. the
+        // The onSignal payload follows the same content switch and caps as
+        // the trial log: pasted text is handed to the researcher's callback
+        // only when pasteDropContent is on. The raw DOM event `e` is still
+        // passed through unchanged; what a callback reads from it (e.g. the
         // clipboardData) remains the researcher's own responsibility.
         var pasteSignal = { pastedLength: pastedLength, isKnownInput: known };
         if (config.collectForPostHoc.pasteDropContent) {
-          pasteSignal.text = text;
+          addText(entry, pasteSignal, text);
         }
+        trialData.pasteEvents.push(entry);
+        ctx.sessionData.pasteCount++;
         ctx.fireSignal("paste", e, pasteSignal);
       }
     });
@@ -96,17 +128,15 @@ export function attachClipboardSignals(ctx) {
           droppedLength: droppedLength,
           isKnownInput: known
         };
+        // Same content switch and caps as paste (see above); the raw event
+        // `e` is passed through unchanged and stays the researcher's
+        // responsibility.
+        var dropSignal = { droppedLength: droppedLength, isKnownInput: known };
         if (config.collectForPostHoc.pasteDropContent) {
-          entry.text = text;
+          addText(entry, dropSignal, text);
         }
         trialData.dropEvents.push(entry);
         ctx.sessionData.dropCount++;
-        // Same content switch as paste (see above); the raw event `e` is
-        // passed through unchanged and stays the researcher's responsibility.
-        var dropSignal = { droppedLength: droppedLength, isKnownInput: known };
-        if (config.collectForPostHoc.pasteDropContent) {
-          dropSignal.text = text;
-        }
         ctx.fireSignal("drop", e, dropSignal);
       }
     });

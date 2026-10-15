@@ -129,11 +129,14 @@ names the switch that turns it down.
 
 **What the integrity monitor stores** (every setup):
 
-- **Pasted and dropped text, in full**, for a paste or drop anywhere on the
-  page, password fields included (`collectForPostHoc.pasteDropContent`,
-  default `true`; `false` keeps the lengths only). Pasted text can hold
-  anything from the participant's clipboard. Copy and cut record only the
-  selected length.
+- **Pasted and dropped text**, for a paste or drop anywhere on the page,
+  password fields included (`collectForPostHoc.pasteDropContent`, default
+  `true`; `false` keeps the lengths only). Pasted text can hold anything
+  from the participant's clipboard. The first 20,000 characters of each
+  paste or drop are kept, up to 200,000 per trial
+  (`thresholds.maxPasteDropChars`, `maxPasteDropCharsPerTrial`); a shortened
+  entry keeps its full length and says `truncated: true`. Copy and cut
+  record only the selected length.
 - **Characters typed into fields outside the experiment** (an AI sidebar's
   prompt, a chat widget), once you set an `experimentContainer`
   (`collectForPostHoc.foreignInputContent`, default `true`).

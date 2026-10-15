@@ -40,6 +40,11 @@ study with it: it lists what is collected by default.
   `thresholds.maxWindowPositions` (2000). The session report gains
   `windowPositionsCapped` (true when a change went unrecorded). Sessions
   that never move the window have one row instead of one every 2 s.
+- **Stored pasted and dropped text is capped**: the first 20,000 characters
+  of each paste or drop, and 200,000 per trial. A shortened entry keeps its
+  full `pastedLength` / `droppedLength` and gains `truncated: true`. Counts,
+  lengths and scores are unchanged. A huge paste no longer pushes a
+  participant's data past an upload limit.
 - **`onSignal` callbacks get pasted, dropped and typed text only when the
   matching `collectForPostHoc` switch is on** (`pasteDropContent`,
   `foreignInputContent`; both default on, so the default is unchanged).
@@ -59,6 +64,8 @@ study with it: it lists what is collected by default.
 - `data-replay` takes `off` (also `none`, `false`); unset means on in `ch.js`
   and `ch-labjs.js`.
 - `thresholds.maxWindowPositions` (default 2000, `null` for no cap).
+- `thresholds.maxPasteDropChars` (default 20000) and
+  `thresholds.maxPasteDropCharsPerTrial` (default 200000); `null` for no cap.
 - A misspelt key inside `collectForPostHoc`, `signals` or `thresholds` is now
   reported with a console warning (it used to be ignored silently, leaving
   the default on). An invalid `redactSelector` is reported once in the

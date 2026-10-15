@@ -122,3 +122,73 @@ describe('onSignal payload content switch (paste/drop)', () => {
     assert.strictEqual(ctx.fired[0].data.droppedLength, 13);
   });
 });
+
+// ── Stored pasted/dropped text is capped ──
+// One paste could be many MB, and the trial report rides with the
+// participant's responses: past a platform's upload limit the whole
+// submission is refused. The text kept is capped per event
+// (thresholds.maxPasteDropChars) and per trial across pastes and drops
+// (thresholds.maxPasteDropCharsPerTrial); a shortened entry keeps the full
+// length and says truncated: true. Lengths and counts, which scoring uses,
+// are unchanged. The onSignal payload carries the same text as the log.
+
+function cappedCtx(thresholds) {
+  const ctx = captureCtx(true);
+  Object.assign(ctx.config.thresholds, thresholds);
+  attachClipboardSignals(ctx);
+  return ctx;
+}
+const pasteOf = (text) => ({ target: {}, clipboardData: { getData: () => text } });
+const dropOf = (text) => ({ target: {}, dataTransfer: { getData: () => text } });
+
+describe('pasted/dropped text cap', () => {
+  it('keeps the first maxPasteDropChars characters of one paste, with its full length', () => {
+    const ctx = cappedCtx({ maxPasteDropChars: 5, maxPasteDropCharsPerTrial: 100 });
+    ctx.handlers.paste(pasteOf('abcdefghij'));
+    const e = ctx.trialData.pasteEvents[0];
+    assert.strictEqual(e.text, 'abcde');
+    assert.strictEqual(e.pastedLength, 10);
+    assert.strictEqual(e.truncated, true);
+    assert.strictEqual(ctx.fired[0].data.text, 'abcde');
+    assert.strictEqual(ctx.fired[0].data.truncated, true);
+    assert.strictEqual(ctx.sessionData.pasteCount, 1);
+  });
+
+  it('a paste within the cap is stored whole, with no truncated key', () => {
+    const ctx = cappedCtx({ maxPasteDropChars: 5, maxPasteDropCharsPerTrial: 100 });
+    ctx.handlers.paste(pasteOf('abc'));
+    assert.strictEqual(ctx.trialData.pasteEvents[0].text, 'abc');
+    assert.ok(!('truncated' in ctx.trialData.pasteEvents[0]));
+    assert.ok(!('truncated' in ctx.fired[0].data));
+  });
+
+  it('the per-trial budget is shared by pastes and drops; past it only lengths are kept', () => {
+    const ctx = cappedCtx({ maxPasteDropChars: 6, maxPasteDropCharsPerTrial: 10 });
+    ctx.handlers.paste(pasteOf('aaaaaa'));   // 6 kept, 4 left
+    ctx.handlers.drop(dropOf('bbbbbb'));     // 4 kept, 0 left
+    ctx.handlers.paste(pasteOf('cc'));       // nothing kept
+    assert.strictEqual(ctx.trialData.pasteEvents[0].text, 'aaaaaa');
+    assert.deepStrictEqual(
+      { text: ctx.trialData.dropEvents[0].text, len: ctx.trialData.dropEvents[0].droppedLength, t: ctx.trialData.dropEvents[0].truncated },
+      { text: 'bbbb', len: 6, t: true });
+    assert.deepStrictEqual(
+      { text: ctx.trialData.pasteEvents[1].text, len: ctx.trialData.pasteEvents[1].pastedLength, t: ctx.trialData.pasteEvents[1].truncated },
+      { text: '', len: 2, t: true });
+    assert.strictEqual(ctx.sessionData.pasteCount, 2);
+    assert.strictEqual(ctx.sessionData.dropCount, 1);
+  });
+
+  it('null switches a cap off', () => {
+    const ctx = cappedCtx({ maxPasteDropChars: null, maxPasteDropCharsPerTrial: null });
+    const big = 'x'.repeat(50000);
+    ctx.handlers.paste(pasteOf(big));
+    assert.strictEqual(ctx.trialData.pasteEvents[0].text, big);
+    assert.ok(!('truncated' in ctx.trialData.pasteEvents[0]));
+  });
+
+  it('the defaults are 20,000 per event and 200,000 per trial', async () => {
+    const { DEFAULT_THRESHOLDS } = await import('../../src/shared/constants.js');
+    assert.strictEqual(DEFAULT_THRESHOLDS.maxPasteDropChars, 20000);
+    assert.strictEqual(DEFAULT_THRESHOLDS.maxPasteDropCharsPerTrial, 200000);
+  });
+});

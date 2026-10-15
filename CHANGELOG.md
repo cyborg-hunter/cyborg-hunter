@@ -29,6 +29,9 @@ Collected data, configuration and reports all change: read
   `--check` runs in the tests.
 - `thresholds.maxWindowPositions`; the session report's
   `windowPositionsCapped`.
+- `thresholds.maxPasteDropChars` (20,000) and `maxPasteDropCharsPerTrial`
+  (200,000): stored pasted and dropped text is capped, with the full length
+  and `truncated: true` kept.
 
 ### Changed
 - The window/screen log records a row at start and then only on change, with
