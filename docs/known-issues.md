@@ -99,6 +99,10 @@ The recorder's `root` option (manual mode) records a subtree instead of `documen
 
 **Severity:** Minor. Producer-controlled; affects only malformed session payloads.
 
+### A recording file can claim another participant's ID
+
+A recording inside a participant's own data file is credited to that participant only. A recording saved as a separate file (a page's `cyborgHunterReplay` POST field saved on its own, `CyborgHunter.replay()`, an `autoSave` upload) is attached by the participant ID inside it, because that is how pages without a framework deliver their recordings. A participant who knows another participant's ID and can put a file where you save recordings can therefore add one under that ID. From the same browser as the victim's own recordings it is joined to their replay; from another browser, it is left out when the victim's own data holds a recording, and otherwise no recording is shown for that ID, with a warning naming the files. Treat a warning about recordings from different browsers as a reason to look at the files, and keep the folder recordings are saved to writable only by your own save code.
+
 ## Guard / friction
 
 ### Sidebar opened before fullscreen entry is not detected

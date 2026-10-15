@@ -95,6 +95,9 @@ Collected data, configuration and reports all change: read
 - The same recording found in the rows and in a saved file counts once.
 - On the trace tier, a field the page moves out of a `data-ch-redact`
   container stays redacted, as on the dom tier.
+- In a page served as `application/xhtml+xml` (lower-case tag names), the
+  password floor now holds; element ids are read from the attribute, so a
+  form with a field named `id` no longer corrupts a click's anchor.
 
 ## [0.15.0] — 2026-10-11
 
