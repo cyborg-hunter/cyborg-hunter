@@ -220,7 +220,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
       // parse belongs to the participant pass, which reports its own failure.
       if (named) {
         warnings.push({ file: reader.path,
-          warnings: ['Replay-named file could not be parsed (truncated upload or a misnamed participant export?) — skipped from the participant pass; if a matching participant exists, the replay pass reports it too.'] });
+          warnings: [`Replay-named file could not be parsed (${read.error}; truncated upload or a misnamed participant export?) — skipped from the participant pass; if a matching participant exists, the replay pass reports it too.`] });
         continue;
       }
     } else if (artifactKind(read.json) !== null) {

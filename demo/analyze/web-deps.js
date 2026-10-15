@@ -13,6 +13,7 @@
 // engine over http, keep the browser's own PNG encoding.
 import { Gunzip } from 'fflate';
 import { encodePng } from './png-encode.js';
+import { MAX_DECOMPRESSED_BYTES, tooLargeMessage } from '../../src/shared/limits.js';
 
 // The browser's DecompressionStream does the inflating and every check:
 // CRC-32, ISIZE, bytes after a member, truncation, the same set node:zlib
@@ -27,25 +28,39 @@ import { encodePng } from './png-encode.js';
 // member goes through the browser's stream on its own. A corrupt member
 // still fails there; one member or no members found means the first error
 // stands.
-export async function webGunzip(bytes) {
+//
+// The output is capped at `limit` bytes (src/shared/limits.js), across all
+// members: a gzip upload is participant data, and a bomb must cost a
+// warning, not the worker's memory.
+export async function webGunzip(bytes, limit) {
+  var budget = { left: limit || MAX_DECOMPRESSED_BYTES, limit: limit || MAX_DECOMPRESSED_BYTES };
   try {
-    return await inflateMember(bytes);
+    return await inflateMember(bytes, budget);
   } catch (e) {
-    var starts = memberStarts(bytes);
+    if (e && e.tooLarge) throw e;
+    var starts = memberStarts(bytes, budget.limit);
     if (starts.length < 2) throw e;
+    budget.left = budget.limit;
     var parts = [];
-    for (var i = 0; i < starts.length; i++) parts.push(await inflateMember(bytes.subarray(starts[i], i + 1 < starts.length ? starts[i + 1] : bytes.length)));
+    for (var i = 0; i < starts.length; i++) parts.push(await inflateMember(bytes.subarray(starts[i], i + 1 < starts.length ? starts[i + 1] : bytes.length), budget));
     return concat(parts);
   }
 }
 
-async function inflateMember(bytes) {
+async function inflateMember(bytes, budget) {
   var source = new ReadableStream({ start: function (c) { c.enqueue(bytes); c.close(); } });
   var reader = source.pipeThrough(new DecompressionStream('gzip')).getReader();
   var parts = [];
   for (;;) {
     var step = await reader.read();
     if (step.done) break;
+    budget.left -= step.value.length;
+    if (budget.left < 0) {
+      try { await reader.cancel(); } catch (_) { /* already failing */ }
+      var err = new Error(tooLargeMessage(budget.limit));
+      err.tooLarge = true;
+      throw err;
+    }
     parts.push(step.value);
   }
   return concat(parts);
@@ -56,11 +71,17 @@ async function inflateMember(bytes) {
 // thousands of small members overflows the stack when pushed whole; small
 // chunks keep the depth bounded.
 var WALK_CHUNK = 1024;
-function memberStarts(bytes) {
+function memberStarts(bytes, limit) {
   var starts = [0];
+  var seen = 0;
   try {
     var walker = new Gunzip();
-    walker.ondata = function () {};
+    // Its output is discarded, but inflating a bomb still costs the time:
+    // stop at the same limit.
+    walker.ondata = function (chunk) {
+      seen += chunk.length;
+      if (limit && seen > limit) throw new Error('too large');
+    };
     walker.onmember = function (offset) { starts.push(offset); };
     for (var at = 0; at < bytes.length; at += WALK_CHUNK) {
       walker.push(bytes.subarray(at, at + WALK_CHUNK), at + WALK_CHUNK >= bytes.length);

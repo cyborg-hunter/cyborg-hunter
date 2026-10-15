@@ -7,14 +7,28 @@ import { join, basename } from 'path';
 import { gunzipSync } from 'zlib';
 import { createHash } from 'crypto';
 import { getByPath } from '../shared/paths.js';
+import { MAX_DECOMPRESSED_BYTES, tooLargeMessage } from '../shared/limits.js';
 import { extractIntegrityData, ruleChronologicalCompare } from './extract-core.js';
 import { ingestFiles, migrateArtifact, expandPatternToMatchers } from './ingest-core.js';
 
 // The two platform steps the core takes injected. Node's own gunzip keeps
 // its error messages, which reach the analyst inside "could not be read"
 // warnings.
+// gunzip stops at `limit` decompressed bytes (src/shared/limits.js): a gzip
+// upload is participant data, and a bomb must cost a warning, not the run.
+export function nodeGunzip(limit) {
+  return async (bytes) => {
+    try {
+      return new Uint8Array(gunzipSync(bytes, { maxOutputLength: limit }));
+    } catch (e) {
+      if (e && (e.code === 'ERR_BUFFER_TOO_LARGE' || e instanceof RangeError)) throw new Error(tooLargeMessage(limit));
+      throw e;
+    }
+  };
+}
+
 export const nodeDeps = {
-  gunzip: async (bytes) => new Uint8Array(gunzipSync(bytes)),
+  gunzip: nodeGunzip(MAX_DECOMPRESSED_BYTES),
   sha256: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
 };
 
