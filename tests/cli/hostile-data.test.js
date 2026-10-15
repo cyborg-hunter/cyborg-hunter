@@ -3,7 +3,7 @@
 // must stay with that participant (a warning, a missing plot or replay).
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ingest } from '../../src/cli/ingest.js';
@@ -132,5 +132,33 @@ describe('the plots of one participant', () => {
     const texts = log.filter((e) => e[0] === 'fillText').map((e) => String(e[1]));
     assert.ok(texts.some((t) => /first 400 of 900 trials/.test(t)), 'the trajectory grid says it is capped');
     assert.ok(texts.some((t) => /first 800 of 900 trials/.test(t)), 'the typing profile says it is capped');
+  });
+});
+
+describe('a recording whose page nests elements very deeply', () => {
+  it('costs that participant their replay, with the reason; the report is written for everyone', async () => {
+    const fixture = (name) => readFileSync(join('tests/fixtures/demo', name), 'utf8');
+    const rec = JSON.parse(fixture('DEMO-FIXT-replay-1785352263344.json'));
+    const keyframe = rec.segments.find((s) => s.initial_dom);
+    // Small on the wire, but deeper than JSON.stringify can follow.
+    let node = { id: 700000, kind: 'element', tag: 'div', attrs: {}, children: [] };
+    for (let i = 1; i <= 30000; i++) node = { id: 700000 + i, kind: 'element', tag: 'div', attrs: {}, children: [node] };
+    keyframe.initial_dom.children.push(node);
+    const other = JSON.parse(fixture('DEMO-FIXT-replay-1785352263344.json'));
+    other.participant_id = 'OTHER';
+    const { participants, config } = await ingestFilesOf({
+      'DEMO-FIXT.json': fixture('DEMO-FIXT.json'),
+      'DEMO-FIXT-replay-1785352263344.json': JSON.stringify(rec),
+      'OTHER.json': fixture('DEMO-FIXT.json').replaceAll('DEMO-FIXT', 'OTHER'),
+      'OTHER-replay-1785352263344.json': JSON.stringify(other),
+    });
+    const { built, files } = await report(participants, config, { createCanvas: null });
+    assert.ok(files.has('index.html'));
+    assert.ok(files.has('replay/OTHER.replay.js'), 'the other participant keeps their replay');
+    assert.ok(!files.has('replay/DEMO-FIXT.replay.js'));
+    const deep = participants.find((p) => p.participantId === 'DEMO-FIXT');
+    assert.strictEqual(deep.replay.error, 'unloadable');
+    assert.match(deep.replay.reason, /could not be written/);
+    assert.ok(built.replayAssets.skipped.some((s) => s.participantId === 'DEMO-FIXT'));
   });
 });

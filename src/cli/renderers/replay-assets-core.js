@@ -115,10 +115,21 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
     // Null-prototype store: participant ids are untrusted, and a pid like
     // "__proto__" on a plain object would mutate the store's prototype
     // instead of creating an entry (prototype pollution).
-    const src =
-      'window.__chReplay = window.__chReplay || Object.create(null);\n' +
-      'window.__chReplay[' + JSON.stringify(String(p.participantId)) + '] = ' +
-      inlineSafeJson(model) + ';\n';
+    // Serializing can fail too: a page whose elements nest thousands deep is
+    // small on the wire but deeper than JSON.stringify can follow. That
+    // participant is skipped like a rejected recording, not the cohort.
+    let src;
+    try {
+      src =
+        'window.__chReplay = window.__chReplay || Object.create(null);\n' +
+        'window.__chReplay[' + JSON.stringify(String(p.participantId)) + '] = ' +
+        inlineSafeJson(model) + ';\n';
+    } catch (e) {
+      const reason = `the replay could not be written: ${e && e.message ? e.message : String(e)}`;
+      skipped.push({ participantId: p.participantId, file: p.replay.file || null, reason });
+      p.replay = { error: 'unloadable', reason, file: p.replay.file || null };
+      continue;
+    }
     let base = sanitize(p.participantId);
     let name = base + '.replay.js';
     for (let n = 2; usedNames.has(name.toLowerCase()); n++) {
