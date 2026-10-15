@@ -133,7 +133,7 @@ describe('ch.js with the bundled recorder on real jsPsych', () => {
     assert.equal(snapshot.length, 3, 'the snapshot holds the three rows before the save trial');
     const rec = rebuild(snapshot);
     assert.deepStrictEqual(rec.extensions['cyborg-hunter'].reassembly,
-      { complete: false, missing_seq: [], missing_end: true });
+      { complete: false, missing_seq_ranges: [], missing_end: true });
     // The three trials before the save trial, each as its own segment.
     const full = rebuild(jsPsych.data.get().values());
     assert.deepStrictEqual(rec.segments, full.segments.slice(0, rec.segments.length));

@@ -137,7 +137,7 @@ describe('pieces: incomplete deliveries', () => {
     assert.equal(rec.segments.length, 4);
     assert.equal(rec.end_reason, 'aborted');
     assert.deepEqual(rec.extensions['cyborg-hunter'].reassembly,
-      { complete: false, missing_seq: [], missing_end: true });
+      { complete: false, missing_seq_ranges: [], missing_end: true });
   });
 
   it('a gap in the sequence leaves out those segments and names the gap', () => {
@@ -146,7 +146,7 @@ describe('pieces: incomplete deliveries', () => {
     assert.deepEqual(rec.segments.map(s => s.label), ['q1', 'q3']);
     assert.deepEqual(rec.segments.map(s => s.index), [0, 1]);
     assert.deepEqual(rec.extensions['cyborg-hunter'].reassembly,
-      { complete: false, missing_seq: [1], missing_end: false });
+      { complete: false, missing_seq_ranges: [[1, 1]], missing_end: false });
   });
 
   it('a complete delivery carries no reassembly note', () => {
@@ -254,5 +254,20 @@ describe('pieces: skipEmpty', () => {
     const p2 = taker.take({ final: true, skipEmpty: true });
     assert.equal(p2.seq, 2);
     assert.equal(reassemblePieces([p0, p1, p2]).extensions['cyborg-hunter'].reassembly, undefined);
+  });
+});
+
+describe('pieces: hostile input', () => {
+  // Pieces come from participant data. An edited seq must not make a reader
+  // walk to it or allocate per missing value.
+  it('a seq far past any real session is not a piece; a large gap is one range', () => {
+    const { pieces } = session();
+    const far = Object.assign({}, pieces[1], { seq: 2 ** 31 });
+    assert.equal(isPiece(far), false);
+    const late = Object.assign({}, pieces[1], { seq: 90000 });
+    const t0 = Date.now();
+    const rec = reassemblePieces([pieces[0], late, pieces[2]]);
+    assert.ok(Date.now() - t0 < 100, 'no walk over the gap');
+    assert.deepEqual(rec.extensions['cyborg-hunter'].reassembly.missing_seq_ranges, [[1, 1], [3, 89999]]);
   });
 });

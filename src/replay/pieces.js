@@ -36,6 +36,10 @@ import {
 
 export var PIECE_KIND = 'ch-replay-piece';
 export var PIECE_VERSION = 1;
+// Pieces come from participant data, which a participant can edit. A
+// session has at most a few thousand trials; a larger seq is not a piece, so
+// no reader ever walks toward an attacker's number.
+export var MAX_SEQ = 100000;
 
 function randomId() {
   var c = typeof globalThis !== 'undefined' ? globalThis.crypto : null;
@@ -150,7 +154,7 @@ function endOf(trial) {
 export function isPiece(p) {
   return !!p && typeof p === 'object' && p.kind === PIECE_KIND && p.v === PIECE_VERSION &&
     typeof p.recording_id === 'string' && p.recording_id !== '' &&
-    typeof p.seq === 'number' && p.seq >= 0 && Math.floor(p.seq) === p.seq &&
+    typeof p.seq === 'number' && p.seq >= 0 && p.seq <= MAX_SEQ && Math.floor(p.seq) === p.seq &&
     Array.isArray(p.segments) && !!p.streams && typeof p.streams === 'object';
 }
 
@@ -174,7 +178,8 @@ export function groupPieces(list) {
  * valid recording: missing segments are left out (positions close up), a
  * missing final piece leaves end_reason 'aborted' with ended_at_perf at the
  * last observed moment, and the CH vendor block names what is missing as
- * `reassembly: { complete: false, missing_seq, missing_end }`. Throws only
+ * `reassembly: { complete: false, missing_seq_ranges, missing_end }`, the
+ * gaps as [from, to] ranges of seq (never one entry per seq). Throws only
  * when the first piece, the one with the header, is missing.
  *
  * Stream order: each piece's viewport entries are sorted, and pieces hold
@@ -194,12 +199,15 @@ export function reassemblePieces(pieces) {
     throw new Error('the first piece of the recording (the one with its header) is missing');
   }
   var seqs = Array.from(bySeq.keys()).sort(function (a, b) { return a - b; });
-  var maxSeq = seqs[seqs.length - 1];
   var finalSeq = null;
   seqs.forEach(function (s) { if (bySeq.get(s).end) finalSeq = s; });
-  var lastSeq = finalSeq != null ? Math.max(finalSeq, maxSeq) : maxSeq;
+  // Gaps between the seqs present, as ranges: one step per piece present.
   var missing = [];
-  for (var s = 0; s <= lastSeq; s++) if (!bySeq.has(s)) missing.push(s);
+  var expect = 0;
+  seqs.forEach(function (sq) {
+    if (sq > expect) missing.push([expect, sq - 1]);
+    expect = sq + 1;
+  });
 
   var segments = [];
   var vc = [], gv = [], ra = [], cf = [];
@@ -233,7 +241,7 @@ export function reassemblePieces(pieces) {
   }
 
   var reassembly = (missing.length || finalSeq == null)
-    ? { complete: false, missing_seq: missing, missing_end: finalSeq == null }
+    ? { complete: false, missing_seq_ranges: missing, missing_end: finalSeq == null }
     : null;
 
   return assembleRecording({

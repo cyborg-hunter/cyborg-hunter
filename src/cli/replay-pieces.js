@@ -79,10 +79,12 @@ export function recordingsFromPieces(sources) {
     try {
       const recording = reassemblePieces(pieces);
       const note = recording.extensions['cyborg-hunter'].reassembly;
-      if (note && note.missing_seq.length) {
+      const gaps = note ? note.missing_seq_ranges : [];
+      if (gaps.length) {
+        const count = gaps.reduce((n, [from, to]) => n + (to - from + 1), 0);
         warnings.push({ file: paths.join(', '), warnings: [
           `Replay for ${recording.participant_id} rebuilt from the pieces in the saved data, but ` +
-          `${note.missing_seq.length} of them are missing (rows not saved, or a file left out): ` +
+          `${count} of them are missing (rows not saved, or a file left out): ` +
           'the replay skips those parts.'] });
       }
       recordings.push({ recording, recordingId: id, paths });
