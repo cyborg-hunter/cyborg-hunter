@@ -596,6 +596,36 @@ describe('counters, chips and defects', () => {
     assert.equal(v.dbg.getCounters().skipped, 1);
   });
 
+  // A file input's value can only be set to '' (the DOM throws otherwise, in
+  // happy-dom as in every browser), and the format never records one (§13).
+  // A value aimed at one, from the stream or from the seed, used to throw out
+  // of the walk and end the replay there.
+  it('a value aimed at a file input is counted, and the walk goes on', () => {
+    const v = boot(baseRecording({
+      segments: [segment({
+        initial_dom: bodyKeyframe([
+          { id: 2, kind: 'element', tag: 'input', attrs: { type: 'file' }, children: [] },
+          { id: 3, kind: 'element', tag: 'input', attrs: {}, children: [] },
+          { id: 4, kind: 'element', tag: 'p', attrs: {}, children: [{ id: 5, kind: 'text', text: 'before' }] },
+        ]),
+        initial_state: { scroll: { x: 0, y: 0 }, element_scroll: [], media: [], form: [
+          { node: 2, value: 'C:\\fakepath\\seed.txt' },
+          { node: 3, value: 'seeded' },
+        ] },
+        events: [
+          { type: 'input.value', t: 10, node: 2, value: 'C:\\fakepath\\x.txt' },
+          { type: 'input.value', t: 11, node: 2, redacted: true, value_len: 5 },
+          { type: 'dom.text', t: 20, node: 5, text: 'after' },
+        ],
+      })],
+    }));
+    assert.equal(v.dbg.getNode(3).value, 'seeded', 'the seed went on past the file input');
+    v.dbg.seek(30);
+    assert.equal(v.dbg.getNode(5).nodeValue, 'after', 'the walk went on past both events');
+    assert.equal(v.dbg.getNode(2).value, '');
+    assert.equal(v.dbg.getCounters().patchFailures, 3);
+  });
+
   it('renders a trace-tier recording without an iframe and still folds the camera', () => {
     const v = boot(baseRecording({
       extensions: { 'cyborg-hunter': { tier: 'trace' } },

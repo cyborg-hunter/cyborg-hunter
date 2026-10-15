@@ -1549,6 +1549,13 @@
       return span && num(id) != null ? span.idMap.get(id) : undefined;
     }
 
+    function isFileInput(el) {
+      if (String(el.tagName || '').toLowerCase() !== 'input') return false;
+      if (String(el.type || '').toLowerCase() === 'file') return true;
+      var attr = typeof el.getAttribute === 'function' ? el.getAttribute('type') : null;
+      return typeof attr === 'string' && attr.toLowerCase() === 'file';
+    }
+
     // Form state lives in element PROPERTIES, which no DOM snapshot carries, so
     // without this every replayed form would look untouched. The seed and the
     // recorded stream reach it through THIS function — design §6's whole point.
@@ -1567,6 +1574,13 @@
         }
         return;
       }
+      // A file input's value can only be set to '' (anything else throws, in
+      // every engine), and the format never carries one (spec §13; capture
+      // drops these events). A value aimed at one threw out of the walk, or
+      // out of the seed, and ended the replay there; it is a recorded change
+      // that cannot be reapplied. Property or attribute, as capture-trace.js's
+      // `isFileInput` reads it.
+      if (isFileInput(target)) { if (span) span.patchFailures++; return; }
       if (e.redacted) {
         // The identity is withheld by design (spec §8); the LENGTH is not, and
         // showing it as bullets is the honest reconstruction.
