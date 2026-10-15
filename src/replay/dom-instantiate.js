@@ -82,9 +82,14 @@ var MAX_DEPTH = 512;
 // renders and never runs, so ids and sibling positions stay coherent instead
 // of the tree developing a hole a later patch would miss. Their children are
 // instantiated too — the source text keeps its id, so a later `dom.text` still
-// lands. WHERE those children sit is realm-dependent and deliberately not
-// relied on: happy-dom routes `appendChild` on a template into `content`,
-// browsers keep it in `childNodes`, and neither is rendered or executed.
+// lands — and they go into the template's `content` (`childParent`), as does
+// anything a `dom.add` puts under one. That placement is what makes the
+// SUBTREE inert, not only the element: a browser keeps children appended to
+// a template in its `childNodes`, in the live document, where an <img> under a
+// recorded <noscript> loaded in the CLI report (no page policy there). The
+// `content` fragment belongs to the template's own inert document, so nothing
+// in it loads, renders or runs. (happy-dom routes appends into `content`
+// unasked, which is why the node suite could not see the difference.)
 //
 // The same for elements that make the browser fetch or navigate by
 // themselves, with no script: `<link>` (prefetch, preload, preconnect,
@@ -152,6 +157,7 @@ var RESERVED_TAG_PREFIX_RE = /^(?:xml|xmlns):|^xmlns$/;
 var ELEMENT_NODE = 1;
 var TEXT_NODE = 3;
 var COMMENT_NODE = 8;
+var DOCUMENT_FRAGMENT_NODE = 11;
 
 // Foreign content (spec-r3 gap, recorded). Spec §4's DomNode carries no
 // namespace, so a player has to infer one, and `createElement` alone cannot
@@ -378,7 +384,7 @@ function skipSetFor(tag) {
   return null;
 }
 
-function instantiateNode(domNode, ctx, parentNs, depth) {
+function instantiateNode(domNode, ctx, parentNs, depth, doc) {
   // Tolerant posture (design §4): an unusable node is skipped and counted, not
   // thrown on. `instantiateTree` has no try/catch by design — one guard at the
   // boundary, one predicate, the same answer in every realm — so this is the
@@ -390,7 +396,6 @@ function instantiateNode(domNode, ctx, parentNs, depth) {
     ctx.skipped++;
     return null;
   }
-  var doc = ctx.doc;
   var node;
   if (domNode.kind === 'text') {
     node = doc.createTextNode(domNode.text == null ? '' : String(domNode.text));
@@ -402,7 +407,7 @@ function instantiateNode(domNode, ctx, parentNs, depth) {
       ctx.skipped++;
       return null;
     }
-    node = instantiateElement(domNode, ctx, tag, parentNs, depth);
+    node = instantiateElement(domNode, ctx, tag, parentNs, depth, doc);
   }
   if (!bind(ctx, domNode.id, node)) {
     // The id belongs to the reconstruction root and `bind` refused to move it
@@ -418,7 +423,7 @@ function instantiateNode(domNode, ctx, parentNs, depth) {
   return node;
 }
 
-function instantiateElement(domNode, ctx, tag, parentNs, depth) {
+function instantiateElement(domNode, ctx, tag, parentNs, depth, doc) {
   var inert = INERT_TAGS[tag] === true;
   var isFrame = tag === 'iframe';
   var ns = namespaceFor(tag, parentNs);
@@ -427,11 +432,16 @@ function instantiateElement(domNode, ctx, tag, parentNs, depth) {
   // point of the sandbox is that the reconstruction is made of the frame's own
   // nodes. A `<template>` standing in for a script is an HTML element wherever
   // the script sat, so the substitution lands in the XHTML namespace.
+  //
+  // Under a template, `doc` is the template's own inert document instead (its
+  // `content` belongs to it): a node is created where it will live. Created in
+  // the frame and moved there afterwards, an <img> has already started its
+  // load when `src` is set (WebKit fetched one from under a <noscript>).
   var created = inert ? 'template' : tag;
   var createdNs = inert ? XHTML_NS : ns;
   var el = createdNs === XHTML_NS
-    ? ctx.doc.createElement(created)
-    : ctx.doc.createElementNS(createdNs, created);
+    ? doc.createElement(created)
+    : doc.createElementNS(createdNs, created);
 
   var skip = skipSetFor(tag);
   applyAttrs(el, domNode.attrs || {}, skip, ctx);
@@ -484,8 +494,18 @@ function instantiateElement(domNode, ctx, tag, parentNs, depth) {
     ctx.canvases.set(domNode.id, { w: size.w, h: size.h });
   }
 
-  instantiateChildren(el, childrenOf(domNode, ctx), ctx, childNamespaceOf(tag, createdNs), depth + 1);
+  var holder = childParent(el);
+  if (holder !== el) ctx.hosts.set(holder, el);
+  instantiateChildren(holder, childrenOf(domNode, ctx), ctx, childNamespaceOf(tag, createdNs), depth + 1);
   return el;
+}
+
+// Where an element's children go: a template's into its `content`, the only
+// place they are inert (see INERT_TAGS). Only a template has a fragment for a
+// `content` (a <meta>'s is a string), and it covers recorded <template>s too.
+function childParent(el) {
+  var content = el.content;
+  return content && content.nodeType === DOCUMENT_FRAGMENT_NODE ? content : el;
 }
 
 // A DomNode's children as a list the walk can trust (see MAX_NODES).
@@ -502,7 +522,7 @@ function instantiateChildren(parent, kids, ctx, ns, depth) {
       ctx.skipped += kids.length - i;
       return;
     }
-    var child = instantiateNode(kids[i], ctx, ns, depth);
+    var child = instantiateNode(kids[i], ctx, ns, depth, parent.ownerDocument || ctx.doc);
     if (child) parent.appendChild(child);
   }
 }
@@ -523,6 +543,9 @@ function newContext(doc) {
     idMap: new Map(), idOf: new Map(), canvases: new Map(),
     skipped: 0, patchFailures: 0,
     budget: MAX_NODES,   // nodes left for the instantiation under way; reset per dom.add
+    // Each template `content` fragment → its template, so `depthOf` can climb
+    // out of a fragment, which has no parent of its own.
+    hosts: new WeakMap(),
   };
 }
 
@@ -570,11 +593,11 @@ function bind(ctx, id, node) {
 
 // Drop a node and every descendant from both maps.
 //
-// `template.content` is walked as well as `childNodes` for the realm reason
-// `INERT_TAGS` records: happy-dom routes `appendChild` on a template into
-// `content`, browsers keep it in `childNodes`. Walking both leaves the same map
-// in every realm, which is the same determinism argument the name filters rest
-// on. Deleting an id twice is a no-op, so the overlap costs nothing.
+// `template.content` is walked as well as `childNodes`: a template's children
+// are put there (`childParent`, and see `INERT_TAGS`). Walking both also
+// covers a realm or a page that left one in `childNodes`, so the map comes out
+// the same either way. Deleting an id twice is a no-op, so the overlap costs
+// nothing.
 function purgeSubtree(ctx, node) {
   var id = ctx.idOf.get(node);
   if (id !== undefined) {
@@ -627,7 +650,7 @@ function purgeSubtree(ctx, node) {
  */
 function instantiateTree(domNode, doc) {
   var ctx = newContext(doc);
-  return result(ctx, instantiateNode(domNode, ctx, null, 0));
+  return result(ctx, instantiateNode(domNode, ctx, null, 0, doc));
 }
 
 /**
@@ -676,7 +699,7 @@ function mountTree(domNode, body, doc) {
   var tag = domNode.kind === 'element' || domNode.kind == null
     ? String(domNode.tag == null ? '' : domNode.tag).toLowerCase() : null;
   if (tag !== 'body') {
-    var root = instantiateNode(domNode, ctx, null, 0);
+    var root = instantiateNode(domNode, ctx, null, 0, doc);
     if (root) body.appendChild(root);
     return result(ctx, root);
   }
@@ -716,10 +739,13 @@ function resolve(mount, id) {
 
 // A live node's level under the reconstruction root (see MAX_DEPTH), counted
 // with a loop: the tree it measures is the one a recursive walk could not be
-// trusted with.
+// trusted with. A template's `content` is crossed to the template itself and
+// is not a level, as in the walk that built it.
 function depthOf(node, mount) {
   var d = 0;
-  for (var n = node; n && n !== mount.root; n = n.parentNode) d++;
+  for (var n = node; n && n !== mount.root; n = n.parentNode || mount.hosts.get(n)) {
+    if (n.nodeType !== DOCUMENT_FRAGMENT_NODE) d++;
+  }
   return d;
 }
 
@@ -740,7 +766,11 @@ function applyAdd(patch, mount) {
   // moves.
   var childNs = childNamespaceOf(tagNameOf(parent), parent.namespaceURI);
   mount.budget = MAX_NODES;   // each dom.add subtree is its own instantiation
-  var node = instantiateNode(patch.node, mount, childNs, depthOf(parent, mount) + 1);
+  // Under a template, into its inert `content` (see INERT_TAGS), and created
+  // in that content's document.
+  var into = childParent(parent);
+  var node = instantiateNode(patch.node, mount, childNs, depthOf(parent, mount) + 1,
+    into.ownerDocument || mount.doc);
   if (!node) return;              // already counted into `skipped`
 
   var ref = null;
@@ -750,12 +780,12 @@ function applyAdd(patch, mount) {
     // parent, cannot be honoured: the node is appended instead. Counted,
     // because the recorded POSITION was lost even though the node survived —
     // the reconstruction is knowingly approximate at that point.
-    if (anchor !== undefined && anchor.parentNode === parent) ref = anchor;
+    if (anchor !== undefined && anchor.parentNode === into) ref = anchor;
     else mount.patchFailures++;
   }
 
   try {
-    parent.insertBefore(node, ref);
+    into.insertBefore(node, ref);
   } catch (err) {
     // A hierarchy the DOM refuses. The subtree is unbound again rather than
     // left in the map, where a later patch would resolve it against a node

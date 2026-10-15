@@ -477,10 +477,9 @@ describe('spec §12 player filters', () => {
     same(root.childNodes[0], idMap.get(2), 'the script keeps its position');
     same(root.childNodes[1], idMap.get(4), 'the noscript keeps its position');
     assert.equal(idMap.size, 4);
-    // The source survives as inert TEXT, addressable by its own id. WHERE it
-    // sits inside the template is realm-dependent and deliberately unasserted:
-    // happy-dom routes `appendChild` into `template.content`, a real browser
-    // keeps it in `childNodes`, and a template renders neither.
+    // The source survives as inert TEXT, addressable by its own id, in the
+    // template's `content` (pinned below with a browser-like template, since
+    // happy-dom puts it there whatever the walk does).
     assert.equal(idMap.get(3).nodeType, 3);
     assert.equal(idMap.get(3).data, 'alert(1)');
   });
@@ -503,6 +502,55 @@ describe('spec §12 player filters', () => {
     for (const id of [2, 3, 4]) assert.equal(idMap.get(id).tagName.toLowerCase(), 'template', 'node ' + id);
     assert.equal(root.querySelectorAll('link, meta, base').length, 0);
     assert.equal(root.childNodes.length, 3, 'sibling positions kept');
+  });
+
+  // A template is inert only in its `content`. A browser keeps children
+  // APPENDED to a template in its `childNodes`, in the live document, where an
+  // <img> under a recorded <noscript> loaded (seen in the CLI report, which has
+  // no page policy). happy-dom routes appends into `content` by itself, so
+  // these tests give `createElement('template')` the browser's behaviour: a
+  // plain element whose `content` is a separate fragment.
+  function browserLikeTemplates(doc) {
+    const create = doc.createElement.bind(doc);
+    doc.createElement = (tag) => {
+      if (tag !== 'template') return create(tag);
+      const el = create('div');
+      Object.defineProperty(el, 'content', { value: doc.createDocumentFragment() });
+      return el;
+    };
+    return doc;
+  }
+
+  it('the children of an inert element go into the template content, not the live tree', () => {
+    const doc = browserLikeTemplates(freshDoc());
+    const { root, idMap } = instantiateTree({
+      id: 1, kind: 'element', tag: 'div', attrs: {}, children: [
+        { id: 2, kind: 'element', tag: 'noscript', attrs: {}, children: [
+          { id: 3, kind: 'element', tag: 'img', attrs: { src: 'https://img.example/x.png' }, children: [] }] },
+      ],
+    }, doc);
+    assert.equal(root.querySelectorAll('img').length, 0, 'no <img> in the live tree');
+    same(idMap.get(3).parentNode, idMap.get(2).content, 'the <img> sits in the content');
+  });
+
+  it('a dom.add under an inert element lands in its content too', () => {
+    const doc = browserLikeTemplates(freshDoc());
+    const mount = mountTree({ id: 1, kind: 'element', tag: 'body', attrs: {}, children: [
+      { id: 2, kind: 'element', tag: 'noscript', attrs: {}, children: [] }] }, doc.body, doc);
+    applyPatches([{ type: 'dom.add', t: 1, parent: 2, before: null,
+      node: { id: 3, kind: 'element', tag: 'img', attrs: { src: 'https://img.example/x.png' }, children: [] } }], mount);
+    assert.equal(doc.body.querySelectorAll('img').length, 0, 'no <img> in the live tree');
+    same(mount.idMap.get(3).parentNode, mount.idMap.get(2).content, 'the <img> sits in the content');
+    assert.equal(mount.patchFailures, 0);
+    // A later add measures its depth through the template, not from the
+    // content's own top, so content cannot be stacked past the depth limit.
+    let deep = { id: 100, kind: 'element', tag: 'i', attrs: {}, children: [] };
+    for (let i = 101; i < 700; i++) deep = { id: i, kind: 'element', tag: 'i', attrs: {}, children: [deep] };
+    applyPatches([{ type: 'dom.add', t: 2, parent: 3, before: null, node: deep }], mount);
+    // body 0, noscript 1, img 2, so the add's root (id 699) is level 3 and
+    // level 512 is id 699 - 509.
+    assert.equal(mount.idMap.has(699 - 509), true);
+    assert.equal(mount.idMap.has(699 - 510), false);
   });
 
   it('an iframe is instantiated without src/srcdoc and stamped as a placeholder', () => {
