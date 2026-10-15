@@ -42,11 +42,25 @@
 // and `snapshot.js` (`var`, `function`) for the same reason.
 
 // Spec §4's exclusion placeholder is `{id, kind, tag}` with the `attrs` and
-// `children` keys ABSENT, so `attrs || {}` and `children || []` below ARE the
+// `children` keys ABSENT, so `attrs || {}` and `childrenOf` below ARE the
 // placeholder handling: a bare, empty element of that tag, holding its id and
 // its sibling position. It is written as a fallback rather than a branch
 // because that is exactly what it is, and because the fork crashed on the
 // shape when it read the keys as required.
+//
+// `childrenOf` asks for an ARRAY, not for anything with a `length`: a file's
+// `children: {"length": 1e15}` passed `children || []` and drove a loop of
+// that many steps on the analyst's main thread. A present value that is not
+// an array is counted into `skipped` once (the file said something no DOM
+// can hold); an absent one is the placeholder and is not.
+//
+// One instantiation — a keyframe mount, or one `dom.add` subtree — creates at
+// most MAX_NODES nodes, so a real but enormous `children` list costs a
+// bounded walk too. Every DomNode the walk visits counts, malformed ones
+// included, and the remainder of a list is counted into `skipped` in one step
+// rather than walked. The largest keyframe in the committed fixtures has
+// under 1,000 nodes.
+var MAX_NODES = 100000;
 
 // Executable content never enters the reconstruction as itself. A foreign
 // producer may serialise `script`/`noscript` (CH's own capture skips them
@@ -357,6 +371,7 @@ function instantiateNode(domNode, ctx, parentNs) {
   // line that stops a hand-edited or foreign file from aborting a whole
   // keyframe mount. The §11 tolerant loader admits all of these shapes into
   // the model, so the viewer is where they arrive.
+  ctx.budget--;   // every visit counts against MAX_NODES; the loop checks it
   if (!domNode || typeof domNode !== 'object') {
     ctx.skipped++;
     return null;
@@ -455,13 +470,27 @@ function instantiateElement(domNode, ctx, tag, parentNs) {
     ctx.canvases.set(domNode.id, { w: size.w, h: size.h });
   }
 
-  var childNs = childNamespaceOf(tag, createdNs);
-  var kids = domNode.children || [];
-  for (var i = 0; i < kids.length; i++) {
-    var child = instantiateNode(kids[i], ctx, childNs);
-    if (child) el.appendChild(child);
-  }
+  instantiateChildren(el, childrenOf(domNode, ctx), ctx, childNamespaceOf(tag, createdNs));
   return el;
+}
+
+// A DomNode's children as a list the walk can trust (see MAX_NODES).
+function childrenOf(domNode, ctx) {
+  var kids = domNode.children;
+  if (Array.isArray(kids)) return kids;
+  if (kids != null) ctx.skipped++;
+  return [];
+}
+
+function instantiateChildren(parent, kids, ctx, ns) {
+  for (var i = 0; i < kids.length; i++) {
+    if (ctx.budget <= 0) {
+      ctx.skipped += kids.length - i;
+      return;
+    }
+    var child = instantiateNode(kids[i], ctx, ns);
+    if (child) parent.appendChild(child);
+  }
 }
 
 // The span-scoped state. One of these per keyframe span (design §4): the id map
@@ -479,6 +508,7 @@ function newContext(doc) {
     doc: doc, root: null,
     idMap: new Map(), idOf: new Map(), canvases: new Map(),
     skipped: 0, patchFailures: 0,
+    budget: MAX_NODES,   // nodes left for the instantiation under way; reset per dom.add
   };
 }
 
@@ -571,7 +601,8 @@ function purgeSubtree(ctx, node) {
  *   `counters.patchFailures` surface that already drives the "recorded
  *   change(s) could not be reapplied" chip: `skipped` is *the file said
  *   something no DOM here could hold* (a tag or attribute name outside the
- *   Name production, a null child), `patchFailures` is *a reference the span
+ *   Name production, a null child, a `children` that is not an array, nodes
+ *   past MAX_NODES), `patchFailures` is *a reference the span
  *   could not honour* (an id the map does not hold, a `before` that is not a
  *   child, a target of the wrong kind, a refused re-bind of the root).
  *
@@ -642,11 +673,7 @@ function mountTree(domNode, body, doc) {
   // keyframe whose descendant repeats the root's id cannot re-bind it away from
   // the frame's own body mid-mount — the mount-time half of `bind`'s exception.
   ctx.root = body;
-  var kids = domNode.children || [];
-  for (var j = 0; j < kids.length; j++) {
-    var child = instantiateNode(kids[j], ctx, null);
-    if (child) body.appendChild(child);
-  }
+  instantiateChildren(body, childrenOf(domNode, ctx), ctx, null);
   return result(ctx, body);
 }
 
@@ -689,6 +716,7 @@ function applyAdd(patch, mount) {
   // again. `dom-player.js` carries the same rule; re-sync both when either
   // moves.
   var childNs = childNamespaceOf(tagNameOf(parent), parent.namespaceURI);
+  mount.budget = MAX_NODES;   // each dom.add subtree is its own instantiation
   var node = instantiateNode(patch.node, mount, childNs);
   if (!node) return;              // already counted into `skipped`
 

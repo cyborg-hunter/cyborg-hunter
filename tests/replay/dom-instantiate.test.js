@@ -708,6 +708,38 @@ describe('tolerant instantiation — a malformed node must not abort a mount', (
     assert.equal(doc.body.childNodes.length, 0);
   });
 
+  // `children` that is not an array is not a list of children, whatever its
+  // `length` claims. `{length: N}` used to drive an N-step loop on the
+  // analyst's main thread, with N chosen by the file.
+  it('a non-array children value is one skip, not a loop over its length', { timeout: 10000 }, () => {
+    for (const bad of [{ length: 1e9 }, 'abc', 5]) {
+      const { root, skipped, idMap } = instantiateTree({
+        id: 1, kind: 'element', tag: 'div', attrs: {}, children: bad,
+      }, freshDoc());
+      assert.equal(skipped, 1, 'children ' + JSON.stringify(bad));
+      assert.equal(root.childNodes.length, 0);
+      assert.equal(idMap.size, 1);
+    }
+    const doc = freshDoc();
+    const mount = mountTree({ id: 1, kind: 'element', tag: 'body', attrs: {}, children: { length: 1e9 } }, doc.body, doc);
+    assert.equal(mount.skipped, 1, 'the body-root path reads children the same way');
+    // An exclusion placeholder has NO children key; that is not a skip.
+    assert.equal(instantiateTree({ id: 1, kind: 'element', tag: 'div' }, freshDoc()).skipped, 0);
+  });
+
+  // One instantiation (a keyframe mount, or one dom.add subtree) creates at
+  // most 100,000 nodes; the rest of the file's list is counted, not walked.
+  it('caps the nodes one instantiation creates and counts the rest', () => {
+    const N = 100005;
+    const children = [];
+    for (let i = 0; i < N; i++) children.push({ id: i + 2, kind: 'text', text: '' });
+    const { root, skipped, idMap } = instantiateTree({ id: 1, kind: 'element', tag: 'div', attrs: {}, children }, freshDoc());
+    // The root is the first of the 100,000.
+    assert.equal(root.childNodes.length, 99999);
+    assert.equal(idMap.size, 100000);
+    assert.equal(skipped, N - 99999);
+  });
+
   it('a well-formed tree reports zero skips, and the corpus has one bad name', () => {
     // NAME-TOKEN refusals are routed into the
     // same counter, so the corpus's single malformed attribute — the `<` in
