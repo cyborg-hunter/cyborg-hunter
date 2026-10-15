@@ -3,9 +3,9 @@
 // must stay with that participant (a warning, a missing plot or replay).
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { ingest } from '../../src/cli/ingest.js';
 import { buildReport } from '../../src/cli/report-core.js';
 import { mergeConfig } from '../../src/cli/config-core.js';
@@ -160,5 +160,40 @@ describe('a recording whose page nests elements very deeply', () => {
     assert.strictEqual(deep.replay.error, 'unloadable');
     assert.match(deep.replay.reason, /could not be written/);
     assert.ok(built.replayAssets.skipped.some((s) => s.participantId === 'DEMO-FIXT'));
+  });
+});
+
+describe('file names made from participant ids', () => {
+  const fixture = (name) => readFileSync(join('tests/fixtures/demo', name), 'utf8');
+  // A participant with the demo fixture's data and recording under `pid`.
+  const withReplay = (pid) => {
+    const rec = JSON.parse(fixture('DEMO-FIXT-replay-1785352263344.json'));
+    rec.participant_id = pid;
+    return {
+      ['p' + Math.abs(hash(pid)) + '.json']: fixture('DEMO-FIXT.json').replaceAll('"DEMO-FIXT"', JSON.stringify(pid)),
+      ['rec-' + Math.abs(hash(pid)) + '.json']: JSON.stringify(rec),
+    };
+  };
+  const hash = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7);
+
+  it('a very long id still gets its replay file, under a name the file system accepts', async () => {
+    const long1 = 'L'.repeat(300) + '1';
+    const long2 = 'L'.repeat(300) + '2';
+    const { participants, config } = await ingestFilesOf({ ...withReplay(long1), ...withReplay(long2) });
+    assert.strictEqual(participants.filter((p) => p.replay && p.replay.recording).length, 2);
+    const out = mkdtempSync(join(tmpdir(), 'ch-hostile-out-'));
+    try {
+      const sink = (path, data) => {
+        mkdirSync(dirname(join(out, path)), { recursive: true });
+        writeFileSync(join(out, path), data);
+      };
+      await buildReport(participants, config, { sink, replayClientSrc: '', fontFaceCss: '' });
+      const names = readdirSync(join(out, 'replay'));
+      assert.strictEqual(names.length, 2);
+      assert.ok(names.every((n) => n.length < 100), names.join(', '));
+      assert.deepStrictEqual(participants.map((p) => p.replay.assetPath).sort(), names.map((n) => 'replay/' + n).sort());
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
   });
 });

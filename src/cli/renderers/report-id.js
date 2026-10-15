@@ -14,7 +14,7 @@
 // FNV-1a over the UTF-16 units, 32 bits, written as 8 hex digits: enough to
 // keep honest ids apart, not a defence against an id crafted to collide
 // with a known other one.
-function fingerprint(s) {
+export function fingerprint(s) {
   var h = 0x811c9dc5;
   for (var i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);

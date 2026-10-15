@@ -11,6 +11,7 @@
 // sink in report.js, a zip sink on the browser /analyze/ page).
 
 import { sanitizeId as sanitize } from '../../shared/constants.js';
+import { fingerprint } from './report-id.js';
 import { buildViewerModel } from '../../replay/viewer-model.js';
 import { inlineSafeJson } from '../../shared/inline-safe.js';
 import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.js';
@@ -130,7 +131,12 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
       p.replay = { error: 'unloadable', reason, file: p.replay.file || null };
       continue;
     }
+    // A long id is cut, as report-id.js cuts the image names, and the raw
+    // id's fingerprint keeps it apart from others that share the cut: file
+    // systems refuse a name longer than 255 bytes, and the write stopped
+    // the run.
     let base = sanitize(p.participantId);
+    if (base.length > 40) base = base.substring(0, 40) + '-' + fingerprint(String(p.participantId));
     let name = base + '.replay.js';
     for (let n = 2; usedNames.has(name.toLowerCase()); n++) {
       name = base + '~' + n + '.replay.js';
