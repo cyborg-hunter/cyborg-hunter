@@ -84,12 +84,20 @@ export function attachForeignInputSignals(ctx) {
         entry.data = e.data || "";
       }
       trialData.foreignInputEvents.push(entry);
-      ctx.fireSignal("typingOutsideExperiment", e, {
+      // The onSignal payload follows the same content switch as the trial
+      // log: the typed characters reach the researcher's callback only when
+      // foreignInputContent is on. The raw DOM event `e` is still passed
+      // through unchanged; what a callback reads from it (e.g. e.data)
+      // remains the researcher's own responsibility.
+      var signalData = {
         targetTag: entry.targetTag,
         targetId: entry.targetId,
-        targetClass: entry.targetClass,
-        data: e.data || ""
-      });
+        targetClass: entry.targetClass
+      };
+      if (config.collectForPostHoc.foreignInputContent) {
+        signalData.data = e.data || "";
+      }
+      ctx.fireSignal("typingOutsideExperiment", e, signalData);
     }
   }, true);
 }

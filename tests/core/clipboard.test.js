@@ -56,3 +56,69 @@ describe('drop signal gating', () => {
     }
   });
 });
+
+// ── onSignal payload respects collectForPostHoc.pasteDropContent ──
+// The trial log already omitted pasted/dropped text when the switch was off,
+// but the onSignal payload carried it regardless. These pin the payload to the
+// same switch: `text` is present only when pasteDropContent is true.
+
+function captureCtx(pasteDropContent) {
+  const handlers = {};
+  const fired = [];
+  return {
+    handlers,
+    fired,
+    config: {
+      signals: { paste: true, copy: false, drop: true },
+      thresholds: { pasteMinChars: 0, dropMinChars: 0 },
+      collectForPostHoc: { pasteDropContent },
+    },
+    trialData: { pasteEvents: [], copyEvents: [], dropEvents: [] },
+    sessionData: { pasteCount: 0, copyCount: 0, dropCount: 0 },
+    addTrialListener: (target, event, handler) => { handlers[event] = handler; },
+    fireSignal: (type, e, data) => fired.push({ type, data }),
+    isKnownInput: () => null,
+  };
+}
+
+const pasteEvent = { target: {}, clipboardData: { getData: () => 'secret answer' } };
+const dropEvent = { target: {}, dataTransfer: { getData: () => 'dropped words' } };
+
+describe('onSignal payload content switch (paste/drop)', () => {
+  it('omits pasted text from the payload when pasteDropContent is off', () => {
+    const ctx = captureCtx(false);
+    attachClipboardSignals(ctx);
+    ctx.handlers.paste(pasteEvent);
+    const data = ctx.fired[0].data;
+    assert.strictEqual(ctx.fired[0].type, 'paste');
+    assert.ok(!('text' in data), 'text key must be absent');
+    assert.strictEqual(data.pastedLength, 13);
+    assert.ok(!('text' in ctx.trialData.pasteEvents[0]));
+  });
+
+  it('includes pasted text in the payload when pasteDropContent is on', () => {
+    const ctx = captureCtx(true);
+    attachClipboardSignals(ctx);
+    ctx.handlers.paste(pasteEvent);
+    assert.strictEqual(ctx.fired[0].data.text, 'secret answer');
+    assert.strictEqual(ctx.fired[0].data.pastedLength, 13);
+  });
+
+  it('omits dropped text from the payload when pasteDropContent is off', () => {
+    const ctx = captureCtx(false);
+    attachClipboardSignals(ctx);
+    ctx.handlers.drop(dropEvent);
+    const data = ctx.fired[0].data;
+    assert.strictEqual(ctx.fired[0].type, 'drop');
+    assert.ok(!('text' in data), 'text key must be absent');
+    assert.strictEqual(data.droppedLength, 13);
+  });
+
+  it('includes dropped text in the payload when pasteDropContent is on', () => {
+    const ctx = captureCtx(true);
+    attachClipboardSignals(ctx);
+    ctx.handlers.drop(dropEvent);
+    assert.strictEqual(ctx.fired[0].data.text, 'dropped words');
+    assert.strictEqual(ctx.fired[0].data.droppedLength, 13);
+  });
+});

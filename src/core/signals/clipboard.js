@@ -37,7 +37,16 @@ export function attachClipboardSignals(ctx) {
         }
         trialData.pasteEvents.push(entry);
         ctx.sessionData.pasteCount++;
-        ctx.fireSignal("paste", e, { pastedLength: pastedLength, isKnownInput: known, text: text });
+        // The onSignal payload follows the same content switch as the trial
+        // log: pasted text is handed to the researcher's callback only when
+        // pasteDropContent is on. The raw DOM event `e` is still passed
+        // through unchanged; what a callback reads from it (e.g. the
+        // clipboardData) remains the researcher's own responsibility.
+        var pasteSignal = { pastedLength: pastedLength, isKnownInput: known };
+        if (config.collectForPostHoc.pasteDropContent) {
+          pasteSignal.text = text;
+        }
+        ctx.fireSignal("paste", e, pasteSignal);
       }
     });
   }
@@ -92,7 +101,13 @@ export function attachClipboardSignals(ctx) {
         }
         trialData.dropEvents.push(entry);
         ctx.sessionData.dropCount++;
-        ctx.fireSignal("drop", e, { droppedLength: droppedLength, isKnownInput: known, text: text });
+        // Same content switch as paste (see above); the raw event `e` is
+        // passed through unchanged and stays the researcher's responsibility.
+        var dropSignal = { droppedLength: droppedLength, isKnownInput: known };
+        if (config.collectForPostHoc.pasteDropContent) {
+          dropSignal.text = text;
+        }
+        ctx.fireSignal("drop", e, dropSignal);
       }
     });
   }
