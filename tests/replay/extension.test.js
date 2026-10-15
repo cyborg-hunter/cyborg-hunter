@@ -20,6 +20,33 @@ beforeEach(() => {
 });
 
 describe('CyborgHunterReplay.attach', () => {
+  // ch.js records by default. A page that also loads the standalone recorder
+  // and calls attach() used to destroy ch.js's recording and keep a
+  // near-empty one in the saved data. The page's attach() is now refused,
+  // loudly, with a recorder that does nothing; ch.js's recording goes on.
+  it('a page attach() while the one-line setup records is refused; the one-line recording goes on', async () => {
+    const errs = [];
+    const origErr = console.error;
+    console.error = (msg) => errs.push(String(msg));
+    try {
+      const owner = CHReplay.attach({ participantId: 'P1', autoSave: { mode: 'none' }, _ownerSavesRecording: true });
+      owner.startSession();
+      const page = CHReplay.attach({ participantId: 'P1', autoSave: { mode: 'none' } });
+      assert.strictEqual(page.refused, true);
+      page.startSession(); page.startTrial({ trialId: 'x' }); page.endTrial(); page.stopSession(); page.destroy();
+      assert.strictEqual(page.getRecording(), null);
+      assert.strictEqual((await page.autoSaveNow()).recording, null);
+      assert.ok(errs.some((e) => /already recording/.test(e) && /CyborgHunter\.replay\(\)/.test(e)), errs.join('\n'));
+      owner.startTrial({ trialId: 't1' });
+      owner.endTrial();
+      owner.stopSession('finished');
+      assert.strictEqual(owner.getRecording().end_reason, 'finished', 'the one-line recorder was not destroyed');
+      owner.destroy();
+    } finally {
+      console.error = origErr;
+    }
+  });
+
   it('second attach destroys the first and warns', () => {
     const warnings = [];
     const origWarn = console.warn;

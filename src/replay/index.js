@@ -83,7 +83,37 @@ function redactSelectorError(selector) {
  * is true whenever this recording started on a page that had already withheld
  * something. Both the inheritance and the flag are pinned in capture-e2e.test.js.
  */
+// What a refused attach() returns: every method does nothing, and nothing
+// is recorded or saved. `refused: true` says so to code that checks.
+function refusedApi() {
+  var noop = function () { return api; };
+  var api = {
+    refused: true,
+    startSession: noop, startTrial: noop, endTrial: noop, stopSession: noop, resumeSession: noop,
+    getRecording: function () { return null; },
+    getRecordingCompressed: function () { return Promise.resolve(null); },
+    pieceTaker: function () { return { take: function () { return null; } }; },
+    autoSaveNow: function () {
+      return Promise.resolve({ recording: null, saveResult: { saved_to: 'no_session' },
+        meta: { schema_version: SCHEMA_VERSION, saved_to: 'no_session', note: 'attach() was refused; nothing recorded' } });
+    },
+    destroy: function () {}
+  };
+  return api;
+}
+
 export function attach(userConfig) {
+  // The one-line setup (ch.js, ch-labjs.js) records by default and saves its
+  // recording with the data (_ownerSavesRecording marks its recorder). A
+  // page's own attach() would destroy that recording and leave a near-empty
+  // one in the saved data, so it is refused, loudly, with a recorder that
+  // does nothing. The one-line setup's own re-attach still replaces.
+  if (_active && _active.config._ownerSavesRecording && !(userConfig && userConfig._ownerSavesRecording)) {
+    console.error('[cyborg-hunter-replay] attach() refused: ch.js is already recording this page and saves the ' +
+      'recording with your data. Get it with CyborgHunter.replay(), or set data-replay="off" on the ch.js tag to ' +
+      'record with your own attach() instead.');
+    return refusedApi();
+  }
   if (_active) {
     console.warn('[cyborg-hunter-replay] attach() called while a recorder is active — replacing the previous instance (its unsaved recording is discarded).');
     _active.destroy();
@@ -232,6 +262,16 @@ export { replayFilename, buildReplayMeta, serialize };
 // assignment; no esbuild globalName). replayFilename rides along so a
 // researcher saving the recording to their own server names it exactly as
 // the CLI expects (sanitized participant id), without an ES import.
+// Keeps the first definition, as the guard cores do: a page's own
+// CyborgHunterReplay, or a second copy of this file, is not overwritten.
+// Quiet when ch.js re-runs in a host that re-renders its header (Qualtrics;
+// src/oneliner/rerun.js sets the flag).
 if (typeof window !== 'undefined') {
-  window.CyborgHunterReplay = { attach: attach, replayFilename: replayFilename };
+  if (!window.CyborgHunterReplay) {
+    window.CyborgHunterReplay = { attach: attach, replayFilename: replayFilename };
+  } else if (!window.__cyborgHunterRerun) {
+    console.error('[cyborg-hunter-replay] Not redefining CyborgHunterReplay: it is already defined, so two scripts on ' +
+      'this page include the session recorder, or the page defines that name. Fix: keep one of them (ch.js and ' +
+      'ch-labjs.js already contain the recorder).');
+  }
 }

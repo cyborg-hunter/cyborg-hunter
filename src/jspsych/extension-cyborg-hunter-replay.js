@@ -217,6 +217,13 @@ class CyborgHunterReplayExtension {
 }
 
 export { CyborgHunterReplayExtension };
+// Keeps the first definition, like CyborgHunterReplay (src/replay/index.js).
 if (typeof window !== 'undefined') {
-  window.jsPsychCyborgHunterReplay = CyborgHunterReplayExtension;
+  if (!window.jsPsychCyborgHunterReplay) {
+    window.jsPsychCyborgHunterReplay = CyborgHunterReplayExtension;
+  } else if (!window.__cyborgHunterRerun) {
+    console.error('[cyborg-hunter-replay] Not redefining jsPsychCyborgHunterReplay: it is already defined, so two ' +
+      'scripts on this page include the session recorder, or the page defines that name. Fix: keep one of them ' +
+      '(ch.js and ch-labjs.js already contain the recorder).');
+  }
 }

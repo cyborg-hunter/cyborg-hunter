@@ -61,6 +61,11 @@ study with it: it lists what is collected by default.
   fullscreen (iPhone Safari, a frame without `allow="fullscreen"`); the other
   checks still run.
 - A decoy is no longer injected after its trial ended.
+- **A page's own `CyborgHunterReplay.attach()` next to `ch.js` or
+  `ch-labjs.js` is refused** while the one-line file records (replay is on
+  by default), with a console error; it used to discard ch.js's recording.
+  A page's own `window.CyborgHunterReplay` is no longer overwritten. To
+  record with your own code, set `data-replay="off"`.
 
 ### Configuration
 
