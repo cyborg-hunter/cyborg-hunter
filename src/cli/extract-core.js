@@ -307,13 +307,25 @@ export function extractIntegrityData(raw, config) {
         );
         trial[field] = [];
       }
+      // An entry that is not an event (null above all) made a reader's
+      // `e.t` or `e.name` throw, which stopped the whole report.
+      if (EVENT_LISTS.has(field) && Array.isArray(trial[field])) {
+        const kept = trial[field].filter((e) => isEventEntry(e, field));
+        if (kept.length !== trial[field].length) {
+          warnings.push(`Trial ${trial.trialId ?? '?'}: ${trial[field].length - kept.length} of the entries ` +
+            `of "${field}" are not event objects — skipped.`);
+          trial[field] = kept;
+        }
+      }
     }
     if (missing.length > 0) {
       warnings.push(`Trial ${trial.trialId || '?'}: missing fields: ${missing.join(', ')}`);
     }
   }
 
-  const { session, score } = findSessionData(raw, config, warnings);
+  const found = findSessionData(raw, config, warnings);
+  const session = withEventEntriesOnly(found.session, warnings);
+  const score = found.score;
   if (session === null && trials.length > 0) {
     warnings.push('No session-level integrity data — some signals unavailable (did the experiment call getSessionReport()?)');
   }
@@ -402,6 +414,40 @@ export function extractIntegrityData(raw, config) {
     // extension was not used.
     honeypot: findHoneypotDisclosure(raw),
   };
+}
+
+// The signal lists whose entries the analyzers and renderers read as event
+// objects: every array field of a trial report but editTimestamps (numbers),
+// and the session report's lists (monitor.js sessionData; tabAwaySums and
+// charsPerSec hold numbers and are not here). A list of extensions may name
+// one by a plain string, which the readers take.
+const EVENT_LISTS = new Set(Object.keys(TRIAL_REPORT_FIELDS)
+  .filter((f) => TRIAL_REPORT_FIELDS[f].type === 'array' && f !== 'editTimestamps'));
+const SESSION_EVENT_LISTS = ['tabAwayEvents', 'sidebarEvents', 'devToolsEvents', 'aiExtensionsFound',
+  'keyboardShortcuts', 'windowPositions', 'idleGaps', 'extensionInjections', 'viewportWidthShifts',
+  'layoutShifts', 'zoomChanges'];
+const NAME_LISTS = new Set(['extensionsDetected', 'aiExtensionsFound']);
+function isEventEntry(e, field) {
+  if (NAME_LISTS.has(field) && typeof e === 'string') return true;
+  return !!e && typeof e === 'object' && !Array.isArray(e);
+}
+
+// The session report with entries that are not events left out of its
+// lists, as the trials' lists are above. A copy when anything is left out:
+// the session object may be the caller's own.
+function withEventEntriesOnly(session, warnings) {
+  if (!session || typeof session !== 'object') return session;
+  let out = session;
+  for (const field of SESSION_EVENT_LISTS) {
+    const list = session[field];
+    if (!Array.isArray(list)) continue;
+    const kept = list.filter((e) => isEventEntry(e, field));
+    if (kept.length === list.length) continue;
+    if (out === session) out = { ...session };
+    out[field] = kept;
+    warnings.push(`Session: ${list.length - kept.length} of the entries of "${field}" are not event objects — skipped.`);
+  }
+  return out;
 }
 
 // True when obj plausibly IS a getSessionReport() output — i.e. it carries at
