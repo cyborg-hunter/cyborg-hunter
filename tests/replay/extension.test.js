@@ -33,6 +33,7 @@ describe('CyborgHunterReplay.attach', () => {
       owner.startSession();
       const page = CHReplay.attach({ participantId: 'P1', autoSave: { mode: 'none' } });
       assert.strictEqual(page.refused, true);
+      assert.strictEqual(page.config.participantId, 'P1', 'shaped like a real recorder: config is there');
       page.startSession(); page.startTrial({ trialId: 'x' }); page.endTrial(); page.stopSession(); page.destroy();
       assert.strictEqual(page.getRecording(), null);
       assert.strictEqual((await page.autoSaveNow()).recording, null);

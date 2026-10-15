@@ -84,11 +84,14 @@ function redactSelectorError(selector) {
  * something. Both the inheritance and the flag are pinned in capture-e2e.test.js.
  */
 // What a refused attach() returns: every method does nothing, and nothing
-// is recorded or saved. `refused: true` says so to code that checks.
-function refusedApi() {
+// is recorded or saved. `refused: true` says so to code that checks; the
+// shape is a real recorder's, `config` included (the options passed in), so
+// page code reading it does not throw.
+function refusedApi(userConfig) {
   var noop = function () { return api; };
   var api = {
     refused: true,
+    config: Object.assign({}, userConfig || {}),
     startSession: noop, startTrial: noop, endTrial: noop, stopSession: noop, resumeSession: noop,
     getRecording: function () { return null; },
     getRecordingCompressed: function () { return Promise.resolve(null); },
@@ -112,7 +115,7 @@ export function attach(userConfig) {
     console.error('[cyborg-hunter-replay] attach() refused: ch.js is already recording this page and saves the ' +
       'recording with your data. Get it with CyborgHunter.replay(), or set data-replay="off" on the ch.js tag to ' +
       'record with your own attach() instead.');
-    return refusedApi();
+    return refusedApi(userConfig);
   }
   if (_active) {
     console.warn('[cyborg-hunter-replay] attach() called while a recorder is active — replacing the previous instance (its unsaved recording is discarded).');
