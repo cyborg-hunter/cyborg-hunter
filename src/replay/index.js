@@ -25,6 +25,24 @@ import {
 
 var _active = null;
 
+// The researcher's redactSelector, checked once: null when it is usable (or
+// absent, or there is no document to check it against), else the error the
+// browser's selector parser threw. isRedacted() (redaction.js) turns a
+// throwing selector into "redacts nothing", deliberately, so a typo would
+// otherwise drop the configured redaction without a sign; attach() makes it
+// loud instead. Checked on an empty fragment, which parses the selector and
+// matches nothing.
+function redactSelectorError(selector) {
+  if (!selector || typeof document === 'undefined' || !document ||
+      typeof document.createDocumentFragment !== 'function') return null;
+  try {
+    document.createDocumentFragment().querySelector(selector);
+    return null;
+  } catch (e) {
+    return e || new Error('invalid selector');
+  }
+}
+
 /**
  * Create (and replace) the singleton recorder.
  *
@@ -74,6 +92,15 @@ export function attach(userConfig) {
 
   var rec = createRecorder(userConfig);
 
+  // An invalid redactSelector redacts nothing (redaction.js isRedacted):
+  // warned here, once, and recorded in the recording as a capture failure at
+  // startSession below, so that its time falls inside the session.
+  var redactError = redactSelectorError(rec.config.redactSelector);
+  if (redactError) {
+    console.warn('[cyborg-hunter-replay] redactSelector "' + String(rec.config.redactSelector) +
+      '" is not a valid CSS selector, so it redacts nothing (password fields are still withheld). Fix the selector.');
+  }
+
   var api = {
     // Exposed for tests and advanced integrations; not part of the
     // documented surface.
@@ -82,6 +109,11 @@ export function attach(userConfig) {
 
     startSession: function () {
       rec.startSession();
+      if (redactError) {
+        rec.captureFailure('redact_selector', new Error(
+          'redactSelector "' + String(rec.config.redactSelector) + '" is not a valid CSS selector, so it redacted nothing (' +
+          String((redactError && redactError.message) || redactError) + ')'));
+      }
       // ONE capture span per recording (span.js): the node ids the keyframe
       // assigns and the record of what the file contains. Both capture modules
       // get the SAME object, because an event's `target` and a patch's `node`

@@ -139,6 +139,8 @@ export function isPasswordField(el) {
  *
  * A selector that throws (invalid syntax) redacts nothing rather than
  * everything — the alternative is a typo silently emptying a whole recording.
+ * It is not silent: attach() (index.js) checks the selector once, warns, and
+ * records a 'redact_selector' capture failure in the recording.
  */
 export function isRedacted(el, selector) {
   if (isPasswordField(el)) return true;

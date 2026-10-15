@@ -542,6 +542,61 @@ describe('assembly wiring (index.js)', () => {
     });
   });
 
+  // isRedacted() turns a selector that throws into "redacts nothing" (the
+  // other way, a typo would empty the recording). That stays, but it must not
+  // be silent: attach() checks the selector once, warns naming it, and the
+  // recording carries one capture failure on the 'redact_selector' channel.
+  it('an invalid redactSelector warns once at attach and is recorded as a capture failure', () => {
+    const warns = [];
+    const origWarn = console.warn;
+    console.warn = (m) => warns.push(String(m));
+    let recording;
+    try {
+      const api = CHReplay.attach({
+        participantId: 'P', tier: 'dom', root: '#stage',
+        redactSelector: '[data-ch-redact', autoSave: { mode: 'none' },
+      });
+      api.startSession();
+      api.startTrial({ trialId: 't1' });
+      api.endTrial();
+      api.stopSession('finished');
+      recording = api.getRecording();
+      api.destroy();
+    } finally {
+      console.warn = origWarn;
+    }
+    const about = warns.filter((w) => w.includes('redactSelector'));
+    assert.equal(about.length, 1, warns.join('\n'));
+    assert.ok(about[0].includes('"[data-ch-redact"'), about[0]);
+    const failures = recording.extensions['cyborg-hunter'].capture_failures;
+    assert.deepEqual(failures.map((f) => f.channel), ['redact_selector']);
+    assert.ok(failures[0].t >= 0, 'stamped inside the session');
+    assert.equal(validateStrict(recording).ok, true);
+  });
+
+  it('a valid redactSelector neither warns nor records a capture failure', () => {
+    const warns = [];
+    const origWarn = console.warn;
+    console.warn = (m) => warns.push(String(m));
+    let recording;
+    try {
+      const api = CHReplay.attach({
+        participantId: 'P', tier: 'dom', root: '#stage',
+        redactSelector: '.private, [data-ch-redact]', autoSave: { mode: 'none' },
+      });
+      api.startSession();
+      api.startTrial({ trialId: 't1' });
+      api.endTrial();
+      api.stopSession('finished');
+      recording = api.getRecording();
+      api.destroy();
+    } finally {
+      console.warn = origWarn;
+    }
+    assert.deepEqual(warns.filter((w) => w.includes('redactSelector')), []);
+    assert.deepEqual(recording.extensions['cyborg-hunter'].capture_failures, []);
+  });
+
   it('a SECOND recording on the same page inherits the first\'s withholding', () => {
     // The accepted cost of the choice above, pinned so it is a decision rather
     // than an accident. `redaction.js`'s taint set is module-level and lives
