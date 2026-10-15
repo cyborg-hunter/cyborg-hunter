@@ -32,17 +32,17 @@ export function buildTriageMd(triage, config) {
 
   triage.forEach((t, i) => {
     const tier = t.hardTriggered ? '**HARD**' : t.softFlagged ? 'soft' : 'clean';
-    // Escape pipe characters in reason text to avoid breaking the table
-    const reason = t.reason.replace(/\|/g, '\\|');
-    lines.push(`| ${i + 1} | ${mdCell(t.participantId)} | ${tier} | ${formatScore(t.score)} | ${reason} |`);
+    // The reason quotes participant data too (the names of the extensions
+    // their browser reported), so it is escaped as the id is.
+    lines.push(`| ${i + 1} | ${mdCell(t.participantId)} | ${tier} | ${formatScore(t.score)} | ${mdCell(t.reason)} |`);
   });
 
   lines.push('');
   return lines.join('\n');
 }
 
-// A participant id in a table cell, as text: the id comes from participant
-// data, so a pipe would break the table and markdown or HTML in it would be
+// A participant id or a reason in a table cell, as text: both come from
+// participant data, so a pipe would break the table and markdown or HTML in it would be
 // rendered (a link, an image the viewer fetches, a tag). Backslash-escape
 // what can do that (the pipe, brackets, angle brackets, emphasis and code
 // marks, the backslash itself) and drop line breaks; `_` and `-`, common in

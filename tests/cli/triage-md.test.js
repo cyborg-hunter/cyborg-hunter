@@ -10,6 +10,7 @@ import { readFileSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { renderTriage } from '../../src/cli/renderers/triage-md.js';
+import { buildTriageMd } from '../../src/cli/renderers/triage-md-core.js';
 
 describe('triage.md renderer', () => {
   const outputDir = mkdtempSync(join(tmpdir(), 'ch-triage-'));
@@ -31,5 +32,16 @@ describe('triage.md renderer', () => {
     // The header note must spell out that Score is the CLI heuristic, not the
     // library soft score.
     assert.ok(md.includes('not the library soft score'), 'score/soft-score distinction documented in the header');
+  });
+
+  it('escapes the Reason cell as it escapes the ID: an extension name is participant data', () => {
+    const name = '![t](https://example.invalid/t.png) <img src=x onerror=alert(1)> [l](javascript:alert(2)) a|b';
+    const md = buildTriageMd([{ participantId: 'P1', score: 0, reason: name + ' detected', hardTriggered: false, softFlagged: false }], {});
+    const row = md.split('\n').find((l) => l.startsWith('| 1 |'));
+    assert.ok(row.endsWith(' |'), 'the row still ends the table cell');
+    const cell = row.slice(row.indexOf('| clean | 0 | ') + 14, -2);
+    assert.ok(!/(^|[^\\])[<[\]|]/.test(cell),
+      `no unescaped markdown or HTML in the reason cell: ${row}`);
+    assert.ok(row.includes('\\<img src=x onerror=alert(1)\\>'));
   });
 });
