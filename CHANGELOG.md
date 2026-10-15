@@ -68,6 +68,10 @@ Collected data, configuration and reports all change: read
   reported instead of silently leaving collection on.
 - `collectForPostHoc.responseText`, which no code ever read, is removed;
   passing it now warns as an unknown key.
+- The `domProtection` init option, which no code ever read, is removed;
+  passing it now warns as an unknown key. Copy logging is `signals.copy`; the
+  DOM protections are the functions `preventTextSelection(selector)`,
+  `addHoneypot()` and `setAltText()`.
 - Privacy switches given an unexpected value (`'false'`, `keys: false`) now
   turn collection off with a warning instead of leaving it on; the recorder
   warns on unknown option names.

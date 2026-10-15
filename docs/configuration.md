@@ -40,7 +40,7 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 >
 > The CLI's "did you mean?" validator shares one key list with the browser library,
 > so a CLI config file can also carry browser-only keys (`preset`, `participantId`,
-> `signals`, `domProtection`, etc.) without a warning. Those keys configure the
+> `signals`, `collectForPostHoc`, etc.) without a warning. Those keys configure the
 > *runtime* (in your experiment page), not the report; placing them in the CLI
 > config has no effect on `cyborg-hunter report`.
 

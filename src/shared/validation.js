@@ -12,7 +12,7 @@ const ALL_KNOWN_KEYS = [
   ...Object.keys(DEFAULT_CLI_CONFIG),
   ...Object.keys(DEFAULT_THRESHOLDS),
   'preset', 'participantId', 'signals', 'thresholds', 'scoring',
-  'domProtection', 'collectForPostHoc', 'onSignal', 'screenout',
+  'collectForPostHoc', 'onSignal', 'screenout',
   'experimentContainer', 'knownInputs', 'decoyAnswers', 'decoyMap',
   'decoyVisibility', 'decoyFraming', 'decoyExcludeButtons',
   'autoMonitor', 'excludeTrialTypes'

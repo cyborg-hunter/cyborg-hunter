@@ -91,12 +91,6 @@ export function init(userConfig) {
     thresholds: Object.assign({}, DEFAULT_THRESHOLDS, preset.thresholds || {}, userConfig.thresholds || {}),
     scoring: mergedScoring,
     screenout: Object.assign({}, preset.screenout, userConfig.screenout || {}),
-    domProtection: Object.assign({
-      preventTextSelection: false,
-      honeypotText: null,
-      logCopyAttempts: true,
-      renderStimulusAsCanvas: false
-    }, userConfig.domProtection || {}),
     collectForPostHoc: Object.assign({}, COLLECT_FOR_POST_HOC_DEFAULTS, userConfig.collectForPostHoc || {}),
     decoyAnswers: userConfig.decoyAnswers || false,
     decoyMap: userConfig.decoyMap || null,
@@ -108,7 +102,7 @@ export function init(userConfig) {
   // Validate config keys — warn on typos.
   var KNOWN_KEYS = [
     "participantId", "preset", "signals", "thresholds", "scoring",
-    "screenout", "domProtection", "collectForPostHoc", "decoyAnswers",
+    "screenout", "collectForPostHoc", "decoyAnswers",
     "decoyMap", "decoyVisibility", "decoyFraming", "decoyExcludeButtons",
     "onSignal", "experimentContainer", "knownInputs"
   ];

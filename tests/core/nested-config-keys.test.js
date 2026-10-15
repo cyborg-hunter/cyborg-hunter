@@ -59,6 +59,17 @@ describe('unknown keys inside nested config sections', () => {
     assert.deepStrictEqual(warnings, ['[cyborg-hunter] Unknown config key "collectForPostHoc.responseText"']);
   });
 
+  // domProtection was a config sketch never wired to anything; the working
+  // DOM protections are the functions CyborgHunter.preventTextSelection(),
+  // addHoneypot() and setAltText(), and copy logging is signals.copy.
+  it('warns for domProtection, which does nothing', () => {
+    const warnings = captureWarnings(() => {
+      monitor = init({ participantId: 'N0', domProtection: { logCopyAttempts: false } });
+    });
+    assert.strictEqual(warnings.length, 1);
+    assert.match(warnings[0], /^\[cyborg-hunter\] Unknown config key "domProtection"/);
+  });
+
   it('warns for typos in signals and thresholds too', () => {
     const warnings = captureWarnings(() => {
       monitor = init({ participantId: 'N2', signals: { tabAWay: false }, thresholds: { typingSpeedCPS: 12, zzzz: 1 } });
