@@ -18,7 +18,7 @@ study with it: it lists what is collected by default.
 - **Session replay is on by default in `ch.js` and `ch-labjs.js`** (trace
   tier: pointer, scroll, focus, and every key pressed on the page). The
   recorder is bundled into those files, so nothing extra is loaded and
-  `data-replay-src` no longer applies to them; `ch.js` grows by about 43 KB.
+  `data-replay-src` no longer applies to them; `ch.js` and `ch-labjs.js` grow by about 50 KB (uncompressed).
   `data-replay="off"` (or `none`, `false`, or `CyborgHunterConfig.replay =
   false`) turns it off. `ch-qualtrics.js` is unchanged: replay stays opt-in.
 - **The recording is saved with your data**, in pieces:
@@ -58,8 +58,9 @@ study with it: it lists what is collected by default.
   link without the slash). jsPsych inside a Qualtrics survey under `ch.js`
   keeps the ID per survey too. Tabs holding the old keys start fresh.
 - **Friction** no longer requires fullscreen on a browser that cannot go
-  fullscreen (iPhone Safari, a frame without `allow="fullscreen"`); the other
-  checks still run.
+  fullscreen (iPhone Safari, a frame without `allow="fullscreen"`); the
+  tab-visibility and focus checks still run (the sidebar check needs the
+  fullscreen baseline, so it is off there too).
 - A decoy is no longer injected after its trial ended.
 - **A page's own `CyborgHunterReplay.attach()` next to `ch.js` or
   `ch-labjs.js` is refused** while the one-line file records (replay is on
@@ -155,7 +156,7 @@ What ships around it:
 
 - **A per-participant replay viewer in the CLI report** (scrub bar, cursor trail, event markers). `dom`-tier recordings reconstruct the page in a sandboxed iframe.
 - **Autosave and CLI ingest of replay artifacts**, with ownership verification and reload-collision handling. Malformed artifacts are skipped with a warning; they no longer abort the report.
-- **Guard-honeypot and guard-friction events appear in the replay stream**, so deterrence violations can be watched in context.
+- **Guard-honeypot and guard-friction events appear in the replay stream** on the DOM tier, so deterrence violations can be watched in context.
 - **A per-trial camera model** keeps cursor and DOM aligned; on `dom`-tier recordings the cursor is verified per interaction, and any click that can't be confirmed draws an explicit uncertain marker instead of a wrong one. Recordings made before this guarantee existed replay under a clearly-labeled reduced-alignment banner.
 - **Privacy defaults:** password inputs are redacted unconditionally; clipboard events record lengths only, never content. Field-level redaction is controlled by `redactSelector`; the full privacy model is in [using-cyborg-hunter.md](using-cyborg-hunter.md).
 
@@ -226,7 +227,7 @@ These changes affect the browser library, so they apply to sessions recorded wit
 
 ### Version stamps in the data
 
-The library stamps `cyborgHunterVersion` into every participant's data, so version mixing within a study is visible directly in the data (the CLI does not warn about it automatically). Mixing 0.6.0 and 0.6.1 participants in one report is safe; 0.6.1-only fields stay empty for the older sessions.
+The library stamps `cyborgHunterVersion` into every participant's data, so version mixing within a study is visible directly in the data (the CLI lists the versions the data carries when they differ from its own, but does not flag mixing as such). Mixing 0.6.0 and 0.6.1 participants in one report is safe; 0.6.1-only fields stay empty for the older sessions.
 
 ## Upgrading from 0.5.x
 

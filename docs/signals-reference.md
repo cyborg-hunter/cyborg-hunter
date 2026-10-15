@@ -11,7 +11,7 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 | Drop | Clipboard | `drop` event listener on the whole page | Records every drop; the full text is stored (same switch as paste) |
 | Tab-away | Focus | Visibility API + window blur/focus | All tab-aways logged; soft score fires for durations **strictly greater than** `tabAwayDurationMs` (default 3s, 5s for strict). Reports bin durations as flicker (≤ cutoff, not scored) / medium (cutoff–10s) / long (≥10s) using that **per-participant** cutoff; the 10s line is a display split, not the soft cutoff. Since 0.6.1 the session report also carries timestamped `tabAwayEvents[]` (start, duration, type, wall-clock) for every tab-away **including off-trial ones** (consent, tutorial, comprehension); pre-0.6.1 payloads keep only durations (`tabAwaySums`) for those, so timelines can count but not place them |
 | Idle gap | Focus | No input activity for N ms | Default 10s threshold |
-| Typing speed | Typing | chars/sec from input edit timestamps | Default soft threshold 10 cps |
+| Typing speed | Typing | chars/sec from input edit timestamps | Default soft threshold 10 cps (15 for `permissive`, 8 for `strict`) |
 | Synthetic insertion | Typing | Text appears without preceding keystrokes | Default 100ms gap |
 | Foreign input | Typing | Typing lands outside the experiment container (needs `experimentContainer`) | All occurrences logged, with each typed character (`collectForPostHoc.foreignInputContent`, default on) |
 | Mouse track | Mouse | `mousemove` sampled at `mouseThrottleMs` (50 ms by default); every `mousedown`/`mouseup`/`click` | Cap of 2000 events per trial. Since 0.14 each sample carries viewport coordinates (`cx`, `cy`) beside the page ones (`x`, `y`) |
@@ -92,11 +92,11 @@ Numeric defaults that apply across presets unless overridden:
 | `mouseMaxEvents` | 2000 | Per-trial cap on mouse events captured |
 | `mouseBotMinEvents` | 3 | Minimum events needed to compute mouse metrics |
 | `tabAwayDurationMs` | 3000 | Tab-away durations longer than this add to the soft score (the `strict` preset raises it to 5000) |
-| `typingSpeedCps` | 10 | chars/sec above which typing is "fast" |
+| `typingSpeedCps` | 10 | chars/sec above which typing is "fast" (15 in `permissive`, 8 in `strict`) |
 | `windowPositionPollMs` | 2000 | How often the window geometry is checked for a change |
 | `maxWindowPositions` | 2000 | Session cap on window-geometry rows; `null` disables it |
 
-The `strict` preset overrides several of these (`typingSpeedCps: 8`, `tabAwayDurationMs: 5000`, `mouseMaxEvents: 5000`).
+The `permissive` preset raises `typingSpeedCps` to 15; the `strict` preset overrides several of these (`typingSpeedCps: 8`, `tabAwayDurationMs: 5000`, `mouseMaxEvents: 5000`).
 
 ## Enabling and disabling signals
 
@@ -141,7 +141,7 @@ The full set of toggles (matching `PRESETS.standard.signals` in `constants.js`):
 
 `paste`, `copy`, `drop`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `keystrokeDynamics`.
 
-What is stored, beside which signals run, is set by `collectForPostHoc`: `pasteDropContent` (pasted and dropped text, default on), `foreignInputContent` (characters typed outside the experiment container, default on), `rawMouseTrack` (default on), `windowPositionLog` (default on), `fullKeystrokeTimestamps` and `elementTrace` (default off). A misspelt key in `collectForPostHoc`, `signals` or `thresholds` is reported with a console warning.
+What is stored, beside which signals run, is set by `collectForPostHoc`: `pasteDropContent` (pasted and dropped text, default on), `foreignInputContent` (characters typed outside the experiment container, default on), `rawMouseTrack` (default on), `windowPositionLog` (default on), `fullKeystrokeTimestamps` and `elementTrace` (default off). `responseText` is accepted but has no effect. Each takes `true` or `false`; any other value turns it off, with a warning. A misspelt key in `collectForPostHoc`, `signals` or `thresholds` is reported with a console warning.
 
 ## AI-extension detector
 

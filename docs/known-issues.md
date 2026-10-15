@@ -15,7 +15,7 @@ Every console error from a one-line file (`ch.js`, `ch-qualtrics.js`, `ch-labjs.
 | `A second lab.js study ran after the first ended` | ch-labjs.js records one session per page and ends it when the first lab.js study's root component ends. Components run after that get no integrity columns. A component run on its own, outside the study's root, counts as a study. | Run one study per page, or reload the page between studies; keep every component inside the study's root ([lab.js](labjs.md#the-end-of-the-session)). |
 | `Friction is only partly set up` | The page has a friction start (the entry trial, `data-ch-friction-start` or `CyborgHunter.startFriction()`) but `data-guards` does not list `friction`. Enforcement still starts, without the AI refusal notices. | Add `friction` to `data-guards`, or remove the start ([Friction](advanced-integration.md#friction)). |
 | `The saved session is approaching the sessionStorage limit` / `The session could not be carried to the next page` | Pages without jsPsych: the session kept for the next page is over 4 MB, or storage refused it. | Set `CyborgHunterConfig.collectForPostHoc.rawMouseTrack = false`, or save `CyborgHunter.data()` on every page ([Vanilla segmentation reference](advanced-integration.md#vanilla-segmentation-reference)). |
-| `Session replay is not recording` | `cyborg-hunter-replay.js` did not load: missing file, network error, Content-Security-Policy, or more than 15 s. | Put it next to the one-line file or set `data-replay-src`, and allow its URL in `script-src` ([Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner)). |
+| `Session replay is not recording` | `ch-qualtrics.js` only (`ch.js` and `ch-labjs.js` carry the recorder): `cyborg-hunter-replay.js` did not load: missing file, network error, Content-Security-Policy, or more than 15 s. | Put it next to `ch-qualtrics.js` or set `data-replay-src`, and allow its URL in `script-src` ([Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner)). |
 | `Qualtrics legacy layout detected` | The survey runs the older layout (New Survey Taking Experience off), so the payload goes to the field `cyborg_hunter`. | Declare `cyborg_hunter` in Survey Flow, or switch to the New Survey Taking Experience ([Legacy layout](qualtrics.md#legacy-layout)). |
 | `The jsPsych trials on this survey are not recorded one by one` | `ch-qualtrics.js` found a survey whose page also runs jsPsych: it writes a row per page to embedded data and none per jsPsych trial. | Nothing for the page rows; for rows per trial see [jsPsych inside a survey](qualtrics.md#jspsych-inside-a-survey). |
 | `The Qualtrics payload was reduced` | The session's summary was over the embedded-data cap, so a reduced level was written. The report's counts, scores and tier stay those of the whole session; the page rows and event lists cover only what was kept. | Nothing for that participant ([Payload size](qualtrics.md#payload-size)). |
@@ -39,25 +39,11 @@ Known limits of the one-line setup:
 - **lab.js that `ch.js` and `ch-qualtrics.js` do not see.** They look for lab.js (`window.lab`) only when they load, and if it is there on a page without jsPsych or Qualtrics, they log the wrong-file error naming `ch-labjs.js`. A lab.js loaded after their tag, or bundled so that it never defines `window.lab`, gets no message, and its rows get no integrity columns.
 - **`ch-labjs.js` on a lab.js page that also runs jsPsych.** A page with jsPsych there when `ch-labjs.js` loads counts as a jsPsych page: it logs the wrong-file error naming `ch.js` and does not hook lab.js. With `lib/lab.js` above its tag and jsPsych loaded after it, it logs the same error once, at `DOMContentLoaded`, while lab.js stays hooked and its rows keep their integrity columns; the jsPsych trials get none.
 
-## Session replay (0.7.0 feature)
+## Session replay
 
-The items below are known limitations of the replay feature, kept open deliberately.
+### A capture root other than `<body>` is not re-verified
 
-### Viewer for the replay resolves mutation paths against `document.body`, not the capture root
-
-**Symptom:** `src/cli/renderers/replay-viewer.client.js` `applyMutation()` resolves each patch path from `doc.body`, but capture paths (`capture-dom.js` `nodePath`) are relative to the configured `root`. With the default `root` (document.body) this works — the serialized `<body>` collapses when re-inserted, aligning the root's children with the viewer body's children. With a **non-body root** (e.g. `root: '#experiment'`), the serialized root element becomes a child of the viewer body, so every path is shifted one level and mutations apply to the wrong node — the replay diverges from what the participant saw.
-
-**Fix (deferred — format-level):** make capture and viewer agree on the root anchor. Cleanest is to serialize the root's *children* (innerHTML semantics) for `initial_dom` so the viewer body holds exactly the root-relative children for both cases; alternatively record the root path in the model and anchor `resolvePath` there. Deferred because it changes the recording format and touches the DOM-snapshot tests + guard-violation snapshots.
-
-**Severity:** Major for studies that set a non-body capture root; the default is unaffected.
-
-### ID-less input elements are resolved by first tag match in the viewer
-
-**Symptom:** An input/textarea with no `id` is described only by tag name in the trace (`capture-trace.js`, `describeEl`); the viewer selects the first element of that tag (`replay-viewer.client.js`). Typing into the second of two ID-less textareas updates the first textarea in the replay.
-
-**Fix (deferred):** capture an nth-of-type index or a child-index path for ID-less targets, and resolve it in the viewer. Minor fidelity issue; most experiment fields carry ids.
-
-**Severity:** Minor.
+The recorder's `root` option (manual mode) records a subtree instead of `document.body`. Recordings address nodes by number (format v2), so the path-based problems of the first format are gone, but the viewer has not been re-checked with a non-body root since. If you set `root`, replay a pilot recording before collecting data. The default (`document.body`, and every one-line setup) is unaffected.
 
 ## Client-side authority limits (inherent, not patchable)
 

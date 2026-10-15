@@ -121,7 +121,7 @@ cyborg-hunter-report/
 
 Every output is keyed by participant ID, which under the one-line setup is the
 platform's (Prolific, MTurk). `index.html` carries pasted texts, `event-log.csv`
-every pasted, dropped and synthetically inserted text, `summary.csv` the
+every pasted and dropped text (a synthetic insertion carries its length only), `summary.csv` the
 honeypot's free-text answer, and `replay/` the whole recordings (typed text
 included). Treat the folder as raw, identifiable data; to share it, run
 with `--pseudonymize`, which replaces every ID with a code and keeps the key
@@ -134,6 +134,7 @@ you later exclude keeps their old files until you empty the folder.
 once a day, `report` asks the npm registry for the latest version
 (`https://registry.npmjs.org/cyborg-hunter/latest`) to tell you about an update.
 The request carries no data from your study; the registry sees your IP address.
+The answer is kept for a day in `~/.cache/cyborg-hunter/update-check.json`.
 Set `NO_UPDATE_NOTIFIER=1` (or run with `CI` set) to turn it off. Opening a
 `dom`-tier replay in `index.html` loads the recorded page's images, fonts and,
 unless you untick the box, its external stylesheets from their own addresses

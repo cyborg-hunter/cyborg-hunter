@@ -29,7 +29,7 @@ To name a trial's segment or pass trial-level options, give the trial its own en
 |---|---|---|
 | `trialId` | string | Used as the trial's identifier in the report. Defaults to `trial-{index}`. |
 | `phase` | string | Free-form tag (e.g. `'training'`, `'test'`) — passed through to the trial report for filtering in analysis. |
-| `decoyAnswer` | string | A "honeytoken" string injected into the DOM (off-screen by default) for a trial, framed per `decoyFraming`. An AI tool scraping the page may surface it; a human reader never sees it. The library records the injected text in the trial's `decoy` metadata — it does **not** auto-match it against paste/typed text. Cross-reference the decoy string with `event-log.csv` paste/typed content downstream to flag hits. |
+| `decoyAnswer` | string \| false | Works only with `decoyAnswers: true` (off by default; in `window.CyborgHunterConfig` under the one-line setup, in the init config in manual mode). With it on, **every** trial gets a hidden decoy, framed per `decoyFraming`: this string when set, else text taken from the page's first response option (or a generic "validation trial" notice); `false` skips the trial. An AI tool scraping the page may surface it. It is off-screen but in the accessibility tree, so a screen reader reads it, unless `decoyVisibility: 'aria-hidden'`. The library records the injected text in the trial's `decoy` metadata — it does **not** auto-match it against paste/typed text. Cross-reference the decoy string with `event-log.csv` paste/typed content downstream to flag hits. |
 | `experimentContainer` | string \| Element | Selector or DOM element bounding the response area. Used for the foreign-input detector — typing outside this region is flagged. |
 
 Extension-level settings (`participantId`, `preset`, `excludeTrialTypes`, `autoMonitor`) are set once per page, not per trial: see [advanced-integration.md → Configuration beyond data-*](advanced-integration.md#configuration-beyond-data-).
@@ -50,7 +50,7 @@ recordings (the record_session branch, PR #3661) are converted on the way in
 by `tools/convert/jspsych-v1-to-v2.mjs`; see `docs/v2-player-migration.md`.
 Releases before 0.8.0 recorded the earlier v1 shape.
 
-With the one-line setup, `ch.js` and `ch-labjs.js` carry the recorder and **record by default** (`data-replay="off"` turns it off; `data-replay="dom"` chooses the page-content tier). The recording is saved with the data your experiment already saves, with no code of yours: one piece per trial in the jsPsych or lab.js rows (`cyborgHunterReplay`, and `cyborgHunterReplayFinal` on the last row), or, on a page without a framework, in a second hidden field of every POST form (`cyborgHunterReplay`) and in `CyborgHunter.data()`. The CLI puts the pieces back together. `ch-qualtrics.js` keeps replay opt-in (`data-replay`): a survey field cannot hold a recording, so it goes to your own server through `CyborgHunter.replay()`. Details: [advanced-integration.md → Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner). The wiring below is manual mode's. The privacy, volume and viewing notes apply to both. Of the configuration options, the one-line setup sets `tier` (`data-replay`) and, on jsPsych, `autoSave` (`CyborgHunterConfig.replay`); `participantId` is the ID ch.js found, and the others keep their defaults, so to redact a field, mark it with `data-ch-redact`.
+With the one-line setup, `ch.js` and `ch-labjs.js` carry the recorder and **record by default** (`data-replay="off"` turns it off; `data-replay="dom"` chooses the page-content tier). The recording is saved with the data your experiment already saves, with no code of yours: one piece per trial in the jsPsych or lab.js rows (`cyborgHunterReplay`, and `cyborgHunterReplayFinal` on the last row), or, on a page without a framework, in a second hidden field of every POST form (`cyborgHunterReplay`) and in `CyborgHunter.data()`. The CLI puts the pieces back together. `ch-qualtrics.js` keeps replay opt-in (`data-replay`): a survey field cannot hold a recording, so it goes to your own server through `CyborgHunter.replay()`. Details: [advanced-integration.md → Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner). The wiring below is manual mode's. The privacy, volume and viewing notes apply to both. Of the configuration options, the one-line setup sets `tier` (`data-replay`) and, on jsPsych, `autoSave` (`CyborgHunterConfig.replay`); `participantId` is the ID ch.js found, and the others keep their defaults, so to redact a field from the recording, mark it with `data-ch-redact` (the integrity monitor's paste capture does not read the mark: [Privacy model](#privacy-model)).
 
 ### jsPsych wiring (manual mode)
 
@@ -108,7 +108,7 @@ rec.destroy();
 | `tier` | `'trace'` | `'trace'` events only; `'dom'` adds initial-DOM snapshots + a mutation log (visual replay). `'canvas'` is reserved for a future canvas tier and currently records at `dom` fidelity. |
 | `keys` | `'full'` | `'full'` records the identity of every key pressed anywhere on the page (key, code, modifiers), so typed text can be read back keystroke by keystroke, on both tiers; `'off'` records no key events. Password fields and fields matching `redactSelector` record only that a key was pressed, and when. |
 | `mouseHz` | `30` | mousemove sampling ceiling. |
-| `redactSelector` | `[data-ch-redact]` | Matching elements and everything inside them: text, the `value` attribute, `data:` and `blob:` URLs in `src`, `srcset`, `poster` and `href` (an image drawn from a webcam or a signature pad), typed keys, input values, form state and clipboard contents are withheld; value lengths and keystroke times are kept. Other attributes the page wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) are kept: they are page content, not what the participant entered. `input[type=password]` is always redacted, not overridable. A selector that is not valid CSS redacts nothing and is reported once (console and `capture_failures`). |
+| `redactSelector` | `[data-ch-redact]` | Matching elements and everything inside them: text, the `value` attribute, `data:` and `blob:` URLs in `src`, `srcset`, `poster` and `href` (an image drawn from a webcam or a signature pad), typed keys, input values, form state and clipboard contents are withheld from the recording; value lengths and keystroke times are kept. The integrity monitor does not read this selector: it stores text pasted into a matching field like any other ([Privacy model](#privacy-model)). Other attributes the page wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) are kept: they are page content, not what the participant entered. `input[type=password]` is always redacted, not overridable. A selector that is not valid CSS redacts nothing and is reported once (console and `capture_failures`). |
 | `clipboardContent` | `false` | Paste and drop events record the text length only; copy and cut record neither text nor length. `true` records the pasted or dropped text and HTML (the jsPsych recorder's behaviour). Fields matching `redactSelector` and password inputs stay length-only either way. This is the recorder's switch; the integrity monitor has its own (see [Privacy model](#privacy-model)). |
 | `keepBait` | `false` | Keep honeypot/decoy nodes in DOM captures (red-team analysis). |
 | `root` | `document.body` | Capture root for the DOM tier. |
@@ -117,7 +117,7 @@ rec.destroy();
 | `maxEventsPerTrial` | `50000` | Hard, per-trial cap on event count. Once a trial crosses it, that trial's capture stops (a `recording.capture_stopped` event is written once per recording and `truncated` is set, no silent truncation); later trials in the same session record normally. Doesn't bound the size of the whole session. |
 | `maxCharsPerTrial` | `8000000` | Hard, per-trial cap measured in characters (JS string length), seeded by the trial's initial DOM snapshot. Same stop-and-mark behavior as `maxEventsPerTrial`, and the same per-trial scope; whichever cap is crossed first stops that trial. Set `null` to disable. |
 | `keyframeEvery` | `10` | DOM tier only. At most this many segments per full snapshot: one keyframe plus up to `keyframeEvery - 1` segments recorded as deltas against it. A fresh snapshot is also taken sooner whenever the mutations since the last one have grown to rival its size, so this setting is the fallback for a DOM that barely changes, and it bounds how far a viewer must replay forward to reach a given segment. `1` snapshots every segment (the jsPsych adapter forces this, since the display is wiped between trials). `null` leaves only the size trigger. Must be a number; anything else disables the fallback and warns. |
-| `maxGuardViolations` | `40` | Session-wide cap on recorded guard-friction violations. Each `start` entry carries a full DOM snapshot, and the per-trial caps cannot see a session-level array. Past the ceiling later violations are not recorded and a capture failure says so once. Set `null` to disable. |
+| `maxGuardViolations` | `40` | DOM tier only (the trace tier records no guard violations; the honeypot's columns in the data still do). Session-wide cap on recorded guard-friction violations. Each `start` entry carries a full DOM snapshot, and the per-trial caps cannot see a session-level array. Past the ceiling later violations are not recorded and a capture failure says so once. Set `null` to disable. |
 | `maxViewportChanges` | `2000` | Session-wide cap on recorded viewport/zoom geometry changes (a drag-resize produces up to two per frame). Same forward-only bound and single capture-failure note. Set `null` to disable. |
 | `maxRootAttrEvents` | `2000` | DOM tier only. Session-wide cap on recorded changes to `<html>`'s own attributes, such as CSS variables a page sets with `document.documentElement.style.setProperty` (one entry per attribute each time the page changes it; changes made in the same task count once). It counts entries, not bytes: a 600-character style rewritten 2000 times is about 1.3 MB. Same forward-only bound and single capture-failure note, but every keyframe restates `<html>`'s attributes in full, so past the ceiling the replay's `<html>` is out of date only until the next keyframe. Set `null` to disable. |
 
@@ -132,15 +132,18 @@ names the switch that turns it down.
 **What the integrity monitor stores** (every setup):
 
 - **Pasted and dropped text**, for a paste or drop anywhere on the page,
-  password fields included (`collectForPostHoc.pasteDropContent`, default
+  password fields and fields marked `data-ch-redact` included
+  (`collectForPostHoc.pasteDropContent`, default
   `true`; `false` keeps the lengths only). Pasted text can hold anything
   from the participant's clipboard. The first 20,000 characters of each
   paste or drop are kept, up to 200,000 per trial
   (`thresholds.maxPasteDropChars`, `maxPasteDropCharsPerTrial`); a shortened
-  entry keeps its full length and says `truncated: true`. Copy and cut
-  record only the selected length.
+  entry keeps its full length and says `truncated: true`. Copy records
+  only the selected length; cut records only that it happened (both count
+  toward the copy total).
 - **Characters typed into fields outside the experiment** (an AI sidebar's
-  prompt, a chat widget), once you set an `experimentContainer`
+  prompt, a chat widget), with the field's `id`, `class` and input type,
+  once you set an `experimentContainer`
   (`collectForPostHoc.foreignInputContent`, default `true`).
 - **Raw mouse coordinates** (`mouseTrack`, the per-sample {x, y, cx, cy, t,
   type} trace the report's trajectory panels draw and its cursor section
@@ -159,9 +162,15 @@ names the switch that turns it down.
 - **Browser extensions**: the names of known AI extensions found on the
   page, and the tag names of custom elements any extension adds to
   `<body>`, which can reveal installed extensions.
-- Tab switches and window blur with their UTC time, idle gaps, typing speed,
-  DevTools shortcuts. Keystroke timestamps only in the `strict` preset or
-  with `collectForPostHoc.fullKeystrokeTimestamps`.
+- A wall-clock time (UTC, to the millisecond) at the end of every trial and
+  on every tab switch, so the data shows when the participant took part.
+- Tab switches and window blur, idle gaps, typing speed, DevTools
+  shortcuts. Keystroke timestamps only in the `strict` preset or with
+  `collectForPostHoc.fullKeystrokeTimestamps`.
+- Opt-in: `collectForPostHoc.elementTrace` samples the tag and `id` of the
+  element under the cursor (every 500 ms by default); `decoyAnswers: true`
+  puts a hidden decoy on every trial and stores its text in the trial's
+  `decoy` metadata (see `decoyAnswer` above).
 
 Your own `onSignal` callback receives pasted, dropped and typed text only
 when the matching switch is on; it also receives the raw DOM event, and what
@@ -175,10 +184,18 @@ your code reads from that event is yours to declare.
   keystroke. This includes screens that collect nothing themselves
   (consent, instructions, demographics) and fields that are not part of the
   experiment. Mark a field `data-ch-redact` (a name, an email, an ID typed
-  by hand) to keep its keys, value and clipboard contents out; only that a
-  key was pressed, and when, is kept. Password inputs are always redacted.
+  by hand) to keep its keys, value and clipboard contents out of the
+  recording; only that a key was pressed, and when, is kept. Password inputs
+  are always redacted. The mark is the recorder's only: the integrity
+  monitor still stores text pasted or dropped into a marked field, in full
+  (see above), so when you de-identify or delete a field's values, remove
+  them from the integrity data too, or set
+  `collectForPostHoc.pasteDropContent: false` to keep pasted and dropped
+  text out of it altogether.
 - Pointer, scroll, touch, focus and tab visibility; the browser's user agent
-  and the viewport (size, pixel ratio, zoom).
+  and the viewport (size, pixel ratio, zoom). For each click, tap and key
+  press, the tag, `id` and on-screen rectangle of the element it landed on
+  (no `id` inside a redacted area).
 - Clipboard: paste and drop lengths only (`clipboardContent`).
 - On the `dom` tier (`data-replay="dom"`), the page itself: every text node
   and attribute under `<body>`, what is typed into form fields, the
@@ -205,11 +222,13 @@ this means a separate consent survey).
 
 - In page memory, for the life of the page; `destroy()` stops collection but
   leaves the data readable by any script on the page until it unloads.
-- In the tab's `sessionStorage` (one-line setup on pages without a framework
-  and on Qualtrics): the participant ID and the session so far, pasted text
-  included, so later pages continue the session. It is not cleared when the
-  study ends; it lasts until the tab is closed and can be read by pages of
-  the same site in that tab. The recording is never stored there.
+- In the tab's `sessionStorage` (one-line setup): on every host, the
+  participant ID, under a key for the study's folder (or the survey, on
+  Qualtrics); on pages without a framework and on Qualtrics, also the
+  session so far, pasted text included, so later pages continue the
+  session. Neither is cleared when the study ends; both last until the tab
+  is closed and can be read by pages of the same site in that tab. The
+  recording is never stored there.
 - Nothing in cookies or `localStorage` on the participant's side.
 
 **Where it is sent.** Only where your experiment already sends its data, plus:
@@ -525,7 +544,7 @@ submissions (`form-action 'none'`), and no `<base>` element that could point
 the page's own links elsewhere (`base-uri 'none'`). The browser enforces these
 whatever the page's code does, so even a bug could not make the page fetch,
 post or load anything from another address. One gap was found in this
-guarantee and closed in 0.16: Chromium does not apply `connect-src` to a
+guarantee and closed in this release: Chromium does not apply `connect-src` to a
 `<link rel="prefetch">`, so a replay whose recorded page contained one could
 make the browser request the address in it. Recorded `<link>`, `<meta>` and
 `<base>` elements are now rebuilt as inert placeholders. The policy does not cover
@@ -687,4 +706,4 @@ These run alongside the monitor — they aren't enabled by default, since they a
 
 ## Versioning
 
-The library writes its version (`window.CyborgHunter.VERSION` and the `cyborgHunterVersion` column in the CSV) into every participant's data. Mixing data from different library versions in one report works — the signal definitions are stable across minor versions — but if a new signal was added, older participants will have empty cells for it. The `cyborgHunterVersion` column lets you spot version mixing yourself; the CLI does not currently warn about it automatically.
+The library writes its version (`window.CyborgHunter.VERSION` and the `cyborgHunterVersion` column in the CSV) into every participant's data. Mixing data from different library versions in one report works — the signal definitions are stable across minor versions — but if a new signal was added, older participants will have empty cells for it. The `cyborgHunterVersion` column lets you spot version mixing yourself; the CLI lists the library versions the data carries when they differ from its own, but does not flag mixing as such.

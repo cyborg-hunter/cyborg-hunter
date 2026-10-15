@@ -53,7 +53,7 @@ Three kinds of component are not trials: a skipped one (`skip`), a `core.Dummy`,
 A trial's segment is named from the first of these that is set:
 
 1. the component option `cyborgHunter`: `new lab.html.Form({ cyborgHunter: { trialId: 'recall-1', phase: 'test' } })`. It takes the keys of the jsPsych extension's per-trial params: `trialId`, `phase`, `decoyAnswer`, `experimentContainer`;
-2. the component parameter `chTrialId`, which the builder can set. `chPhase` and `chDecoyAnswer` set the phase and the decoy answer the same way;
+2. the component parameter `chTrialId`, which the builder can set. `chPhase` and `chDecoyAnswer` set the phase and the decoy answer the same way (a decoy needs `decoyAnswers: true` in `window.CyborgHunterConfig`);
 3. a `data-ch-trial="recall-1"` attribute on an element of the component's content, on an `html.Screen`, `html.Form` or `html.Page`;
 4. the component's `sender_id`, the id lab.js writes into its row (`0`, `1_2`, …);
 5. `trial-<n>`, for a component without one.

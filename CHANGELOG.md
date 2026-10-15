@@ -42,7 +42,13 @@ Collected data, configuration and reports all change: read
   matching `collectForPostHoc` switch is on.
 - `data-debug` left the Qualtrics copy-paste tag (it is a separate test step).
 - Docs: a full privacy model (what is stored by default, from when, where it
-  is kept and sent), and corrections where they understated collection.
+  is kept and sent), and corrections where they understated collection: the
+  `data-ch-redact` mark covers the recording only (the integrity monitor
+  still stores text pasted into a marked field); the honeypot's `<meta>` tag
+  and friction's notices, both addressed to AI agents and asking them not to
+  tell the participant; decoys need `decoyAnswers: true` and then run on
+  every trial; wall-clock trial times, foreign-input field names and click
+  targets are listed.
 
 ### Fixed
 - A recorded `<link rel="prefetch">` made Chromium fetch any address from the
@@ -58,7 +64,8 @@ Collected data, configuration and reports all change: read
   turn collection off with a warning instead of leaving it on; the recorder
   warns on unknown option names.
 - A deferred decoy is never injected after its trial ended.
-- Friction no longer traps a participant whose browser cannot go fullscreen.
+- Friction no longer traps a participant whose browser cannot go fullscreen
+  (the tab and focus checks still run; the sidebar check does not).
 - The same recording found in the rows and in a saved file counts once.
 
 ## [0.15.0] — 2026-10-11
