@@ -160,6 +160,7 @@ describe('a recording whose page nests elements very deeply', () => {
     assert.strictEqual(deep.replay.error, 'unloadable');
     assert.match(deep.replay.reason, /could not be written/);
     assert.ok(built.replayAssets.skipped.some((s) => s.participantId === 'DEMO-FIXT'));
+    assert.ok(built.warnings.some((w) => w.includes('DEMO-FIXT') && w.includes('could not be written')), built.warnings.join(' / '));
   });
 });
 

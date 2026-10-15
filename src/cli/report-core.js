@@ -205,7 +205,7 @@ export async function buildReport(participants, config, deps) {
         if (!canvas) continue;
         await emit(`images/trajectories_${fileId(p)}.png`, canvas, p.participantId, 'trajectories');
       } catch (err) {
-        warn(`  [warn] trajectories failed for ${shortId(p.participantId)}: ${err.message}`);
+        warn(`  [warn] trajectories failed for ${p.participantId}: ${err.message}`);
       }
     }
     log(`  trajectories — ${participants.length} images`);
@@ -228,7 +228,7 @@ export async function buildReport(participants, config, deps) {
         if (!canvas) continue;
         await emit(`images/typing_profile_${fileId(p)}.png`, canvas, p.participantId, 'typingProfile');
       } catch (err) {
-        warn(`  [warn] typing profile failed for ${shortId(p.participantId)}: ${err.message}`);
+        warn(`  [warn] typing profile failed for ${p.participantId}: ${err.message}`);
       }
     }
     log(`  typing profiles — rendered`);
@@ -246,7 +246,10 @@ export async function buildReport(participants, config, deps) {
   // A skipped artifact is already visible in the report (the participant's
   // replay section says why), but an analyst watching the CLI must not have
   // to open the HTML to learn a recording did not make it.
-  for (const s of replayAssets.skipped) log(`  replay/ — skipped ${s.participantId}: ${s.reason}`);
+  for (const s of replayAssets.skipped) {
+    if (s.warn) warn(`  [warn] replay not written for ${s.participantId}: ${s.reason}`);
+    else log(`  replay/ — skipped ${s.participantId}: ${s.reason}`);
+  }
   for (const a of replayAssets.assetErrors) {
     warn(`  [warn] experiment assets not applied to the replay of ${shortId(a.participantId)}: ${a.reason}`);
   }

@@ -776,3 +776,33 @@ describe('recordings with malformed fields', () => {
     assert.match(res.assetErrors[0].reason, /lookup failed/);
   });
 });
+
+// A page whose elements nest 20,000 deep is small on the wire. The viewer
+// mounts nothing below 512 levels, so the matcher reads no deeper either,
+// and such a recording neither stops the matcher nor loses the references
+// above that depth.
+describe('a recording whose elements nest very deeply', () => {
+  const chain = (depth, leaf) => {
+    let node = leaf;
+    for (let i = 0; i < depth; i++) node = { id: 900000 + i, kind: 'element', tag: 'div', attrs: {}, children: [node] };
+    return node;
+  };
+  const deepRecording = () => {
+    const rec = recording();
+    const leaf = { id: 899999, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/study/img/too-deep.png' }, children: [] };
+    rec.segments[0].initial_dom.children.push(chain(20000, leaf));
+    rec.segments[0].events.push({ type: 'dom.add', t: 4, parent: 1, before: null, node: chain(20000, { ...leaf, id: 899998 }) });
+    return rec;
+  };
+
+  it('is matched above the depth the viewer shows, and costs no warning', async () => {
+    const files = [{ path: 'img/stim-1.png', read: async () => PNG }, { path: 'img/too-deep.png', read: async () => PNG }];
+    const { assetMap, report } = await buildAssetMap([deepRecording()], files);
+    assert.deepStrictEqual(report.warnings, []);
+    assert.ok(assetMap.has('https://exp.example.org/study/img/stim-1.png'));
+    assert.ok(!assetMap.has('https://exp.example.org/study/img/too-deep.png'), 'nothing below the shown depth is read');
+    const rec = deepRecording();
+    assert.doesNotThrow(() => assetNoteText(assetMatchSummary(rec, assetMap)));
+    assert.doesNotThrow(() => applyAssetMap(buildViewerModel(rec), assetMap));
+  });
+});

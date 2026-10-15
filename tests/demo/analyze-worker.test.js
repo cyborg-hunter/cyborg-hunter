@@ -629,3 +629,34 @@ test('a pseudonymized run: the warnings the page lists name participants by thei
   const plain = await w.next('done', 'error');
   assert.ok(JSON.stringify(plain.warnings).includes(RAW), 'a plain report keeps the ids in its warnings');
 });
+
+// A recording whose elements nest 20,000 deep is small on the wire; it costs
+// its participant the replay, with a warning, and the run goes on.
+test('a recording nested very deeply: the run finishes, that replay is reported as not written', async () => {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  let node = { id: 700000, kind: 'element', tag: 'img', attrs: { src: 'img/x.png' }, children: [] };
+  for (let i = 1; i <= 20000; i++) node = { id: 700000 + i, kind: 'element', tag: 'div', attrs: {}, children: [node] };
+  rec.segments.find((s) => s.initial_dom).initial_dom.children.push(node);
+  const other = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  other.participant_id = 'OTHER';
+  const data = readFileSync(dir + '/DEMO-FIXT.json', 'utf8');
+  const files = [
+    { path: 'data/DEMO-FIXT.json', file: new File([data], 'DEMO-FIXT.json') },
+    { path: 'data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'data/OTHER.json', file: new File([data.replaceAll('DEMO-FIXT', 'OTHER')], 'OTHER.json') },
+    { path: 'data/other-session.json', file: new File([JSON.stringify(other)], 'other-session.json') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  const deep = done.participants.find((p) => p.participantId === 'DEMO-FIXT');
+  assert.equal(deep.hasReplay, false);
+  assert.match(deep.replayError, /could not be written/);
+  assert.ok(done.reportWarnings.some((x) => x.includes('DEMO-FIXT')), done.reportWarnings.join(' / '));
+  assert.equal(done.participants.find((p) => p.participantId === 'OTHER').hasReplay, true);
+});

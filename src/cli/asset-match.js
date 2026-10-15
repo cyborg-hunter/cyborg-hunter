@@ -120,10 +120,16 @@ function cssRefs(css, href) {
 const list = (v) => (Array.isArray(v) ? v : []);
 const attrsOf = (n) => (n.attrs && typeof n.attrs === 'object' ? n.attrs : {});
 
-function* walkNodes(node) {
-  if (!node || typeof node !== 'object') return;
+// The deepest level of a tree the viewer mounts (src/replay/dom-instantiate.js
+// MAX_DEPTH): nothing below it is shown, so nothing below it is matched. The
+// bound also keeps the two walks below within the call stack: a recording
+// can nest elements far deeper than recursion can follow.
+const MAX_DEPTH = 512;
+
+function* walkNodes(node, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > MAX_DEPTH) return;
   yield node;
-  for (const c of list(node.children)) yield* walkNodes(c);
+  for (const c of list(node.children)) yield* walkNodes(c, depth + 1);
 }
 
 function* sheetsOf(recording) {
@@ -155,12 +161,12 @@ function* segmentsOf(recording) {
 // says so. `parent` is the parent's id (a dom.add root's is the event's);
 // `attrs` and `srcEvent` (the last dom.attr of its src) say where its src is
 // written, for an input that becomes an image button.
-function noteTree(elems, node, parent) {
-  if (!node || typeof node !== 'object') return;
+function noteTree(elems, node, parent, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > MAX_DEPTH) return;
   if (node.kind === 'element' && node.id != null) {
     elems.set(node.id, { tag: node.tag, parent, type: attrsOf(node).type, attrs: attrsOf(node), srcEvent: null });
   }
-  for (const c of list(node.children)) noteTree(elems, c, node.id);
+  for (const c of list(node.children)) noteTree(elems, c, node.id, depth + 1);
 }
 const parentTagOf = (elems, id) => {
   const e = elems.get(id);

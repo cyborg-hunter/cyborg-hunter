@@ -127,7 +127,9 @@ export function buildReplayAssets(participants, { sink, assetMap = null }) {
         inlineSafeJson(model) + ';\n';
     } catch (e) {
       const reason = `the replay could not be written: ${e && e.message ? e.message : String(e)}`;
-      skipped.push({ participantId: p.participantId, file: p.replay.file || null, reason });
+      // `warn`: unlike a rejected recording, nothing in the file says why;
+      // report-core.js prints it as a warning.
+      skipped.push({ participantId: p.participantId, file: p.replay.file || null, reason, warn: true });
       p.replay = { error: 'unloadable', reason, file: p.replay.file || null };
       continue;
     }
