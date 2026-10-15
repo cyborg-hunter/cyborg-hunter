@@ -57,7 +57,15 @@
 // lands. WHERE those children sit is realm-dependent and deliberately not
 // relied on: happy-dom routes `appendChild` on a template into `content`,
 // browsers keep it in `childNodes`, and neither is rendered or executed.
-var INERT_TAGS = { script: true, noscript: true };
+//
+// The same for elements that make the browser fetch or navigate by
+// themselves, with no script: `<link>` (prefetch, preload, preconnect,
+// dns-prefetch; Chromium fetched a recorded prefetch from any host under the
+// report's CSP, whose connect-src does not cover it), `<meta>` (refresh) and
+// `<base>` (which would re-point every relative URL). A recording is
+// participant-controlled data. Styling loses nothing: the viewer applies the
+// recording's `stylesheets` list itself and never reads a recorded <link>.
+var INERT_TAGS = { script: true, noscript: true, link: true, meta: true, base: true };
 
 // Attributes whose value is a URL the browser will follow. Everything else is
 // page content: a `title` that reads like a `javascript:` URL is text.

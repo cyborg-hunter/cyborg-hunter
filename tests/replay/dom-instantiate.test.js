@@ -485,6 +485,26 @@ describe('spec §12 player filters', () => {
     assert.equal(idMap.get(3).data, 'alert(1)');
   });
 
+  // A recorded page is participant-controlled: an element that makes the
+  // browser fetch or navigate on its own, with no script, must not come back
+  // as itself. Chromium fetched a recorded <link rel=prefetch> from any host
+  // under the report's and the analyzer's CSP (connect-src does not cover
+  // prefetch). Styling does not need them: the viewer applies the
+  // recording's `stylesheets` list itself.
+  it('link, meta and base become inert <template>s and keep their ids', () => {
+    const dom = {
+      id: 1, kind: 'element', tag: 'div', attrs: {}, children: [
+        { id: 2, kind: 'element', tag: 'link', attrs: { rel: 'prefetch', href: 'https://attacker.example/beacon' }, children: [] },
+        { id: 3, kind: 'element', tag: 'meta', attrs: { 'http-equiv': 'refresh', content: '0;url=https://attacker.example/' }, children: [] },
+        { id: 4, kind: 'element', tag: 'base', attrs: { href: 'https://attacker.example/' }, children: [] },
+      ],
+    };
+    const { root, idMap } = instantiateTree(dom, freshDoc());
+    for (const id of [2, 3, 4]) assert.equal(idMap.get(id).tagName.toLowerCase(), 'template', 'node ' + id);
+    assert.equal(root.querySelectorAll('link, meta, base').length, 0);
+    assert.equal(root.childNodes.length, 3, 'sibling positions kept');
+  });
+
   it('an iframe is instantiated without src/srcdoc and stamped as a placeholder', () => {
     const { root, idMap } = instantiateTree({
       id: 1, kind: 'element', tag: 'iframe',
