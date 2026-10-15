@@ -7,6 +7,7 @@ import Papa from 'papaparse';
 import { webGunzip } from './web-deps.js';
 import { artifactKind } from '../../src/cli/ingest-core.js';
 import { isPieceFile } from '../../src/cli/replay-pieces.js';
+import { readWithinLimit } from '../../src/shared/limits.js';
 
 var decode = function (bytes) { return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes); };
 
@@ -51,7 +52,7 @@ async function gunzipIfGzip(bytes) {
 export async function peekParticipantFile(reader, opts) {
   var maxRows = (opts && opts.maxRows) || 50;
   var text;
-  try { text = decode(await gunzipIfGzip(await reader.read())); } catch (e) { return null; }
+  try { text = decode(await gunzipIfGzip(await readWithinLimit(reader))); } catch (e) { return null; }
   if (/\.csv$/i.test(reader.name)) {
     var parsed = Papa.parse(text.trimEnd(), { header: true, skipEmptyLines: true, preview: maxRows });
     var fields = (parsed.meta && parsed.meta.fields) || [];

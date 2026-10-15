@@ -47,6 +47,7 @@ import { isQualtricsExport, parseQualtricsExport } from './qualtrics-csv.js';
 import { convertRecording } from '../../tools/convert/convert-core.mjs';
 import { detectGzip, validateStrict } from '../shared/schema-v2-validator.js';
 import { collectPieces, isPieceFile, recordingsFromPieces } from './replay-pieces.js';
+import { readWithinLimit } from '../shared/limits.js';
 import { mergeRecordings } from '../replay/merge.js';
 
 // Replay artifacts saved by the replay extension:
@@ -114,7 +115,7 @@ const extOf = (name) => { const i = name.lastIndexOf('.'); return i <= 0 ? '' : 
 async function readArtifactJson(reader, gunzip) {
   let text;
   try {
-    const bytes = await reader.read();
+    const bytes = await readWithinLimit(reader);
     // Suffix OR magic bytes (RFC 1952): a gzip export renamed to `.json` is
     // still gzip, and decoding it as UTF-8 announced a truncated upload that
     // did not exist.
@@ -242,7 +243,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
   const census = [];
   for (const reader of files) {
     try {
-      const text = decodeUtf8(await reader.read());
+      const text = decodeUtf8(await readWithinLimit(reader));
       // A Qualtrics export is one file holding many participants, one per
       // response row (qualtrics-csv.js); every other file is one participant.
       if (extOf(reader.name) === '.csv' && isQualtricsExport(text, config.qualtricsField)) {

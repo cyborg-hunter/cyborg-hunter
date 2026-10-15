@@ -7,6 +7,7 @@ import assert from 'node:assert';
 import { gzipSync } from 'node:zlib';
 import { nodeGunzip } from '../../src/cli/ingest.js';
 import { webGunzip, webSha256 } from '../../demo/analyze/web-deps.js';
+import { peekParticipantFile } from '../../demo/analyze/peek-files.js';
 import { ingestFiles } from '../../src/cli/ingest-core.js';
 import { MAX_DECOMPRESSED_BYTES } from '../../src/shared/limits.js';
 
@@ -41,5 +42,32 @@ describe('gunzip limit', () => {
       { gunzip: (b) => webGunzip(b, MB), sha256: webSha256, shellHints: false });
     assert.strictEqual(participants.length, 1);
     assert.ok(warnings.some((w) => String(w.warnings).includes('exceeds')), JSON.stringify(warnings));
+  });
+
+  it('ingest: a file larger than the limit is not read at all, and the run goes on', async () => {
+    const ok = new TextEncoder().encode(JSON.stringify({ participantId: 'P1', trials: [{ integrity: { trialId: 't', participantId: 'P1', pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [] } }] }));
+    const reader = (name, bytes) => ({ name, path: name, size: bytes.length, read: async () => bytes });
+    // Its size is what the file system reports; reading it would be the failure.
+    const huge = (name) => ({ name, path: name, size: MAX_DECOMPRESSED_BYTES + 1,
+      read: async () => { throw new Error('read a file over the limit'); } });
+    const participantFiles = [reader('P1.json', ok), huge('P2.json'), huge('P3.csv')];
+    const replayFiles = [...participantFiles, huge('session.json')];
+    const { participants, warnings } = await ingestFiles({ participantFiles, replayFiles },
+      { participantIdField: 'participantId', integrityField: 'integrity', dataDir: '.' },
+      { gunzip: (b) => webGunzip(b, MB), sha256: webSha256, shellHints: false });
+    assert.deepStrictEqual(participants.map((p) => p.participantId), ['P1']);
+    for (const name of ['P2.json', 'P3.csv', 'session.json']) {
+      const w = warnings.find((x) => x.file === name);
+      assert.ok(w && /larger than 256 MB; not read/.test(String(w.warnings)), name + ': ' + JSON.stringify(warnings));
+    }
+    assert.ok(!JSON.stringify(warnings).includes('read a file over the limit'));
+  });
+
+  it('the analyzer\'s first look at a file does not read one larger than the limit', async () => {
+    let read = false;
+    const huge = { name: 'P2.json', path: 'P2.json', size: MAX_DECOMPRESSED_BYTES + 1,
+      read: async () => { read = true; return new TextEncoder().encode('{"participantId":"P2","trials":[]}'); } };
+    assert.strictEqual(await peekParticipantFile(huge), null);
+    assert.strictEqual(read, false);
   });
 });
