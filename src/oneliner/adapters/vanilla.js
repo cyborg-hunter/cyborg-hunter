@@ -415,12 +415,7 @@ export function installVanillaAdapter(opts) {
       }
       return replaces;
     }
-    if (!input) {
-      input = doc.createElement('input');
-      input.type = 'hidden';
-      input.name = HIDDEN_INPUT;
-      form.appendChild(input);
-    }
+    if (!input) input = hiddenInput(form, HIDDEN_INPUT);
     input.value = JSON.stringify(blob());
     setReplayInput(form);
     written = { form: form, cuts: cuts };
@@ -445,13 +440,22 @@ export function installVanillaAdapter(opts) {
       if (input) input.parentNode.removeChild(input);
       return;
     }
-    if (!input) {
-      input = doc.createElement('input');
-      input.type = 'hidden';
-      input.name = REPLAY_INPUT;
-      form.appendChild(input);
-    }
+    if (!input) input = hiddenInput(form, REPLAY_INPUT);
     input.value = json;
+  }
+
+  // One of ch.js's own hidden inputs. data-record-exclude keeps it out of
+  // the session recording (spec §4, no opt-out): its value is the session
+  // and the recording so far, and when the page stays after a submit a
+  // dom-tier keyframe would otherwise record it, each piece carrying the
+  // earlier ones and the pasted text.
+  function hiddenInput(form, name) {
+    var input = doc.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.setAttribute('data-record-exclude', '');
+    form.appendChild(input);
+    return input;
   }
 
   // Capture phase on document: runs before the page's own submit handlers,

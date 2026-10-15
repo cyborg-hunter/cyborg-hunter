@@ -112,6 +112,35 @@ describe('ch.js with the bundled recorder on a page without a framework', () => 
     assert.deepStrictEqual(errors, []);
   });
 
+  // ch.js writes the session (pasted text included) and the pieces so far
+  // into hidden inputs at submit time. When the page stays (a cancelled
+  // submit), the dom tier's keyframes used to record those inputs' values:
+  // every later piece carried the earlier pieces and the pasted text, and
+  // the recording grew geometrically. The inputs are not participant
+  // content and must stay out of the recording on every tier.
+  it('dom tier: the hidden inputs ch.js adds never enter the recording', async () => {
+    await start({ replay: 'dom' });
+    const f = form();
+    const ta = f.querySelector('textarea');
+    const paste = new win.Event('paste', { bubbles: true, cancelable: true });
+    paste.clipboardData = { getData: () => 'PASTE-SENTINEL-7' };
+    ta.dispatchEvent(paste);
+    for (let i = 0; i < 12; i++) {   // past keyframeEvery (10): keyframes follow
+      click(el('<button>b' + i + '</button>'));
+      submit(f);
+    }
+    assert.ok(win.document.querySelector('input[name="cyborgHunterData"]').value.includes('PASTE-SENTINEL-7'),
+      'sanity: the session field holds the pasted text');
+    const pieces = JSON.parse(fieldOf(f).value);
+    const rec = rebuild(pieces);
+    assert.ok(rec.segments.filter((s) => s.initial_dom).length >= 2, 'sanity: a second keyframe was taken');
+    const json = JSON.stringify(pieces);
+    assert.equal(json.split('PASTE-SENTINEL-7').length - 1, 0, 'the pasted text is not in the recording');
+    assert.ok(!json.includes('cyborgHunterReplay') && !json.includes('cyborgHunterData'),
+      'the hidden inputs are not in the recording');
+    assert.deepStrictEqual(errors, []);
+  });
+
   it('a GET form gets no replay input', async () => {
     await start();
     click(el('<button>x</button>'));
