@@ -34,9 +34,22 @@ export function buildTriageMd(triage, config) {
     const tier = t.hardTriggered ? '**HARD**' : t.softFlagged ? 'soft' : 'clean';
     // Escape pipe characters in reason text to avoid breaking the table
     const reason = t.reason.replace(/\|/g, '\\|');
-    lines.push(`| ${i + 1} | ${t.participantId} | ${tier} | ${formatScore(t.score)} | ${reason} |`);
+    lines.push(`| ${i + 1} | ${mdCell(t.participantId)} | ${tier} | ${formatScore(t.score)} | ${reason} |`);
   });
 
   lines.push('');
   return lines.join('\n');
+}
+
+// A participant id in a table cell, as text: the id comes from participant
+// data, so a pipe would break the table and markdown or HTML in it would be
+// rendered (a link, an image the viewer fetches, a tag). Backslash-escape
+// what can do that (the pipe, brackets, angle brackets, emphasis and code
+// marks, the backslash itself) and drop line breaks; `_` and `-`, common in
+// ids, stay as they are (GitHub-flavoured markdown does not emphasise inside
+// a word).
+function mdCell(v) {
+  return String(v == null ? '' : v)
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[\\`*[\]|<>~]/g, (c) => '\\' + c);
 }

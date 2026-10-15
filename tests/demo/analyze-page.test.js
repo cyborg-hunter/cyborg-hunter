@@ -1775,7 +1775,7 @@ describe('a re-analysis keeps the analyst\'s place', () => {
     t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
     t.emit(done);
     await tick();
-    assert.match(frame.src, /^blob:[^#]*#p-p_2_b$/, 'the new report opens on the selected participant');
+    assert.match(frame.src, /^blob:[^#]*#p-p_2_b-[0-9a-f]{8}$/, 'the new report opens on the selected participant (a cleaned id carries its fingerprint, report-id.js)');
     assert.equal(document.querySelectorAll('iframe.replay-host-frame').length, 0, 'the old viewer went with the old report');
     frame.dispatchEvent(new win.Event('load'));
     await tick();

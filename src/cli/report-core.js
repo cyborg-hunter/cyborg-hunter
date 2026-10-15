@@ -183,7 +183,9 @@ export async function buildReport(participants, config, deps) {
   // Plots, through the injected canvas: one PNG per participant from each of
   // trajectories-core.js, session-timeline-core.js and typing-profile-core.js.
   let visualsRendered = false;
-  const images = {};
+  // Keyed by participant id: a null prototype, so an id like `__proto__`
+  // is a key like any other rather than the object's prototype.
+  const images = Object.create(null);
   if (deps.createCanvas && !config.noVisuals) {
     const emit = async (path, canvas, pid, kind) => {
       const bytes = await deps.encodePng(canvas);

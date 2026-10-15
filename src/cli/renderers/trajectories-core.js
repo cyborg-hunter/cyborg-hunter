@@ -436,10 +436,9 @@ function drawTriangle(ctx, x, y, size, direction) {
   ctx.fill();
 }
 
-// report-core.js builds the per-participant PNG filename with this.
-export function sanitize(name) {
-  return name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
-}
+// report-core.js builds the per-participant PNG filename with this; the
+// rule is the report page's own (report-id.js), so the link always matches.
+export { sanitize } from './report-id.js';
 
 // Picks the windowPositions sample closest in time to the trial's start
 // anchor and translates it into the field shape chooseScreenFrame() expects.

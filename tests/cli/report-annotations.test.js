@@ -213,9 +213,11 @@ describe('the report\'s annotation script', () => {
     };
   }
 
-  it('i, e and f label the selected row\'s participant, though both panes of its pane id show', () => {
+  it('i, e and f label the selected row\'s participant, with both panes shown', () => {
     const r = mount(memoryStorage());
-    assert.equal(r.doc.querySelectorAll('.participant[id="p-a_b"]').length, 2, 'the two ids share a pane id');
+    // Ids that clean up alike no longer share a pane id (report-id.js).
+    assert.equal(r.doc.querySelectorAll('.participant[id="p-a_b"]').length, 1, 'a_b keeps its own pane id');
+    assert.equal(r.doc.querySelectorAll('.participant[id^="p-a_b-"]').length, 1, '"a b" gets one of its own');
     r.select('a b');
     r.key('e');
     assert.deepEqual(r.labels(), { 'a b': 'exclude' });

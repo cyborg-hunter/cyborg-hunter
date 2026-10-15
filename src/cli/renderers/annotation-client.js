@@ -319,8 +319,9 @@ export const ANNOTATION_UI_JS = String.raw`
       });
 
       // i, e and f set the label of the selected participant: the rail's
-      // selected row, since two ids that sanitize alike share one pane id and
-      // both panes then show. Not while typing in a field, not with a modifier
+      // selected row, which is the one participant the keys can mean even
+      // when more than one pane shows (reports built before ids that clean
+      // up alike got distinct pane ids, report-id.js, still have such pairs). Not while typing in a field, not with a modifier
       // key, not for a held key's repeats, and not while the legend or an
       // enlarged image is open or anything is in fullscreen (a replay viewer
       // covers the report, as the report's navigation keys allow for).

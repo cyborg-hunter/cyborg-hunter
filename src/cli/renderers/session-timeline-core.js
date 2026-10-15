@@ -895,9 +895,9 @@ function drawLegendRow(ctx, items, yText) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
-export function sanitize(name) {
-  return String(name).replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
-}
+// report-core.js builds the per-participant PNG filename with this; the
+// rule is the report page's own (report-id.js), so the link always matches.
+export { sanitize } from './report-id.js';
 export function shortId(name) {
   return String(name).slice(0, 8);
 }
