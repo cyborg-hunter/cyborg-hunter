@@ -590,12 +590,12 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
         : { error: 'parse_failed', reason: parsed[0].reason, file: parsed[0].file };
       continue;
     }
-    const several = parsed.length > 1;
+
     // Filename sanitization is many-to-one ('a/b' and 'a_b' both map to
     // 'a_b'), so ownership is verified against the UNsanitized
     // participant_id embedded in the recording. Artifacts without one
     // (e.g. plain #3661 recordings) attach with a soft warning.
-    const owned = [];
+    let owned = [];
     for (const cand of readable) {
       // v2 carries the id at the TOP LEVEL; v1 carried it in `metadata`.
       // Reading only the v1 site would send every v2 artifact down the
@@ -641,6 +641,12 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       p.replay = null;
       continue;
     }
+    // One recording found twice: the pieces in the rows and the whole file
+    // the researcher also saved with CyborgHunter.replay(). Same participant,
+    // same start on both clocks: kept once, the copy with more segments (the
+    // whole file, when the rows stop at a save trial), silently.
+    owned = sameRecordingOnce(owned);
+    const several = owned.length > 1;
     // Duplicate records for this id + multiple owned artifacts: the
     // per-session mapping is genuinely ambiguous. Attach nothing rather
     // than knowingly mis-associate a session's replay. The participant
@@ -742,6 +748,26 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       warnings.push({ file: a.reader.path, warnings: [`Replay artifact ${a.file} ${why}`] });
     }
   }
+}
+
+// Candidates that are one recording (same participant_id, and the same
+// start on the wall clock and on the capture clock), kept once each: the
+// copy with more segments wins, then a file over rebuilt pieces.
+function sameRecordingOnce(owned) {
+  const byKey = new Map();
+  for (const c of owned) {
+    const r = c.recording;
+    const key = r && r.schema_version === 2
+      ? JSON.stringify([r.participant_id, r.recording_started_at, r.recording_started_at_perf])
+      : Symbol('unkeyed');
+    const prev = byKey.get(key);
+    const size = (x) => (x.recording.segments || []).length;
+    const fromPieces = (x) => String(x.file).startsWith('replay pieces ');
+    if (!prev || size(c) > size(prev) || (size(c) === size(prev) && fromPieces(prev) && !fromPieces(c))) {
+      byKey.set(key, c);
+    }
+  }
+  return [...byKey.values()];
 }
 
 // One participant's recordings joined in time order (merge.js), or null when

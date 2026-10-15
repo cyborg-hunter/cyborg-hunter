@@ -12,7 +12,7 @@ import { join } from 'path';
 import Papa from 'papaparse';
 import { ingest } from '../../src/cli/ingest.js';
 import { createRecorder } from '../../src/replay/recorder.js';
-import { createPieceTaker } from '../../src/replay/pieces.js';
+import { createPieceTaker, reassemblePieces } from '../../src/replay/pieces.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 
 // A recording of `trials` trials, as pieces: one per trial end and a final
@@ -141,6 +141,17 @@ describe('ingest: recordings in pieces', () => {
     const { participants, warnings } = await run({ 'P-HEAD.json': JSON.stringify(rows) });
     assert.strictEqual(participants[0].replay, null);
     assert.ok(warnings.some((w) => String(w.warnings).match(/first one, which carries the recording's header, is missing/)));
+  });
+
+  it('the same recording in the rows and in a saved replay() file counts once, without a warning', async () => {
+    const pieces = recordedPieces('P-BOTH', 2);
+    const whole = reassemblePieces(pieces);
+    const { participants, warnings } = await run({
+      'P-BOTH.json': JSON.stringify(jsPsychRows('P-BOTH', pieces)),
+      'P-BOTH-replay-1751600000000.json': JSON.stringify(whole),
+    });
+    assert.deepStrictEqual(participants[0].replay.recording.segments.map((s) => s.label), ['t0', 't1']);
+    assert.deepStrictEqual(warnings.filter((w) => /replay/i.test(String(w.warnings))), []);
   });
 
   it('pieces for a participant who is not in the data are reported, not attached', async () => {

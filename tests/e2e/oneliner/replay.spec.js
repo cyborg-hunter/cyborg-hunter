@@ -17,14 +17,6 @@ test.afterAll(() => cleanupTmpDirs());
 function chErrors(log) { return log.error.filter((t) => t.startsWith('[cyborg-hunter]')); }
 function json(cell) { return cell ? JSON.parse(cell) : null; }
 
-// The catalogue message around its cause: the cause names the missing URL.
-function expectReplayUnavailable(text, src) {
-  const [head, tail] = MESSAGES.replayUnavailable('\u0000').split('\u0000');
-  expect(text.startsWith(head), text).toBe(true);
-  expect(text.endsWith(tail), text).toBe(true);
-  expect(text).toContain(src);
-}
-
 // On the ch.js tag itself (the header comments mention data-replay too).
 function addReplaySrc(html) {
   return html.replace('<script src="/dist/ch.js"', '<script src="/dist/ch.js" data-replay-src="' + MISSING + '"');
@@ -46,41 +38,49 @@ async function driveJsPsychReplay(page) {
   };
 }
 
-test('jsPsych + data-replay: the recorder loads from next to ch.js and CyborgHunter.replay() returns a recording with events', async ({ page }) => {
+// ch.js bundles the recorder (build-targets.js `replay`): nothing is
+// loaded, and the recording also rides in the rows (cyborgHunterReplay).
+test('jsPsych + data-replay: the bundled recorder loads nothing, CyborgHunter.replay() returns a recording with events, and the rows carry its pieces', async ({ page }) => {
   const log = collectConsole(page);
   const replayRequests = [];
   page.on('request', (r) => { if (r.url().endsWith('/cyborg-hunter-replay.js')) replayRequests.push(new URL(r.url()).pathname); });
   const { rows, csv, replay } = await driveJsPsychReplay(page);
 
-  expect(replayRequests).toEqual(['/dist/cyborg-hunter-replay.js']);
+  expect(replayRequests).toEqual([]);
   expect(replay).not.toBeNull();
   expect(replay.schema_version).toBe(2);
   expect(replay.participant_id).toBe('E2E-RP-1');
-  // The one-liner's own save reminder (no data-debug here), once; the
+  // The recording is saved with the rows, so no save reminder; the
   // recorder's autoSave warning, which names getRecording(), is silenced.
-  expect(log.info.filter((t) => t === MESSAGES.replaySaveReminder())).toHaveLength(1);
+  expect(log.info.filter((t) => t === MESSAGES.replaySaveReminder())).toHaveLength(0);
   expect(log.warn.filter((t) => t.includes('autoSave.mode is "none"'))).toEqual([]);
   expect(replay.segments).toHaveLength(3);   // one per trial
   expect(replay.segments.reduce((n, s) => n + s.events.length, 0)).toBeGreaterThan(0);
   expect(chErrors(log)).toEqual([]);
 
   expect(rows).toHaveLength(3);
-  for (const r of rows) expect(json(r.integritySegment)).not.toBeNull();
+  for (const r of rows) {
+    expect(json(r.integritySegment)).not.toBeNull();
+    expect(json(r.cyborgHunterReplay).kind).toBe('ch-replay-piece');
+  }
   const out = saveAndReport(newTmpDir('replay-js'), 'E2E-RP-1.csv', csv);
   expect(out.stdout).toContain('Found 1 participants');
   expect(out.stdout).not.toContain('files had warnings');
   expect(out.summaryCsv[0].totalPasteEvents).toBe('1');
 });
 
-test('jsPsych + data-replay-src that 404s: catalogue error, the experiment still completes with its segments', async ({ page }) => {
+// data-replay-src names where to load the recorder from; ch.js carries it,
+// so the attribute has nothing to do (ch-qualtrics.js still loads it).
+test('jsPsych + data-replay-src that 404s: ch.js loads nothing from it and records with its bundled recorder', async ({ page }) => {
   await rewriteFixture(page, '**/jspsych-replay.html', addReplaySrc);
   const log = collectConsole(page);
+  const replayRequests = [];
+  page.on('request', (r) => { if (r.url().includes('cyborg-hunter-replay')) replayRequests.push(r.url()); });
   const { rows, csv, replay } = await driveJsPsychReplay(page);
 
-  const errors = chErrors(log);
-  expect(errors).toHaveLength(1);
-  expectReplayUnavailable(errors[0], MISSING);
-  expect(replay).toBeNull();
+  expect(chErrors(log)).toEqual([]);
+  expect(replayRequests).toEqual([]);
+  expect(replay).not.toBeNull();
 
   expect(rows).toHaveLength(3);
   for (const r of rows) {
@@ -93,7 +93,7 @@ test('jsPsych + data-replay-src that 404s: catalogue error, the experiment still
   expect(out.summaryCsv[0].totalPasteEvents).toBe('1');
 });
 
-test('vanilla + data-replay-src that 404s: catalogue error, marks and the custom save still work', async ({ page }) => {
+test('vanilla + data-replay-src that 404s: ch.js loads nothing from it; marks, the custom save and the replay work', async ({ page }) => {
   await rewriteFixture(page, '**/vanilla-marks-fetch.html', addReplaySrc);
   const log = collectConsole(page);
   let saved = null;
@@ -102,16 +102,14 @@ test('vanilla + data-replay-src that 404s: catalogue error, marks and the custom
     await route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' });
   });
   await page.goto(FIX + 'vanilla-marks-fetch.html');
-  await expect.poll(() => chErrors(log).length).toBe(1);
-  expectReplayUnavailable(chErrors(log)[0], MISSING);
 
   for (const id of ['q1', 'q2', 'q3']) await page.click('[data-ch-trial="' + id + '"]');
   await page.click('#finish');
   await page.waitForFunction(() => window.__saved === true);
 
-  expect(saved.replay).toBeNull();
+  expect(saved.replay).not.toBeNull();
   expect(saved.data.trials.map((t) => t.trialId)).toEqual(['span-0', 'q1', 'q2', 'q3']);
-  expect(chErrors(log)).toHaveLength(1);
+  expect(chErrors(log)).toEqual([]);
   const out = saveAndReport(newTmpDir('replay-van-404'), 'E2E-VAN-2.json', JSON.stringify(saved.data));
   expect(out.stdout).toContain('Found 1 participants');
   expect(out.stdout).not.toContain('files had warnings');

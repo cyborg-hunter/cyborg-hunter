@@ -184,9 +184,10 @@ test('shared trial object + own extensions: injected once, both rows carry segme
     for (const [k, t] of Object.entries(window.__trials)) out[k] = (t.extensions || []).map((e) => e.type.info.name);
     return out;
   });
-  expect(ext.shared).toEqual(['cyborg-hunter', 'guard-honeypot']);
-  expect(ext.tracked).toEqual(['mouse-tracking', 'cyborg-hunter', 'guard-honeypot']);
-  expect(ext.after).toEqual(['cyborg-hunter', 'guard-honeypot']);
+  // ch.js records replay by default (its bundled recorder's extension).
+  expect(ext.shared).toEqual(['cyborg-hunter', 'guard-honeypot', 'cyborg-hunter-replay']);
+  expect(ext.tracked).toEqual(['mouse-tracking', 'cyborg-hunter', 'guard-honeypot', 'cyborg-hunter-replay']);
+  expect(ext.after).toEqual(['cyborg-hunter', 'guard-honeypot', 'cyborg-hunter-replay']);
 
   // Planned: 3 unique trial objects; written: 4 rows.
   const summaries = log.info.filter((t) => t.startsWith('Cyborg Hunter active'));

@@ -236,8 +236,8 @@ test('single page: manual marks + custom fetch save via CyborgHunter.data(), rep
   // and Finish (whose handler calls CyborgHunter.data()).
   expect(saved.data.trials.map((t) => t.integrity.mouseTrack.filter((m) => m.type === 'click').length)).toEqual([1, 1, 1, 1]);
 
-  // The replay recording, loaded from next to dist/ch.js.
-  expect(replayRequests).toEqual(['/dist/cyborg-hunter-replay.js']);
+  // The replay recording, from the recorder dist/ch.js bundles: nothing loaded.
+  expect(replayRequests).toEqual([]);
   const rec = saved.replay;
   expect(rec).not.toBeNull();
   expect(rec.schema_version).toBe(2);
@@ -246,11 +246,11 @@ test('single page: manual marks + custom fetch save via CyborgHunter.data(), rep
   const labels = rec.segments.map((s) => s.label);
   for (const id of ['q1', 'q2', 'q3']) expect(labels).toContain(id);
 
-  // data-debug: one console summary for the page; with data-replay it ends
-  // with the save reminder, which is then not logged on its own. The
-  // recorder's own autoSave warning (it names getRecording()) is silenced.
+  // data-debug: one console summary for the page. The recording goes with
+  // the POST and CyborgHunter.data(), so no save reminder. The recorder's own
+  // autoSave warning (it names getRecording()) is silenced.
   const summaries = log.info.filter((t) => t.startsWith('Cyborg Hunter active'));
-  expect(summaries).toEqual(['Cyborg Hunter active · vanilla mode · 3 mark elements · ID from data-participant-id · honeypot on · friction off · data-replay is on: save CyborgHunter.replay() in your save code']);
+  expect(summaries).toEqual(['Cyborg Hunter active · vanilla mode · 3 mark elements · ID from data-participant-id · honeypot on · friction off']);
   expect(log.info).not.toContain(MESSAGES.replaySaveReminder());
   expect(log.warn.filter((t) => t.includes('autoSave.mode is "none"'))).toEqual([]);
   expect(chErrors(log)).toEqual([]);
