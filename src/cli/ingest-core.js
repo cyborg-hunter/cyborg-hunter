@@ -46,6 +46,8 @@ import { isQualtricsExport, parseQualtricsExport } from './qualtrics-csv.js';
 // validator) is never loaded by importing it.
 import { convertRecording } from '../../tools/convert/convert-core.mjs';
 import { detectGzip, validateStrict } from '../shared/schema-v2-validator.js';
+import { collectPieces, isPieceFile, recordingsFromPieces } from './replay-pieces.js';
+import { mergeRecordings } from '../replay/merge.js';
 
 // Replay artifacts saved by the replay extension:
 //   <sanitizedPid>-replay-<sessionStartEpochMs>.json[.gz]
@@ -194,6 +196,9 @@ function ownField(recording, which) {
 export async function ingestFiles({ participantFiles, replayFiles }, config, deps) {
   const participants = [];
   const warnings = [];
+  // Session recordings in pieces (replay-pieces.js), from every file they
+  // turn up in; rebuilt into recordings in the replay pass.
+  const pieceSources = [];
 
   // Session recordings are excluded from the participant pass by CONTENT, not
   // by name: v2 is producer-agnostic, so a conforming artifact can arrive
@@ -220,6 +225,10 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
       }
     } else if (artifactKind(read.json) !== null) {
       continue;                       // a session recording is never participant data
+    } else if (isPieceFile(read.json)) {
+      // A saved cyborgHunterReplay field: recording data, never participant data.
+      pieceSources.push({ path: reader.path, pieces: collectPieces(read.json) });
+      continue;
     } else if (named) {
       warnings.push({ file: reader.path,
         warnings: ['File matches the replay-artifact naming pattern (<pid>-replay-<epoch>.json) but contains participant data — parsed as a participant file. Consider renaming it to avoid ambiguity.'] });
@@ -245,6 +254,10 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
       const raw = extOf(reader.name) === '.csv'
         ? parseCsvToRaw(text, config)
         : JSON.parse(text);
+      // Pieces of the session recording ride in the rows (ch.js, ch-labjs.js)
+      // or beside the session (CyborgHunter.data() output).
+      const found = collectPieces(raw);
+      if (found.length) pieceSources.push({ path: reader.path, pieces: found });
       const result = extractIntegrityData(raw, config);
       if (result.trials.length > 0) census.push({ participantId: result.participantId, metadata: result.metadata });
 
@@ -281,7 +294,7 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
     }
   }
 
-  await attachReplayArtifacts(participants, census, config, warnings, replayFiles, participantFiles, deps);
+  await attachReplayArtifacts(participants, census, config, warnings, replayFiles, participantFiles, deps, pieceSources);
 
   return { participants, warnings };
 }
@@ -341,7 +354,8 @@ function ingestQualtricsExport(text, path, config, participants, warnings) {
 // `entries`: readers for the replay directory's files. `participantPassFiles`:
 // what discovery handed the participant pass, so the foreign scan knows which
 // unreadable files already reported themselves there.
-async function attachReplayArtifacts(participants, census, config, warnings, entries, participantPassFiles, deps) {
+async function attachReplayArtifacts(participants, census, config, warnings, entries, participantPassFiles, deps, pieceSources) {
+  pieceSources = pieceSources || [];
   const dir = config.replayDir || config.dataDir;
   // The shell lists the directory; a listing failure is reported here, where
   // it always was (silent for the default dataDir, whose own listing ran first).
@@ -466,8 +480,26 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       continue;
     }
     const kind = artifactKind(read.json);
-    if (kind === null) continue;
+    if (kind === null) {
+      // Pieces kept apart from the participant files (a replayDir of saved
+      // cyborgHunterReplay fields). A file the participant pass read is
+      // collected twice; the rebuild counts each piece once.
+      const found = collectPieces(read.json);
+      if (found.length) pieceSources.push({ path: full.path, pieces: found });
+      continue;
+    }
     foreign.push({ file: f, reader: full, kind, id: embeddedId(read.json) });
+  }
+  // Recordings rebuilt from pieces join the content route: attached by the
+  // participant_id they carry, like any foreign-named recording. They are
+  // held built (the reader hands the object back), named after the files
+  // their pieces came from.
+  const rebuilt = recordingsFromPieces(pieceSources);
+  for (const w of rebuilt.warnings) warnings.push(w);
+  for (const r of rebuilt.recordings) {
+    const name = `replay pieces ${r.recordingId}`;
+    foreign.push({ file: name, kind: 'v2', id: embeddedId(r.recording),
+      reader: { name, path: r.paths.join(', '), size: 0, recording: r.recording } });
   }
   const claimed = new Set();
 
@@ -512,7 +544,7 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
     for (const a of mineForeign) claimed.add(a.file);
     for (const r of [...mine, ...mineForeign.map(a => a.reader)]) {
       const f = r.name;
-      const read = await readArtifactJson(r, deps.gunzip);
+      const read = r.recording ? { json: r.recording } : await readArtifactJson(r, deps.gunzip);
       if (read.error) { parsed.push({ file: f, path: r.path, reason: read.error }); continue; }
       // Same structural sniff as the participant pass: a misnamed
       // participant export was rescued as participant data there and
@@ -558,10 +590,7 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
         : { error: 'parse_failed', reason: parsed[0].reason, file: parsed[0].file };
       continue;
     }
-    if (parsed.length > 1) {
-      warnings.push({ file: dir,
-        warnings: [`Multiple replay artifacts for ${p.participantId} (page reload?) — using the latest by start_time.`] });
-    }
+    const several = parsed.length > 1;
     // Filename sanitization is many-to-one ('a/b' and 'a_b' both map to
     // 'a_b'), so ownership is verified against the UNsanitized
     // participant_id embedded in the recording. Artifacts without one
@@ -643,7 +672,21 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       return m ? Number(m[1]) : 0;
     };
     owned.sort((a, b) => sessionEpoch(a) - sessionEpoch(b));
-    const chosen = owned[owned.length - 1];
+    // Several recordings that follow one another in time (one per page of a
+    // study without a framework, or a reload) are joined into one replay
+    // (src/replay/merge.js). Overlapping ones are two sessions: the latest
+    // is shown, as before.
+    let chosen = owned.length > 1 ? mergedOf(owned) : null;
+    if (chosen) {
+      warnings.push({ file: dir,
+        warnings: [`${owned.length} replay recordings for ${p.participantId} (one per page, or a reload) joined into one replay in time order.`] });
+    } else {
+      if (several) {
+        warnings.push({ file: dir,
+          warnings: [`Multiple replay artifacts for ${p.participantId} (page reload?) — using the latest by start_time.`] });
+      }
+      chosen = owned[owned.length - 1];
+    }
     // The targeted version is 2: the viewer is v2-only and a v1
     // artifact is skipped with a note when the report is built
     // (replay-assets-core.js). Warning "this CLI targets 1" was the previous
@@ -698,6 +741,21 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       }
       warnings.push({ file: a.reader.path, warnings: [`Replay artifact ${a.file} ${why}`] });
     }
+  }
+}
+
+// One participant's recordings joined in time order (merge.js), or null when
+// they cannot be one session (overlap, another participant, not all v2) or
+// the join fails strict validation; the caller then shows the latest.
+function mergedOf(owned) {
+  if (!owned.every((c) => c.recording && c.recording.schema_version === 2)) return null;
+  try {
+    const recording = mergeRecordings(owned.map((c) => c.recording));
+    if (!validateStrict(recording).ok) return null;
+    return { recording, file: owned.map((c) => c.file).join(' + '), path: owned[0].path,
+      converted: owned.some((c) => c.converted) };
+  } catch {
+    return null;
   }
 }
 

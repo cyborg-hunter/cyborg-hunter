@@ -10,6 +10,7 @@ import { join } from 'path';
 import { gzipSync } from 'zlib';
 import { ingest, migrateArtifact } from '../../src/cli/ingest.js';
 import { buildViewerModel } from '../../src/replay/viewer-model.js';
+import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 
 function participantFile(pid, replayMeta) {
   return JSON.stringify({
@@ -48,7 +49,12 @@ function recording(pid, startEpoch) {
 // SessionRecording v2 (spec r2) — what the recorder emits.
 // The content sniff has to recognise it or a fresh capture is parsed as a
 // participant file and never reaches the viewer.
-function recordingV2(pid, startEpoch) {
+// `durationMs` long enough to reach past a later recording's start makes
+// the two overlap in time: two sessions, not two pages of one, so ingest
+// shows the latest rather than joining them (src/replay/merge.js).
+const OVERLAPPING = 2_000_000;
+function recordingV2(pid, startEpoch, durationMs) {
+  const end = durationMs || 100;
   return {
     schema_version: 2,
     recorder: { name: 'cyborg-hunter-replay', version: '0.7.5' },
@@ -61,10 +67,10 @@ function recordingV2(pid, startEpoch) {
     observed_root: null,
     stylesheets: [], stylesheet_events: [], viewport_changes: [],
     rng: null, rng_calls: null,
-    ended_at_perf: 100, end_reason: 'finished', truncated: false,
+    ended_at_perf: end, end_reason: 'finished', truncated: false,
     segments: [{
       index: 0, label: 'r1', plugin: 'x',
-      t_start: null, t_dom_ready: null, t_load: 0, t_end: 100,
+      t_start: null, t_dom_ready: null, t_load: 0, t_end: end,
       initial_dom: { id: 1, kind: 'element', tag: 'body', attrs: {}, children: [] },
       initial_state: null, events: [], host_data: {}, extensions: null,
     }],
@@ -273,7 +279,7 @@ describe('replay artifact ingest', () => {
     const d = mkdtempSync(join(tmpdir(), 'ch-replay-v2junkt-'));
     try {
       writeFileSync(join(d, 'P13.json'), participantFile('P13'));
-      const older = recordingV2('P13', 1751600000000);
+      const older = recordingV2('P13', 1751600000000, OVERLAPPING);
       older.metadata = { start_time: new Date(1799999999999).toISOString() }; // junk: claims newest
       writeFileSync(join(d, 'P13-replay-1751600000000.json'), JSON.stringify(older));
       writeFileSync(join(d, 'P13-replay-1751600999999.json'),
@@ -288,6 +294,26 @@ describe('replay artifact ingest', () => {
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
+  it('recordings that follow one another (pages, a reload) are joined into one replay', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'ch-replay-v2join-'));
+    try {
+      writeFileSync(join(d, 'P14.json'), participantFile('P14'));
+      writeFileSync(join(d, 'P14-replay-1751600999999.json'), JSON.stringify(recordingV2('P14', 1751600999999)));
+      writeFileSync(join(d, 'P14-replay-1751600000000.json'), JSON.stringify(recordingV2('P14', 1751600000000)));
+      const { participants, warnings } = await ingest({
+        dataDir: d, filePattern: '*.json', singleParticipant: 'P14',
+        integrityField: 'integrity', participantIdField: 'participantId',
+      });
+      const rec = participants[0].replay.recording;
+      assert.strictEqual(rec.recording_started_at, new Date(1751600000000).toISOString(), 'starts with the first page');
+      assert.strictEqual(rec.segments.length, 2);
+      assert.strictEqual(rec.segments[1].t_load, 999999, 'the later page on the first page clock');
+      assert.deepStrictEqual(validateStrict(rec).errors, []);
+      assert.ok(warnings.some(w => String(w.warnings).match(/2 replay recordings for P14 .* joined/)));
+      assert.ok(!warnings.some(w => String(w.warnings).match(/multiple replay artifacts/i)));
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+
   it('picks the latest v2 session by its own start time', async () => {
     const d = mkdtempSync(join(tmpdir(), 'ch-replay-v2latest-'));
     try {
@@ -298,7 +324,7 @@ describe('replay artifact ingest', () => {
       // filename epoch is derived from that field, so the two agree; this
       // pair exists to prove which one is being read.)
       writeFileSync(join(d, 'P11-replay-1751600000002.json'),
-        JSON.stringify(recordingV2('P11', 1751600000000)));   // older session
+        JSON.stringify(recordingV2('P11', 1751600000000, OVERLAPPING)));   // older session
       writeFileSync(join(d, 'P11-replay-1751600000001.json'),
         JSON.stringify(recordingV2('P11', 1751600999999)));   // newer session
       const { participants } = await ingest({
@@ -707,7 +733,7 @@ describe('replay ingest — v2 from other producers', () => {
     try {
       writeFileSync(join(d, 'F5.json'), participantFile('F5'));
       writeFileSync(join(d, 'F5-replay-1751600000000.json'),
-        JSON.stringify(recordingV2('F5', 1751600000000)));      // older, CH-named
+        JSON.stringify(recordingV2('F5', 1751600000000, OVERLAPPING)));      // older, CH-named
       writeFileSync(join(d, 'session.json'),
         JSON.stringify(recordingV2('F5', 1751600999999)));      // newer, foreign-named
       const { participants, warnings } = await ingest(cfg(d));

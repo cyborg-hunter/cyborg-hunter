@@ -89,6 +89,9 @@ test('peek: a session recording is reported as a recording, plain or gzipped, an
   assert.deepEqual(await peekParticipantFile(reader('DEMO-FIXT-replay-1785352263344.json', text)), { recording: true });
   const gz = gzipSync(Buffer.from(text));
   assert.deepEqual(await peekParticipantFile({ name: 'r.json.gz', read: async () => new Uint8Array(gz) }), { recording: true });
+  // A saved cyborgHunterReplay field (pieces of a recording) is no participant's data either.
+  const piece = { kind: 'ch-replay-piece', v: 1, recording_id: 'r1', seq: 0, header: null, segments: [], streams: {}, end: null };
+  assert.deepEqual(await peekParticipantFile(reader('P1-page1.json', JSON.stringify([piece]))), { recording: true });
 });
 
 test('peek: a gzipped JSON file is decompressed first', async () => {
