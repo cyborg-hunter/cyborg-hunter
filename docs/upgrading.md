@@ -66,6 +66,11 @@ study with it: it lists what is collected by default.
 - `thresholds.maxWindowPositions` (default 2000, `null` for no cap).
 - `thresholds.maxPasteDropChars` (default 20000) and
   `thresholds.maxPasteDropCharsPerTrial` (default 200000); `null` for no cap.
+- Privacy switches fail closed: a `collectForPostHoc` switch that is not
+  `true` or `false`, or a recorder `keys`, `tier`, `clipboardContent` or
+  `keepBait` outside its documented values, now collects the less (off,
+  `'trace'`) and warns. Before, `'false'` or `keys: false` left collection
+  on. The recorder also warns on unknown option names.
 - A misspelt key inside `collectForPostHoc`, `signals` or `thresholds` is now
   reported with a console warning (it used to be ignored silently, leaving
   the default on). An invalid `redactSelector` is reported once in the

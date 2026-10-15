@@ -13,6 +13,7 @@
 // serializer.js converts to ms-since-session-start on the wire.
 
 import { hasInheritedRedactionTaint } from './redaction.js';
+import { validateConfig, validateSectionKeys } from '../shared/validation.js';
 
 export const REPLAY_DEFAULTS = {
   participantId: 'unknown',
@@ -114,9 +115,37 @@ const VALID = {
   destroyed: []
 };
 
+// The settings that decide what is recorded fail closed: only a documented
+// value is taken as is, anything else (keys: false, clipboardContent:
+// 'false', a misspelt tier) records the less, with a warning. Unknown keys
+// warn too, naming the closest one, as the monitor's init() does; keys
+// starting with _ are internal (the one-line setup's _ownerSavesRecording).
+var AUTOSAVE_KEYS = ['mode', 'experimentId'];
+var ENUMS = {
+  keys: { allowed: ['full', 'off'], fallback: 'off' },
+  tier: { allowed: ['trace', 'dom', 'canvas'], fallback: 'trace' },
+  clipboardContent: { allowed: [true, false], fallback: false },
+  keepBait: { allowed: [true, false], fallback: false }
+};
+function checkConfig(userConfig, config) {
+  var user = {};
+  Object.keys(userConfig).forEach(function (k) { if (k.charAt(0) !== '_') user[k] = userConfig[k]; });
+  var warnings = validateConfig(user, Object.keys(REPLAY_DEFAULTS))
+    .concat(validateSectionKeys(userConfig.autoSave, 'autoSave', AUTOSAVE_KEYS));
+  Object.keys(ENUMS).forEach(function (k) {
+    var rule = ENUMS[k];
+    if (rule.allowed.indexOf(config[k]) !== -1) return;
+    warnings.push(k + ' must be ' + rule.allowed.map(function (v) { return JSON.stringify(v); }).join(' or ') +
+      '; got ' + JSON.stringify(config[k]) + ', so it is ' + JSON.stringify(rule.fallback));
+    config[k] = rule.fallback;
+  });
+  warnings.forEach(function (w) { console.warn('[cyborg-hunter-replay] ' + w); });
+}
+
 export function createRecorder(userConfig) {
   var config = Object.assign({}, REPLAY_DEFAULTS, userConfig || {});
   config.autoSave = Object.assign({}, REPLAY_DEFAULTS.autoSave, (userConfig || {}).autoSave || {});
+  checkConfig(userConfig || {}, config);
 
   var state = 'created';
   var listeners = [];

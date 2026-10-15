@@ -54,6 +54,9 @@ Collected data, configuration and reports all change: read
   image map; `triage.md` escapes IDs.
 - A misspelt nested privacy switch, and an invalid `redactSelector`, are now
   reported instead of silently leaving collection on.
+- Privacy switches given an unexpected value (`'false'`, `keys: false`) now
+  turn collection off with a warning instead of leaving it on; the recorder
+  warns on unknown option names.
 - A deferred decoy is never injected after its trial ended.
 - Friction no longer traps a participant whose browser cannot go fullscreen.
 - The same recording found in the rows and in a saved file counts once.

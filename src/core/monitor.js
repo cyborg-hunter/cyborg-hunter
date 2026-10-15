@@ -121,6 +121,16 @@ export function init(userConfig) {
     .concat(validateSectionKeys(userConfig.collectForPostHoc, "collectForPostHoc", Object.keys(COLLECT_FOR_POST_HOC_DEFAULTS)))
     .concat(validateSectionKeys(userConfig.signals, "signals", Object.keys(preset.signals)))
     .concat(validateSectionKeys(userConfig.thresholds, "thresholds", Object.keys(DEFAULT_THRESHOLDS)));
+  // Privacy switches fail closed: the listeners test truthiness, so a value
+  // like the string 'false' (from a JSON file or a URL) would keep collecting.
+  // Only true turns a switch on; any other non-boolean turns it off.
+  Object.keys(COLLECT_FOR_POST_HOC_DEFAULTS).forEach(function (key) {
+    var v = config.collectForPostHoc[key];
+    if (typeof v === "boolean") return;
+    config.collectForPostHoc[key] = false;
+    warnings.push("collectForPostHoc." + key + " must be true or false; got " +
+      JSON.stringify(v) + ", so it is off");
+  });
   warnings.forEach(function (w) { console.warn("[cyborg-hunter] " + w); });
 
   // Shape-check the MERGED scoring config: a nested typo in an override

@@ -80,3 +80,37 @@ describe('unknown keys inside nested config sections', () => {
     });
   });
 });
+
+// A privacy switch given anything but true or false used to fail open: the
+// listeners test truthiness, so the string 'false' (from a JSON or URL
+// config) kept pasted text. Now only true turns a collectForPostHoc switch
+// on; any other non-boolean value turns it off and warns.
+describe('collectForPostHoc switches fail closed', () => {
+  function pasteOnce(cfg) {
+    const warnings = captureWarnings(() => { monitor = init(Object.assign({ participantId: 'FC' }, cfg)); });
+    monitor.startSession();
+    monitor.startTrial({ trialId: 't1' });
+    const ev = new win.Event('paste', { bubbles: true });
+    ev.clipboardData = { getData: () => 'PASTED-MONITOR' };
+    win.document.body.dispatchEvent(ev);
+    const trial = monitor.endTrial();
+    return { warnings, trial };
+  }
+
+  it("pasteDropContent: 'false' keeps the length only, with a warning", () => {
+    const { warnings, trial } = pasteOnce({ collectForPostHoc: { pasteDropContent: 'false' } });
+    assert.strictEqual(trial.pasteEvents.length, 1);
+    assert.ok(!('text' in trial.pasteEvents[0]), 'no pasted text');
+    assert.ok(warnings.some((w) => /collectForPostHoc\.pasteDropContent/.test(w) && /off/.test(w)), warnings.join('\n'));
+  });
+
+  it('true and false work as before, with no warning', () => {
+    const on = pasteOnce({ collectForPostHoc: { pasteDropContent: true } });
+    assert.strictEqual(on.trial.pasteEvents[0].text, 'PASTED-MONITOR');
+    assert.deepStrictEqual(on.warnings, []);
+    monitor.destroy(); monitor = null;
+    const off = pasteOnce({ collectForPostHoc: { pasteDropContent: false } });
+    assert.ok(!('text' in off.trial.pasteEvents[0]));
+    assert.deepStrictEqual(off.warnings, []);
+  });
+});
