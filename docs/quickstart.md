@@ -62,7 +62,7 @@ ch.js takes the participant ID from the first of these it finds:
 3. `window.CyborgHunterConfig.participantId`, set in a script above the tag;
 4. otherwise a random `ch-` + 12 hex characters, with a console warning: rows saved under it cannot be linked to the platform's records.
 
-The ID found is kept in the browser tab for the pages of the same study (the same folder of your site; keep a study's pages in one folder), so a later page without the ID in its address continues with it; a study in another folder does not pick it up. When the ID comes from the URL it is the platform's own ID (Prolific's, MTurk's): it is in every row and every report output, so the data and the report identify the participant to anyone who can look the ID up. Treat them as identifiable ([Privacy model](using-cyborg-hunter.md#privacy-model)).
+The ID found is kept in the browser tab for the pages of the same study (the same folder of your site; keep a study's pages in one folder, and end the study link with `/` or a file name, as in `/study/` or `/study/index.html`), so a later page without the ID in its address continues with it; a study in another folder does not pick it up. When the ID comes from the URL it is the platform's own ID (Prolific's, MTurk's): it is in every row and every report output, so the data and the report identify the participant to anyone who can look the ID up. Treat them as identifiable ([Privacy model](using-cyborg-hunter.md#privacy-model)).
 
 One participant per tab: do not hard-code one ID for several participants (a session in the same tab with the same ID continues the previous one).
 

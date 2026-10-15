@@ -23,9 +23,13 @@
 //      is the page's directory (pageDirectory: the address path up to and
 //      including its last '/'), so two studies in two folders of one
 //      github.io site or lab server stay apart, and a study whose pages sit
-//      in one folder keeps one session. Under Qualtrics' New Survey Taking
-//      Experience a study is the survey (ctx.qualtricsSurveyId, the SV_… id:
-//      adapters/qualtrics.js qualtricsSurveyId). Any other Qualtrics page
+//      in one folder keeps one session. A page whose folder kept nothing
+//      continues from the nearest folder above it that kept an id (the same
+//      id, when its address names one): a /study link without the slash
+//      keeps page one at '/' (keptAbove). Under Qualtrics' New Survey Taking
+//      Experience, and on any /jfe/ address under ch.js with jsPsych, a
+//      study is the survey (the SV_… id: adapters/qualtrics.js
+//      qualtricsSurveyId), never a folder. Any other Qualtrics page
 //      (the legacy layout, or no survey id found) keeps the unscoped keys:
 //      every survey there sits under /jfe/form/, so a directory would
 //      separate nothing, and a legacy later page's address may not be the
@@ -165,6 +169,23 @@ function pageDirectory(win) {
   } catch (_) { return '/'; }
 }
 
+// The nearest folder above `scope` that kept an id, as { scope, id }, or
+// null. With `wantId` (the page's address named an id) only a folder that
+// kept that same id counts. A study link without a trailing slash (/study,
+// served as /study/index.html) keeps the id at '/', and its next page at
+// /study/p2.html looks in '/study/' first: without this it would start over
+// under a random id. The cost: a page whose folder kept nothing also takes
+// the id kept by an earlier study in a folder above it, in the same tab.
+function keptAbove(win, scope, wantId) {
+  var s = scope;
+  while (s !== '/' && s.length > 1) {
+    s = s.slice(0, s.slice(0, -1).lastIndexOf('/') + 1) || '/';
+    var id = sessionGet(win, PID_KEY + ':' + s);
+    if (id) return wantId === null || id === wantId ? { scope: s, id: id } : null;
+  }
+  return null;
+}
+
 function sessionGet(win, key) {
   try { return win.sessionStorage.getItem(key); } catch (_) { return null; }
 }
@@ -220,10 +241,15 @@ export function boot(opts) {
       : labjsSeen && !HAS_LABJS ? { host: 'lab.js', file: 'ch-labjs.js' } : null;
     if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
     else if (qualtrics && jsPsychPage) console.warn(MESSAGES.qualtricsJsPsych());
-    var surveyId = HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
+    // A Qualtrics address (/jfe/form/SV_…), whichever file and framework run
+    // there: jsPsych inside a survey under ch.js too. Every survey of a
+    // university's Qualtrics domain shares the folder /jfe/form/.
+    var onJfe = /^\/jfe\//.test(String((win.location && win.location.pathname) || ''));
+    var surveyId = (HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new') || (HAS_JSPSYCH && jsPsychPage && onJfe)
+      ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
     // The study the kept id and the saved session belong to (step 3): the
     // survey, else (off Qualtrics) the page's directory, else none.
-    var keyScope = surveyId || (qualtricsSeen ? null : pageDirectory(win));
+    var keyScope = surveyId || (qualtricsSeen || onJfe ? null : pageDirectory(win));
     var pidKey = keyScope ? PID_KEY + ':' + keyScope : PID_KEY;
 
     var pid = resolveParticipantId({
@@ -233,8 +259,18 @@ export function boot(opts) {
       params: opts.participantParams || DEFAULT_PARAMS,
       random: function () { return randomParticipantId(win.crypto || globalThis.crypto); }
     });
+    var kept = sessionGet(win, pidKey);
+    if (!kept && keyScope && !surveyId) {
+      // Nothing kept in this page's folder: the folder above may hold the
+      // study (keptAbove). Its scope is then this page's, for the session too.
+      var above = keptAbove(win, keyScope, pid.source === 'random' ? null : pid.id);
+      if (above) {
+        keyScope = above.scope;
+        pidKey = PID_KEY + ':' + keyScope;
+        kept = above.id;
+      }
+    }
     if (pid.source === 'random') {
-      var kept = sessionGet(win, pidKey);
       if (kept) pid = { id: kept, source: 'session' };
       else console.warn(MESSAGES.randomId(pid.id, CH_FILE));
     }

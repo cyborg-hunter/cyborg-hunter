@@ -618,6 +618,57 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(win.CyborgHunter.data().cyborgHunterOneLiner.pageCount, 1);
   });
 
+  // A study link without a trailing slash (/study, served as /study/index.html
+  // by many hosts) puts page one in the folder '/', and page two at
+  // /study/p2.html in '/study/'. A page whose own folder kept nothing takes
+  // the id and session of the nearest folder above it that did; with an id
+  // in its address, only when that folder kept the same id.
+  it('/study then /study/p2.html: page two continues from the folder above', () => {
+    win.close();
+    useWindow(new Window({ url: 'https://lab.example/study?participant=AAA' }));
+    const ctx1 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx1);
+    paste('page one');
+    endPage(ctx1);
+
+    nextPage(30000, 'https://lab.example/study/p2.html');
+    const ctx2 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx2);
+    assert.strictEqual(ctx2.participantId, 'AAA');
+    assert.strictEqual(ctx2.participantIdSource, 'session');
+    assert.strictEqual(ctx2.segmenter.state().segmentIndex, 1, 'the session continues');
+    assert.strictEqual(win.CyborgHunter.data().cyborgHunterOneLiner.pageCount, 2);
+  });
+
+  it('/study then /study/p2.html?participant=AAA: the same id continues the session above', () => {
+    win.close();
+    useWindow(new Window({ url: 'https://lab.example/study?participant=AAA' }));
+    const ctx1 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx1);
+    endPage(ctx1);
+
+    nextPage(30000, 'https://lab.example/study/p2.html?participant=AAA');
+    const ctx2 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx2);
+    assert.strictEqual(ctx2.participantIdSource, 'url:participant');
+    assert.strictEqual(ctx2.segmenter.state().segmentIndex, 1);
+  });
+
+  it('a different id in the address never takes the session of the folder above', () => {
+    win.close();
+    useWindow(new Window({ url: 'https://lab.example/study?participant=AAA' }));
+    const ctx1 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx1);
+    endPage(ctx1);
+
+    nextPage(30000, 'https://lab.example/study/p2.html?participant=BBB');
+    const ctx2 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx2);
+    assert.strictEqual(ctx2.participantId, 'BBB');
+    assert.strictEqual(ctx2.segmenter.state().segmentIndex, 0);
+    assert.strictEqual(win.CyborgHunter.data().cyborgHunterOneLiner.pageCount, 1);
+  });
+
   // A tab that already holds the keys an earlier release wrote (no scope):
   // nothing reads them any more, so the page starts as a first page would.
   it('an id and a session kept under the earlier unscoped keys are ignored', () => {

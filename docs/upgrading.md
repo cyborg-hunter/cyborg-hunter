@@ -52,8 +52,11 @@ study with it: it lists what is collected by default.
   folder** (the directory of the page's address; on Qualtrics, still per
   survey). A study in another folder of the same site no longer picks up an
   earlier study's ID or session. A study whose pages sit in different folders
-  loses its continuity between them: keep a study's pages in one folder. Tabs
-  holding the old keys start fresh.
+  loses its continuity between them: keep a study's pages in one folder, and
+  end the study link with `/` or a file name. A page whose own folder kept
+  nothing continues from the nearest folder above it that did (a `/study`
+  link without the slash). jsPsych inside a Qualtrics survey under `ch.js`
+  keeps the ID per survey too. Tabs holding the old keys start fresh.
 - **Friction** no longer requires fullscreen on a browser that cannot go
   fullscreen (iPhone Safari, a frame without `allow="fullscreen"`); the other
   checks still run.

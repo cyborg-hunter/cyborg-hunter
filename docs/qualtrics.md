@@ -412,7 +412,10 @@ writes them into jsPsych's own data, and writes nothing into embedded data;
 in a Qualtrics header it also logs the double-load error each time the header
 runs again ([known issues](known-issues.md#one-line-setup)). That error says
 to keep one of the file's tags, but the header's tag is the only one, so the
-error can be ignored there.
+error can be ignored there. `ch.js` keeps the participant ID in the tab per
+survey (the `SV_…` id in the address), so another survey on your
+institution's Qualtrics domain opened later in the same tab does not pick it
+up.
 
 ## Legacy layout
 
