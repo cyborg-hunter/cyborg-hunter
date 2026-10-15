@@ -38,6 +38,24 @@ export function validateConfig(config, knownKeys = ALL_KNOWN_KEYS) {
 }
 
 /**
+ * Validates the keys inside one nested config section (collectForPostHoc,
+ * signals, thresholds). Returns the same warnings as validateConfig(), with
+ * the key named by its dotted path.
+ *
+ * Why this exists: those sections are merged over their defaults with
+ * Object.assign, and validateConfig() only checks top-level keys, so a typo
+ * inside one fails open with no warning — `collectForPostHoc:
+ * { pasteDropContents: false }` leaves the default pasteDropContent: true,
+ * and pasted text is still collected. A section that is not a plain object
+ * gives no warnings (the merge ignores it).
+ */
+export function validateSectionKeys(section, sectionName, knownKeys) {
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return [];
+  return validateConfig(section, knownKeys).map(w =>
+    w.replace(/^Unknown config key "/, `Unknown config key "${sectionName}.`));
+}
+
+/**
  * Validates the SHAPE of a merged scoring config, after preset+user overrides.
  * Returns warning strings for rules whose required numeric field is missing.
  *

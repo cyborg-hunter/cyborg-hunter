@@ -7,7 +7,7 @@
 
 import { createStateMachine, deepCopy } from './state-machine.js';
 import { DEFAULT_THRESHOLDS, PRESETS, VERSION } from '../shared/constants.js';
-import { validateConfig, validateScoringShape } from '../shared/validation.js';
+import { validateConfig, validateSectionKeys, validateScoringShape } from '../shared/validation.js';
 import { computeTrialScores, shouldScreenout as _shouldScreenout } from './scoring.js';
 import { attachClipboardSignals } from './signals/clipboard.js';
 import { attachFocusSignals, attachIdleGapSignals } from './signals/focus.js';
@@ -35,6 +35,19 @@ export function readDeviceFacts() {
 }
 
 let _activeInstance = null; // Track for idempotent init
+
+// What collectForPostHoc collects unless the researcher says otherwise. Its
+// keys are also the only ones init() accepts in that section (a typo there
+// would otherwise leave the default on: see the nested-key check in init).
+var COLLECT_FOR_POST_HOC_DEFAULTS = {
+  fullKeystrokeTimestamps: false,
+  rawMouseTrack: true,   // see the privacy note at endTrial (flipped on 2026-09-02)
+  responseText: false,
+  windowPositionLog: true,
+  elementTrace: false,
+  pasteDropContent: true,
+  foreignInputContent: true
+};
 
 /**
  * Initialize a new CyborgHunter monitor instance.
@@ -80,15 +93,7 @@ export function init(userConfig) {
       logCopyAttempts: true,
       renderStimulusAsCanvas: false
     }, userConfig.domProtection || {}),
-    collectForPostHoc: Object.assign({
-      fullKeystrokeTimestamps: false,
-      rawMouseTrack: true,   // see the privacy note at endTrial (flipped on 2026-09-02)
-      responseText: false,
-      windowPositionLog: true,
-      elementTrace: false,
-      pasteDropContent: true,
-      foreignInputContent: true
-    }, userConfig.collectForPostHoc || {}),
+    collectForPostHoc: Object.assign({}, COLLECT_FOR_POST_HOC_DEFAULTS, userConfig.collectForPostHoc || {}),
     decoyAnswers: userConfig.decoyAnswers || false,
     decoyMap: userConfig.decoyMap || null,
     decoyVisibility: userConfig.decoyVisibility || "offscreen",
@@ -104,6 +109,13 @@ export function init(userConfig) {
     "onSignal", "experimentContainer", "knownInputs"
   ];
   var warnings = validateConfig(userConfig, KNOWN_KEYS);
+  // The same check one level down, for the sections merged key by key over
+  // their defaults: a typo there keeps the default (for collectForPostHoc,
+  // a privacy switch left on) with no other sign. Warns, never throws.
+  warnings = warnings
+    .concat(validateSectionKeys(userConfig.collectForPostHoc, "collectForPostHoc", Object.keys(COLLECT_FOR_POST_HOC_DEFAULTS)))
+    .concat(validateSectionKeys(userConfig.signals, "signals", Object.keys(preset.signals)))
+    .concat(validateSectionKeys(userConfig.thresholds, "thresholds", Object.keys(DEFAULT_THRESHOLDS)));
   warnings.forEach(function (w) { console.warn("[cyborg-hunter] " + w); });
 
   // Shape-check the MERGED scoring config: a nested typo in an override
