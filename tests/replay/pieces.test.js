@@ -135,7 +135,7 @@ describe('pieces: incomplete deliveries', () => {
     const { pieces } = session();
     const rec = strict(reassemblePieces(pieces.slice(0, 3).map(viaJson)));
     assert.equal(rec.segments.length, 4);
-    assert.equal(rec.end_reason, 'aborted');
+    assert.equal(rec.end_reason, null, 'unknown, not a screenout');
     assert.deepEqual(rec.extensions['cyborg-hunter'].reassembly,
       { complete: false, missing_seq_ranges: [], missing_end: true });
   });

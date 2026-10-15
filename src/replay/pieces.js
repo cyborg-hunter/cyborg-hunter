@@ -176,8 +176,9 @@ export function groupPieces(list) {
  * Order-independent, and a repeated piece (the same seq twice, e.g. a row
  * saved twice) counts once. A delivery with parts missing still yields a
  * valid recording: missing segments are left out (positions close up), a
- * missing final piece leaves end_reason 'aborted' with ended_at_perf at the
- * last observed moment, and the CH vendor block names what is missing as
+ * missing final piece leaves end_reason null (spec §2: unknown; a page
+ * without a framework never sends one, and 'aborted' would claim a
+ * screenout) with ended_at_perf at the last observed moment, and the CH vendor block names what is missing as
  * `reassembly: { complete: false, missing_seq_ranges, missing_end }`, the
  * gaps as [from, to] ranges of seq (never one entry per seq). Throws only
  * when the first piece, the one with the header, is missing.
@@ -237,7 +238,7 @@ export function reassemblePieces(pieces) {
       if (typeof seg.t_end === 'number' && seg.t_end > last) last = seg.t_end;
       seg.events.forEach(function (e) { if (typeof e.t === 'number' && e.t > last) last = e.t; });
     });
-    end = { ended_at_perf: h.recording_started_at_perf + last, end_reason: 'aborted' };
+    end = { ended_at_perf: h.recording_started_at_perf + last, end_reason: null };
   }
 
   var reassembly = (missing.length || finalSeq == null)
