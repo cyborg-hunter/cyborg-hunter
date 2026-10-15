@@ -142,7 +142,10 @@ class CyborgHunterExtension {
   //     addDataToLastTrial, so they're attached ONCE on the final row.
   //     Avoids duplicating kilobytes of identical JSON across every row.
   //
-  // After persisting, tears down listeners and clears session state.
+  // After persisting, calls monitor.destroy(): the monitor's listeners and
+  // intervals are removed, so nothing more is recorded. The session data is
+  // not cleared: it stays readable in memory (getSessionReport() still
+  // works) until the page unloads.
   finalize() {
     if (!this.monitor) return;
 

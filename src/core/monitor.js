@@ -2,8 +2,13 @@
 // Main CyborgHunter orchestrator.
 // Imports signal modules, manages lifecycle, exposes public API.
 //
-// The public API is a frozen object returned by init(). Internal state
-// is closure-scoped so participants cannot disable monitoring via console.
+// The public API is a frozen object returned by init(). Internal state is
+// closure-scoped, so page scripts and the console cannot rewrite the session
+// data in place (the getters return copies) or swap out the API's methods.
+// That is not tamper-proofing: destroy() is public like every other method,
+// so code that can reach the monitor object can stop monitoring, and with
+// the standalone build a console call to CyborgHunter.init() destroys the
+// running instance (init below replaces it).
 
 import { createStateMachine, deepCopy } from './state-machine.js';
 import { DEFAULT_THRESHOLDS, PRESETS, VERSION } from '../shared/constants.js';
