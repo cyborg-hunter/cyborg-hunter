@@ -53,6 +53,9 @@
 //     protections. Goal is to raise the bar from trivial to deliberate,
 //     not to make it impossible.
 //   - Mobile fullscreen API support is uneven; gate on desktop if mobile.
+//     Where the page cannot go fullscreen at all (iPhone Safari), friction
+//     does not require it (fullscreenAvailableOf below), so a participant
+//     there is checked for tab visibility and focus only.
 //
 // ============================================================
 
@@ -87,6 +90,27 @@ export function exitFullscreenFnOf(doc) {
         || doc.webkitExitFullscreen
         || doc.mozCancelFullScreen
         || null;
+}
+
+// Can this document go fullscreen at all? No on a browser without the
+// Fullscreen API on elements (iPhone Safari: no requestFullscreen, prefixed
+// or not, on <html>), and no where the document says it is not enabled (a
+// frame without allow="fullscreen"; the first of fullscreenEnabled /
+// webkitFullscreenEnabled / mozFullScreenEnabled the browser defines, in the
+// order fullscreenElementOf reads). There, requestFullscreen() below is a
+// silent no-op, so a not_fullscreen check could never pass and the enforce
+// curtain could never be dismissed: start() reads this and drops that one
+// check. An undefined flag is unknown, not false (prefix-only browsers lack
+// the unprefixed one). Pure + exported for unit testing.
+export function fullscreenAvailableOf(doc) {
+    doc = doc || (typeof document !== 'undefined' ? document : null);
+    if (!doc) return false;
+    const enabled = doc.fullscreenEnabled !== undefined ? doc.fullscreenEnabled
+        : doc.webkitFullscreenEnabled !== undefined ? doc.webkitFullscreenEnabled
+        : doc.mozFullScreenEnabled;
+    if (enabled === false) return false;
+    const el = doc.documentElement;
+    return !!(el && (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen));
 }
 
 (function (global) {
@@ -153,6 +177,14 @@ export function exitFullscreenFnOf(doc) {
         rebaselineTimerHandle: null,
         // Subscribers added via onViolation()
         violationHandlers: [],
+        // Whether check() requires fullscreen: set at each start() from
+        // fullscreenAvailableOf(document). False on a document that cannot
+        // go fullscreen, where the not_fullscreen check is skipped (the
+        // participant could never pass it); the other checks stay.
+        fullscreenRequired: true,
+        // The console note about a document without fullscreen is given once
+        // per page, not at every start().
+        fullscreenWarned: false,
     };
 
     function logDebug(ctx, details) {
@@ -186,6 +218,7 @@ export function exitFullscreenFnOf(doc) {
             fullscreen_element_present: !!document.fullscreenElement,
             vendor_fullscreen_present: !!fsEl,
             fullscreen_element_tag: fsEl && fsEl.tagName ? fsEl.tagName : null,
+            fullscreen_api_available: fullscreenAvailableOf(document),
             baseline_width_devpx: state.baselineWidth,
             baseline_height_devpx: state.baselineHeight,
             inner_width: window.innerWidth,
@@ -517,7 +550,7 @@ export function exitFullscreenFnOf(doc) {
     function check() {
         const diagnostics = getDiagnostics();
 
-        if (!fullscreenElementOf(document)) {
+        if (state.fullscreenRequired && !fullscreenElementOf(document)) {
             return { ok: false, reason: 'not_fullscreen', diagnostics: diagnostics };
         }
         if (document.visibilityState !== 'visible') {
@@ -863,6 +896,17 @@ export function exitFullscreenFnOf(doc) {
             diagnostics: getDiagnostics(),
         });
 
+        // A document that cannot go fullscreen (fullscreenAvailableOf above)
+        // is not asked to: the not_fullscreen check is skipped, in enforce
+        // and observe mode alike, since the participant could never pass it.
+        // The sidebar check needs the baseline a fullscreen entry captures,
+        // so it stays off there too, as it always was without fullscreen.
+        state.fullscreenRequired = fullscreenAvailableOf(document);
+        if (!state.fullscreenRequired && !state.fullscreenWarned) {
+            state.fullscreenWarned = true;
+            console.warn('[cyborg-hunter] GuardFriction: this browser cannot go fullscreen (no Fullscreen API, or not allowed in this frame), so fullscreen is not required here. The tab-visibility and focus checks still run.');
+        }
+
         state.active = true;
         bindListeners();
         if (!state.pollHandle) {
@@ -957,6 +1001,9 @@ export function exitFullscreenFnOf(doc) {
             // true while violations are only logged (no curtain); the entry
             // trial switches it off — enforcement starts at that mark.
             observe_only: state.observeOnly,
+            // false on a document that cannot go fullscreen, where
+            // not_fullscreen is never reported (start() above).
+            fullscreen_required: state.fullscreenRequired,
         };
     }
 

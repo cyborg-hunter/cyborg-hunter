@@ -30,6 +30,11 @@ before(async () => {
     : (cb) => setTimeout(() => cb(Date.now()), 0);
   // createEntryTrial() reads the button-response plugin global eagerly.
   global.jsPsychHtmlButtonResponse = { name: 'html-button-response' };
+  // A desktop browser: happy-dom has no Fullscreen API, and friction does
+  // not require fullscreen where the document cannot go fullscreen
+  // (friction-no-fullscreen-api.test.js). A request method that does
+  // nothing keeps the page out of fullscreen, which is the case here.
+  win.document.documentElement.requestFullscreen = function () {};
   await import('../../src/jspsych/extension-guard-friction.js');
   GuardFriction = window.GuardFriction;
 });
