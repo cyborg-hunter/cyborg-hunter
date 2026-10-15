@@ -175,10 +175,12 @@
   // composite is presented through.
   var CANVAS_ATTR = 'data-ch-canvas';
   var CANVAS_RULE_ATTR = 'data-ch-canvas-rule';
-  // Nothing but our own encoder writes this string, and it goes inside a CSS
-  // `url("…")`, so the shape is checked rather than trusted: a realm without
-  // canvas support returns '' from toDataURL (happy-dom does), and a stray
-  // quote would end the declaration early.
+  // The one shape of image payload the viewer handles, checked twice. Our own
+  // encoder's output goes inside a CSS `url("…")`, so it is checked rather
+  // than trusted: a realm without canvas support returns '' from toDataURL
+  // (happy-dom does), and a stray quote would end the declaration early. And
+  // a recorded `canvas.snapshot` payload must match it before it is decoded
+  // (`applyCanvasSnapshot`), since decoding anything else is a fetch.
   var DATA_URL_RE = /^data:image\/[a-z+.-]+;base64,[A-Za-z0-9+/=]*$/;
 
   function el(tag, cls, text) {
@@ -1278,8 +1280,13 @@
 
     function applyCanvasSnapshot(e) {
       var el = resolveNode(e.node);
+      // The payload is decoded through an <img> in the report's document, so
+      // it has to be image data already: a `data_url` that is really an http
+      // URL was fetched from wherever it pointed, in the CLI report (whose page
+      // has no policy) on every engine. The field is a data URL by name (spec
+      // §5.4), and the corpus's snapshots are all base64 `data:image/png`.
       if (!el || String(el.tagName || '').toLowerCase() !== 'canvas'
-          || typeof e.data_url !== 'string' || !e.data_url) {
+          || typeof e.data_url !== 'string' || !DATA_URL_RE.test(e.data_url)) {
         if (span) span.patchFailures++;
         return;
       }

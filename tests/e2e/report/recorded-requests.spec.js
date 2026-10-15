@@ -63,3 +63,20 @@ test('the children of a recorded <noscript> load nothing', async ({ page }) => {
     report.cleanup();
   }
 });
+
+test('a canvas snapshot whose payload is a URL is not fetched', async ({ page }) => {
+  const sentinel = await startSentinel();
+  const report = buildReport(sentinel.url, (rec, keyframe) => {
+    keyframe.initial_dom.children.unshift({ id: 900002, kind: 'element', tag: 'canvas', attrs: { width: '10', height: '10' }, children: [], canvas_size: { w: 10, h: 10 } });
+    const origin = keyframe.t_load ?? keyframe.t_dom_ready ?? keyframe.t_start;
+    keyframe.events.unshift({ type: 'canvas.snapshot', t: origin, node: 900002, data_url: sentinel.url + '/snapshot.png' });
+  });
+  try {
+    await page.goto(report.url);
+    await playThrough(page, sentinel);
+    expect(sentinel.hits.filter((u) => u !== '/control.png')).toEqual([]);
+  } finally {
+    await sentinel.close();
+    report.cleanup();
+  }
+});

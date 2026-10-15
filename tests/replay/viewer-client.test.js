@@ -923,6 +923,27 @@ describe('canvas.snapshot composites in the parent, presented through a head rul
       'value: null clobbers by the same route and must not reach the presentation either');
   });
 
+  // The payload is decoded through an <img> in the report's own document,
+  // so a data_url that is really a URL was fetched from wherever it pointed
+  // (in the CLI report, whose page has no policy). Only a data:image URL is
+  // decoded; anything else is a recorded change that cannot be reapplied.
+  it('decodes only a data:image payload, and counts anything else', async () => {
+    const v = boot(baseRecording({
+      segments: [segment({
+        initial_dom: canvasKeyframe(2, 40, 20, {}),
+        events: [
+          { type: 'canvas.snapshot', t: 10, node: 2, data_url: 'https://img.example/x.png' },
+          { type: 'canvas.snapshot', t: 20, node: 2, data_url: 'data:text/html;base64,PGI+' },
+        ],
+      })],
+    }));
+    v.dbg.seek(30);
+    assert.equal(v.dbg.getCounters().patchFailures, 2, 'both counted when they are applied');
+    await v.dbg.canvasSettled();
+    assert.deepEqual(offscreenCalls(v), [], 'nothing was decoded or drawn');
+    assert.equal(v.dbg.getCounters().patchFailures, 2);
+  });
+
   it('pins a collapsed canvas from canvas_size and leaves a laid-out one alone', async () => {
     const rec = baseRecording({
       segments: [segment({
