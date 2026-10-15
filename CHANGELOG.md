@@ -54,6 +54,12 @@ Collected data, configuration and reports all change: read
 - A recorded `<link rel="prefetch">` made Chromium fetch any address from the
   report and the analyzer despite their CSP; recorded `<link>`, `<meta>` and
   `<base>` elements are now inert.
+- The replay viewer withstands hostile recordings: what sits inside a recorded
+  `<noscript>` or other inert element no longer loads; trees nested deeper
+  than 512 levels, non-array `children` and oversized node lists are
+  dropped and counted instead of freezing or stopping the viewer; stylesheet
+  ids must be numbers; a canvas snapshot must be a `data:image` URL; a value
+  aimed at a file input is skipped.
 - A `.gz` upload is decompressed to at most 256 MB.
 - Participant IDs that clean up to the same file name no longer overwrite
   each other's plots; an ID of `__proto__` no longer pollutes the analyzer's

@@ -375,15 +375,19 @@ detail pane in the report, by default; **1:1** for its own pixel size;
 **Fullscreen**), and — for
 `dom`-tier recordings — a sandboxed reconstruction of the page. Scripts
 are blocked by both the iframe sandbox and a restrictive CSP, and recorded
-`<script>`, `<link>`, `<meta>` and `<base>` elements are rebuilt as inert
-placeholders. To render remote stimuli the report's viewer does load, from
+`<script>`, `<noscript>`, `<link>`, `<meta>` and `<base>` elements are
+rebuilt as inert placeholders, and nothing inside them is loaded. To render remote stimuli the report's viewer does load, from
 the analyst's browser, the images, fonts and CSS `url()` images the
 recorded page referenced, and its external stylesheets (the box "also fetch
 … external stylesheets from their origins" next to *Load replay*, ticked by
 default). Those hosts,
 which a participant could choose by editing their page, learn the analyst's
-IP address and when the replay was opened; no data is sent. The hosted and
-offline analyzer pages block all of these.
+IP address and when the replay was opened; no data is sent. Which of those
+requests are made can also tell a host something about the analyst's
+machine: a font listed with a `local()` fallback is fetched only when it is
+not installed, and an image behind a media query (colour scheme,
+resolution) only when the query matches. The hosted and offline analyzer
+pages block all of these.
 
 ### Alignment guarantee
 
@@ -546,8 +550,9 @@ whatever the page's code does, so even a bug could not make the page fetch,
 post or load anything from another address. One gap was found in this
 guarantee and closed in this release: Chromium does not apply `connect-src` to a
 `<link rel="prefetch">`, so a replay whose recorded page contained one could
-make the browser request the address in it. Recorded `<link>`, `<meta>` and
-`<base>` elements are now rebuilt as inert placeholders. The policy does not cover
+make the browser request the address in it. Recorded `<link>`, `<meta>`,
+`<base>` and `<noscript>` elements are now rebuilt as inert placeholders, with
+nothing inside them loaded. The policy does not cover
 navigation: a page that moved itself, or a new window, to another address
 could carry data in that address. This page's own code never navigates away
 or opens another page, and the end-to-end tests, which run the page in
