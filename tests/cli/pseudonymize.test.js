@@ -195,3 +195,22 @@ describe('a pseudonymized report', () => {
     await assert.rejects(buildReport(participants, config, { sink: () => {} }), /pseudonymize/);
   });
 });
+
+describe('pseudonymizing deeply nested participant data', () => {
+  it('copies a value nested far deeper than the call stack, and still codes the ids inside it', async () => {
+    // JSON.parse reads such a value without recursion, so it reaches the
+    // copy; built here as an object chain 200,000 deep.
+    let deep = { participantId: 'DEEP-RAW', note: 'leaf' };
+    for (let i = 0; i < 200000; i++) deep = [deep];
+    const p = { participantId: 'DEEP-RAW', metadata: {}, trials: [{ trialId: 't0', extra: deep, keep: { a: 1, b: [2, 3] } }] };
+    const codes = await assignCodes(['DEEP-RAW'], SECRET, hmac);
+    const [copy] = pseudonymizeParticipants([p], codes, {});
+    let leaf = copy.trials[0].extra;
+    let depth = 0;
+    while (Array.isArray(leaf)) { leaf = leaf[0]; depth++; }
+    assert.equal(depth, 200000);
+    assert.deepEqual(leaf, { participantId: codes.get('DEEP-RAW'), note: 'leaf' });
+    assert.deepEqual(Object.keys(copy.trials[0]), ['trialId', 'extra', 'keep'], 'keys keep their order');
+    assert.deepEqual(copy.trials[0].keep, { a: 1, b: [2, 3] });
+  });
+});

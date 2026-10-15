@@ -132,16 +132,38 @@ export function pseudonymizeParticipants(participants, codes, config) {
     const raw = String(p.participantId);
     const code = codes.get(raw);
     if (code === undefined) throw new Error(`no pseudonym code for participant "${raw}"`);
-    const scrub = (v) => {
-      if (Array.isArray(v)) return v.map(scrub);
-      if (!v || typeof v !== 'object') return v;
-      const out = {};
-      for (const k of Object.keys(v)) {
-        if (dropKeys.has(k)) continue;
-        const x = v[k];
-        out[k] = idKeys.has(k) && (typeof x === 'string' || typeof x === 'number') ? code : scrub(x);
+    // A walk with its own stack, not recursion: JSON.parse reads a value
+    // nested far deeper than the call stack, and a recursive copy of it
+    // stopped the run. Each step copies one array or object and leaves its
+    // children on the stack; a key is set when its object is copied, so the
+    // copy keeps the key order.
+    const scrub = (value) => {
+      const box = {};
+      const stack = [[box, 'v', value]];
+      while (stack.length > 0) {
+        const [target, key, v] = stack.pop();
+        if (Array.isArray(v)) {
+          const out = new Array(v.length);
+          target[key] = out;
+          for (let i = 0; i < v.length; i++) stack.push([out, i, v[i]]);
+        } else if (!v || typeof v !== 'object') {
+          target[key] = v;
+        } else {
+          const out = {};
+          target[key] = out;
+          for (const k of Object.keys(v)) {
+            if (dropKeys.has(k)) continue;
+            const x = v[k];
+            if (idKeys.has(k) && (typeof x === 'string' || typeof x === 'number')) {
+              out[k] = code;
+            } else {
+              out[k] = undefined;
+              stack.push([out, k, x]);
+            }
+          }
+        }
       }
-      return out;
+      return box.v;
     };
     const { replay, ...rest } = p;
     const copy = scrub(rest);
