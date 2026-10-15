@@ -16,6 +16,13 @@
  * detection AND edit timestamp collection. When clipboardManager is off
  * but typingSpeed is on, a simpler input listener collects timestamps.
  */
+// A field typing goes into. Tag names are compared upper-cased: a page served
+// as application/xhtml+xml reports them in lower case.
+function isTextField(el) {
+  var tag = String(el.tagName || "").toUpperCase();
+  return tag === "INPUT" || tag === "TEXTAREA" || !!el.isContentEditable;
+}
+
 export function attachTypingSignals(ctx) {
   var config = ctx.config;
   var trialData = ctx.trialData;
@@ -27,7 +34,7 @@ export function attachTypingSignals(ctx) {
       _lastKeydownTime = performance.now();
     });
     ctx.addTrialListener(document, "input", function (e) {
-      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) {
+      if (e.target && isTextField(e.target)) {
         // Record edit timestamp for typing speed computation
         trialData.editTimestamps.push(performance.now());
 
@@ -49,7 +56,7 @@ export function attachTypingSignals(ctx) {
   // for typing speed computation via a simpler listener.
   if (config.signals.typingSpeed && !config.signals.clipboardManager) {
     ctx.addTrialListener(document, "input", function (e) {
-      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) {
+      if (e.target && isTextField(e.target)) {
         trialData.editTimestamps.push(performance.now());
       }
     }, true);
@@ -69,7 +76,7 @@ export function attachForeignInputSignals(ctx) {
   ctx.addTrialListener(document, "input", function (e) {
     var target = e.target;
     if (!target) return;
-    var isTextInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+    var isTextInput = isTextField(target);
     if (!isTextInput) return;
     var known = ctx.isKnownInput(target);
     if (known === false) {

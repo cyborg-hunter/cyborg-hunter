@@ -128,8 +128,10 @@ function hasTypePasswordAttr(el) {
  * by the attribute too. Detection stays declarative (spec §8): a name or
  * placeholder that merely looks password-ish is not a password field.
  */
+// Tag names are compared upper-cased: a page served as application/xhtml+xml
+// reports them in lower case ('input'), and the floor must hold there too.
 export function isPasswordField(el) {
-  if (!el || el.tagName !== 'INPUT') return false;
+  if (!el || String(el.tagName || '').toUpperCase() !== 'INPUT') return false;
   return el.type === 'password' || hasTypePasswordAttr(el);
 }
 

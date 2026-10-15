@@ -333,7 +333,11 @@ export function attachTraceCapture(rec, env) {
     var described = (facts.excluded && facts.heldEl && facts.heldEl !== el)
       ? facts.heldEl : el;
     var a = { tag: (described.tagName || '').toLowerCase() };
-    if (!facts.redacted && !facts.excluded) a.id = described.id || null;
+    // The attribute, not the property: a <form> holding a field named "id"
+    // answers form.id with that field.
+    if (!facts.redacted && !facts.excluded) {
+      a.id = (typeof described.getAttribute === 'function' ? described.getAttribute('id') : described.id) || null;
+    }
     try {
       if (typeof described.getBoundingClientRect === 'function') {
         var r = described.getBoundingClientRect();
@@ -649,7 +653,7 @@ export function attachTraceCapture(rec, env) {
   // (redaction.js): the IDL property first, the attribute as the fallback that
   // catches duck-typed nodes and unknown-type reads.
   function isFileInput(el) {
-    if (!el || el.tagName !== 'INPUT') return false;
+    if (!el || String(el.tagName || '').toUpperCase() !== 'INPUT') return false;
     if (String(el.type || '').toLowerCase() === 'file') return true;
     var attr = typeof el.getAttribute === 'function' ? el.getAttribute('type') : null;
     return typeof attr === 'string' && attr.toLowerCase() === 'file';
@@ -687,14 +691,14 @@ export function attachTraceCapture(rec, env) {
     // duck-typed nodes and reads "text" for an unknown type.
     if (isFileInput(target) || (composed && isFileInput(composed))) return null;
     var type = String(target.type || '').toLowerCase();
-    if (target.tagName === 'SELECT') {
+    if (String(target.tagName || '').toUpperCase() === 'SELECT') {
       // No redacted variant exists for input.select or input.checked (spec
       // §5.2 defines one for input.value only), so a withheld control emits
       // nothing at all rather than a shape the format does not have.
       return redacted ? null
         : { type: 'input.select', node: node, values: selectedValues(target) };
     }
-    if (target.tagName === 'INPUT' && (type === 'checkbox' || type === 'radio')) {
+    if (String(target.tagName || '').toUpperCase() === 'INPUT' && (type === 'checkbox' || type === 'radio')) {
       // checked is an element PROPERTY (never an attribute mutation), so the
       // DOM replay can only restore box state from here — but a redacted
       // field's checked state is still its value: withhold it.

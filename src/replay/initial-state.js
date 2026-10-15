@@ -210,7 +210,7 @@ function selectDivergence(el) {
 
 // The state of one control, or null when it matches what the tree restores.
 function formDivergence(el) {
-  var tag = el.tagName;
+  var tag = String(el.tagName || '').toUpperCase();   // XHTML pages report lower case
   if (tag === 'SELECT') return selectDivergence(el);
   if (tag === 'INPUT') {
     var type = String(el.type || 'text').toLowerCase();

@@ -296,7 +296,10 @@ export function attachDomCapture(rec, env) {
   // the other half of this — together they are diagnosable.
   function rootSelector() {
     if (rootFromSelector) return rec.config.root;
-    if (root && root.id) return '#' + root.id;
+    // The attribute: a <form> root holding a field named "id" answers .id
+    // with that field.
+    var rootId = root && typeof root.getAttribute === 'function' ? root.getAttribute('id') : null;
+    if (rootId) return '#' + rootId;
     return null;
   }
 

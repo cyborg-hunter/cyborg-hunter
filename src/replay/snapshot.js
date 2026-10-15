@@ -96,7 +96,7 @@ export function isExcluded(node, opts) {
     if (LEGACY_EXCLUDE_ATTRS[name]) legacy = true;
   }
   if (opts && opts.keepBait) return false;
-  return legacy || node.id === LEGACY_EXCLUDE_ID;
+  return legacy || attrValue(node, 'id') === LEGACY_EXCLUDE_ID;
 }
 
 // The SUBTREE reading of exclusion — "this node or any ancestor is excluded" —
@@ -220,7 +220,7 @@ export var ATTR_WITHHELD = { withheld: true };
  * @param {boolean} redacted whether the element sits in a redacted subtree
  */
 export function attrPatchValue(node, name, redacted) {
-  var tagName = node.tagName || '';
+  var tagName = String(node.tagName || '').toUpperCase();   // XHTML pages report lower case
   if (!isEmittedAttr(tagName, name, redacted)) return ATTR_WITHHELD;
   var raw = attrValue(node, name);
   if (raw === null) return null;               // removed (spec §5.1)
@@ -352,7 +352,7 @@ function emitNode(node, span, opts, inheritedRedaction, parent) {
       text: inheritedRedaction ? '' : String(node.textContent || ''),
     };
   }
-  var tagName = node.tagName || '';
+  var tagName = String(node.tagName || '').toUpperCase();   // XHTML pages report lower case
   var id = span.registry.idFor(node);
   if (isExcluded(node, opts)) return { id: id, kind: 'element', tag: tagName.toLowerCase() };
 
