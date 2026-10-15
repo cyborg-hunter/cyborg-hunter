@@ -49,7 +49,7 @@ npm install -g cyborg-hunter
 Browser (experiment page): one tag, below `jspsych.js` and above your experiment code (on a page without jsPsych, anywhere in the page; in `<head>`, recording starts at `DOMContentLoaded`):
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
 ```
 
 Each framework has its own one-line file, with the same API and the same tag attributes ([quickstart § Which file](docs/quickstart.md#which-file)):
@@ -60,19 +60,19 @@ Each framework has its own one-line file, with the same API and the same tag att
 | `ch-qualtrics.js` | Qualtrics surveys, in the survey's header ([docs/qualtrics.md](docs/qualtrics.md)) |
 | `ch-labjs.js` | lab.js studies, below `lib/lab.js` ([docs/labjs.md](docs/labjs.md)) |
 
-For production studies, pin a version: `https://unpkg.com/cyborg-hunter@0.15.0/dist/...`. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
+Every tag in these docs names an exact version (`https://unpkg.com/cyborg-hunter@0.15.0/dist/...`) and carries the `integrity` hash of that version's file, so the browser refuses any other bytes. To change version, copy the tags from that version's README instead of editing the number alone. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
 
 Manual mode (advanced), for experiments that wire the jsPsych extension themselves: see [docs/advanced-integration.md](docs/advanced-integration.md#manual-mode). It loads these files instead of `ch.js`:
 
 ```html
 <!-- Signal collection -->
-<script src="https://unpkg.com/cyborg-hunter/dist/cyborg-hunter.min.js"></script>
-<script src="https://unpkg.com/cyborg-hunter/dist/extension-cyborg-hunter.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/cyborg-hunter.min.js" integrity="sha384-CVCy4Men38CpWl9pCjrKVAOA67FGRP2J6F4p3JK816mzRF9r8ALrLdXR8j050vdY" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/extension-cyborg-hunter.js" integrity="sha384-xdwRg9XsIFP+79LgfBpo+Gj5C/6IJMhId9yc0XQWwPy2gSzYFxJpd7mXVymxRi13" crossorigin="anonymous"></script>
 <!-- Optional: deterrence + bait detection -->
-<script src="https://unpkg.com/cyborg-hunter/dist/extension-guard-friction.js"></script>
-<script src="https://unpkg.com/cyborg-hunter/dist/extension-guard-honeypot.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/extension-guard-friction.js" integrity="sha384-uzwjUukhzik37XrUUFXEGAKhd9ySP+YvUAYpJbjASWd1zGJimU1Zafta9W0KtgkA" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/extension-guard-honeypot.js" integrity="sha384-yALrPlLmPIeDV/Ytdi0n/I8K4db6bbNFahyU876uM5uCwtMhBf7uPob/CydVX1dP" crossorigin="anonymous"></script>
 <!-- Optional: session replay recorder -->
-<script src="https://unpkg.com/cyborg-hunter/dist/cyborg-hunter-replay.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/cyborg-hunter-replay.js" integrity="sha384-Vu3/IvGB2OCGGQrnPFcx0V2jeMEEBwimaQhTcplh1rQxsc9BRLLcDmcfwYO9cxgp" crossorigin="anonymous"></script>
 ```
 
 ## Plug into an experiment
@@ -81,7 +81,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 
 ```html
 <script src="jspsych/jspsych.js"></script>
-<script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
 <script src="experiment.js"></script>
 ```
 
@@ -124,7 +124,7 @@ Releases before 0.8.0 recorded the earlier v1 shape.
 With the one-line setup, replay is `data-replay` on the tag, and the experiment's save code saves what `CyborgHunter.replay()` returns ([details](docs/advanced-integration.md#replay-with-the-one-liner)):
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter/dist/ch.js" data-replay="dom"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous" data-replay="dom"></script>
 ```
 
 ```javascript

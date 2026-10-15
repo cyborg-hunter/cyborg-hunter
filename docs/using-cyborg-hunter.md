@@ -14,7 +14,7 @@ The integrity monitor writes its observations into the same data file your exper
 ## One-line setup
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
 ```
 
 For production studies pin an exact version (see [README § Install](../README.md#install)).

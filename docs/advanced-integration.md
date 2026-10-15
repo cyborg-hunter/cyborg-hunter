@@ -180,7 +180,7 @@ To move a manual-mode experiment to `ch.js`:
 2. Add the one tag below `jspsych.js` and above your experiment code:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
+   <script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
    ```
 
    For production studies pin an exact version (see [README § Install](../README.md#install)).
@@ -327,7 +327,7 @@ The saved object:
 Add `data-replay` to the tag to record a session replay (`data-replay="dom"` for the visual DOM tier; the default is the trace tier). ch.js does not bundle the recorder. It loads `cyborg-hunter-replay.js` only when `data-replay` is set, from the directory `ch.js` came from. `data-replay-src="…"` points it somewhere else.
 
 - **Self-hosting:** copy `cyborg-hunter-replay.js` from `dist/` next to `ch.js`.
-- **CDN URLs:** use the full path, `https://unpkg.com/cyborg-hunter/dist/ch.js`, never the bare package URL `https://unpkg.com/cyborg-hunter`. The bare URL serves `cyborg-hunter.min.js` (manual mode's file, not ch.js), and ch.js finds the replay file relative to its own URL.
+- **CDN URLs:** use the full path, `https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js`, never the bare package URL `https://unpkg.com/cyborg-hunter`. The bare URL serves `cyborg-hunter.min.js` (manual mode's file, not ch.js), and ch.js finds the replay file relative to its own URL.
 - **Loading:** if the file fails to load (missing, network error, Content-Security-Policy) or has not arrived after 15 s, ch.js logs an error and the experiment runs on without replay. On jsPsych the first trial waits for it, up to that limit. Allow the file's URL in your page's `script-src`. A `nonce` on the ch.js tag is copied to the replay script.
 - **Subresource Integrity:** an `integrity` attribute on the ch.js tag covers ch.js only, not the replay file ch.js loads later. To pin that file too, load it yourself with its own `<script src="…/cyborg-hunter-replay.js" integrity="…" crossorigin="anonymous">` above the ch.js tag. ch.js then uses it and fetches nothing.
 
@@ -363,7 +363,7 @@ The tag attributes ([quickstart § Configuration](quickstart.md#configuration)) 
     replay: { tier: 'dom', autoSave: { mode: 'datapipe', experimentId: 'ABC123' } }
   };
 </script>
-<script src="https://unpkg.com/cyborg-hunter/dist/ch.js"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
 ```
 
 For production studies pin an exact version (see [README § Install](../README.md#install)).

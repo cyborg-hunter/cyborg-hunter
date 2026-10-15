@@ -190,3 +190,15 @@ describe('pin-snippets: --check', () => {
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });
+
+// The project's own docs: every snippet names package.json's version and
+// carries integrity and crossorigin. Hash values are not compared here: they
+// match only a dist/ built from the release commit, and the source moves on
+// between releases. The release checks them with `npm run pin:snippets -- --check`
+// after `node build.js`.
+describe('pin-snippets: the project docs', () => {
+  it('README.md and docs/*.md are pinned to the package version', () => {
+    const r = spawnSync(process.execPath, [SCRIPT, '--root', ROOT, '--check', '--no-hash'], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, 'unpinned snippets (run node build.js, then npm run pin:snippets):\n' + r.stderr);
+  });
+});

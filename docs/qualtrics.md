@@ -28,7 +28,7 @@ matters.
    the editor to its source view, paste, and save:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter/dist/ch-qualtrics.js" data-participant-id="${e://Field/ResponseID}" data-qualtrics-survey-id="${e://Field/SurveyID}" data-debug></script>
+   <script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch-qualtrics.js" integrity="sha384-ocEj/XKY3sO17fZe8WOvvuduebVP18Np2YqlKcGBowaY01qeDDoiYKzCuTEZk1ee" crossorigin="anonymous" data-participant-id="${e://Field/ResponseID}" data-qualtrics-survey-id="${e://Field/SurveyID}"></script>
    ```
 
    The second pipe gives the tag the survey's ID, so each survey opened in
@@ -36,8 +36,9 @@ matters.
    show the ID ([Sessions and surveys in one tab](#sessions-and-surveys-in-one-tab)).
 
    Open the header source again after saving: if the tag is gone, the
-   licence strips scripts (see [Requirements](#requirements)). For a launched
-   study, pin an exact version (see [README § Install](../README.md#install)).
+   licence strips scripts (see [Requirements](#requirements)). The tag names
+   an exact version and carries the `integrity` hash of that version's file
+   (see [README § Install](../README.md#install)).
    The tag takes the same attributes as on any page
    ([Configuration](quickstart.md#configuration)). The honeypot is on by
    default and adds hidden bait to every survey page: read the
@@ -48,8 +49,10 @@ matters.
 3. **Add the final-page line** (recommended): one line of question
    JavaScript on the survey's last page with a Next button
    ([The final page](#the-final-page)).
-4. **Smoke-test in Preview**, then remove `data-debug` before launch
-   ([Smoke test](#smoke-test)).
+4. **Test your setup with `data-debug`.** While testing, add `data-debug` to
+   the tag, just before `></script>`, and smoke-test in Preview
+   ([Smoke test](#smoke-test)). Remove it before launch: participants can see
+   its badge.
 5. **Publish the survey.** Preview runs your draft; respondents get the last
    published version. Publish after adding the tag, the field and the
    final-page line, and publish again after removing `data-debug`.
@@ -156,8 +159,9 @@ checked, and the line covers that case.
 
 ## Smoke test
 
-1. **Preview** the survey. A badge in the bottom-left corner and one console
-   line confirm that `ch-qualtrics.js` runs:
+1. **Add `data-debug` to the header tag and Preview** the survey. A badge in
+   the bottom-left corner and one console line confirm that `ch-qualtrics.js`
+   runs:
 
    ```
    Cyborg Hunter active · Qualtrics detected · page 1 · field __js_cyborg_hunter unknown · ID from data-participant-id · honeypot on · friction off
