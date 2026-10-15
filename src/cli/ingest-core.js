@@ -175,6 +175,14 @@ export async function migrateArtifact(json, kind, deps) {
   }
 }
 
+// ch.js's own id for a participant keyed by the study's own participantId
+// (lab.js under the one-line setup), or null: extract-core keeps it in
+// metadata.cyborgHunterParticipantId only when the two differ.
+function chIdOf(p) {
+  const v = p.metadata && typeof p.metadata === 'object' ? p.metadata.cyborgHunterParticipantId : null;
+  return v == null || v === '' || String(v) === String(p.participantId) ? null : String(v);
+}
+
 // Identity fields moved between the two wire versions: v1 kept them in a
 // `metadata` block, v2 states them at the top level under different names.
 // The read is VERSION-AWARE on purpose — a chain like `metadata?.x ?? x`
@@ -255,11 +263,18 @@ export async function ingestFiles({ participantFiles, replayFiles }, config, dep
       const raw = extOf(reader.name) === '.csv'
         ? parseCsvToRaw(text, config)
         : JSON.parse(text);
-      // Pieces of the session recording ride in the rows (ch.js, ch-labjs.js)
-      // or beside the session (CyborgHunter.data() output).
-      const found = collectPieces(raw);
-      if (found.length) pieceSources.push({ path: reader.path, pieces: found });
       const result = extractIntegrityData(raw, config);
+      // Pieces of the session recording ride in the rows (ch.js, ch-labjs.js)
+      // or beside the session (CyborgHunter.data() output). Data inside a
+      // participant's own file is that participant's, so the pieces carry the
+      // file's participant: they attach to them or to no one, whatever id
+      // their header names (attachReplayArtifacts).
+      const found = collectPieces(raw);
+      if (found.length) {
+        const chId = chIdOf(result);
+        pieceSources.push({ path: reader.path, pieces: found, owner: String(result.participantId),
+          ownerIds: chId === null ? [String(result.participantId)] : [String(result.participantId), chId] });
+      }
       if (result.trials.length > 0) census.push({ participantId: result.participantId, metadata: result.metadata });
 
       // --participant flag filters to a single participant
@@ -393,17 +408,12 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
 
   // lab.js under the one-line setup: a participant keyed by the study's own
   // participantId keeps ch.js's id in metadata.cyborgHunterParticipantId
-  // (extract-core sets it only when the two differ), and ch.js's recorder
-  // embeds ch.js's id. That id is a second name for the participant's
-  // recording, used only when it names nobody else in the whole dataset
-  // (census): no participant is keyed by it and no other participant
-  // carries it, both compared sanitized and lowercased, as the filename
+  // (chIdOf), and ch.js's recorder embeds ch.js's id. That id is a second
+  // name for the participant's recording, used only when it names nobody
+  // else in the whole dataset (census): no participant is keyed by it and no
+  // other participant carries it, both compared sanitized and lowercased, as the filename
   // match is ('a/b' and 'a_b' are one name there). Otherwise it is ignored,
   // and a recording carrying it falls to the mismatch warning below.
-  const chIdOf = (p) => {
-    const v = p.metadata && typeof p.metadata === 'object' ? p.metadata.cyborgHunterParticipantId : null;
-    return v == null || v === '' || String(v) === String(p.participantId) ? null : String(v);
-  };
   const chIdCounts = Object.create(null);
   for (const p of census) {
     const c = chIdOf(p);
@@ -483,24 +493,40 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
     const kind = artifactKind(read.json);
     if (kind === null) {
       // Pieces kept apart from the participant files (a replayDir of saved
-      // cyborgHunterReplay fields). A file the participant pass read is
-      // collected twice; the rebuild counts each piece once.
+      // cyborgHunterReplay fields). A file the participant pass read had its
+      // pieces collected there, with the participant the file belongs to;
+      // collected again here they would pass for recording data of no one's
+      // file, attached by the id they carry.
+      if (seenByParticipantPass.has(full.path)) continue;
       const found = collectPieces(read.json);
       if (found.length) pieceSources.push({ path: full.path, pieces: found });
       continue;
     }
     foreign.push({ file: f, reader: full, kind, id: embeddedId(read.json) });
   }
-  // Recordings rebuilt from pieces join the content route: attached by the
-  // participant_id they carry, like any foreign-named recording. They are
-  // held built (the reader hands the object back), named after the files
-  // their pieces came from.
+  // Recordings rebuilt from pieces. From files of pieces alone, they join
+  // the content route: attached by the participant_id they carry, like any
+  // foreign-named recording. From a participant's own data file, they are
+  // that participant's (`ownRebuilt`), and one whose header names anyone
+  // else is attached to no one: data inside A's file is never credited to
+  // B. They are held built (the reader hands the object back), named after
+  // the files their pieces came from.
   const rebuilt = recordingsFromPieces(pieceSources);
   for (const w of rebuilt.warnings) warnings.push(w);
+  const ownRebuilt = [];
   for (const r of rebuilt.recordings) {
     const name = `replay pieces ${r.recordingId}`;
-    foreign.push({ file: name, kind: 'v2', id: embeddedId(r.recording),
-      reader: { name, path: r.paths.join(', '), size: 0, recording: r.recording } });
+    const reader = { name, path: r.paths.join(', '), size: 0, recording: r.recording };
+    const id = embeddedId(r.recording);
+    if (r.owner === null) {
+      foreign.push({ file: name, kind: 'v2', id, reader });
+    } else if (id === null || r.ownerIds.includes(id)) {
+      ownRebuilt.push({ owner: r.owner, reader });
+    } else {
+      warnings.push({ file: reader.path, warnings: [
+        `Replay pieces in ${r.owner}'s data file name participant "${id}" in their header — not attached ` +
+        'to anyone (a recording inside one participant\'s file is never credited to another).'] });
+    }
   }
   const claimed = new Set();
 
@@ -519,6 +545,8 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
     const ownsId = (id) => id === String(p.participantId) || (alias !== null && id === alias);
     // Foreign-named artifacts that named THIS participant inside themselves.
     const mineForeign = foreign.filter(a => a.id !== null && ownsId(a.id));
+    // Recordings rebuilt from pieces in this participant's own data files.
+    const mineOwn = ownRebuilt.filter(r => r.owner === String(p.participantId));
     // The meta pointer rides on every trial row via addProperties.
     const meta = (p.trials && p.trials[0] && p.trials[0].integrityReplayMeta) || null;
     // Replay finalize failures ride the same way — surface them where the
@@ -529,7 +557,7 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
         warnings: [`Replay finalize failed for ${p.participantId}: ${finErr} — the artifact was likely never saved.`] });
     }
 
-    if (mine.length === 0 && mineForeign.length === 0) {
+    if (mine.length === 0 && mineForeign.length === 0 && mineOwn.length === 0) {
       p.replay = null;
       if (meta && meta.saved_to === 'download') {
         warnings.push({
@@ -554,6 +582,8 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       if (kind === null) continue;
       parsed.push({ file: f, path: r.path, ...(await migrateArtifact(read.json, kind, deps)) });
     }
+    // `own`: found in the participant's own data, so theirs without an id check.
+    for (const { reader: r } of mineOwn) parsed.push({ file: r.name, path: r.path, recording: r.recording, own: true });
     if (parsed.length === 0) {
       p.replay = null;
       continue;
@@ -607,7 +637,9 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       // no `metadata` block (spec §2), so one appearing there is junk, and a
       // chain that consulted it first would let that junk decide ownership.
       const embedded = ownField(cand.recording, 'participant_id');
-      if (embedded == null) {
+      if (cand.own) {
+        owned.push(cand);
+      } else if (embedded == null) {
         // Ownerless artifacts skip id verification entirely, so the filename
         // must match EXACT-case (our recorder writes sanitize(pid) verbatim).
         // Case-tolerant matching stays for discovery, where the embedded-id
@@ -644,9 +676,36 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
     }
     // One recording found twice: the pieces in the rows and the whole file
     // the researcher also saved with CyborgHunter.replay(). Same participant,
-    // same start on both clocks: kept once, the copy with more segments (the
-    // whole file, when the rows stop at a save trial), silently.
+    // same start on both clocks: kept once, silently: the copy from the
+    // participant's own data, else the one with more segments.
     owned = sameRecordingOnce(owned);
+    // Recordings from more than one browser (user_agent) are not one
+    // participant's pages to join, nor one session's reload: a file that
+    // names this participant is not enough to put it beside their own. The
+    // participant's own data, when it holds a recording, says which browser
+    // is theirs; without it, which is theirs cannot be told and none is
+    // attached, as for duplicate records below.
+    if (owned.length > 1 && new Set(owned.map(userAgentOf)).size > 1) {
+      const ownAgents = new Set(owned.filter((c) => c.own).map(userAgentOf));
+      if (ownAgents.size === 1) {
+        const [agent] = ownAgents;
+        const other = owned.filter((c) => userAgentOf(c) !== agent);
+        owned = owned.filter((c) => userAgentOf(c) === agent);
+        warnings.push({ file: dir, warnings: [
+          `Replay recording${other.length === 1 ? '' : 's'} ${other.map((c) => c.file).sort().join(', ')} for ` +
+          `${p.participantId} ${other.length === 1 ? 'was' : 'were'} recorded in another browser than the one ` +
+          'in the participant\'s own data — not attached.'] });
+      } else {
+        const files = owned.map((c) => c.file).sort().join(', ');
+        warnings.push({ file: dir, warnings: [
+          `${owned.length} replay recordings for ${p.participantId} come from different browsers (${files}) — ` +
+          'none attached: which one is the participant\'s cannot be told.'] });
+        p.replay = { error: 'ambiguous', file: null,
+          reason: `${owned.length} replays claim the participant id "${p.participantId}" (${files}), recorded in ` +
+            'different browsers, and the participant\'s own data holds none to tell which is theirs, so none is shown.' };
+        continue;
+      }
+    }
     const several = owned.length > 1;
     // Duplicate records for this id + multiple owned artifacts: the
     // per-session mapping is genuinely ambiguous. Attach nothing rather
@@ -748,27 +807,48 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
       }
       warnings.push({ file: a.reader.path, warnings: [`Replay artifact ${a.file} ${why}`] });
     }
+    // Pieces in a data file that gave no participant (no trials in it).
+    const ids = new Set(participants.map((p) => String(p.participantId)));
+    for (const r of ownRebuilt) {
+      if (ids.has(r.owner)) continue;
+      warnings.push({ file: r.reader.path, warnings: [`Replay pieces in ${r.owner}'s data file are not attached: ` +
+        'the file gave no participant with trials to attach them to.'] });
+    }
   }
 }
 
 // Candidates that are one recording (same participant_id, and the same
 // start on the wall clock and on the capture clock), kept once each: the
-// copy with more segments wins, then a file over rebuilt pieces.
+// copy from the participant's own data file wins (a copy elsewhere may claim
+// the same start and carry anything), then the copy with more segments,
+// then a file over rebuilt pieces.
 function sameRecordingOnce(owned) {
   const byKey = new Map();
+  const rank = (x) => [x.own ? 1 : 0, (x.recording.segments || []).length,
+    String(x.file).startsWith('replay pieces ') ? 0 : 1];
+  const above = (a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i];
+    return false;
+  };
   for (const c of owned) {
     const r = c.recording;
     const key = r && r.schema_version === 2
       ? JSON.stringify([r.participant_id, r.recording_started_at, r.recording_started_at_perf])
       : Symbol('unkeyed');
     const prev = byKey.get(key);
-    const size = (x) => (x.recording.segments || []).length;
-    const fromPieces = (x) => String(x.file).startsWith('replay pieces ');
-    if (!prev || size(c) > size(prev) || (size(c) === size(prev) && fromPieces(prev) && !fromPieces(c))) {
-      byKey.set(key, c);
-    }
+    if (!prev || above(c, prev)) byKey.set(key, c);
   }
   return [...byKey.values()];
+}
+
+// The browser a candidate was recorded in (v2: user_agent; v1 kept it in
+// metadata), '' when it does not say.
+function userAgentOf(cand) {
+  const r = cand.recording;
+  const v = r.schema_version === 2 ? r.user_agent : r.metadata && r.metadata.user_agent;
+  return v == null ? '' : String(v);
 }
 
 // One participant's recordings joined in time order (merge.js), or null when

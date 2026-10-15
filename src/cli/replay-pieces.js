@@ -14,7 +14,7 @@
 //     or an object holding one under cyborgHunterReplay;
 //   - a value still a JSON string (a server that stored the field as text).
 
-import { isPiece, groupPieces, reassemblePieces } from '../replay/pieces.js';
+import { isPiece, reassemblePieces } from '../replay/pieces.js';
 
 // lab.js writes cyborgHunter_<name> when the study already uses a name.
 export const PIECE_KEYS = ['cyborgHunterReplay', 'cyborgHunterReplayFinal',
@@ -53,9 +53,17 @@ export function isPieceFile(json) {
 
 /**
  * recordingsFromPieces(sources) → { recordings, warnings }
- *   sources: [{ path, pieces }] — the files the pieces were found in
- *   recordings: [{ recording, recordingId, paths }]
+ *   sources: [{ path, pieces, owner?, ownerIds? }] — the files the pieces
+ *     were found in; `owner` is the participant whose data file it is (null
+ *     or absent for a file of pieces alone), `ownerIds` the ids that
+ *     participant's own recording may carry in its header (ingest-core.js)
+ *   recordings: [{ recording, recordingId, paths, owner, ownerIds }]
  *   warnings: [{ file, warnings: [text] }]
+ * Pieces are rebuilt per recording AND per owner: pieces in one
+ * participant's data file are never joined with pieces from another
+ * participant's file, whatever recording id they share (a shared id from
+ * two participants is reported). Files of pieces alone (no owner) are
+ * rebuilt together.
  * A recording whose first piece is missing cannot be rebuilt (no header) and
  * is reported; one with pieces missing in between is rebuilt without them
  * and reported. A missing final piece is not reported: on a page without a
@@ -63,21 +71,42 @@ export function isPieceFile(json) {
  * ran before the session ended, which the integrity data shows the same way.
  */
 export function recordingsFromPieces(sources) {
-  const all = [];
-  const pathsOf = new Map();
+  const groups = new Map();
+  const ownersOf = new Map();   // recording id → the owners its pieces came from
   for (const s of sources) {
+    const owner = s.owner == null ? null : String(s.owner);
     for (const p of s.pieces) {
-      all.push(p);
-      if (!pathsOf.has(p.recording_id)) pathsOf.set(p.recording_id, new Set());
-      pathsOf.get(p.recording_id).add(s.path);
+      if (!isPiece(p)) continue;
+      const key = JSON.stringify([owner, p.recording_id]);
+      if (!groups.has(key)) {
+        groups.set(key, { owner, recordingId: p.recording_id, ownerIds: new Set(), pieces: [], paths: new Set() });
+      }
+      const g = groups.get(key);
+      g.pieces.push(p);
+      g.paths.add(s.path);
+      for (const id of s.ownerIds || []) g.ownerIds.add(String(id));
+      if (owner !== null) {
+        if (!ownersOf.has(p.recording_id)) ownersOf.set(p.recording_id, new Set());
+        ownersOf.get(p.recording_id).add(owner);
+      }
     }
   }
   const recordings = [];
   const warnings = [];
-  for (const [id, pieces] of groupPieces(all)) {
-    const paths = [...pathsOf.get(id)].sort();
+  for (const [id, owners] of ownersOf) {
+    if (owners.size < 2) continue;
+    const paths = [...groups.values()].filter((g) => g.recordingId === id && g.owner !== null)
+      .flatMap((g) => [...g.paths]).sort();
+    warnings.push({ file: paths.join(', '), warnings: [
+      `Replay pieces of one recording (${id}) were found in the data files of ${owners.size} participants ` +
+      `(${[...owners].sort().join(', ')}): not joined across participants; each participant's own pieces ` +
+      'are rebuilt on their own.'] });
+  }
+  for (const g of groups.values()) {
+    const paths = [...g.paths].sort();
+    const id = g.recordingId;
     try {
-      const recording = reassemblePieces(pieces);
+      const recording = reassemblePieces(g.pieces);
       const note = recording.extensions['cyborg-hunter'].reassembly;
       const gaps = note ? note.missing_seq_ranges : [];
       if (gaps.length) {
@@ -91,7 +120,7 @@ export function recordingsFromPieces(sources) {
               'after a gap, because the page snapshot they build on is in a missing piece.'
             : '')] });
       }
-      recordings.push({ recording, recordingId: id, paths });
+      recordings.push({ recording, recordingId: id, paths, owner: g.owner, ownerIds: [...g.ownerIds] });
     } catch (e) {
       warnings.push({ file: paths.join(', '), warnings: [
         `Replay pieces found (recording ${id}) but the first one, which carries the recording's header, ` +
