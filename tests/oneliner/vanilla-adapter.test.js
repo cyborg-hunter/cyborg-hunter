@@ -591,10 +591,10 @@ describe('vanilla host: page-load edge cases', () => {
   // the tab's sessionStorage. The kept id and the saved session are scoped by
   // the page's directory, so pages of one study in one folder share them and
   // a study in another folder neither adopts the first study's id (a real
-  // PROLIFIC_PID included) nor continues its session.
+  // platform ID included) nor continues its session.
   it('a study in another folder of the origin starts fresh; a page in the same folder continues', () => {
     win.close();
-    useWindow(new Window({ url: 'https://lab.example/study-a/p1.html?PROLIFIC_PID=AAA' }));
+    useWindow(new Window({ url: 'https://lab.example/study-a/p1.html?participant=AAA' }));
     const ctx1 = boot({ script: { dataset: { guards: 'none' } }, win });
     contexts.push(ctx1);
     assert.strictEqual(ctx1.participantId, 'AAA');

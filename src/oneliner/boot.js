@@ -19,7 +19,7 @@
 //      still wins. The kept id and the saved session are per study (keyScope
 //      below): every page of an origin shares the tab's sessionStorage, and
 //      a second study in the tab must neither adopt the first one's id (a
-//      PROLIFIC_PID included) nor continue its session. Off Qualtrics a study
+//      platform ID included) nor continue its session. Off Qualtrics a study
 //      is the page's directory (pageDirectory: the address path up to and
 //      including its last '/'), so two studies in two folders of one
 //      github.io site or lab server stay apart, and a study whose pages sit
