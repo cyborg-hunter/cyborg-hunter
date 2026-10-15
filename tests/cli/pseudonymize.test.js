@@ -98,9 +98,9 @@ const RAW = {
 function writeCohort(dir) {
   const tracker = (pid) => JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8').replaceAll('DEMO-FIXT', pid));
   const a = tracker(RAW.pidA);
-  a.metadata = { ...(a.metadata || {}), PROLIFIC_PID: RAW.platform, qualtricsResponseId: RAW.qualtrics, cyborgHunterParticipantId: RAW.chId };
+  a.metadata = { ...(a.metadata || {}), platform_pid: RAW.platform, qualtricsResponseId: RAW.qualtrics, cyborgHunterParticipantId: RAW.chId };
   a.trials[0].cyborgHunterParticipantId = RAW.chId;
-  a.trials[0].PROLIFIC_PID = RAW.platform;
+  a.trials[0].platform_pid = RAW.platform;
   writeFileSync(join(dir, RAW.pidA + '.json'), JSON.stringify(a));
   const rec = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT-replay-1785352263344.json', 'utf8'));
   rec.participant_id = RAW.pidA;
@@ -139,7 +139,7 @@ function leaks(out) {
 
 describe('a pseudonymized report', () => {
   let dir, participants, createCanvas;
-  const fileConfig = { platformIdField: 'PROLIFIC_PID', showPlatformId: true };
+  const fileConfig = { platformIdField: 'platform_pid', showPlatformId: true };
   before(async () => {
     dir = mkdtempSync(join(tmpdir(), 'ch-pseudo-'));
     writeCohort(dir);

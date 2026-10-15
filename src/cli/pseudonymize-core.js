@@ -13,7 +13,7 @@
 // not content. Whatever a participant typed or pasted (event-log.csv's text
 // column, the replays' typed text), what a honeypot reported, and what a
 // dom-tier replay recorded of the page (visible text, hidden form values,
-// URLs carrying ?PROLIFIC_PID=...) can still identify them; those are left
+// URLs carrying the platform ID as a query parameter) can still identify them; those are left
 // as recorded.
 //
 // The key file maps the codes back. It is CSV: a banner line, the secret on a
