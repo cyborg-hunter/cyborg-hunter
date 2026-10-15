@@ -216,8 +216,11 @@ function textPseudonymizer(names) {
   if (byForm.size === 0) return (text) => text;
   const forms = [...byForm.keys()].sort((a, b) => b.length - a.length)
     .map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const re = new RegExp('(?<![A-Za-z0-9])(?:' + forms.join('|') + ')(?![A-Za-z0-9])', 'g');
-  return (text) => String(text).replace(re, (m) => byForm.get(m));
+  // The character before a name is matched and put back, not looked behind
+  // at: the analyzer runs this too, and Safari before 16.4 rejects a
+  // lookbehind, which would stop a pseudonymized run there.
+  const re = new RegExp('(^|[^A-Za-z0-9])(' + forms.join('|') + ')(?![A-Za-z0-9])', 'g');
+  return (text) => String(text).replace(re, (m, before, name) => before + byForm.get(name));
 }
 
 // The names each participant goes by in ingest's text: its id, and the
