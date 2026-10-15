@@ -104,6 +104,10 @@ function writeCohort(dir) {
   writeFileSync(join(dir, RAW.pidA + '.json'), JSON.stringify(a));
   const rec = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT-replay-1785352263344.json', 'utf8'));
   rec.participant_id = RAW.pidA;
+  // Structured data inside the recording that names the participant: the
+  // viewer model must not carry it into replay/<code>.replay.js.
+  rec.segments[0].host_data = { subject_ID: RAW.pidA, participantId: RAW.pidA };
+  rec.segments[0].extensions = { ...(rec.segments[0].extensions || {}), 'cyborg-hunter': { ...((rec.segments[0].extensions || {})['cyborg-hunter'] || {}), participantId: RAW.pidA } };
   writeFileSync(join(dir, RAW.pidA + '-replay-1785352263344.json'), JSON.stringify(rec));
   writeFileSync(join(dir, RAW.pidB + '.json'), JSON.stringify(tracker(RAW.pidB)));
 }

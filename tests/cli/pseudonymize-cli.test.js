@@ -43,6 +43,8 @@ describe('CLI flags: pseudonymize', () => {
       assert.match(c.pseudonymKeyFile, /^\/.*\/keys\/from-file\.csv$/);
       assert.match(loadConfig(['--config', join(dir, 'c.json'), '--pseudonym-key-file', 'cli.csv']).pseudonymKeyFile, /^\/.*\/cli\.csv$/);
       assert.equal(loadConfig(['--pseudonymize']).pseudonymize, true);
+      writeFileSync(join(dir, 'null.json'), JSON.stringify({ pseudonymKeyFile: null }));
+      assert.match(loadConfig(['--config', join(dir, 'null.json')]).pseudonymKeyFile, /\/cyborg-hunter-pseudonyms\.csv$/);
     });
   });
 

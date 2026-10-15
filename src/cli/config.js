@@ -9,6 +9,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve, join, relative, isAbsolute, sep } from 'path';
 import { mergeConfig, cliConfigWarnings } from './config-core.js';
+import { KEY_FILE_NAME } from './pseudonymize-core.js';
 
 // Load-bearing re-export: tests import cliConfigWarnings from this file.
 export { cliConfigWarnings };
@@ -49,7 +50,8 @@ export function loadConfig(cliArgs) {
   config.dataDir = resolve(config.dataDir);
   config.outputDir = resolve(config.outputDir);
   if (config.assetsDir) config.assetsDir = resolve(config.assetsDir);
-  config.pseudonymKeyFile = resolve(config.pseudonymKeyFile);
+  // A config that sets it to null keeps the default, as an unset one does.
+  config.pseudonymKeyFile = resolve(config.pseudonymKeyFile || KEY_FILE_NAME);
 
   // Config file key typos first, then config VALUES that would otherwise
   // silently mis-score (a non-numeric softScoreThreshold coerces every
