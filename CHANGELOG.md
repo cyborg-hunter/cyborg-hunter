@@ -60,7 +60,21 @@ Collected data, configuration and reports all change: read
   dropped and counted instead of freezing or stopping the viewer; stylesheet
   ids must be numbers; a canvas snapshot must be a `data:image` URL; a value
   aimed at a file input is skipped.
-- A `.gz` upload is decompressed to at most 256 MB.
+- A `.gz` upload is decompressed to at most 256 MB, and a participant file
+  larger than 256 MB is not read.
+- One participant can no longer stop the report for everyone: a study with
+  426 or more trials (plots now capped at 400 trajectory panels and 800
+  typing bars, with a note), a deeply nested recording, a `null` entry in a
+  signal list, or an ID too long for a file name.
+- A recording inside one participant's data file is credited to that
+  participant only; recordings found elsewhere join a participant's replay
+  only from a browser their own data shows; pieces sharing a recording id
+  across participants are not joined.
+- Plot files of IDs that differ only in case no longer overwrite each other
+  on macOS and Windows.
+- Pseudonymized output: replay reasons and the analyzer's warnings use the
+  codes; the key-file guard compares real paths; deeply nested data no
+  longer stops the run; `triage.md` escapes the Reason column.
 - Participant IDs that clean up to the same file name no longer overwrite
   each other's plots; an ID of `__proto__` no longer pollutes the analyzer's
   image map; `triage.md` escapes IDs.

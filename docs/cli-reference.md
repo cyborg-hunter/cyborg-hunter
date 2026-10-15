@@ -56,14 +56,21 @@ arrives inside the data you saved, in pieces: `cyborgHunterReplay` (and
 CSV, and on pages without a framework a saved `cyborgHunterReplay` POST field
 or the `cyborgHunterReplay` of `CyborgHunter.data()`, under any file name. The
 CLI finds the pieces by their content, puts each recording back together and
-attaches it by the `participant_id` inside it. Rows a save trial saved before
+attaches it to the participant whose data file held it; pieces whose header
+names another participant are reported and attached to no one. A file
+holding pieces alone (a saved `cyborgHunterReplay` field) attaches by the
+`participant_id` inside it. Rows a save trial saved before
 the session ended give the recording up to that point; pieces missing in
 between are left out and reported; without its first piece a recording cannot
 be rebuilt, which is reported too. A participant's recordings that follow one
-another in time (one per page, or a reload) are joined into one replay;
+another in time (one per page, or a reload) are joined into one replay. A
+recording found outside the participant's own data joins only when it was
+recorded in a browser (`user_agent`) their own data shows; one from another
+browser is left out with a warning, and when their own data holds no
+recording to tell, recordings from different browsers are not attached at all;
 recordings that overlap in time are two sessions, and the latest is shown with
 a warning. The same recording found both in the rows and as a saved file
-counts once.
+counts once, and the copy from the participant's own data is kept.
 
 **Files.** `<pid>-replay-<epoch>.json[.gz]` files are picked up automatically from
 `dataDir` (or `replayDir` when set) and rendered as per-participant
@@ -71,7 +78,8 @@ counts once.
 embedded `participant_id`; corrupt artifacts are reported, never fatal;
 `report` prints the total size of emitted `replay/` assets. A `.gz` file
 that would decompress to more than 256 MB is not read and is reported (a
-participant-supplied file can be a "gzip bomb").
+participant-supplied file can be a "gzip bomb"), and so is a participant file
+larger than 256 MB as stored.
 
 Recordings from other producers are accepted too, since SessionRecording v2 is
 not a Cyborg Hunter format:
@@ -298,7 +306,7 @@ written unchanged.
 
 ### `images/trajectories_*.png`, `session_timeline_*.png`, `typing_profile_*.png`
 
-Per-participant visualizations rendered with `node-canvas`. Trajectory panels show the mouse path with start/end markers, click events, tab-away markers placed at trial-relative timing, and (when window-position data is present) a nested screen → window outline showing where the browser was on the user's display. Panels are ordered chronologically by rule by default (`trajectoryDisplayOrder` picks `"rule"` / `"time"` / `"insertion"`) and tinted by phase — peach gallery, purple typing/query, blue classification, grey re-query — matching the session-timeline strip. Plots are zoom-aware: if the participant adjusted CSS-level browser zoom, mouse coords are scaled to the outline correctly. The session timeline lays tab-away, sidebar, layout-shift, and guard-friction events on one session-wide time axis with phase bands. In the report, a click on a figure enlarges it to fit the window; **1:1** (or a click on the enlarged figure) shows it at the size it was drawn, scrolling, and **Fullscreen** gives it the whole screen.
+Per-participant visualizations rendered with `node-canvas`. The trajectory grid shows at most 400 trials and the typing profile 800; the plot's header says when trials are left out. A participant whose plot cannot be drawn gets a warning, and the rest of the report is built. Trajectory panels show the mouse path with start/end markers, click events, tab-away markers placed at trial-relative timing, and (when window-position data is present) a nested screen → window outline showing where the browser was on the user's display. Panels are ordered chronologically by rule by default (`trajectoryDisplayOrder` picks `"rule"` / `"time"` / `"insertion"`) and tinted by phase — peach gallery, purple typing/query, blue classification, grey re-query — matching the session-timeline strip. Plots are zoom-aware: if the participant adjusted CSS-level browser zoom, mouse coords are scaled to the outline correctly. The session timeline lays tab-away, sidebar, layout-shift, and guard-friction events on one session-wide time axis with phase bands. In the report, a click on a figure enlarges it to fit the window; **1:1** (or a click on the enlarged figure) shows it at the size it was drawn, scrolling, and **Fullscreen** gives it the whole screen.
 
 If `canvas` is unavailable (Cairo not installed), images are skipped with platform-specific install hints. Text outputs still render.
 
