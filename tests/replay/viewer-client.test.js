@@ -495,6 +495,39 @@ describe('the data-ch-* family is viewer-owned, both verbs', () => {
       'the recorded sheet precedes the viewer rules, so page CSS cannot override them');
   });
 
+  // A sheet's id is found through a selector. The schema types it as a
+  // number and capture numbers sheets from 1; a string id carrying a quote
+  // used to end the selector early, or widen it.
+  const sheetIdRecording = (id) => baseRecording({
+    stylesheets: [{ id: 1, kind: 'inline', css: '#p{color:red}', media: null }],
+    stylesheet_events: [
+      { type: 'stylesheet.add', t: -1, sheet: { id, kind: 'inline', css: 'body{color:blue}', media: null } },
+      { type: 'stylesheet.update', t: -1, id, css: 'body{color:green}' },
+      { type: 'stylesheet.remove', t: -1, id },
+    ],
+    segments: [segment({
+      initial_dom: bodyKeyframe([
+        { id: 2, kind: 'element', tag: 'input', attrs: { id: 'answer' }, children: [] },
+      ]),
+      initial_state: { scroll: { x: 0, y: 0 }, element_scroll: [], form: [{ node: 2, value: 'seeded' }], media: [] },
+    })],
+  });
+
+  it('a sheet id that would widen the selector cannot remove the viewer\'s own rules', () => {
+    const v = boot(sheetIdRecording('x"],[data-ch-shell-rules],[x="'));
+    assert.ok(v.doc().head.querySelector('style[data-ch-shell-rules]'), 'the shell rules survive');
+    assert.ok(v.doc().head.querySelector('[data-ch-sheet="1"]'), 'and so does the recorded sheet');
+    assert.equal(v.doc().head.querySelectorAll('[data-ch-sheet]').length, 1, 'the bad sheet was not inserted');
+    // The add and the update each tried to create a sheet; both are counted.
+    assert.equal(v.dbg.getCounters().skipped, 2);
+  });
+
+  it('a sheet id with a quote does not end the restore', () => {
+    const v = boot(sheetIdRecording('a"b'));
+    assert.equal(v.dbg.getNode(2).value, 'seeded', 'the restore went on to seed the form');
+    assert.equal(v.dbg.getCounters().skipped, 2);
+  });
+
   it('leaves page-authored data-ch-* attributes alone', () => {
     // `data-ch-redact` is the RESEARCHER's marker on their own page and is
     // serialised into the keyframe (capture-e2e pins that). The predicate is

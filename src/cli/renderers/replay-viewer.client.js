@@ -912,7 +912,25 @@
     // into <body> and sheets only ever live in <head>, so scoping the read is
     // what closes it — and unlike widening the attribute ban, it deletes
     // nothing the page really had.
+    //
+    // AND ONLY A NUMBER IS EVER PUT IN ONE OF THOSE SELECTORS. A sheet id is
+    // the recording's, and the schema types it as a number (capture numbers
+    // sheets from 1, merge.js renumbers the same way). A string id was
+    // interpolated as it came: a quote in it ended the selector, so
+    // `querySelector` threw out of the restore and the replay stopped after
+    // the keyframe mount, or it widened the selector to the viewer's own
+    // `style[data-ch-shell-rules]`, which the next lookup then removed or
+    // rewrote. A sheet whose id is not a number is not inserted and is counted
+    // into `skipped`; a remove or update naming one finds nothing.
+    function findSheet(doc, id) {
+      return num(id) == null ? null : doc.head.querySelector('[data-ch-sheet="' + id + '"]');
+    }
+
     function insertSheet(doc, sheet) {
+      if (num(sheet.id) == null) {
+        if (span) span.skipped++;
+        return;
+      }
       var node = sheetNode(doc, sheet);
       if (!node) return;
       var anchor = doc.head.querySelector('style[data-ch-shell-rules]');
@@ -921,21 +939,21 @@
 
     function applySheetEvent(doc, ev) {
       if (ev.type === 'stylesheet.add') {
-        if (ev.sheet && ev.sheet.id != null) {
+        if (ev.sheet) {
           removeSheet(doc, ev.sheet.id);
           insertSheet(doc, ev.sheet);
         }
       } else if (ev.type === 'stylesheet.remove') {
         removeSheet(doc, ev.id);
       } else if (ev.type === 'stylesheet.update') {
-        var node = doc.head.querySelector('[data-ch-sheet="' + ev.id + '"]');
+        var node = findSheet(doc, ev.id);
         if (node && node.tagName.toLowerCase() === 'style') node.textContent = ev.css == null ? '' : ev.css;
         else insertSheet(doc, { id: ev.id, kind: 'inline', css: ev.css, media: null });
       }
     }
 
     function removeSheet(doc, id) {
-      var node = doc.head.querySelector('[data-ch-sheet="' + id + '"]');
+      var node = findSheet(doc, id);
       if (node && node.parentNode) node.parentNode.removeChild(node);
     }
 
@@ -946,7 +964,7 @@
       }
       missingSheets = 0; failedSheets = 0;   // recounted by every rebuild
       (model.stylesheets || []).forEach(function (sheet) {
-        if (sheet && sheet.id != null) insertSheet(doc, sheet);
+        if (sheet) insertSheet(doc, sheet);
       });
       for (var j = 0; j < sheetEvents.length; j++) {
         var ev = sheetEvents[j];
