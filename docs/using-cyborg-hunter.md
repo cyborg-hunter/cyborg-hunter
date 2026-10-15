@@ -114,7 +114,7 @@ rec.destroy();
 | `root` | `document.body` | Capture root for the DOM tier. |
 | `autoSave.mode` | `'none'` | `'datapipe'` (needs `experimentId`), `'download'` (participant's machine — piloting only), `'none'` (call `getRecording()` yourself; warns at startSession). See [Saving the replay to your own server](#saving-the-replay-to-your-own-server). |
 | `autoSave.experimentId` | — | Your DataPipe experiment ID. Required by `'datapipe'` mode; without it the save reports `saved_to: 'failed'`. |
-| `maxEventsPerTrial` | `50000` | Hard, per-trial cap on event count. Once a trial crosses it, that trial's capture stops (a `recording.capture_stopped` event is written once per recording and `truncated` is set, no silent truncation); later trials in the same session record normally. Doesn't bound the size of the whole session. |
+| `maxEventsPerTrial` | `50000` | Hard, per-trial cap on event count. A recording you never bracket with `startTrial`/`endTrial` is one trial for the whole session, so the cap then ends capture for the rest of the session (about 28 minutes of mouse movement at 30 Hz); bracket long sessions. Once a trial crosses it, that trial's capture stops (a `recording.capture_stopped` event is written once per recording and `truncated` is set, no silent truncation); later trials in the same session record normally. Doesn't bound the size of the whole session. |
 | `maxCharsPerTrial` | `8000000` | Hard, per-trial cap measured in characters (JS string length), seeded by the trial's initial DOM snapshot. Same stop-and-mark behavior as `maxEventsPerTrial`, and the same per-trial scope; whichever cap is crossed first stops that trial. Set `null` to disable. |
 | `keyframeEvery` | `10` | DOM tier only. At most this many segments per full snapshot: one keyframe plus up to `keyframeEvery - 1` segments recorded as deltas against it. A fresh snapshot is also taken sooner whenever the mutations since the last one have grown to rival its size, so this setting is the fallback for a DOM that barely changes, and it bounds how far a viewer must replay forward to reach a given segment. `1` snapshots every segment (the jsPsych adapter forces this, since the display is wiped between trials). `null` leaves only the size trigger. Must be a number; anything else disables the fallback and warns. |
 | `maxGuardViolations` | `40` | DOM tier only (the trace tier records no guard violations; the honeypot's columns in the data still do). Session-wide cap on recorded guard-friction violations. Each `start` entry carries a full DOM snapshot, and the per-trial caps cannot see a session-level array. Past the ceiling later violations are not recorded and a capture failure says so once. Set `null` to disable. |
@@ -185,7 +185,8 @@ your code reads from that event is yours to declare.
   (consent, instructions, demographics) and fields that are not part of the
   experiment. Mark a field `data-ch-redact` (a name, an email, an ID typed
   by hand) to keep its keys, value and clipboard contents out of the
-  recording; only that a key was pressed, and when, is kept. Password inputs
+  recording; only that a key was pressed, when, and the length of the
+  field's value or of a paste, is kept. Password inputs
   are always redacted. The mark is the recorder's only: the integrity
   monitor still stores text pasted or dropped into a marked field, in full
   (see above), so when you de-identify or delete a field's values, remove
@@ -203,6 +204,12 @@ your code reads from that event is yours to declare.
   example), URLs with their query strings, and content a browser extension
   injects into `<body>` (a password manager's or Grammarly's UI, an AI
   sidebar). The contents of shadow roots and iframes are not recorded.
+  Also on the `dom` tier: `<html>`'s own attributes; the text of the page's
+  stylesheets, including ones a browser extension injects (which can reveal
+  installed extensions); for a stylesheet on another site, the participant's
+  browser fetches it once more, without cookies, to store its text; and
+  with friction on, a further copy of the page at each violation
+  (`maxGuardViolations`).
 - Redaction removes what the participant entered, and embedded `data:` and
   `blob:` media in the redacted area; attributes the page itself wrote
   (`placeholder`, `title`, `aria-*`, `data-*`, `style`) stay, so a page that
