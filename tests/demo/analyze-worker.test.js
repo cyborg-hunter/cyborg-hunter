@@ -606,3 +606,26 @@ test('a pseudonymized run: no raw id in the zip or the in-page report, the key a
   assert.deepEqual(plain.participants.map((p) => p.participantId), [RAW]);
   assert.equal(plain.pseudonymKey, null);
 });
+
+// Ingest's warnings are listed on the page beside the report, so under
+// config.pseudonymize they name participants by their codes too.
+test('a pseudonymized run: the warnings the page lists name participants by their codes', async () => {
+  const RAW = 'PROLIFICX5d1e9f00aa';
+  const data = readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8').replaceAll('DEMO-FIXT', RAW);
+  // Two uploads of one participant: ingest warns, naming the id and the files.
+  const files = [
+    { path: 'data/' + RAW + '.json', file: new File([data], RAW + '.json') },
+    { path: 'data/' + RAW + '-again.json', file: new File([data], RAW + '-again.json') },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.ok(done.warnings.some((x) => /duplicate participantId/.test(x.warnings.join(' '))), 'the warning is still there');
+  assert.ok(!JSON.stringify(done.warnings).includes(RAW), JSON.stringify(done.warnings));
+  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'participantId' });
+  const plain = await w.next('done', 'error');
+  assert.ok(JSON.stringify(plain.warnings).includes(RAW), 'a plain report keeps the ids in its warnings');
+});

@@ -11,7 +11,7 @@ import { mergeConfig } from '../../src/cli/config-core.js';
 import { buildReport, renderInPageHtml } from '../../src/cli/report-core.js';
 import { webHmacSha256 } from '../../demo/analyze/web-deps.js';
 import {
-  KEY_FILE_BANNER, pseudonymCode, assignCodes, parseKeyFile, keyFileUpdate, pseudonymizeParticipants,
+  KEY_FILE_BANNER, pseudonymCode, assignCodes, parseKeyFile, keyFileUpdate, pseudonymizeParticipants, pseudonymizeWarnings,
 } from '../../src/cli/pseudonymize-core.js';
 
 if (!globalThis.crypto) globalThis.crypto = (await import('node:crypto')).webcrypto;
@@ -212,5 +212,54 @@ describe('pseudonymizing deeply nested participant data', () => {
     assert.deepEqual(leaf, { participantId: codes.get('DEEP-RAW'), note: 'leaf' });
     assert.deepEqual(Object.keys(copy.trials[0]), ['trialId', 'extra', 'keep'], 'keys keep their order');
     assert.deepEqual(copy.trials[0].keep, { a: 1, b: [2, 3] });
+  });
+});
+
+describe('pseudonymized text that names participants', () => {
+  it('the reason a replay is not shown carries no raw id, nor the form file names give it', async () => {
+    const RAWID = 'AB/CD';            // file names carry it as AB_CD
+    const dir = mkdtempSync(join(tmpdir(), 'ch-pseudo-reason-'));
+    try {
+      const data = readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8').replaceAll('"DEMO-FIXT"', JSON.stringify(RAWID));
+      writeFileSync(join(dir, 'first.json'), data);
+      writeFileSync(join(dir, 'second.json'), data);
+      for (const [epoch, shift] of [[1785352263344, 0], [1785355863344, 3600e3]]) {
+        const rec = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT-replay-1785352263344.json', 'utf8'));
+        rec.participant_id = RAWID;
+        rec.recording_started_at = new Date(Date.parse(rec.recording_started_at) + shift).toISOString();
+        writeFileSync(join(dir, `AB_CD-replay-${epoch}.json`), JSON.stringify(rec));
+      }
+      const { config } = mergeConfig({ dataDir: dir, filePattern: '*.json', participantIdField: 'participantId', pseudonymize: true });
+      const { participants } = await ingest(config);
+      assert.equal(participants[0].replay.error, 'ambiguous');
+      assert.match(participants[0].replay.reason, /AB_CD-replay-/, 'the plain reason lists the files');
+      const coded = pseudonymizeParticipants(participants, await assignCodes(participants.map((p) => p.participantId), SECRET, hmac), config);
+      const { out } = await buildAll(coded, config, null);
+      for (const [path, text] of Object.entries(out)) {
+        if (typeof text !== 'string') continue;
+        assert.ok(!text.includes('AB_CD') && !text.includes(RAWID), path + ' names the participant');
+      }
+      assert.match(coded[0].replay.reason, /P-[0-9a-f]{10}-replay-/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('pseudonymizeWarnings: ids, Qualtrics response ids and ch.js ids become codes; a longer id is not cut', async () => {
+    const participants = [
+      { participantId: 'P1', metadata: { qualtricsResponseId: 'R_abc123' } },
+      { participantId: 'P10', metadata: { cyborgHunterParticipantId: 'ch-zz9' } },
+      { participantId: 'A/B', metadata: {} },
+    ];
+    const codes = await assignCodes(participants.map((p) => p.participantId), SECRET, hmac);
+    const out = pseudonymizeWarnings([
+      { file: 'data/P1.json', warnings: ['duplicate participantId "P1" appears in 2 files'] },
+      { file: 'export.csv (response R_abc123)', response: 'R_abc123', warnings: ['P10 and ch-zz9; A_B-replay-1.json and A/B'] },
+    ], participants, codes);
+    const [c1, c10, cab] = ['P1', 'P10', 'A/B'].map((id) => codes.get(id));
+    assert.deepEqual(out, [
+      { file: `data/${c1}.json`, warnings: [`duplicate participantId "${c1}" appears in 2 files`] },
+      { file: `export.csv (response ${c1})`, response: c1, warnings: [`${c10} and ${c10}; ${cab}-replay-1.json and ${cab}`] },
+    ]);
   });
 });

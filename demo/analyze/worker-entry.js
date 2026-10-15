@@ -40,7 +40,8 @@
 //                   pointer-verdicts sentence (report-core.js); pseudonymKey:
 //                   under config.pseudonymize, the key file's text (its own
 //                   download, never in the zip), else null. Under it every id
-//                   the message carries, as the report's, is a code
+//                   the message carries, as the report's, is a code (in
+//                   ingest's warnings too)
 //     replay-model  { participantId, model }
 //     error         { phase, message, warnings? }, phase 'ingest' or the type of
 //                   the message that failed: 'check' | 'run' | 'reanalyze' |
@@ -59,7 +60,7 @@ import { classifyFiles, CONFIG_NAME } from './classify-files.js';
 import { peekParticipantFile } from './peek-files.js';
 import { suggestIdField } from './participant-id-suggest.js';
 import { createZipSink } from './zip-sink.js';
-import { assignCodes, keyFileUpdate, pseudonymizeParticipants } from '../../src/cli/pseudonymize-core.js';
+import { assignCodes, keyFileUpdate, pseudonymizeParticipants, pseudonymizeWarnings } from '../../src/cli/pseudonymize-core.js';
 import { webGunzip, webSha256, webHmacSha256, webRandomSecret, bytesToBase64, offscreenCreateCanvas, offscreenEncodePng } from './web-deps.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from './limits.js';
 
@@ -201,11 +202,13 @@ async function reanalyze(msg) {
 // two zips file for file, with a stylesheet two others import).
 async function renderRun(state, config) {
   var raw = state.participants, assetNotes = state.assetNotes;
-  var participants = raw, pseudonymKey = null;
+  var participants = raw, pseudonymKey = null, warnings = state.warnings;
   if (config.pseudonymize) {
     var coded = await codedParticipants(state, config);
     participants = coded.participants;
     pseudonymKey = keyFileUpdate(null, pseudonymSecret, coded.codes).text;
+    // The page lists ingest's warnings beside the report: codes there too.
+    warnings = pseudonymizeWarnings(state.warnings, raw, coded.codes);
   }
   // The participants this report shows, for the replay requests that name them.
   state.shown = participants;
@@ -233,7 +236,7 @@ async function renderRun(state, config) {
         assetNote: has ? assetNotes[raw[i].participantId] : null,
         replayError: p.replay && p.replay.error ? (p.replay.reason || p.replay.error) : null };
     }),
-    warnings: state.warnings, reportWarnings: built.warnings, assetReport: state.assetReport,
+    warnings: warnings, reportWarnings: built.warnings, assetReport: state.assetReport,
     files: fileTexts, configUsed: config, zipBytes: zip.bytes, pseudonymKey: pseudonymKey,
     triageRows: built.triage.map(function (t) {
       return { participantId: t.participantId, tier: t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean', triageScore: t.score };

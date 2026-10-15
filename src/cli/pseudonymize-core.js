@@ -23,6 +23,7 @@
 // for, never need quoting, so each row's first cell is read without a CSV
 // parser (the analyze page imports this module and stays free of one).
 import { csvCell } from '../shared/csv-cell.js';
+import { sanitizeId } from '../shared/constants.js';
 
 export const KEY_FILE_NAME = 'cyborg-hunter-pseudonyms.csv';
 export const KEY_FILE_BANNER = '# cyborg-hunter pseudonym key — keep private; do not share with the report';
@@ -113,8 +114,8 @@ export function isPseudonymized(p) { return coded.has(p); }
 //     trial, where the report reads it, removed;
 //   - the replay: the recording's top-level participant_id (v1:
 //     metadata.participant_id) set to the code, its source filename (named
-//     after the id) dropped, and the id replaced in the reason an unloadable
-//     replay gives.
+//     after the id) dropped, and the id, as written and as file names carry
+//     it, replaced in the reason a replay that is not shown gives.
 // Matching is by key, never by value, so content that happens to equal an id
 // is left alone (a trial labelled "1" in a cohort with participant "1"). The
 // configured field names are matched only where ingest and the report read
@@ -127,6 +128,7 @@ export function pseudonymizeParticipants(participants, codes, config) {
   const named = (f) => (typeof f === 'string' && f ? f : null);
   const idField = named(config && config.participantIdField);
   const platformField = named(config && config.platformIdField);
+  const swap = textPseudonymizer(namesOf(participants, codes));
 
   return participants.map((p) => {
     const raw = String(p.participantId);
@@ -172,18 +174,19 @@ export function pseudonymizeParticipants(participants, codes, config) {
     if (platformField) roots.forEach((o) => deletePath(o, platformField));
     // Last: every renderer keys by it, whatever the field edits above did.
     copy.participantId = code;
-    if (replay !== undefined) copy.replay = scrubReplay(replay, raw, code, scrub);
+    if (replay !== undefined) copy.replay = scrubReplay(replay, code, scrub, swap);
     coded.add(copy);
     return copy;
   });
 }
 
-function scrubReplay(replay, raw, code, scrub) {
+function scrubReplay(replay, code, scrub, swap) {
   if (!replay || typeof replay !== 'object') return replay;
   const { recording, ...rest } = replay;
   const out = scrub(rest);
   if ('file' in out) out.file = null;
-  if (typeof out.reason === 'string') out.reason = out.reason.split(raw).join(code);
+  // The reason can list the recordings' file names, named after the id.
+  if (typeof out.reason === 'string') out.reason = swap(out.reason);
   if (recording && typeof recording === 'object') {
     const rec = { ...recording };
     if ('participant_id' in rec) rec.participant_id = code;
@@ -195,6 +198,56 @@ function scrubReplay(replay, raw, code, scrub) {
     out.recording = recording;
   }
   return out;
+}
+
+// Text that names participants (ingest's warnings, the reason a replay is
+// not shown) with codes in their place. `names` maps each name a participant
+// goes by to its code; each is replaced as written and in the form file
+// names carry it (sanitizeId: `AB/CD`'s recording is `AB_CD-replay-….json`),
+// the longest first, and only where it is not part of a longer run of
+// letters and digits ('P1' in 'P10' is left alone). → text → text
+function textPseudonymizer(names) {
+  const byForm = new Map();
+  for (const [name, code] of names) if (name !== '') byForm.set(name, code);
+  for (const [name, code] of names) {
+    const form = sanitizeId(name);
+    if (form !== '' && !byForm.has(form)) byForm.set(form, code);
+  }
+  if (byForm.size === 0) return (text) => text;
+  const forms = [...byForm.keys()].sort((a, b) => b.length - a.length)
+    .map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp('(?<![A-Za-z0-9])(?:' + forms.join('|') + ')(?![A-Za-z0-9])', 'g');
+  return (text) => String(text).replace(re, (m) => byForm.get(m));
+}
+
+// The names each participant goes by in ingest's text: its id, and the
+// Qualtrics response id and ch.js's own id its metadata keeps.
+function namesOf(participants, codes) {
+  const names = new Map();
+  for (const p of participants) {
+    const code = codes.get(String(p.participantId));
+    if (code === undefined) continue;
+    names.set(String(p.participantId), code);
+    const m = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+    for (const k of ['qualtricsResponseId', 'cyborgHunterParticipantId']) {
+      if (m[k] != null && m[k] !== '' && !names.has(String(m[k]))) names.set(String(m[k]), code);
+    }
+  }
+  return names;
+}
+
+// Ingest's warnings ({ file, response?, warnings }) for a pseudonymized
+// report's page (the analyze page lists them beside the report): every name
+// of a participant in them replaced by its code. `participants` are the raw
+// ones the codes were made for.
+export function pseudonymizeWarnings(warnings, participants, codes) {
+  const swap = textPseudonymizer(namesOf(participants, codes));
+  return warnings.map((w) => ({
+    ...w,
+    file: swap(w.file),
+    ...('response' in w ? { response: swap(w.response) } : {}),
+    warnings: w.warnings.map(swap),
+  }));
 }
 
 // Dotted-path edits on the copies. A flat key that spells the whole path wins,
