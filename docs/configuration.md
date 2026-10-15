@@ -269,7 +269,7 @@ With the one-line setup, set the monitor's options in `window.CyborgHunterConfig
     signals: { keystrokeDynamics: false }                     // turn one signal off
   };
 </script>
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-oxYH2GswrijxHGWbnr6HhbEVo3M0qDc5dgzcp63yLlMTCCJ6IGtoQ+a63XuOyH7K" crossorigin="anonymous"></script>
 ```
 
 With the one-line setup, `CyborgHunter.init()` logs an error and returns a monitor that records nothing.

@@ -49,7 +49,7 @@ npm install -g cyborg-hunter
 Browser (experiment page): one tag, below `jspsych.js` and above your experiment code (on a page without jsPsych, anywhere in the page; in `<head>`, recording starts at `DOMContentLoaded`):
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-oxYH2GswrijxHGWbnr6HhbEVo3M0qDc5dgzcp63yLlMTCCJ6IGtoQ+a63XuOyH7K" crossorigin="anonymous"></script>
 ```
 
 Each framework has its own one-line file, with the same API and the same tag attributes ([quickstart § Which file](docs/quickstart.md#which-file)):
@@ -72,7 +72,7 @@ Manual mode (advanced), for experiments that wire the jsPsych extension themselv
 <script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/extension-guard-friction.js" integrity="sha384-uzwjUukhzik37XrUUFXEGAKhd9ySP+YvUAYpJbjASWd1zGJimU1Zafta9W0KtgkA" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/extension-guard-honeypot.js" integrity="sha384-yALrPlLmPIeDV/Ytdi0n/I8K4db6bbNFahyU876uM5uCwtMhBf7uPob/CydVX1dP" crossorigin="anonymous"></script>
 <!-- Optional: session replay recorder -->
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/cyborg-hunter-replay.js" integrity="sha384-Vu3/IvGB2OCGGQrnPFcx0V2jeMEEBwimaQhTcplh1rQxsc9BRLLcDmcfwYO9cxgp" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/cyborg-hunter-replay.js" integrity="sha384-Zmu1fbRaMGdWHjdN4/VFzFf6Wca4dR1J+Sv+aJ08EAuye7oDSlZ2NGYuG2g+M33B" crossorigin="anonymous"></script>
 ```
 
 ## Plug into an experiment
@@ -81,7 +81,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 
 ```html
 <script src="jspsych/jspsych.js"></script>
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-oxYH2GswrijxHGWbnr6HhbEVo3M0qDc5dgzcp63yLlMTCCJ6IGtoQ+a63XuOyH7K" crossorigin="anonymous"></script>
 <script src="experiment.js"></script>
 ```
 
@@ -124,7 +124,7 @@ Releases before 0.8.0 recorded the earlier v1 shape.
 With the one-line setup, replay is `data-replay` on the tag, and the experiment's save code saves what `CyborgHunter.replay()` returns ([details](docs/advanced-integration.md#replay-with-the-one-liner)):
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous" data-replay="dom"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-oxYH2GswrijxHGWbnr6HhbEVo3M0qDc5dgzcp63yLlMTCCJ6IGtoQ+a63XuOyH7K" crossorigin="anonymous" data-replay="dom"></script>
 ```
 
 ```javascript

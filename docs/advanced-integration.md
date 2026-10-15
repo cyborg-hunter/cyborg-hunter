@@ -180,7 +180,7 @@ To move a manual-mode experiment to `ch.js`:
 2. Add the one tag below `jspsych.js` and above your experiment code:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
+   <script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-oxYH2GswrijxHGWbnr6HhbEVo3M0qDc5dgzcp63yLlMTCCJ6IGtoQ+a63XuOyH7K" crossorigin="anonymous"></script>
    ```
 
    For production studies pin an exact version (see [README § Install](../README.md#install)).
@@ -363,7 +363,7 @@ The tag attributes ([quickstart § Configuration](quickstart.md#configuration)) 
     replay: { tier: 'dom', autoSave: { mode: 'datapipe', experimentId: 'ABC123' } }
   };
 </script>
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-KcubT+Gr+tAVCb3bIaUhwUX+ExjS8e3XPMsSYRRH9iyIoA14OPrMpxrt8oaDYai2" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-oxYH2GswrijxHGWbnr6HhbEVo3M0qDc5dgzcp63yLlMTCCJ6IGtoQ+a63XuOyH7K" crossorigin="anonymous"></script>
 ```
 
 For production studies pin an exact version (see [README § Install](../README.md#install)).

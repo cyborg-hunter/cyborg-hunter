@@ -9,7 +9,7 @@ The one-line setup on a [lab.js](https://lab.js.org) study: one tag, every scree
 ```html
 <script src="lib/lab.js" data-labjs-script="library"></script>
 <link rel="stylesheet" href="lib/lab.css">
-<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch-labjs.js" integrity="sha384-nkh4cprNKH7odK0PfG4yE7bQ/cV9WKCUkVNhgQjXlV/hiVC45t9fLYZ/CmD4kZX+" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch-labjs.js" integrity="sha384-EgtswYIjtS05koL4PANodmD7iujEOfiZtD7WGI/dwtnUkBVsHeyG+avW+pdRc3NF" crossorigin="anonymous"></script>
 <script defer src="script.js"></script>
 ```
 
