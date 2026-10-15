@@ -354,5 +354,15 @@ export const MESSAGES = {
       'ch-labjs.js keeps your value and writes its own as cyborgHunter_' + key + ' from here on, where the report reads it',
       'nothing is lost; rename your ' + key + ' column if you want ch-labjs.js\'s value under its usual name',
       DOCS + 'labjs.md#where-the-data-goes');
+  },
+  // console.warn, once per page: the study's lab.js datastore has persistence
+  // (its storage is set), so lab.js rewrites every row into sessionStorage or
+  // localStorage at each commit; past the browser's limit its commit() throws
+  // and the study stops (adapters/labjs.js stamp()).
+  labjsPersistentStore: function () {
+    return formatError('Your lab.js datastore keeps every row in the browser\'s storage (persistence)',
+      'ch-labjs.js adds the integrity data and the session recording to each row, so a long study can pass the browser\'s storage limit (about 5 MB); lab.js then cannot save the next row and the study stops',
+      'remove persistence from your lab.js datastore, or set data-replay="off" and collectForPostHoc: { rawMouseTrack: false } for a long study',
+      DOCS + 'labjs.md#saving-and-reading-the-data');
   }
 };

@@ -186,7 +186,12 @@ export function installVanillaAdapter(opts) {
     earlierHoneypot = saved.honeypot || null;
     notes = Array.isArray(saved.errors) ? saved.errors.slice() : [];
     if (saved.storageError) {
-      notes.push('session storage full on page ' + (pageCount - 1) + '; earlier pages only in their own saves');
+      // A page without a framework posted each earlier page's session with
+      // its own form. On Qualtrics each page's write replaces the survey
+      // field, so the pages before the failure are lost from it.
+      notes.push('session storage full on page ' + (pageCount - 1) + (ctx.qualtricsLayout
+        ? '; the pages before it are not in this survey field'
+        : '; earlier pages only in their own saves'));
     }
     ctx.segmenter.setSegmentIndex(saved.segmentIndex);
   }

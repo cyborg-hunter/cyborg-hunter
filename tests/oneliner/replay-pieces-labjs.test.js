@@ -10,6 +10,7 @@ import { attach as attachRecorder } from '../../src/replay/index.js';
 import { CyborgHunterReplayExtension } from '../../src/jspsych/extension-cyborg-hunter-replay.js';
 import { groupPieces, reassemblePieces } from '../../src/replay/pieces.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
+import { MESSAGES } from '../../src/oneliner/errors.js';
 
 const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
 
@@ -84,6 +85,27 @@ for (const build of ['20.2.4']) {
       assert.ok(rec.segments.length >= 2);
       assert.equal(win.document.querySelectorAll('script[src*="cyborg-hunter-replay"]').length, 0);
       assert.deepStrictEqual(errors, []);
+    });
+
+    // A lab.js datastore with persistence rewrites every row into
+    // sessionStorage or localStorage at each commit. The pieces make rows far
+    // larger, and once the store passes the browser's limit lab.js's commit()
+    // throws and the study stops. ch-labjs.js says so once, at the first row.
+    it('a persistent datastore gets one warning', async () => {
+      let lab;
+      ({ win, lab } = createLabWindow({ build }));
+      const warns = [];
+      console.warn = (...a) => warns.push(a.map(String).join(' '));
+      await bootCh(win);
+      const study = new lab.flow.Sequence({ title: 'root', content: [
+        new lab.html.Screen({ title: 'a', content: '<p>a</p>', timeout: 20 }),
+        new lab.html.Screen({ title: 'b', content: '<p>b</p>', timeout: 20 })
+      ] });
+      // lab.js 20.2.4 puts its controller's store in place at prepare; the
+      // Store constructor's persistence sets exactly this property.
+      study.on('prepare', () => { datastoreOf(study).storage = win.sessionStorage; });
+      await runToEnd(study);
+      assert.strictEqual(warns.filter((w) => w === MESSAGES.labjsPersistentStore()).length, 1, warns.join('\n'));
     });
 
     it('data-replay="off" puts nothing in the rows', async () => {

@@ -259,6 +259,12 @@ export function installLabJsAdapter(opts) {
     var ds = datastoreOf(c);
     if (state.stamped || !ds || !ds.staging || typeof ds.staging !== 'object') return;
     state.stamped = true;
+    // A datastore with persistence (lab.js's Store sets `storage`) writes all
+    // rows to the browser's storage at every commit, which ch-labjs.js's
+    // larger rows can overflow (MESSAGES.labjsPersistentStore).
+    try {
+      if (ds.storage && typeof ds.storage.setItem === 'function') console.warn(MESSAGES.labjsPersistentStore());
+    } catch (_) { /* a warning only */ }
     try {
       var fields = { cyborgHunterParticipantId: ctx.participantId, cyborgHunterVersion: VERSION };
       if (!studySetsId(c, ds)) fields.participantId = ctx.participantId;

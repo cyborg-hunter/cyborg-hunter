@@ -1054,6 +1054,37 @@ describe('Qualtrics host: the legacy layout', () => {
     assert.strictEqual(p.cyborgHunterOneLiner.pageCount, 2);
   });
 
+  // Under the legacy layout every page rebuilds the field from the session
+  // restored from sessionStorage, and each write replaces the last. When the
+  // tab refuses the session, the pages before the failure are not in the
+  // final value, and there are no "own saves" on Qualtrics: the note says so.
+  it('session storage full: the note says the earlier pages are not in the field', () => {
+    const fake1 = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    const mem = new Map();
+    const quota = {
+      setItem(k, v) {
+        if (String(v).length > 2000) { const e = new Error('exceeded the quota'); e.name = 'QuotaExceededError'; throw e; }
+        mem.set(k, String(v));
+      },
+      getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+      removeItem: (k) => { mem.delete(k); },
+      key: (i) => [...mem.keys()][i] ?? null,
+      get length() { return mem.size; },
+    };
+    Object.defineProperty(win, 'sessionStorage', { value: quota, configurable: true });
+    const ctx1 = start(fake1);
+    paste('x'.repeat(5000));
+    fake1.submit('next');
+    win.dispatchEvent(new win.Event('pagehide'));
+    nextPage(ctx1, 30000);
+    const fake2 = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });
+    start(fake2);
+    const p = JSON.parse(fake2.submit('next')[LEGACY_FIELD]);
+    assert.strictEqual(p.cyborgHunterOneLiner.pageCount, 2);
+    assert.doesNotMatch(p.cyborgHunterError, /their own saves/);
+    assert.match(p.cyborgHunterError, /session storage full on page 1; the pages before it are not in this survey field/);
+  });
+
   // Every legacy page is a new boot, so the header-run count is 1 on each.
   it('page(), the debug summary and the failure note count the page loads', () => {
     const fake1 = fakeSurveyEngine({ layout: 'legacy', declared: [LEGACY_FIELD] });

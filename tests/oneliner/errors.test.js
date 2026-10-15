@@ -227,6 +227,11 @@ const CASES = {
     args: ['integrity'],
     fix: 'nothing is lost; rename your integrity column if you want ch-labjs.js\'s value under its usual name',
     link: DOCS + 'labjs.md#where-the-data-goes'
+  },
+  labjsPersistentStore: {
+    args: [],
+    fix: 'remove persistence from your lab.js datastore, or set data-replay="off" and collectForPostHoc: { rawMouseTrack: false } for a long study',
+    link: DOCS + 'labjs.md#saving-and-reading-the-data'
   }
 };
 

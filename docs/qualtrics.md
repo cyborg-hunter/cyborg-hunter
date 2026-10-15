@@ -432,7 +432,10 @@ tested in a simulated survey, not on a live one.
 Two differences from the default layout: the session is not kept per survey
 (two surveys on your Qualtrics domain in the same tab, under the same
 participant ID, continue one session), and the CLI reads the
-`cyborg_hunter` column.
+`cyborg_hunter` column. Each page rebuilds the field from the session kept
+in the tab, so if the browser refuses to store it (a very long session with
+large pastes), the pages before that point are lost from the field; its
+`cyborgHunterError` says on which page.
 
 ## Troubleshooting
 
