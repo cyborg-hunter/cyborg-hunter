@@ -21,8 +21,10 @@ class StubResizeObserver {
   disconnect() {}
 }
 
-const KEY = 'cyborg-hunter:oneliner:session:P1';
-const PID_KEY = 'cyborg-hunter:oneliner:pid';
+// The tab's keys are scoped by the page's directory (boot.js): every page
+// here is at the origin's root, '/'.
+const KEY = 'cyborg-hunter:oneliner:session:/:P1';
+const PID_KEY = 'cyborg-hunter:oneliner:pid:/';
 let win, boot, errors, warns, orig, contexts, nativeFormSubmit;
 
 function useWindow(w) {
@@ -520,18 +522,20 @@ describe('vanilla host: forms and page loads', () => {
   // A host adapter can keep one session per scope (Qualtrics: per survey).
   it('keyScope saves and restores under a scoped key; without it the key is unchanged', async () => {
     const { installVanillaAdapter } = await import('../../src/oneliner/adapters/vanilla.js');
+    const UNSCOPED = 'cyborg-hunter:oneliner:session:P1';
     const ctx = start();
     ctx.vanilla.teardown();
+    win.sessionStorage.clear();
     const plain = installVanillaAdapter({ win, ctx });
     plain.persist();
     plain.teardown();
-    assert.ok(win.sessionStorage.getItem(KEY), 'cyborg-hunter:oneliner:session:P1');
-    win.sessionStorage.removeItem(KEY);
+    assert.ok(win.sessionStorage.getItem(UNSCOPED));
+    win.sessionStorage.removeItem(UNSCOPED);
 
     const scoped = installVanillaAdapter({ win, ctx, keyScope: 'SV_abc' });
     scoped.persist();
     scoped.teardown();
-    assert.strictEqual(win.sessionStorage.getItem(KEY), null);
+    assert.strictEqual(win.sessionStorage.getItem(UNSCOPED), null);
     assert.ok(win.sessionStorage.getItem('cyborg-hunter:oneliner:session:SV_abc:P1'));
 
     const same = installVanillaAdapter({ win, ctx, keyScope: 'SV_abc' });
@@ -545,13 +549,13 @@ describe('vanilla host: forms and page loads', () => {
 
 describe('vanilla host: page-load edge cases', () => {
   // happy-dom's sessionStorage is per Window: copy the tab's storage over.
-  function nextPage(ms) {
+  function nextPage(ms, url = 'https://lab.example/next.html') {
     const saved = {};
     for (let i = 0; i < win.sessionStorage.length; i++) {
       const k = win.sessionStorage.key(i);
       saved[k] = win.sessionStorage.getItem(k);
     }
-    const page = new Window({ url: 'https://lab.example/next.html' });
+    const page = new Window({ url });
     for (const [k, v] of Object.entries(saved)) page.sessionStorage.setItem(k, v);
     win.close();
     useWindow(page);
@@ -581,6 +585,50 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(warns.filter((w) => w.includes('cannot be linked')).length, 1, 'no second random-id warning');
     assert.deepStrictEqual(ctx2.segmenter.state(), { open: true, segmentIndex: 1, currentTrialId: 'span-1' });
     assert.strictEqual(win.CyborgHunter.data().cyborgHunterOneLiner.pageCount, 2);
+  });
+
+  // Two studies on one origin (a github.io user site, one lab server) share
+  // the tab's sessionStorage. The kept id and the saved session are scoped by
+  // the page's directory, so pages of one study in one folder share them and
+  // a study in another folder neither adopts the first study's id (a real
+  // PROLIFIC_PID included) nor continues its session.
+  it('a study in another folder of the origin starts fresh; a page in the same folder continues', () => {
+    win.close();
+    useWindow(new Window({ url: 'https://lab.example/study-a/p1.html?PROLIFIC_PID=AAA' }));
+    const ctx1 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx1);
+    assert.strictEqual(ctx1.participantId, 'AAA');
+    paste('study A page one');
+    endPage(ctx1);
+
+    nextPage(30000, 'https://lab.example/study-a/p2.html');
+    const ctx2 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx2);
+    assert.strictEqual(ctx2.participantId, 'AAA', 'the same folder keeps the id');
+    assert.strictEqual(ctx2.participantIdSource, 'session');
+    assert.strictEqual(ctx2.segmenter.state().segmentIndex, 1, 'and continues the session');
+    endPage(ctx2);
+
+    nextPage(60000, 'https://lab.example/study-b/index.html');
+    const ctx3 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx3);
+    assert.notStrictEqual(ctx3.participantId, 'AAA', 'another folder does not inherit the id');
+    assert.strictEqual(ctx3.participantIdSource, 'random');
+    assert.strictEqual(ctx3.segmenter.state().segmentIndex, 0);
+    assert.strictEqual(win.CyborgHunter.data().cyborgHunterOneLiner.pageCount, 1);
+  });
+
+  // A tab that already holds the keys an earlier release wrote (no scope):
+  // nothing reads them any more, so the page starts as a first page would.
+  it('an id and a session kept under the earlier unscoped keys are ignored', () => {
+    win.sessionStorage.setItem('cyborg-hunter:oneliner:pid', 'ch-000000000000');
+    win.sessionStorage.setItem('cyborg-hunter:oneliner:session:ch-000000000000', JSON.stringify({ segmentIndex: 5, pageCount: 3, trials: [{}] }));
+    const ctx = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx);
+    assert.notStrictEqual(ctx.participantId, 'ch-000000000000');
+    assert.strictEqual(ctx.participantIdSource, 'random');
+    assert.strictEqual(ctx.segmenter.state().segmentIndex, 0);
+    assert.strictEqual(win.sessionStorage.getItem(PID_KEY), ctx.participantId);
   });
 
   it('a URL, attribute or config id still wins over the id kept in the tab', () => {

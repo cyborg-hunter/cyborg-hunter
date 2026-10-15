@@ -121,7 +121,7 @@ describe('createDebug', () => {
     assert.match(sum({ participantIdSource: 'attribute' }), /ID from data-participant-id/);
     assert.match(sum({ participantIdSource: 'config' }), /ID from CyborgHunterConfig/);
     assert.match(sum({ participantIdSource: 'random' }), /ID from random id \(not linkable\)/);
-    assert.match(sum({ participantIdSource: 'session' }), /ID from random id \(not linkable\)/);
+    assert.match(sum({ participantIdSource: 'session' }), /ID from an earlier page of this study ·/);
     var g = (h, f) => ({ config: { guards: { honeypot: h, friction: f } } });
     assert.match(sum(g(false, true)), /honeypot off · friction observe$/);
     assert.match(sum(Object.assign(g(true, true), { jspsych: { segmentsWritten: 1, instrumented: 1, entryTrialFound: true } })), /friction enforce$/);

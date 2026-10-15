@@ -26,7 +26,8 @@
 //   once loops / timeline_variables write more rows than planned (so never
 //   "5/3"); refresh() updates it.
 //   <source> is the URL parameter name that resolved, data-participant-id,
-//   CyborgHunterConfig, or "random id (not linkable)".
+//   CyborgHunterConfig, "an earlier page of this study" (an id kept in the
+//   tab), or "random id (not linkable)".
 //   With data-replay (and no recorder autoSave) the summary, not the badge,
 //   ends with " · data-replay is on: save CyborgHunter.replay() in your save
 //   code", in place of boot's console.info reminder (replay-loader.js).
@@ -68,7 +69,11 @@ function idSource(source) {
   if (typeof source === 'string' && source.indexOf('url:') === 0) return source.slice(4);
   if (source === 'attribute') return 'data-participant-id';
   if (source === 'config') return 'CyborgHunterConfig';
-  return 'random id (not linkable)';   // 'random', or 'session' (a random id kept from an earlier page)
+  // 'session': kept from an earlier page of this study (boot.js step 3). The
+  // tab keeps the id alone, not where it came from, so the badge cannot say
+  // whether it was a platform id or a random one.
+  if (source === 'session') return 'an earlier page of this study';
+  return 'random id (not linkable)';
 }
 
 function frictionMode(ctx) {

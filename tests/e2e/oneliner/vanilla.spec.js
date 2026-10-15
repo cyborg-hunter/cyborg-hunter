@@ -277,7 +277,8 @@ test('ch.js in <head>: boots after DOMContentLoaded without errors; a paste befo
 // vanilla-submit-targets.html: submits that leave the page in place, and two
 // that the vanilla host must not misread. The session record is read from
 // sessionStorage once the page has been left for a page without ch.js.
-const TARGETS_KEY = 'cyborg-hunter:oneliner:session:E2E-VAN-4';
+// Scoped by the page's directory (boot.js), the fixtures folder.
+const TARGETS_KEY = 'cyborg-hunter:oneliner:session:' + FIX + ':E2E-VAN-4';
 
 function readSession(page) {
   return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), TARGETS_KEY);

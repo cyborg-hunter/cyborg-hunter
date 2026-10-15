@@ -32,8 +32,10 @@
 // starts at 0 again. The accumulated blob is kept in sessionStorage (per tab;
 // not the core's storage helpers, which are localStorage-first and would leak
 // into the next participant on a shared browser) under
-// cyborg-hunter:oneliner:session:<participantId> (boot.js keeps the id itself
-// under cyborg-hunter:oneliner:pid), so the next page continues the
+// cyborg-hunter:oneliner:session:<keyScope>:<participantId> (boot.js passes
+// the study's scope, the page's directory or a Qualtrics survey id, and keeps
+// the id itself under cyborg-hunter:oneliner:pid:<keyScope>), so the next
+// page of the same study continues the
 // segment index and the last page's form carries the whole session. Each
 // segment records its page origin (performance.timeOrigin); the CLI re-bases
 // later pages onto the first page's clock. The honeypot's violation log is
@@ -95,8 +97,9 @@
 //               CyborgHunter.replay() is called.
 //   keyScope:   keeps the session under
 //               cyborg-hunter:oneliner:session:<keyScope>:<participantId>, so
-//               a host can keep one session per scope (a Qualtrics survey id:
-//               boot.js); without it the key is as above.
+//               boot keeps one session per study (the page's directory, or a
+//               Qualtrics survey id); without it the key is
+//               cyborg-hunter:oneliner:session:<participantId>.
 // install restores the saved state first, so the boot span opened after it is
 // named after the continued index. Nothing here throws into the page.
 

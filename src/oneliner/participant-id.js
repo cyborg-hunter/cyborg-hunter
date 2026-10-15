@@ -13,7 +13,8 @@
 //   params:  ordered URL parameter names; the caller supplies the list
 //   random:  () => string, called only when nothing else is found
 //   source:  'url:<param>' | 'attribute' | 'config' | 'random'
-//            (boot.js adds 'session': a random id kept from an earlier page)
+//            (boot.js adds 'session': an id kept from an earlier page of the
+//            same study, whatever its first source)
 
 // The URL parameter names boot.js reads by default, in order of precedence:
 // Prolific's and MTurk's documented study-URL parameters, then a generic name.

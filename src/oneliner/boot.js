@@ -14,14 +14,24 @@
 //   2. config (tag data-* attributes over window.CyborgHunterConfig);
 //   3. participant id (warns when it has to fall back to a random id). The
 //      id is kept for the tab in sessionStorage, so a later page without an
-//      id of its own reuses the first page's random id (source 'session')
-//      and continues its session; a URL, attribute or config id still wins.
-//      Under Qualtrics' New Survey Taking Experience the kept id and the
-//      saved session are per survey (ctx.qualtricsSurveyId, the SV_… id:
-//      adapters/qualtrics.js qualtricsSurveyId): every survey on a brand
-//      domain shares the tab's sessionStorage, and a second survey in the tab
-//      must not continue the first. The Qualtrics check (step 5) is read
-//      here already for that;
+//      id of its own reuses the id of the study's first page (source
+//      'session') and continues its session; a URL, attribute or config id
+//      still wins. The kept id and the saved session are per study (keyScope
+//      below): every page of an origin shares the tab's sessionStorage, and
+//      a second study in the tab must neither adopt the first one's id (a
+//      PROLIFIC_PID included) nor continue its session. Off Qualtrics a study
+//      is the page's directory (pageDirectory: the address path up to and
+//      including its last '/'), so two studies in two folders of one
+//      github.io site or lab server stay apart, and a study whose pages sit
+//      in one folder keeps one session. Under Qualtrics' New Survey Taking
+//      Experience a study is the survey (ctx.qualtricsSurveyId, the SV_… id:
+//      adapters/qualtrics.js qualtricsSurveyId). Any other Qualtrics page
+//      (the legacy layout, or no survey id found) keeps the unscoped keys:
+//      every survey there sits under /jfe/form/, so a directory would
+//      separate nothing, and a legacy later page's address may not be the
+//      first page's. Keys an earlier release wrote without a scope are not
+//      read off Qualtrics: a tab that holds them starts as a first page. The
+//      Qualtrics check (step 5) is read here already for that;
 //   4. a monitor (its session starts at step 6);
 //   5. host: 'jspsych' when initJsPsych is already defined, in a file built
 //      with it (HAS_JSPSYCH), else 'labjs' when window.lab is, in a file
@@ -142,8 +152,18 @@ import { installReplay } from './replay-loader.js';
 import { createDebug } from './debug.js';
 
 // Not under the session prefix (adapters/vanilla.js, cyborg-hunter:oneliner:
-// session:<id>), so no participant id can collide with it.
+// session:<id>), so no participant id can collide with it. Kept as
+// PID_KEY:<keyScope> when a scope is known (step 3).
 var PID_KEY = 'cyborg-hunter:oneliner:pid';
+
+// The directory of the page's address: '/study-a/' for /study-a/p1.html,
+// '/' for /p1.html. The study's scope for the kept id and session (step 3).
+function pageDirectory(win) {
+  try {
+    var path = String((win.location && win.location.pathname) || '/');
+    return path.slice(0, path.lastIndexOf('/') + 1) || '/';
+  } catch (_) { return '/'; }
+}
 
 function sessionGet(win, key) {
   try { return win.sessionStorage.getItem(key); } catch (_) { return null; }
@@ -201,7 +221,10 @@ export function boot(opts) {
     if (wrongBuild) console.error(MESSAGES.wrongBuild(wrongBuild.host, wrongBuild.file, CH_FILE));
     else if (qualtrics && jsPsychPage) console.warn(MESSAGES.qualtricsJsPsych());
     var surveyId = HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new' ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
-    var pidKey = surveyId ? PID_KEY + ':' + surveyId : PID_KEY;
+    // The study the kept id and the saved session belong to (step 3): the
+    // survey, else (off Qualtrics) the page's directory, else none.
+    var keyScope = surveyId || (qualtricsSeen ? null : pageDirectory(win));
+    var pidKey = keyScope ? PID_KEY + ':' + keyScope : PID_KEY;
 
     var pid = resolveParticipantId({
       search: (win.location && win.location.search) || '',
@@ -261,11 +284,11 @@ export function boot(opts) {
     }
     var replay = installReplay({ win: win, ctx: ctx });
     if (host === 'vanilla') {
-      // Under Qualtrics the writer owns the page boundary: the vanilla
-      // adapter cuts on marks only, and keeps the session per survey on the
-      // new layout. With data-debug the badge shows each write.
+      // The session is kept per study (keyScope, step 3). Under Qualtrics
+      // the writer owns the page boundary: the vanilla adapter cuts on marks
+      // only. With data-debug the badge shows each write.
       // The cap's two overrides are for tests.
-      ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: surveyId });
+      ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, pageBoundaries: !ctx.qualtricsLayout, keyScope: keyScope });
       if (HAS_QUALTRICS && ctx.qualtricsLayout) {
         ctx.qualtrics = installQualtricsAdapter({
           win: win, ctx: ctx, maxChars: opts.qualtricsMaxChars || config.qualtricsMaxChars,   // the writer clamps it to MAX_CHARS
@@ -297,7 +320,7 @@ export function boot(opts) {
       onVanilla: function () {
         try {
           startGuards({ win: win, doc: win.document, guards: config.guards, debug: config.debug });
-          if (!ctx.vanilla) ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx });
+          if (!ctx.vanilla) ctx.vanilla = installVanillaAdapter({ win: win, ctx: ctx, keyScope: keyScope });
           replay.startVanilla();
           if (ctx.debug) ctx.debug.logWhenParsed();
         } catch (e) {
