@@ -5,6 +5,95 @@ What each release changes in **collected data**, **configuration** and
 the CLI on data collected with an older version. The complete change list is
 in [CHANGELOG.md](../CHANGELOG.md).
 
+## Unreleased — from 0.15
+
+This release changes all three: collected data (replay is on by default),
+configuration (new switches, stricter warnings) and reports (joined replays,
+new report ids, an optional pseudonymized export). Read
+[Privacy model](using-cyborg-hunter.md#privacy-model) before launching a
+study with it: it lists what is collected by default.
+
+### What changes for newly collected data
+
+- **Session replay is on by default in `ch.js` and `ch-labjs.js`** (trace
+  tier: pointer, scroll, focus, and every key pressed on the page). The
+  recorder is bundled into those files, so nothing extra is loaded and
+  `data-replay-src` no longer applies to them; `ch.js` grows by about 43 KB.
+  `data-replay="off"` (or `none`, `false`, or `CyborgHunterConfig.replay =
+  false`) turns it off. `ch-qualtrics.js` is unchanged: replay stays opt-in.
+- **The recording is saved with your data**, in pieces:
+  - jsPsych and lab.js rows get `cyborgHunterReplay` (one piece per trial)
+    and the last row `cyborgHunterReplayFinal`; `integrityReplayMeta.saved_to`
+    is `'rows'`. A save trial that runs before the session ends keeps every
+    trial before it.
+  - Pages without a framework add a second hidden field,
+    `cyborgHunterReplay`, to every POST form, and `CyborgHunter.data()`
+    returns `cyborgHunterReplay`. It holds the page's recording only: keep
+    every POST's value, not only the last. The POST grows by the recording's
+    size.
+  - Rows and POST bodies grow by about 0.5–1.5 MB per participant on the
+    trace tier. Check the limits of where you save (DataPipe 32 MB per
+    request, JATOS 5 MB per `submitResultData`, your own server's body limit)
+    with a pilot.
+- **The window/screen log records on change**: one row at session start,
+  then a row only when the geometry changes, up to
+  `thresholds.maxWindowPositions` (2000). The session report gains
+  `windowPositionsCapped` (true when a change went unrecorded). Sessions
+  that never move the window have one row instead of one every 2 s.
+- **`onSignal` callbacks get pasted, dropped and typed text only when the
+  matching `collectForPostHoc` switch is on** (`pasteDropContent`,
+  `foreignInputContent`; both default on, so the default is unchanged).
+- **The participant ID and session kept in the tab are scoped to the study's
+  folder** (the directory of the page's address; on Qualtrics, still per
+  survey). A study in another folder of the same site no longer picks up an
+  earlier study's ID or session. A study whose pages sit in different folders
+  loses its continuity between them: keep a study's pages in one folder. Tabs
+  holding the old keys start fresh.
+- **Friction** no longer requires fullscreen on a browser that cannot go
+  fullscreen (iPhone Safari, a frame without `allow="fullscreen"`); the other
+  checks still run.
+- A decoy is no longer injected after its trial ended.
+
+### Configuration
+
+- `data-replay` takes `off` (also `none`, `false`); unset means on in `ch.js`
+  and `ch-labjs.js`.
+- `thresholds.maxWindowPositions` (default 2000, `null` for no cap).
+- A misspelt key inside `collectForPostHoc`, `signals` or `thresholds` is now
+  reported with a console warning (it used to be ignored silently, leaving
+  the default on). An invalid `redactSelector` is reported once in the
+  console and in the recording's `capture_failures` (it still redacts
+  nothing).
+- CLI: `pseudonymize` / `--pseudonymize` and `pseudonymKeyFile` /
+  `--pseudonym-key-file` ([configuration.md](configuration.md#output)).
+
+### What changes on re-run over existing data
+
+- **A participant's recordings that follow one another in time are joined
+  into one replay** (pages of a study without a framework, a reload), instead
+  of showing the latest with a warning. Recordings that overlap in time still
+  show the latest, with the warning.
+- **Report ids**: a participant ID that is not already file-safe (for example
+  one with a dot or a slash, or longer than 40 characters) gets an 8-hex
+  fingerprint in its plot file names, pane id and link (`a_b-1f2e3d4c`), so
+  two such IDs no longer overwrite each other's plots. A link to such a
+  participant's pane saved from an older report no longer opens it.
+- **`triage.md`** escapes markdown in participant IDs.
+- **Trajectory outlines** take the window geometry in force at each trial's
+  start; old data (a row every 2 s) gives the same outlines, except that a
+  trial without a duration now looks only around its start.
+- **Replays in the report** rebuild recorded `<link>`, `<meta>` and `<base>`
+  elements as inert placeholders (styling is unaffected).
+- **A `.gz` file that would decompress past 256 MB** is reported and not read.
+
+### What changes in the report output
+
+- Optional **pseudonymized export**: every participant ID in every output
+  becomes a stable code, with the key kept outside the report folder (CLI) or
+  offered as a separate download (analyzer).
+- The docs' script tags now name an exact version and carry an `integrity`
+  hash; copy a release's tags whole.
+
 ## 0.14.0 — from 0.13
 
 ### What changes on re-run over existing data

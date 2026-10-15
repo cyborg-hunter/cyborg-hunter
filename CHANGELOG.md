@@ -5,6 +5,56 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+Hardening before an institutional review: what is collected, kept and sent is
+now stated in the docs and matches the code, session replay is on by default
+and saved with the data, and a set of privacy and robustness bugs is fixed.
+Collected data, configuration and reports all change: read
+[docs/upgrading.md](docs/upgrading.md).
+
+### Added
+- Session replay on by default in `ch.js` and `ch-labjs.js`, with the
+  recorder bundled into them. The recording is saved with the data, in
+  pieces: `cyborgHunterReplay` per jsPsych or lab.js row and
+  `cyborgHunterReplayFinal` at the end, or a `cyborgHunterReplay` POST field
+  (and `CyborgHunter.data()` key) on pages without a framework. A save trial
+  mid-session keeps every earlier trial. `data-replay="off"` turns it off;
+  `ch-qualtrics.js` keeps replay opt-in.
+- The CLI and the analyzer rebuild recordings from pieces wherever they sit
+  (rows, CSV cells, saved POST fields) and join one participant's
+  consecutive recordings (pages, reloads) into one replay.
+- Pseudonymized export: `pseudonymize` / `--pseudonymize` and
+  `pseudonymKeyFile`, and an analyzer setting; the key stays out of the report.
+- `scripts/pin-snippets.mjs` (`npm run pin:snippets`): every documented
+  script tag names an exact version and carries an SRI `integrity` hash;
+  `--check` runs in the tests.
+- `thresholds.maxWindowPositions`; the session report's
+  `windowPositionsCapped`.
+
+### Changed
+- The window/screen log records a row at start and then only on change, with
+  a session cap.
+- The participant ID and session kept in the tab are scoped to the study's
+  folder.
+- `onSignal` payloads carry pasted, dropped and typed text only when the
+  matching `collectForPostHoc` switch is on.
+- `data-debug` left the Qualtrics copy-paste tag (it is a separate test step).
+- Docs: a full privacy model (what is stored by default, from when, where it
+  is kept and sent), and corrections where they understated collection.
+
+### Fixed
+- A recorded `<link rel="prefetch">` made Chromium fetch any address from the
+  report and the analyzer despite their CSP; recorded `<link>`, `<meta>` and
+  `<base>` elements are now inert.
+- A `.gz` upload is decompressed to at most 256 MB.
+- Participant IDs that clean up to the same file name no longer overwrite
+  each other's plots; an ID of `__proto__` no longer pollutes the analyzer's
+  image map; `triage.md` escapes IDs.
+- A misspelt nested privacy switch, and an invalid `redactSelector`, are now
+  reported instead of silently leaving collection on.
+- A deferred decoy is never injected after its trial ended.
+- Friction no longer traps a participant whose browser cannot go fullscreen.
+- The same recording found in the rows and in a saved file counts once.
+
 ## [0.15.0] — 2026-10-11
 
 Replays for the sample: the bundled example dataset now carries the replay
