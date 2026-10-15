@@ -53,7 +53,10 @@ function randomId() {
  *   opts.host — spec §2 host record, written into the header
  *   opts.recordingId — fixed id (tests); random otherwise
  *
- * take() returns the next piece; it never throws once the session started
+ * take({ final, skipEmpty }) returns the next piece. With skipEmpty, a
+ * piece that would carry nothing new returns null and uses no seq (a
+ * trial that never opened a segment, e.g. jsPsych's call-function, then
+ * adds nothing to its row). take() never throws once the session started
  * (a serialization failure is the caller's to catch and note). The cursors
  * advance only after the piece is built, so a failed take loses nothing: the
  * next one covers it.
@@ -104,6 +107,11 @@ export function createPieceTaker(getState, opts) {
     };
     var sheetsJson = JSON.stringify(state.stylesheets || []);
     if (sheetsJson !== sheetsSent) piece.stylesheets = JSON.parse(sheetsJson);
+    if (takeOpts && takeOpts.skipEmpty && !final && !piece.header && !piece.stylesheets &&
+        !segments.length && !piece.streams.viewport_changes.length && !piece.streams.guard_violations.length &&
+        !piece.streams.root_attr_events.length && !piece.streams.capture_failures.length) {
+      return null;
+    }
     if (final) {
       // serialize()'s ended_at_perf: the last moment any segment observed.
       var lastT = s0;

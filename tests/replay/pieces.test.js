@@ -237,3 +237,22 @@ describe('pieces: a real dom-tier capture', () => {
     }
   });
 });
+
+describe('pieces: skipEmpty', () => {
+  it('a take with nothing new returns null and keeps the sequence unbroken', () => {
+    const rec = createRecorder({ participantId: 'P', autoSave: { mode: 'none' }, _ownerSavesRecording: true });
+    const taker = createPieceTaker(() => rec.getState(), { recordingId: 'r' });
+    rec.startSession();
+    const p0 = taker.take({ skipEmpty: true });       // the header always goes
+    assert.equal(p0.seq, 0);
+    assert.equal(taker.take({ skipEmpty: true }), null);
+    rec.startTrial({ trialId: 'a' });
+    rec.endTrial();
+    const p1 = taker.take({ skipEmpty: true });
+    assert.equal(p1.seq, 1);
+    rec.stopSession('finished');
+    const p2 = taker.take({ final: true, skipEmpty: true });
+    assert.equal(p2.seq, 2);
+    assert.equal(reassemblePieces([p0, p1, p2]).extensions['cyborg-hunter'].reassembly, undefined);
+  });
+});

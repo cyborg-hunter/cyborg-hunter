@@ -58,14 +58,30 @@ function recorderConfig(ctx, params) {
   return Object.assign({ participantId: ctx.participantId, autoSave: { mode: 'none' }, _ownerSavesRecording: true }, params);
 }
 
+// Whether the one-line file bundles the recorder (entry-replay.js): its two
+// globals are defined before boot runs, so nothing is loaded.
+function bundled(win) {
+  return !!win.CyborgHunterReplay && typeof win.CyborgHunterReplay.attach === 'function' &&
+    typeof win.jsPsychCyborgHunterReplay === 'function';
+}
+
+// Whether the recording is saved with the data without the researcher's
+// help: the bundled recorder writes pieces into the rows (jsPsych, lab.js)
+// or the POST (pages without a framework), not into a Qualtrics survey.
+export function replayAutoSaved(ctx) {
+  return !!ctx.config.replay && !!ctx.replayBundled && !ctx.qualtricsLayout;
+}
+
 // Whether the researcher must save CyborgHunter.replay() themselves: replay
 // is on and has a script URL, and the recorder does not save itself
 // (CyborgHunterConfig.replay.autoSave, which only the jsPsych extension
-// runs). Read by debug.js for the summary. The wording is the caller's: the
-// Qualtrics text (replayQualtrics, REPLAY_QUALTRICS_REMINDER) when
-// ctx.qualtricsLayout is set, the generic one otherwise.
+// runs, or pieces in the saved data, replayAutoSaved). Read by debug.js for
+// the summary. The wording is the caller's: the Qualtrics text
+// (replayQualtrics, REPLAY_QUALTRICS_REMINDER) when ctx.qualtricsLayout is
+// set, the generic one otherwise.
 export function replaySaveReminderApplies(ctx) {
-  if (!ctx.config.replay || !ctx.replaySrc) return false;
+  if (!ctx.config.replay || replayAutoSaved(ctx)) return false;
+  if (!ctx.replaySrc && !ctx.replayBundled) return false;
   var autoSave = ctx.config.replay.autoSave;
   var selfSaving = !!(autoSave && autoSave.mode && autoSave.mode !== 'none');
   return !(selfSaving && !standaloneRecorder(ctx));
@@ -122,6 +138,7 @@ export function makeReplayProxy(opts) {
     constructor(jsPsych) {
       this.jsPsych = jsPsych;
       this.inner = null;   // the real replay extension, once loaded and initialized
+      this.taker = null;   // the recording in pieces, one per trial row (replayAutoSaved)
     }
 
     // Always resolves: a rejection here would stop jsPsych's run().
@@ -135,6 +152,12 @@ export function makeReplayProxy(opts) {
         inner = new Inner(this.jsPsych);
         inner.initialize(recorderConfig(ctx, params));
         this.inner = inner;
+        // The taker reads the recorder's buffer, which stays readable after
+        // CyborgHunter.replay() destroys the recorder, so pieces keep coming.
+        if (replayAutoSaved(ctx)) {
+          this.taker = inner.api.pieceTaker({ host: inner._detectHost() });
+          ctx.replayTaker = this.taker;
+        }
       } catch (e) {
         // A recorder attached before the failure would keep its listeners.
         if (inner && inner.api) { try { inner.api.destroy(); } catch (_) { /* already failing */ } }
@@ -154,9 +177,22 @@ export function makeReplayProxy(opts) {
       try { this.inner.on_load(params); } catch (_) { /* replay only */ }
     }
 
+    // The trial's piece of the recording rides in its row, beside its
+    // integrity segment: a save trial that takes its snapshot before the
+    // session ends still has every earlier trial's piece (pieces.js).
     on_finish(params) {
       if (!this.inner) return {};
-      try { return this.inner.on_finish(params) || {}; } catch (_) { return {}; }
+      var out = {};
+      try { out = this.inner.on_finish(params) || {}; } catch (_) { /* replay only */ }
+      if (this.taker) {
+        try {
+          var piece = this.taker.take({ skipEmpty: true });
+          if (piece) out = Object.assign({}, out, { cyborgHunterReplay: piece });
+        } catch (e) {
+          out = Object.assign({}, out, { cyborgHunterReplayError: message(e) });
+        }
+      }
+      return out;
     }
 
     finalize() {
@@ -257,6 +293,24 @@ export function createVanillaReplay(opts) {
   });
 }
 
+// The session's last piece (pieces.js), for the host's session end: stops
+// the recorder (CyborgHunter.replay() still returns the whole recording
+// afterwards) and returns { piece, meta } or null when no pieces are taken.
+// Throws on failure; the caller records the note.
+export function takeFinalPiece(ctx) {
+  var taker = ctx.replayTaker;
+  if (!taker) return null;
+  var holder = currentHolder(ctx);
+  if (holder && holder.api) {
+    try { holder.api.stopSession('finished'); } catch (_) { /* already stopped */ }
+  }
+  var piece = taker.take({ final: true });
+  return {
+    piece: piece,
+    meta: { schema_version: 2, saved_to: 'rows', recording_id: taker.recordingId, pieces: piece.seq + 1 }
+  };
+}
+
 // Stop, serialize, destroy. The recorder refuses stopSession once stopped,
 // which is fine: the recording is complete then.
 function takeRecording(holder, opts) {
@@ -318,11 +372,14 @@ export function installReplay(opts) {
   };
   var none = { startVanilla: function () {} };
   if (!ctx.config.replay) return none;
-  try {
-    ctx.replaySrc = replaySrcFor(ctx.scriptSrc, ctx.config.replaySrc, ctx.file);
-  } catch (e) {
-    console.error(MESSAGES.replayUnavailable(message(e), ctx.file));
-    return none;
+  ctx.replayBundled = bundled(win);
+  if (!ctx.replayBundled) {
+    try {
+      ctx.replaySrc = replaySrcFor(ctx.scriptSrc, ctx.config.replaySrc, ctx.file);
+    } catch (e) {
+      console.error(MESSAGES.replayUnavailable(message(e), ctx.file));
+      return none;
+    }
   }
   var autoSave = ctx.config.replay.autoSave;
   if (standaloneRecorder(ctx) && autoSave && autoSave.mode && autoSave.mode !== 'none') {

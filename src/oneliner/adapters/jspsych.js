@@ -39,6 +39,7 @@
 import { VERSION } from '../../shared/constants.js';
 import { MESSAGES } from '../errors.js';
 import { OneLinerExtension } from './jspsych-extension.js';
+import { takeFinalPiece } from '../replay-loader.js';
 
 var CH_NAME = 'cyborg-hunter';
 var HONEYPOT_NAME = 'guard-honeypot';
@@ -279,6 +280,16 @@ function runFinalHook(ctx, win, has, jsPsych) {
       if (win.GuardHoneypot) win.GuardHoneypot.attachToJsPsychData();
     });
   }
+  // The recording's last piece, on the last row beside integritySegmentFinal
+  // (and, like it, missing from a file a save trial wrote earlier: the rows
+  // before the save trial carry their own pieces).
+  step(function () {
+    var last = takeFinalPiece(ctx);
+    if (last) {
+      jsPsych.data.addDataToLastTrial({ cyborgHunterReplayFinal: last.piece });
+      jsPsych.data.addProperties({ integrityReplayMeta: last.meta });
+    }
+  });
   step(function () { if (!ctx.bootError) ctx.monitor.destroy(); });   // failDeferred destroyed it
 
   if (problems.length) {

@@ -175,7 +175,7 @@ export function boot(opts) {
     }
 
     var script = opts.script || null;
-    var config = readConfig({ dataset: (script && script.dataset) || {}, globalConfig: win.CyborgHunterConfig });
+    var config = readConfig({ dataset: (script && script.dataset) || {}, globalConfig: win.CyborgHunterConfig, replayDefault: REPLAY_BUNDLED });
     // The page's framework, against the ones this file carries (step 5). A
     // file with the jsPsych adapter takes a page with jsPsych for a jsPsych
     // page, Qualtrics or not. The others look for a Qualtrics survey first:

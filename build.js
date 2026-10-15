@@ -139,7 +139,8 @@ async function build() {
   // never clobbers the first.
   for (const target of ONE_LINE_TARGETS) {
     await esbuild.build({
-      entryPoints: ['src/oneliner/entry.js'],
+      // entry-replay.js is entry.js plus the recorder (build-targets.js `replay`).
+      entryPoints: [target.replay ? 'src/oneliner/entry-replay.js' : 'src/oneliner/entry.js'],
       bundle: true, minify: true, format: 'iife', platform: 'browser',
       define: defineFor(target),
       outfile: OUT + '/' + target.file,

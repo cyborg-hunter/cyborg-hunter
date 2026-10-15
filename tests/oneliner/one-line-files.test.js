@@ -10,6 +10,8 @@ import { Window } from 'happy-dom';
 import { MESSAGES } from '../../src/oneliner/errors.js';
 import { setBuild, buildOf } from './support/build-flags.js';
 import { fakeSurveyEngine } from './support/fake-qualtrics.js';
+import { attach as attachRecorder } from '../../src/replay/index.js';
+import { CyborgHunterReplayExtension } from '../../src/jspsych/extension-cyborg-hunter-replay.js';
 
 class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
 let win, boot, errors, warns, infos, orig, ctx;
@@ -19,6 +21,12 @@ beforeEach(async () => {
   global.window = win; global.document = win.document; global.Node = win.Node;
   global.MutationObserver = win.MutationObserver; global.ResizeObserver = StubResizeObserver;
   ({ boot } = await import('../../src/oneliner/boot.js'));
+  // A file that bundles the recorder (REPLAY_BUNDLED) has its globals defined
+  // before boot runs (src/oneliner/entry-replay.js).
+  if (globalThis.REPLAY_BUNDLED) {
+    win.CyborgHunterReplay = { attach: attachRecorder };
+    win.jsPsychCyborgHunterReplay = CyborgHunterReplayExtension;
+  }
   errors = []; warns = []; infos = [];
   orig = { error: console.error, warn: console.warn, info: console.info };
   console.error = (m) => errors.push(String(m)); console.warn = (m) => warns.push(String(m)); console.info = (m) => infos.push(String(m));
@@ -29,6 +37,7 @@ afterEach(() => {
   if (ctx && ctx.qualtrics) ctx.qualtrics.teardown();
   if (ctx && ctx.vanilla) ctx.vanilla.teardown();
   if (ctx && ctx.monitor) { try { ctx.monitor.destroy(); } catch { /* already destroyed */ } }
+  if (ctx && ctx.replay && ctx.replay.api) { try { ctx.replay.api.destroy(); } catch { /* already destroyed */ } }
   win.close();
   delete global.window; delete global.document; delete global.Node; delete global.MutationObserver; delete global.ResizeObserver;
 });

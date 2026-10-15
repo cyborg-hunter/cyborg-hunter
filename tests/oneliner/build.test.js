@@ -19,7 +19,10 @@ import { ONE_LINE_TARGETS, defineFor } from '../../build-targets.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const buildSrc = readFileSync(join(ROOT, 'build.js'), 'utf8');
-const CAP = 120 * 1024;   // bytes, for each one-line file
+const CAP = 120 * 1024;   // bytes, for each one-line file without the recorder
+// A file that bundles the session recorder (build-targets.js `replay`): the
+// recorder is about 45 KiB minified, and these files record by default.
+const CAP_REPLAY = 170 * 1024;
 
 let outDir;
 before(() => {
@@ -46,9 +49,9 @@ const MARKERS = {
 };
 
 describe('build.js: the one-line targets', () => {
-  it('builds every target from src/oneliner/entry.js as an IIFE, with its own define and no globalName', () => {
+  it('builds every target from src/oneliner/entry.js (entry-replay.js with the recorder) as an IIFE, with its own define and no globalName', () => {
     const block = oneLineBlock();
-    assert.ok(block.includes("entryPoints: ['src/oneliner/entry.js']"), block);
+    assert.ok(block.includes("entryPoints: [target.replay ? 'src/oneliner/entry-replay.js' : 'src/oneliner/entry.js']"), block);
     assert.ok(block.includes('define: defineFor(target)'), block);
     assert.ok(block.includes("outfile: OUT + '/' + target.file"), block);
     assert.ok(block.includes("format: 'iife'"), block);
@@ -65,7 +68,15 @@ describe('build.js: the one-line targets', () => {
 
   it('defineFor turns a target into literal flags and its own file name', () => {
     assert.deepStrictEqual(defineFor({ file: 'ch-x.js', hosts: ['labjs'] }),
-      { HAS_JSPSYCH: 'false', HAS_QUALTRICS: 'false', HAS_LABJS: 'true', CH_FILE: '"ch-x.js"' });
+      { HAS_JSPSYCH: 'false', HAS_QUALTRICS: 'false', HAS_LABJS: 'true', REPLAY_BUNDLED: 'false', CH_FILE: '"ch-x.js"' });
+    assert.strictEqual(defineFor({ file: 'ch-y.js', hosts: ['jspsych'], replay: true }).REPLAY_BUNDLED, 'true');
+  });
+
+  // Replay is on by default only where the recorder ships inside the file: a
+  // survey field cannot hold a recording, so ch-qualtrics.js stays opt-in.
+  it('ch.js and ch-labjs.js bundle the recorder; ch-qualtrics.js does not', () => {
+    const bundles = Object.fromEntries(ONE_LINE_TARGETS.map((t) => [t.file, !!t.replay]));
+    assert.deepStrictEqual(bundles, { 'ch.js': true, 'ch-qualtrics.js': false, 'ch-labjs.js': true });
   });
 
   // A file built without the jsPsych adapter, as ch-qualtrics.js and
@@ -112,10 +123,17 @@ describe('build.js: the one-line targets', () => {
 
 for (const target of ONE_LINE_TARGETS) {
   describe('dist/' + target.file, () => {
-    it('exists, is under 120 KiB and sets the one-line sentinel', () => {
+    it('exists, is under its size cap and sets the one-line sentinel', () => {
       const file = join(outDir, target.file);
-      assert.ok(statSync(file).size < CAP, target.file + ': ' + statSync(file).size + ' bytes');
+      const cap = target.replay ? CAP_REPLAY : CAP;
+      assert.ok(statSync(file).size < cap, target.file + ': ' + statSync(file).size + ' bytes');
       assert.match(readFileSync(file, 'utf8'), /\.__cyborgHunterLoaded="ch\.js"/);
+    });
+
+    it('carries the recorder exactly when it records by default', () => {
+      const src = readFileSync(join(outDir, target.file), 'utf8');
+      // A message only the recorder's buffer has (src/replay/recorder.js).
+      assert.strictEqual(src.includes('event pushed to a destroyed recorder'), !!target.replay, target.file);
     });
 
     it('names itself for a later double-load message', () => {

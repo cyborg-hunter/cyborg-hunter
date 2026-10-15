@@ -12,10 +12,15 @@
 //   guards: { honeypot, friction },          data-guards: comma list of
 //                                            honeypot | friction | none;
 //                                            default honeypot on, friction off
-//   replay: null | { tier: 'trace'|'dom',    data-replay: "" | trace → trace, dom → dom;
-//                    autoSave? },            CyborgHunterConfig.replay may be
+//   replay: null | { tier: 'trace'|'dom',    data-replay: "" | trace → trace, dom → dom,
+//                    autoSave? },            off | none | false → null (off);
+//                                            CyborgHunterConfig.replay may be
 //                                            { tier, autoSave } (autoSave kept
 //                                            even when data-replay sets the tier)
+//                                            or false. Unset: the file's
+//                                            default (opts.replayDefault, true
+//                                            in the files that bundle the
+//                                            recorder), trace tier
 //   replaySrc,                               data-replay-src, or null
 //   debug,                                   data-debug present (and not "false")
 //   qualtricsSurveyIdAttr,                   data-qualtrics-survey-id, or null
@@ -82,14 +87,17 @@ function parsePreset(v) {
   return 'standard';
 }
 
+var REPLAY_OFF = ['off', 'none', 'false'];
+
 function parseReplay(v) {
   if (v === false) return null;
   if (v === true) return { tier: 'trace' };
   if (typeof v === 'object') return parseReplay(v.tier === undefined || v.tier === null ? '' : v.tier);
   var tier = String(v).trim().toLowerCase();
+  if (REPLAY_OFF.indexOf(tier) !== -1) return null;
   if (tier === '' || tier === 'trace') return { tier: 'trace' };
   if (tier === 'dom') return { tier: 'dom' };
-  console.warn('[cyborg-hunter] data-replay: unknown tier "' + v + '"; recording the trace tier (use trace or dom)');
+  console.warn('[cyborg-hunter] data-replay: unknown tier "' + v + '"; recording the trace tier (use trace, dom or off)');
   return { tier: 'trace' };
 }
 
@@ -116,7 +124,7 @@ export function readConfig(opts) {
 
   var guards = pick('guards');
   var replay = pick('replay');
-  replay = replay === undefined ? null : parseReplay(replay);
+  replay = replay === undefined ? (opts && opts.replayDefault ? { tier: 'trace' } : null) : parseReplay(replay);
   // The replay recorder's autoSave (DataPipe) only comes from the object form.
   var g = globalConfig.replay;
   if (replay && g && typeof g === 'object' && g.autoSave) replay.autoSave = g.autoSave;
