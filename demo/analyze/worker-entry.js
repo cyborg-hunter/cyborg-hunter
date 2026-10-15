@@ -37,7 +37,10 @@
 //                   runId: the run id (report-core.js runIdOf); triageRows: each
 //                   participant's tier and triage score in triage order
 //                   (for the annotation export); cursorLine: the run's
-//                   pointer-verdicts sentence (report-core.js)
+//                   pointer-verdicts sentence (report-core.js); pseudonymKey:
+//                   under config.pseudonymize, the key file's text (its own
+//                   download, never in the zip), else null. Under it every id
+//                   the message carries, as the report's, is a code
 //     replay-model  { participantId, model }
 //     error         { phase, message, warnings? }, phase 'ingest' or the type of
 //                   the message that failed: 'check' | 'run' | 'reanalyze' |
@@ -56,7 +59,8 @@ import { classifyFiles, CONFIG_NAME } from './classify-files.js';
 import { peekParticipantFile } from './peek-files.js';
 import { suggestIdField } from './participant-id-suggest.js';
 import { createZipSink } from './zip-sink.js';
-import { webGunzip, webSha256, bytesToBase64, offscreenCreateCanvas, offscreenEncodePng } from './web-deps.js';
+import { assignCodes, keyFileUpdate, pseudonymizeParticipants } from '../../src/cli/pseudonymize-core.js';
+import { webGunzip, webSha256, webHmacSha256, webRandomSecret, bytesToBase64, offscreenCreateCanvas, offscreenEncodePng } from './web-deps.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from './limits.js';
 
 var post = function (msg, transfer) { self.postMessage(msg, transfer || []); };
@@ -86,6 +90,11 @@ function readersFor(msg) {
 // and the report rendered again under another config without reading the
 // files again (reanalyze).
 var lastRun = null;
+// The pseudonym secret (config.pseudonymize), made on the first pseudonymized
+// report and kept until reset: a re-analysis, or a run that reads the files
+// again, gives each participant the code it had. The page holds no key file
+// to reuse, so codes made here are not the CLI's.
+var pseudonymSecret = null;
 
 async function check(msg) {
   var readers = readersFor(msg);
@@ -191,7 +200,15 @@ async function reanalyze(msg) {
 // rewrites each stylesheet once (tests/demo/analyze-worker.test.js compares
 // two zips file for file, with a stylesheet two others import).
 async function renderRun(state, config) {
-  var participants = state.participants, assetNotes = state.assetNotes;
+  var raw = state.participants, assetNotes = state.assetNotes;
+  var participants = raw, pseudonymKey = null;
+  if (config.pseudonymize) {
+    var coded = await codedParticipants(state, config);
+    participants = coded.participants;
+    pseudonymKey = keyFileUpdate(null, pseudonymSecret, coded.codes).text;
+  }
+  // The participants this report shows, for the replay requests that name them.
+  state.shown = participants;
   // Copied before transfer: a pass-through chunk aliases the bytes the sink
   // was given, and keepImages still needs those for the in-page data URIs.
   var zip = createZipSink(function (chunk) { var copy = chunk.slice(); post({ type: 'zip', chunk: copy }, [copy.buffer]); });
@@ -209,21 +226,36 @@ async function renderRun(state, config) {
   zip.end();
   var html = await renderInPageHtml(built, participants, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, bytesToBase64: bytesToBase64 });
   post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts, runId: built.runId, cursorLine: built.cursorLine,
-    participants: participants.map(function (p) {
+    participants: participants.map(function (p, i) {
       var has = !!(p.replay && p.replay.recording);
+      // assetNotes is keyed by the id the files gave (run); raw[i] is p's own.
       return { participantId: p.participantId, hasReplay: has,
-        assetNote: has ? assetNotes[p.participantId] : null,
+        assetNote: has ? assetNotes[raw[i].participantId] : null,
         replayError: p.replay && p.replay.error ? (p.replay.reason || p.replay.error) : null };
     }),
     warnings: state.warnings, reportWarnings: built.warnings, assetReport: state.assetReport,
-    files: fileTexts, configUsed: config, zipBytes: zip.bytes,
+    files: fileTexts, configUsed: config, zipBytes: zip.bytes, pseudonymKey: pseudonymKey,
     triageRows: built.triage.map(function (t) {
       return { participantId: t.participantId, tier: t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean', triageScore: t.score };
     }) });
 }
 
+// The run's participants coded (pseudonymize-core.js), made once per run and
+// field settings and kept on its state: a re-analysis renders the same copies,
+// whose replays carry the asset note the first pass wrote
+// (replay-assets-core.js words it once), as the plain participants do.
+async function codedParticipants(state, config) {
+  if (!pseudonymSecret) pseudonymSecret = webRandomSecret();
+  var sig = JSON.stringify([pseudonymSecret, config.participantIdField, config.platformIdField]);
+  if (!state.coded || state.coded.sig !== sig) {
+    var codes = await assignCodes(state.participants.map(function (p) { return p.participantId; }), pseudonymSecret, webHmacSha256);
+    state.coded = { sig: sig, codes: codes, participants: pseudonymizeParticipants(state.participants, codes, config) };
+  }
+  return state.coded;
+}
+
 function replay(msg) {
-  var p = lastRun && lastRun.participants.find(function (x) { return x.participantId === msg.participantId; });
+  var p = lastRun && lastRun.shown && lastRun.shown.find(function (x) { return x.participantId === msg.participantId; });
   if (!p || !p.replay || !p.replay.recording) { post({ type: 'error', phase: 'replay', message: 'No replay for ' + msg.participantId }); return; }
   // Built fresh on every request: the zip pass consumed its own model, and
   // holding every cohort model would defeat reading one artifact at a time.
@@ -235,7 +267,7 @@ function replay(msg) {
 
 self.onmessage = function (ev) {
   var msg = ev.data || {};
-  if (msg.type === 'reset') { lastRun = null; return; }
+  if (msg.type === 'reset') { lastRun = null; pseudonymSecret = null; return; }
   if (msg.type === 'sample') { post({ type: 'sample', files: sample.files }); return; }
   var job = msg.type === 'check' ? check(msg) : msg.type === 'run' ? run(msg) : msg.type === 'reanalyze' ? reanalyze(msg)
     : msg.type === 'replay' ? Promise.resolve().then(function () { replay(msg); }) : null;

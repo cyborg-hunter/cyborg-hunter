@@ -641,7 +641,7 @@ ${fontFaceCss}    :root {
 <body data-filter="all">
   <header class="topbar">
     <h1>Cyborg Hunter Report</h1>
-    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${runLine}</span>
+    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${pseudonymNote(config)}${runLine}</span>
     <button class="legend-btn" type="button" aria-haspopup="dialog" aria-controls="legend-modal">Legend &#9432;</button>
   </header>
   <div class="layout">
@@ -1545,6 +1545,12 @@ function renderScoreBreakdown(t, config) {
 function scoreWeightsNote(config) {
   const { weights, isDefault } = resolveScoreWeights(config?.scoreWeights);
   return isDefault ? '' : ` &middot; custom score weights: ${esc(customWeightsText(weights))}`;
+}
+
+// config.pseudonymize: the ids shown are codes (pseudonymize-core.js), and
+// the key that maps them back is not part of the report.
+function pseudonymNote(config) {
+  return config?.pseudonymize ? ' &middot; participant IDs are pseudonymized codes' : '';
 }
 
 // The run time in the top bar: "2026-10-05T14:03:12.345Z" → "2026-10-05 14:03 UTC".

@@ -24,6 +24,7 @@ import { exportConfig } from './export-config.js';
 import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotations, applyAnnotate } from './annotations.js';
 import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
 import { sanitize } from '../../src/cli/renderers/report-id.js';
+import { KEY_FILE_NAME } from '../../src/cli/pseudonymize-core.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
 // The annotations status line once storage has not taken a write
@@ -151,6 +152,10 @@ export function createPage(root, worker, opts) {
     var files = state.result ? state.result.files : {};
     root.querySelectorAll('[data-action="download"]').forEach(function (b) { b.disabled = busy() || typeof files[b.dataset.file] !== 'string'; });
     root.querySelector('[data-action="download-zip"]').disabled = busy() || !state.zipUrl;
+    // The pseudonym key, offered only beside a pseudonymized report.
+    var key = root.querySelector('[data-action="download-key"]');
+    key.hidden = !(state.result && state.result.pseudonymKey);
+    key.disabled = busy() || key.hidden;
     // The annotation exports and import likewise: the CSV carries the last
     // answer's tiers and scores.
     var noAnnotations = busy() || !state.runId;
@@ -781,6 +786,11 @@ export function createPage(root, worker, opts) {
   root.querySelector('[data-action="download-zip"]').addEventListener('click', function () {
     if (!state.zipUrl) return;
     var a = document.createElement('a'); a.href = state.zipUrl; a.download = ZIP_NAME; document.body.appendChild(a); a.click(); a.remove();
+  });
+  // The key file is its own download: the worker never puts it in the zip.
+  root.querySelector('[data-action="download-key"]').addEventListener('click', function () {
+    if (!state.result || !state.result.pseudonymKey) return;
+    download(KEY_FILE_NAME, state.result.pseudonymKey, 'text/csv');
   });
   root.querySelectorAll('[data-action="download"]').forEach(function (b) {
     b.addEventListener('click', function () {

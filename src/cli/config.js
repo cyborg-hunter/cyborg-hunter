@@ -7,7 +7,7 @@
 //   3. CLI flags (--data, --output, etc.) — ad-hoc overrides
 
 import { readFileSync, existsSync } from 'fs';
-import { resolve, join } from 'path';
+import { resolve, join, relative, isAbsolute, sep } from 'path';
 import { mergeConfig, cliConfigWarnings } from './config-core.js';
 
 // Load-bearing re-export: tests import cliConfigWarnings from this file.
@@ -42,11 +42,14 @@ export function loadConfig(cliArgs) {
   if (flags.sessionIntegrityPath) config.sessionIntegrityPath = flags.sessionIntegrityPath;
   if (flags.qualtricsField) config.qualtricsField = flags.qualtricsField;
   if (flags['no-visuals']) config.noVisuals = true;
+  if (flags.pseudonymize) config.pseudonymize = true;
+  if (flags.pseudonymKeyFile) config.pseudonymKeyFile = flags.pseudonymKeyFile;
 
   // Resolve relative paths to absolute (relative to cwd)
   config.dataDir = resolve(config.dataDir);
   config.outputDir = resolve(config.outputDir);
   if (config.assetsDir) config.assetsDir = resolve(config.assetsDir);
+  config.pseudonymKeyFile = resolve(config.pseudonymKeyFile);
 
   // Config file key typos first, then config VALUES that would otherwise
   // silently mis-score (a non-numeric softScoreThreshold coerces every
@@ -71,6 +74,8 @@ export function loadConfig(cliArgs) {
 //   --qualtrics-field <name>       # config.qualtricsField
 //   --assets-dir <path>            # config.assetsDir
 //   --no-visuals                   # skip canvas-rendered images
+//   --pseudonymize                 # config.pseudonymize: codes for participant IDs
+//   --pseudonym-key-file <path>    # config.pseudonymKeyFile
 //
 // Throws on unknown flags. Earlier behavior was to print a warning and keep
 // going, which silently masked typos and caused the CLI to fall back to a
@@ -93,6 +98,7 @@ export function parseFlags(args) {
     '--session-integrity-path': 'sessionIntegrityPath',
     '--qualtrics-field': 'qualtricsField',
     '--assets-dir': 'assetsDir',
+    '--pseudonym-key-file': 'pseudonymKeyFile',
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -100,6 +106,8 @@ export function parseFlags(args) {
       flags[SINGLE_VALUE[a]] = args[++i];
     } else if (a === '--no-visuals') {
       flags['no-visuals'] = true;
+    } else if (a === '--pseudonymize') {
+      flags.pseudonymize = true;
     } else if (a === 'report') {
       // Subcommand keyword; the dispatcher in bin/cyborg-hunter.js already
       // routed on this. Skip rather than treating it as unknown.
@@ -111,4 +119,12 @@ export function parseFlags(args) {
     }
   }
   return flags;
+}
+
+// True when `keyFile` would be written inside `outputDir` (or is it): the
+// pseudonym key must never travel with a report that is shared. Both paths
+// are absolute (loadConfig resolves them).
+export function keyFileInsideOutput(keyFile, outputDir) {
+  const rel = relative(outputDir, keyFile);
+  return rel === '' || (rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel));
 }

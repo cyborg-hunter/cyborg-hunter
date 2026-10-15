@@ -5,7 +5,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
 import { gunzipSync } from 'zlib';
-import { createHash } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { getByPath } from '../shared/paths.js';
 import { MAX_DECOMPRESSED_BYTES, tooLargeMessage } from '../shared/limits.js';
 import { extractIntegrityData, ruleChronologicalCompare } from './extract-core.js';
@@ -13,7 +13,8 @@ import { ingestFiles, migrateArtifact, expandPatternToMatchers } from './ingest-
 
 // The two platform steps the core takes injected. Node's own gunzip keeps
 // its error messages, which reach the analyst inside "could not be read"
-// warnings.
+// warnings. hmacSha256 is the pseudonym codes' (pseudonymize-core.js), keyed
+// by the key file's hex secret; ingest itself does not use it.
 // gunzip stops at `limit` decompressed bytes (src/shared/limits.js): a gzip
 // upload is participant data, and a bomb must cost a warning, not the run.
 export function nodeGunzip(limit) {
@@ -30,6 +31,7 @@ export function nodeGunzip(limit) {
 export const nodeDeps = {
   gunzip: nodeGunzip(MAX_DECOMPRESSED_BYTES),
   sha256: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
+  hmacSha256: (secretHex, text) => createHmac('sha256', Buffer.from(secretHex, 'hex')).update(text, 'utf8').digest('hex'),
 };
 
 // A lazy reader over one path. Nothing is read until read() is called, so a

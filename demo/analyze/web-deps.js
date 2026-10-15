@@ -106,6 +106,22 @@ export async function webSha256(text) {
   return out;
 }
 
+// The pseudonym codes' HMAC (pseudonymize-core.js), node:crypto's createHmac
+// in report.js's place: the key is the secret's 32 bytes, the digest hex.
+export async function webHmacSha256(secretHex, text) {
+  var bytes = new Uint8Array(secretHex.length / 2);
+  for (var i = 0; i < bytes.length; i++) bytes[i] = parseInt(secretHex.slice(2 * i, 2 * i + 2), 16);
+  var key = await crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return toHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)));
+}
+// A new key file's secret: 32 random bytes, hex.
+export function webRandomSecret() { return toHex(crypto.getRandomValues(new Uint8Array(32))); }
+function toHex(buffer) {
+  var view = new Uint8Array(buffer), out = '';
+  for (var i = 0; i < view.length; i++) out += view[i].toString(16).padStart(2, '0');
+  return out;
+}
+
 // Bytes → base64 in chunks, shared with the report and the asset matcher.
 export { bytesToBase64 } from '../../src/shared/base64.js';
 

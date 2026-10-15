@@ -546,3 +546,63 @@ test('plots reach the zip and the in-page report as the same PNG bytes', { skip:
     delete globalThis.OffscreenCanvas;
   }
 });
+
+// config.pseudonymize: the zip, the in-page report and everything done
+// carries for the page use codes; the key that maps them back comes in
+// done.pseudonymKey, never in the zip. One secret per cohort: a re-analysis
+// keeps the codes (and gives the same zip again), and turning the setting
+// off gives the plain report back.
+test('a pseudonymized run: no raw id in the zip or the in-page report, the key apart, the codes kept by a re-analysis', async () => {
+  const RAW = 'PROLIFICX5d1e9f00aa';
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.participant_id = RAW;
+  const data = readFileSync(dir + '/DEMO-FIXT.json', 'utf8').replaceAll('DEMO-FIXT', RAW);
+  const recFile = recName.replace('DEMO-FIXT', RAW);
+  const files = [
+    { path: 'data/' + RAW + '.json', file: new File([data], RAW + '.json') },
+    { path: 'data/' + recFile, file: new File([JSON.stringify(rec)], recFile) },
+  ];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.config.pseudonymize, false, 'off by default');
+  const config = { ...checked.config, pseudonymize: true };
+  w.send({ type: 'run', files, config, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  const zip = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  for (const [name, bytes] of Object.entries(zip)) {
+    assert.ok(!name.includes(RAW), name);
+    assert.ok(!Buffer.from(bytes).toString('latin1').includes(RAW), name + ' carries the raw id');
+  }
+  assert.ok(!Object.keys(zip).some((n) => /pseudonym/i.test(n)), 'the key is not in the zip');
+  const { warnings, ...shown } = done;   // ingest's own diagnostics, for the analyst's screen
+  assert.ok(!JSON.stringify(shown).replace(JSON.stringify(done.pseudonymKey), '').includes(RAW), 'nothing done carries but the key names the raw id');
+  const code = done.participants[0].participantId;
+  assert.match(code, /^P-[0-9a-f]{10}$/);
+  assert.ok(zip['replay/' + code + '.replay.js'], 'the replay is filed under the code');
+  assert.match(done.pseudonymKey, new RegExp('\\n' + code + ',' + RAW + '\\n$'));
+  assert.ok(done.pseudonymKey.startsWith('# cyborg-hunter pseudonym key — keep private; do not share with the report\n# secret,'));
+  w.send({ type: 'replay', participantId: code });
+  const model = await w.next('replay-model', 'error');
+  assert.equal(model.type, 'replay-model', model.message);
+  assert.equal(model.model.pid, code, 'the replay card shows the code too');
+
+  w.send({ type: 'reanalyze', config, participantIdField: 'participantId' });
+  const again = await w.next('done', 'error');
+  assert.equal(again.type, 'done', again.message);
+  const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  for (const name of Object.keys(zip)) {
+    if (name === 'index.html') assert.equal(withoutRunTime(strFromU8(zip2[name])), withoutRunTime(strFromU8(zip[name])), name);
+    else assert.ok(Buffer.from(zip2[name]).equals(Buffer.from(zip[name])), name);
+  }
+  assert.equal(again.pseudonymKey, done.pseudonymKey);
+
+  w.send({ type: 'reanalyze', config: checked.config, participantIdField: 'participantId' });
+  const plain = await w.next('done', 'error');
+  assert.equal(plain.type, 'done', plain.message);
+  assert.deepEqual(plain.participants.map((p) => p.participantId), [RAW]);
+  assert.equal(plain.pseudonymKey, null);
+});

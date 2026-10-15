@@ -41,6 +41,7 @@ import { drawTypingProfile, sanitize as sanitizeTyping } from './renderers/typin
 import { buildReplayAssets } from './renderers/replay-assets-core.js';
 import { renderIndexHtml } from './renderers/html-index-core.js';
 import { bytesToBase64 } from '../shared/base64.js';
+import { isPseudonymized } from './pseudonymize-core.js';
 
 // The text files every report contains, in write order (images/ and replay/
 // files, when there are any, come between extensions.csv and index.html).
@@ -83,6 +84,13 @@ export async function buildReport(participants, config, deps) {
   const log = deps.log || (() => {});
   const warnings = [];
   const warn = (line) => { warnings.push(line); if (deps.warn) deps.warn(line); };
+  // config.pseudonymize: the caller codes the participants first
+  // (pseudonymize-core.js pseudonymizeParticipants); raw ones are refused
+  // rather than rendered, since the report would then say "pseudonymized"
+  // over raw ids.
+  if (config.pseudonymize && !participants.every(isPseudonymized)) {
+    throw new Error('config.pseudonymize is set but the participants were not pseudonymized (pseudonymizeParticipants)');
+  }
 
   // Analyze — compute summaries, detect edge exits, rank by triage priority.
   // config.phaseScope (0.6.1) filters which trials feed the analyzers so

@@ -46,6 +46,8 @@ export const DEFAULT_CLI_CONFIG = {
   trialsPerParticipant: null,
   platformIdField: null,
   showPlatformId: false,
+  pseudonymize: false,         // report codes in place of participant IDs (cli/pseudonymize-core.js)
+  pseudonymKeyFile: "./cyborg-hunter-pseudonyms.csv",  // the codes' key; never inside outputDir
   conditionField: null,
   groupField: null,
   typingSpeedThreshold_cps: 10,

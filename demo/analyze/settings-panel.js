@@ -3,7 +3,8 @@
 // collected. The score weights order participants within a tier; the soft
 // threshold re-tiers them against the soft scores the data saved; the id,
 // integrity and session-report fields say where the data are, so a change to
-// one reads the files again; the platform id changes only the display. Nothing
+// one reads the files again; the platform id changes only the display, and
+// pseudonymize swaps the ids the report shows for codes. Nothing
 // here re-screens a participant: the hard tier and the saved soft scores are
 // the data's own (docs/configuration.md, "Which fields actually do something").
 // The phase scope and the trajectory order are left to the CLI: the panel
@@ -35,6 +36,7 @@ export function settingsFromConfig(config) {
     sessionIntegrityPath: config.sessionIntegrityPath || null,
     platformIdField: config.platformIdField || null,
     showPlatformId: !!config.showPlatformId,
+    pseudonymize: !!config.pseudonymize,
   };
 }
 
@@ -60,7 +62,7 @@ function resolveWeight(user, sig) {
 export function settingsKey(s) {
   var user = s.scoreWeights || {};
   return JSON.stringify([SCORE_SIGNALS.map(function (sig) { return resolveWeight(user, sig); }),
-    s.softScoreThreshold, s.integrityField, s.sessionIntegrityPath, s.platformIdField, s.showPlatformId]);
+    s.softScoreThreshold, s.integrityField, s.sessionIntegrityPath, s.platformIdField, s.showPlatformId, s.pseudonymize]);
 }
 
 /**
@@ -80,6 +82,7 @@ export function configFromSettings(base, settings) {
   c.sessionIntegrityPath = settings.sessionIntegrityPath || null;
   c.platformIdField = settings.platformIdField || null;
   c.showPlatformId = !!settings.showPlatformId;
+  c.pseudonymize = !!settings.pseudonymize;
   return c;
 }
 
@@ -107,6 +110,9 @@ var PANEL_HTML =
   '<label>Session report path <input type="text" name="sessionIntegrityPath" placeholder="found by convention"></label></p>' +
   '<p><label>Platform ID field <input type="text" name="platformIdField"></label> ' +
   '<label><input type="checkbox" name="showPlatformId"> show it in the report</label></p>' +
+  '<p><label><input type="checkbox" name="pseudonymize"> Pseudonymize participant IDs</label> ' +
+  '<span class="hint">The report and its zip show a code in place of each ID; the key that maps the codes back is a separate download, never in the zip. ' +
+  'Codes replace IDs, not content: typed or pasted text and what a replay recorded can still identify a participant.</span></p>' +
   '<p><button type="button" class="secondary" data-action="export-config">Export config</button> ' +
   '<span class="hint" data-role="assets-hint" hidden>The exported config sets assetsDir to ./assets: for the CLI, put the experiment\'s CSS and image files in an assets folder beside it.</span></p>' +
   '</fieldset></form>';
@@ -129,6 +135,7 @@ export function createSettingsPanel(container, onChange) {
       field('sessionIntegrityPath').value = s.sessionIntegrityPath || '';
       field('platformIdField').value = s.platformIdField || '';
       field('showPlatformId').checked = !!s.showPlatformId;
+      field('pseudonymize').checked = !!s.pseudonymize;
       var user = s.scoreWeights || {};
       SCORE_SIGNALS.forEach(function (sig) {
         var resolved = resolveWeight(user, sig), weight = resolved[0], max = resolved[1];
@@ -152,6 +159,7 @@ export function createSettingsPanel(container, onChange) {
         sessionIntegrityPath: field('sessionIntegrityPath').value.trim() || null,
         platformIdField: field('platformIdField').value.trim() || null,
         showPlatformId: field('showPlatformId').checked,
+        pseudonymize: field('pseudonymize').checked,
       };
     },
     setAssetsHint: function (shown) { container.querySelector('[data-role="assets-hint"]').hidden = !shown; },

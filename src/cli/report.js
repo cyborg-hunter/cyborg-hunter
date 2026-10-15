@@ -7,9 +7,12 @@
 // (e.g., missing canvas) degrade gracefully.
 
 import { join } from 'path';
-import { loadConfig } from './config.js';
+import { existsSync, readFileSync } from 'fs';
+import { randomBytes } from 'crypto';
+import { loadConfig, keyFileInsideOutput } from './config.js';
 import { ingest, nodeDeps } from './ingest.js';
 import { buildReport } from './report-core.js';
+import { assignCodes, parseKeyFile, keyFileUpdate, pseudonymizeParticipants } from './pseudonymize-core.js';
 import { VERSION } from '../shared/constants.js';
 import { checkForUpdate, formatUpdateNotice, formatCollectedVersionNotice } from './update-check.js';
 
@@ -26,6 +29,29 @@ export function ingestWarningLines(warnings, max = 20) {
   return lines;
 }
 
+// The pseudonym key a pseudonymized run codes with: the key file's secret
+// when the file exists (its text is kept, to append to), a new one when it
+// does not. Exits, before anything is read or written, when the file would
+// sit inside the report or holds no readable secret.
+function loadPseudonymKey(config) {
+  const path = config.pseudonymKeyFile;
+  if (keyFileInsideOutput(path, config.outputDir)) {
+    console.error(`[cyborg-hunter] the pseudonym key file ${path} is inside the output folder ${config.outputDir}.`);
+    console.error(`  The key maps the codes back to participant IDs and must never travel with the report.`);
+    console.error(`  Set pseudonymKeyFile (or --pseudonym-key-file) to a path outside it.`);
+    process.exit(1);
+  }
+  if (!existsSync(path)) return { existing: null, secret: randomBytes(32).toString('hex') };
+  const existing = readFileSync(path, 'utf8');
+  try {
+    return { existing, secret: parseKeyFile(existing).secret };
+  } catch (e) {
+    console.error(`[cyborg-hunter] cannot use the pseudonym key file ${path}: ${e.message}.`);
+    console.error(`  A new secret would give every participant a new code; fix the file, or move it away to start a new key.`);
+    process.exit(1);
+  }
+}
+
 export async function run(args) {
   console.log(`cyborg-hunter report v${VERSION}\n`);
 
@@ -35,6 +61,7 @@ export async function run(args) {
 
   // 1. Load and merge config (defaults ← file ← CLI flags)
   const config = loadConfig(args);
+  const pseudonymKey = config.pseudonymize ? loadPseudonymKey(config) : null;
 
   // 2. Ingest participant data files
   const { participants, warnings } = await ingest(config);
@@ -137,9 +164,18 @@ export async function run(args) {
     }
   }
 
+  // config.pseudonymize: the report is built from coded copies of the
+  // participants (pseudonymize-core.js), so no output carries a raw id.
+  let reportParticipants = participants;
+  let codes = null;
+  if (pseudonymKey) {
+    codes = await assignCodes(participants.map((p) => p.participantId), pseudonymKey.secret, nodeDeps.hmacSha256);
+    reportParticipants = pseudonymizeParticipants(participants, codes, config);
+  }
+
   const { readReplayClientSrc } = await import('./renderers/replay-client-source.js');
   const { buildFontFaceCss } = await import('./renderers/report-fonts.js');
-  await buildReport(participants, config, {
+  await buildReport(reportParticipants, config, {
     sink, log: console.log, warn: console.warn, createCanvas, encodePng,
     replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss(), assetMap,
     sha256: nodeDeps.sha256,
@@ -147,6 +183,17 @@ export async function run(args) {
 
   console.log(`\nReport written to ${config.outputDir}/`);
   console.log(`  Open ${config.outputDir}/index.html to review`);
+
+  // Written only after the report is: created, or with this run's new
+  // participants appended. Owner-only permissions on a new file.
+  if (pseudonymKey) {
+    const key = keyFileUpdate(pseudonymKey.existing, pseudonymKey.secret, codes);
+    if (pseudonymKey.existing === null || key.added > 0) {
+      mkdirSync(dirname(config.pseudonymKeyFile), { recursive: true });
+      writeFileSync(config.pseudonymKeyFile, key.text, { mode: 0o600 });
+    }
+    console.log(`  Pseudonym key: ${config.pseudonymKeyFile} — keep it private; never share it with the report.`);
+  }
 
   const update = await updateCheck;
   if (update && update.updateAvailable) {

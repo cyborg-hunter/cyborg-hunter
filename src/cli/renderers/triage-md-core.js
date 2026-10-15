@@ -17,6 +17,9 @@ export function buildTriageMd(triage, config) {
     '',
     `_${triage.length} participants analyzed_`,
     '',
+    ...(config?.pseudonymize
+      ? ['_Participant IDs are pseudonymized codes; the key that maps them back is kept apart from this report._', '']
+      : []),
     '**Tier** is the library\'s two-tier screening verdict: `HARD` = a hard signal',
     '(paste/drop/copy) crossed its count threshold; `soft` = library soft score ≥',
     'its threshold; `clean` = neither. **Score** is the CLI\'s separate ranking',

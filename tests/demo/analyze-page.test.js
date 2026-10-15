@@ -52,7 +52,7 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
   configPath: 'cyborg-hunter.config.json' };
 // CHECKED.config with the settings panel's keys at their defaults: what a run sends.
 const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null,
-  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false };
+  integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false, pseudonymize: false };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
   cursorLine: 'Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 0 not assessed (2 sessions; 0 recorded without device facts)',
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
@@ -2244,4 +2244,45 @@ test('the replay card says why a participant\'s replay is not shown', async () =
   post('A');                   // a row click on A
   assert.equal(role('asset-note').textContent, 'Participant A: ' + why);
   assert.equal(action('load-replay').disabled, true);
+});
+
+// config.pseudonymize (src/cli/pseudonymize-core.js): a checkbox, off by
+// default, that re-analyses; the key file is a download of its own, beside
+// the zip and never in it, offered only for a report that was pseudonymized.
+test('Pseudonymize participant IDs: off by default, a re-analysis, and the key as its own download', async () => {
+  const t = boot();
+  await toCheck(t);
+  const box = role('settings-form').elements.namedItem('pseudonymize');
+  assert.equal(box.type, 'checkbox');
+  assert.equal(box.checked, false);
+  assert.equal(box.closest('label').textContent.trim(), 'Pseudonymize participant IDs');
+  action('run').click();
+  await tick();
+  t.emit({ type: 'zip', chunk: new Uint8Array([1, 2]) });
+  t.emit({ ...DONE, pseudonymKey: null });
+  await tick();
+  const key = action('download-key');
+  assert.equal(key.hidden, true, 'no key for a plain report');
+  assert.notEqual(key.dataset.action, 'download', 'not one of the report\'s own files');
+  setField('pseudonymize', true);
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID', config: { ...PANEL_DEFAULTS, pseudonymize: true } });
+  assert.equal(key.disabled, true, 'waits for the answer, like the other downloads');
+  const text = '# cyborg-hunter pseudonym key — keep private; do not share with the report\n# secret,' + 'a'.repeat(64) + '\ncode,participantId\nP-0123456789,A\n';
+  t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+  t.emit({ ...DONE, pseudonymKey: text });
+  await tick();
+  assert.equal(key.hidden, false);
+  assert.equal(key.disabled, false);
+  const made = [];
+  const names = [];
+  const saved = URL.createObjectURL;
+  const click = win.HTMLAnchorElement.prototype.click;
+  URL.createObjectURL = (blob) => { made.push(blob); return 'blob:test'; };
+  win.HTMLAnchorElement.prototype.click = function () { names.push(this.download); };
+  try {
+    key.click();
+    assert.deepEqual(names, ['cyborg-hunter-pseudonyms.csv']);
+    assert.equal(await made.at(-1).text(), text);
+  } finally { URL.createObjectURL = saved; win.HTMLAnchorElement.prototype.click = click; }
 });

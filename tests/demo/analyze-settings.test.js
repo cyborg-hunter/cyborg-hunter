@@ -18,6 +18,16 @@ test('the panel\'s keys round-trip through a config unchanged', () => {
   }
 });
 
+test('pseudonymize: off by default, through the panel and into the export; a re-analysis, not a re-read', () => {
+  assert.equal(settingsFromConfig(merged(undefined)).pseudonymize, false);
+  const base = merged({ pseudonymize: true });
+  assert.equal(configFromSettings(base, settingsFromConfig(base)).pseudonymize, true);
+  assert.notEqual(settingsKey(settingsFromConfig(base)), settingsKey(settingsFromConfig(merged(undefined))));
+  assert.equal(REINGEST_KEYS.includes('pseudonymize'), false);
+  assert.deepEqual(exportConfig(configFromSettings(merged(undefined), { ...settingsFromConfig(merged(undefined)), pseudonymize: true }),
+    { participantIdField: 'participantId' }), { pseudonymize: true, participantIdField: 'participantId' });
+});
+
 test('an empty threshold takes the saved ones', () => {
   const base = merged({ scoring: { softScoreThreshold: 5 } });
   const c = configFromSettings(base, { ...settingsFromConfig(base), softScoreThreshold: null });
