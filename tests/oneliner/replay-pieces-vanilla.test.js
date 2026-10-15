@@ -1,0 +1,139 @@
+// ch.js with the recorder bundled, on a page without a framework: replay is
+// on by default and every POST carries the page's recording so far in a
+// second hidden input, cyborgHunterReplay (src/oneliner/adapters/vanilla.js,
+// src/replay/pieces.js). Never in sessionStorage, which could not hold it.
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert';
+import { Window } from 'happy-dom';
+import { setBuild, buildOf } from './support/build-flags.js';
+import { attach as attachRecorder } from '../../src/replay/index.js';
+import { CyborgHunterReplayExtension } from '../../src/jspsych/extension-cyborg-hunter-replay.js';
+import { groupPieces, reassemblePieces } from '../../src/replay/pieces.js';
+import { validateStrict } from '../../src/shared/schema-v2-validator.js';
+
+class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
+const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
+
+let restoreBuild;
+before(() => { restoreBuild = setBuild(buildOf('ch.js')); });
+after(() => restoreBuild());
+
+let win, boot, errors, orig, ctx, nativeFormSubmit;
+beforeEach(async () => {
+  win = new Window({ url: 'https://lab.example/page1.html' });
+  global.window = win; global.document = win.document; global.Node = win.Node;
+  global.MutationObserver = win.MutationObserver; global.ResizeObserver = StubResizeObserver;
+  ({ boot } = await import('../../src/oneliner/boot.js'));
+  nativeFormSubmit = win.HTMLFormElement.prototype.submit;
+  errors = [];
+  orig = { error: console.error, warn: console.warn, info: console.info };
+  console.error = (m) => errors.push(String(m)); console.warn = () => {}; console.info = () => {};
+  // What entry-replay.js bundles: both globals, defined before boot.
+  win.CyborgHunterReplay = { attach: attachRecorder };
+  win.jsPsychCyborgHunterReplay = CyborgHunterReplayExtension;
+  ctx = null;
+});
+afterEach(() => {
+  console.error = orig.error; console.warn = orig.warn; console.info = orig.info;
+  if (ctx && ctx.vanilla) ctx.vanilla.teardown();
+  if (ctx && ctx.monitor) { try { ctx.monitor.destroy(); } catch { /* destroyed */ } }
+  if (ctx && ctx.replay && ctx.replay.api) { try { ctx.replay.api.destroy(); } catch { /* destroyed */ } }
+  win.HTMLFormElement.prototype.submit = nativeFormSubmit;
+  win.close();
+  delete global.window; delete global.document; delete global.Node; delete global.MutationObserver; delete global.ResizeObserver;
+});
+
+async function start(dataset) {
+  ctx = boot({ script: { dataset: Object.assign({ participantId: 'P-PAGE', guards: 'none' }, dataset || {}), src: 'https://cdn/x/ch.js' }, win });
+  assert.ok(ctx);
+  await tick();   // the standalone recorder starts on a microtask
+  return ctx;
+}
+
+function el(html) {
+  const host = win.document.createElement('div');
+  host.innerHTML = html;
+  win.document.body.appendChild(host);
+  return host.firstElementChild;
+}
+
+// A form whose submit stays on the page (no navigation in happy-dom).
+function form(method) {
+  const f = el('<form method="' + (method || 'post') + '" action="/submit"><textarea name="answer"></textarea></form>');
+  f.addEventListener('submit', (e) => e.preventDefault());
+  return f;
+}
+const submit = (f) => f.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+const click = (node) => node.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }));
+const fieldOf = (f) => f.querySelector('input[name="cyborgHunterReplay"]');
+
+function rebuild(pieces) {
+  const groups = groupPieces(pieces);
+  assert.equal(groups.size, 1, 'one recording');
+  const rec = reassemblePieces([...groups.values()][0]);
+  assert.deepStrictEqual(validateStrict(rec).errors, []);
+  return rec;
+}
+
+describe('ch.js with the bundled recorder on a page without a framework', () => {
+  it('a POST carries the page recording so far; nothing of it goes into sessionStorage', async () => {
+    const c = await start();
+    assert.deepStrictEqual(c.config.replay, { tier: 'trace' });
+    assert.equal(c.host, 'vanilla');
+    click(el('<button>one</button>'));
+    const f = form();
+    submit(f);
+    const input = fieldOf(f);
+    assert.ok(input, 'the replay input is there');
+    const rec = rebuild(JSON.parse(input.value));
+    assert.equal(rec.participant_id, 'P-PAGE');
+    assert.ok(rec.segments.some((s) => s.events.some((e) => e.type === 'mouse.click')), 'the click is recorded');
+    for (let i = 0; i < win.sessionStorage.length; i++) {
+      const v = win.sessionStorage.getItem(win.sessionStorage.key(i));
+      assert.ok(!v.includes('ch-replay-piece'), 'no piece in sessionStorage');
+    }
+    assert.equal(win.document.querySelectorAll('script[src*="cyborg-hunter-replay"]').length, 0);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('a later submit on the same page carries the earlier pieces too (a cancelled submit loses nothing)', async () => {
+    await start();
+    const f = form();
+    click(el('<button>first</button>'));
+    submit(f);
+    const first = JSON.parse(fieldOf(f).value);
+    click(el('<button>second</button>'));
+    submit(f);
+    const second = JSON.parse(fieldOf(f).value);
+    assert.deepStrictEqual(second.slice(0, first.length), first);
+    assert.ok(second.length > first.length);
+    const rec = rebuild(second);
+    assert.equal(rec.segments.filter((s) => s.events.some((e) => e.type === 'mouse.click')).length, 2);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it('a GET form gets no replay input', async () => {
+    await start();
+    click(el('<button>x</button>'));
+    const f = form('get');
+    submit(f);
+    assert.equal(fieldOf(f), null);
+  });
+
+  it('CyborgHunter.data() returns the pieces as cyborgHunterReplay', async () => {
+    await start();
+    click(el('<button>x</button>'));
+    const out = win.CyborgHunter.data();
+    assert.ok(Array.isArray(out.cyborgHunterReplay));
+    rebuild(out.cyborgHunterReplay);
+  });
+
+  it('data-replay="off": no replay input and nothing in data()', async () => {
+    await start({ replay: 'off' });
+    click(el('<button>x</button>'));
+    const f = form();
+    submit(f);
+    assert.equal(fieldOf(f), null);
+    assert.equal(win.CyborgHunter.data().cyborgHunterReplay, undefined);
+  });
+});

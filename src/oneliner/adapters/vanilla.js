@@ -21,6 +21,12 @@
 // CyborgHunter.data(), which closes the current segment first. A GET form
 // gets no input: the blob, often megabytes, would go into the URL; its page
 // still saves the session for the next page.
+// The session recording (on by default in ch.js) goes beside it, in a
+// second hidden input, cyborgHunterReplay: the pieces of this page's
+// recording so far (replay-loader.js piecesSoFar, src/replay/pieces.js).
+// It is never stored in sessionStorage, which could not hold it, so each
+// page's POST carries that page's recording, and the server keeps every
+// POST's value. CyborgHunter.data() returns it as cyborgHunterReplay.
 //
 // Several pages. Every page load runs a new monitor whose performance.now()
 // starts at 0 again. The accumulated blob is kept in sessionStorage (per tab;
@@ -97,10 +103,12 @@
 import { VERSION } from '../../shared/constants.js';
 import { MESSAGES } from '../errors.js';
 import { startFrictionNow } from '../guards.js';
+import { piecesSoFar } from '../replay-loader.js';
 
 var KEY_PREFIX = 'cyborg-hunter:oneliner:session:';
 var WARN_CHARS = 4000000;
 var HIDDEN_INPUT = 'cyborgHunterData';
+var REPLAY_INPUT = 'cyborgHunterReplay';
 
 function message(e) { return String((e && e.message) || e); }
 
@@ -396,6 +404,8 @@ export function installVanillaAdapter(opts) {
     var input = form.querySelector('input[name="' + HIDDEN_INPUT + '"]');
     if (effectiveMethod(form, submitter) !== 'post') {
       if (input) input.parentNode.removeChild(input);   // left by an earlier POST submit of this form
+      var stale = form.querySelector('input[name="' + REPLAY_INPUT + '"]');
+      if (stale) stale.parentNode.removeChild(stale);
       if (!noticedGet) {
         noticedGet = true;
         console.info('[cyborg-hunter] A GET form was submitted: its data does not get cyborgHunterData (it would go into the URL). The session is kept for the next page and CyborgHunter.data().');
@@ -409,8 +419,36 @@ export function installVanillaAdapter(opts) {
       form.appendChild(input);
     }
     input.value = JSON.stringify(blob());
+    setReplayInput(form);
     written = { form: form, cuts: cuts };
     return replaces;
+  }
+
+  // The recording's pieces so far in their own hidden input, or no input
+  // when there are none. A failure costs the replay field, never the submit.
+  function replayJson() {
+    try {
+      var list = piecesSoFar(ctx);
+      return list ? JSON.stringify(list) : null;
+    } catch (e) {
+      console.error(MESSAGES.vanillaEventFailed('replay: ' + message(e)));
+      return null;
+    }
+  }
+  function setReplayInput(form) {
+    var json = replayJson();
+    var input = form.querySelector('input[name="' + REPLAY_INPUT + '"]');
+    if (json === null) {
+      if (input) input.parentNode.removeChild(input);
+      return;
+    }
+    if (!input) {
+      input = doc.createElement('input');
+      input.type = 'hidden';
+      input.name = REPLAY_INPUT;
+      form.appendChild(input);
+    }
+    input.value = json;
   }
 
   // Capture phase on document: runs before the page's own submit handlers,
@@ -480,11 +518,18 @@ export function installVanillaAdapter(opts) {
       if (!fd || typeof fd.set !== 'function') return;
       if (submitsAnything(form, submitter) && effectiveMethod(form, submitter) === 'post') {
         var fresh = written && written.form === form && written.cuts === cuts;
-        if (!fresh || !fd.has(HIDDEN_INPUT)) fd.set(HIDDEN_INPUT, JSON.stringify(blob()));
-      } else if (fd.has(HIDDEN_INPUT)) {
-        fd.delete(HIDDEN_INPUT);
-        var input = form.querySelector('input[name="' + HIDDEN_INPUT + '"]');
-        if (input) input.parentNode.removeChild(input);
+        if (!fresh || !fd.has(HIDDEN_INPUT)) {
+          fd.set(HIDDEN_INPUT, JSON.stringify(blob()));
+          var rj = replayJson();
+          if (rj !== null) fd.set(REPLAY_INPUT, rj);
+          else if (fd.has(REPLAY_INPUT)) fd.delete(REPLAY_INPUT);
+        }
+      } else if (fd.has(HIDDEN_INPUT) || fd.has(REPLAY_INPUT)) {
+        [HIDDEN_INPUT, REPLAY_INPUT].forEach(function (name) {
+          if (fd.has(name)) fd.delete(name);
+          var input = form.querySelector('input[name="' + name + '"]');
+          if (input) input.parentNode.removeChild(input);
+        });
       }
     } catch (e) {
       console.error(MESSAGES.vanillaEventFailed(message(e)));
@@ -580,7 +625,13 @@ export function installVanillaAdapter(opts) {
   }
 
   ctx.handlers.mark = function (trialId) { cut('manual', trialId); };
-  ctx.handlers.data = function () { cut('manual'); return blob(); };
+  ctx.handlers.data = function () {
+    cut('manual');
+    var out = blob();
+    var rj = replayJson();
+    if (rj !== null) out.cyborgHunterReplay = JSON.parse(rj);
+    return out;
+  };
   ctx.handlers.startFriction = startFriction;
 
   return {

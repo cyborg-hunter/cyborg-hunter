@@ -305,6 +305,22 @@ export function takePiece(ctx) {
   return ctx.replayTaker ? ctx.replayTaker.take({ skipEmpty: true }) : null;
 }
 
+// Every piece of the current recording so far, a new one taken first, or
+// null when there are none to take (replay off, not auto-saved, or the
+// recorder not started yet). For a page without a framework: each POST, and
+// CyborgHunter.data(), carries the whole page's recording so far, so a
+// submit the page cancels (validation) loses nothing; the reader counts a
+// repeated piece once. Kept in memory only: sessionStorage could not hold a
+// recording (about 5 MB per origin), so each page sends its own.
+export function piecesSoFar(ctx) {
+  var taker = ctx.replayTaker;
+  if (!taker) return null;
+  var list = taker.sent || (taker.sent = []);
+  var p = taker.take({ skipEmpty: true });
+  if (p) list.push(p);
+  return list.length ? list.slice() : null;
+}
+
 // The session's last piece (pieces.js), for the host's session end: stops
 // the recorder (CyborgHunter.replay() still returns the whole recording
 // afterwards) and returns { piece, meta } or null when no pieces are taken.

@@ -133,3 +133,26 @@ describe('readConfig', () => {
     assert.deepStrictEqual(c.monitor, { participantId: 'C1' });
   });
 });
+
+// The files that bundle the recorder (build-targets.js `replay`) record by
+// default; ch-qualtrics.js does not. data-replay="off" (or none, false, or
+// CyborgHunterConfig.replay = false) turns it off either way.
+describe('readConfig: the replay default', () => {
+  it('unset: the trace tier where the file bundles the recorder, off otherwise', () => {
+    assert.deepStrictEqual(readConfig({ replayDefault: true }).replay, { tier: 'trace' });
+    assert.strictEqual(readConfig({ replayDefault: false }).replay, null);
+    assert.strictEqual(readConfig({}).replay, null);
+  });
+
+  it('off, none and false turn it off, from the tag or from CyborgHunterConfig', () => {
+    for (const v of ['off', 'none', 'false', 'OFF', ' off ']) {
+      assert.strictEqual(readConfig({ dataset: { replay: v }, replayDefault: true }).replay, null, v);
+    }
+    assert.strictEqual(readConfig({ globalConfig: { replay: false }, replayDefault: true }).replay, null);
+  });
+
+  it('an explicit tier still applies', () => {
+    assert.deepStrictEqual(readConfig({ dataset: { replay: 'dom' }, replayDefault: true }).replay, { tier: 'dom' });
+    assert.deepStrictEqual(readConfig({ dataset: { replay: '' }, replayDefault: false }).replay, { tier: 'trace' });
+  });
+});
