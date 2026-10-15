@@ -33,7 +33,7 @@ lab.js must be loaded from a script tag, so that it defines `window.lab` before 
 | `lab.js <version> is not supported yet` | the page loads a lab.js 23 pre-release | see [lab.js 23](#labjs-23) |
 | `Cyborg Hunter could not hook a lab.js component` | a ch-labjs.js hook failed on a component; that component's row carries a `cyborgHunterError` column saying what failed, and the study runs on | open an issue with the message and your script tags |
 | `A second lab.js study ran after the first ended` | ch-labjs.js records one session per page and ends it when the first study's root component ends, so components run after that have no integrity columns; a component run on its own, outside the study's root, counts as a study | run one study per page, or reload the page between studies; keep every component inside the study's root ([The end of the session](#the-end-of-the-session)) |
-| `CyborgHunterConfig.replay.autoSave is ignored` | the recorder saves itself only on a jsPsych page ([Replay and canvas](#replay-and-canvas)) | save `CyborgHunter.replay()` in your own save code |
+| `CyborgHunterConfig.replay.autoSave is ignored` | the recorder's DataPipe save runs only on a jsPsych page ([Replay and canvas](#replay-and-canvas)) | nothing: the recording is already in lab.js's rows |
 | `Your lab.js study uses the column <name>, which ch-labjs.js also writes` | the study holds a value under one of ch-labjs.js's column names; ch-labjs.js keeps it and writes its own as `cyborgHunter_<name>` ([Where the data goes](#where-the-data-goes)) | nothing is lost; rename the column if you want ch-labjs.js's value under its usual name |
 
 ch-labjs.js logs the hook failure once per page, however many components it affects.
@@ -112,7 +112,7 @@ In every case, keep `participantIdField` at its default, `participantId` (see [W
 
 ## Replay and canvas
 
-`data-replay` records the session as on any page; `data-replay="dom"` records the visual DOM tier ([Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner)). The recorder starts when the page has loaded, and its segments follow the trials and take their names. ch-labjs.js records but does not save: call `CyborgHunter.replay()` in an `on('end')` handler or your save code, and save what it returns as `<participantId>-replay-<epoch>.json` next to the data. `CyborgHunterConfig.replay.autoSave` works only on jsPsych pages; here it is ignored with a warning.
+ch-labjs.js records a session replay by default (`data-replay="off"` turns it off; `data-replay="dom"` records the visual DOM tier, [Replay with the one-liner](advanced-integration.md#replay-with-the-one-liner)). The recorder starts when the page has loaded, and its segments follow the trials and take their names. The recording is saved in lab.js's own rows: each trial row gets `cyborgHunterReplay`, and the root row and the last trial row `cyborgHunterReplayFinal`; the CLI puts the pieces back together. The rows grow by the recording's size (about 0.5–1.5 MB for a 15-minute study on the trace tier); JATOS caps `submitResultData` at 5 MB, so check a pilot's size there. `CyborgHunterConfig.replay.autoSave` works only on jsPsych pages; here it is ignored with a warning.
 
 A `canvas.Screen` is recorded as a canvas element of the right size, not its drawing: the recorder records the DOM, so the replay shows a placeholder where the canvas was. Paste, copy, tab-away, mouse and typing signals work on canvas screens as on HTML ones.
 

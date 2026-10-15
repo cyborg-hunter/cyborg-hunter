@@ -87,9 +87,9 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 
 - Participant ID: ch.js reads it from the study URL or `data-participant-id`; see [docs/quickstart.md § Participant ID](docs/quickstart.md#participant-id).
 - `data-guards`: the honeypot is on by default (read the [ethics and IRB note](docs/advanced-integration.md#honeypot-ethics-and-irb-note)); `data-guards="honeypot,friction"` adds friction, which enforces only after a start mark (`CyborgHunter.frictionEntryTrial()` in the timeline, or `data-ch-friction-start`) and otherwise just observes ([Friction](docs/advanced-integration.md#friction)); `data-guards="none"` turns both off.
-- `data-replay`: records a session replay; save `CyborgHunter.replay()` in your save code.
+- Session replay: on by default in `ch.js` and `ch-labjs.js`, saved with the rows (or the POST) your experiment already saves; `data-replay="dom"` adds the page itself, `data-replay="off"` turns it off. What is collected, for your ethics protocol: [docs/using-cyborg-hunter.md § Privacy model](docs/using-cyborg-hunter.md#privacy-model).
 - `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
-- Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (a POST form gets it as a hidden `cyborgHunterData` field).
+- Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (every POST form gets it as hidden `cyborgHunterData` and `cyborgHunterReplay` fields, whatever address it posts to).
 - Qualtrics: paste the `ch-qualtrics.js` tag into the survey's Look & Feel header and declare one embedded-data field; the CLI reads the CSV export ([docs/qualtrics.md](docs/qualtrics.md)).
 - lab.js: the `ch-labjs.js` tag below `lib/lab.js` and above the study script; every lab.js screen is a trial, and the integrity data lands in lab.js's own rows ([docs/labjs.md](docs/labjs.md)).
 
@@ -105,7 +105,7 @@ cyborg-hunter report              # writes ./cyborg-hunter-report/
 open cyborg-hunter-report/index.html
 ```
 
-Output: `summary.csv` (per-participant columns), `triage.md` (ranked list), `event-log.csv` (chronological events), `images/` (per-participant mouse paths, session timelines, typing profiles), `index.html` (landing page).
+Output: `summary.csv` (per-participant columns), `triage.md` (ranked list), `event-log.csv` (chronological events), `images/` (per-participant mouse paths, session timelines, typing profiles), `replay/` (session recordings), `index.html` (landing page). Every output is keyed by the participant ID, under the one-line setup the platform's: treat the folder as identifiable data.
 
 ## Session replay
 
@@ -121,22 +121,13 @@ other producers and converts jsPsych `schema_version: 1` recordings on the
 way in ([docs/v2-player-migration.md](docs/v2-player-migration.md)).
 Releases before 0.8.0 recorded the earlier v1 shape.
 
-With the one-line setup, replay is `data-replay` on the tag, and the experiment's save code saves what `CyborgHunter.replay()` returns ([details](docs/advanced-integration.md#replay-with-the-one-liner)):
+With the one-line setup, `ch.js` and `ch-labjs.js` record by default and save the recording in the rows the experiment already saves, one piece per trial, so a save trial such as DataPipe's keeps every trial before it; the CLI puts the pieces back together ([details](docs/advanced-integration.md#replay-with-the-one-liner)). `data-replay="dom"` records the page itself too:
 
 ```html
 <script src="https://unpkg.com/cyborg-hunter@0.15.0/dist/ch.js" integrity="sha384-oxYH2GswrijxHGWbnr6HhbEVo3M0qDc5dgzcp63yLlMTCCJ6IGtoQ+a63XuOyH7K" crossorigin="anonymous" data-replay="dom"></script>
 ```
 
-```javascript
-// jsPsych with DataPipe: one more save trial, for the recording
-timeline.push({
-  type: jsPsychPipe,
-  action: 'save',
-  experiment_id: EXPERIMENT_ID,
-  filename: participantId + '-replay-' + Date.now() + '.json',   // the experiment's variable holding the ID ch.js records
-  data_string: () => JSON.stringify(CyborgHunter.replay())
-});
-```
+On Qualtrics, replay stays opt-in and goes to your own server ([docs/qualtrics.md](docs/qualtrics.md)).
 
 Manual mode wires the recorder itself:
 
