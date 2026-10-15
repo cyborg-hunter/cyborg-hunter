@@ -239,18 +239,22 @@ function namesOf(participants, codes) {
   return names;
 }
 
-// Ingest's warnings ({ file, response?, warnings }) for a pseudonymized
-// report's page (the analyze page lists them beside the report): every name
-// of a participant in them replaced by its code. `participants` are the raw
-// ones the codes were made for.
+// The warnings a pseudonymized report's page lists (the analyze page shows
+// them beside the report): ingest's ({ file, response?, warnings }) and the
+// asset matcher's (plain strings), with every name of a participant in them
+// replaced by its code. `participants` are the raw ones the codes were made
+// for.
 export function pseudonymizeWarnings(warnings, participants, codes) {
   const swap = textPseudonymizer(namesOf(participants, codes));
-  return warnings.map((w) => ({
-    ...w,
-    file: swap(w.file),
-    ...('response' in w ? { response: swap(w.response) } : {}),
-    warnings: w.warnings.map(swap),
-  }));
+  const maybe = (v) => (v == null ? v : swap(v));
+  return warnings.map((w) => {
+    if (w == null || typeof w !== 'object') return maybe(w);
+    const out = { ...w };
+    if ('file' in w) out.file = maybe(w.file);
+    if ('response' in w) out.response = maybe(w.response);
+    if (Array.isArray(w.warnings)) out.warnings = w.warnings.map(maybe);
+    return out;
+  });
 }
 
 // Dotted-path edits on the copies. A flat key that spells the whole path wins,

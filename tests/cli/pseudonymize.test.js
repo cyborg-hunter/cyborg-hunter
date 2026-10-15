@@ -262,4 +262,20 @@ describe('pseudonymized text that names participants', () => {
       { file: `export.csv (response ${c1})`, response: c1, warnings: [`${c10} and ${c10}; ${cab}-replay-1.json and ${cab}`] },
     ]);
   });
+
+  // The analyzer lists ingest's warnings ({ file, warnings }) together with the
+  // asset matcher's, which are plain strings naming a recording's participant.
+  it('pseudonymizeWarnings: plain-string warnings are coded too, and a missing file stays missing', async () => {
+    const participants = [{ participantId: 'P1', metadata: {} }];
+    const codes = await assignCodes(['P1'], SECRET, hmac);
+    const c1 = codes.get('P1');
+    const out = pseudonymizeWarnings([
+      'Experiment assets: the replay of P1 could not be read (too deep)',
+      { warnings: ['P1 has no trials'] },
+    ], participants, codes);
+    assert.deepEqual(out, [
+      `Experiment assets: the replay of ${c1} could not be read (too deep)`,
+      { warnings: [`${c1} has no trials`] },
+    ]);
+  });
 });
