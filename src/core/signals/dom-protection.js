@@ -164,9 +164,9 @@ export function resetDecoyState() {
 export function injectDecoy(opts, expectedTrialId, config, trialData, getTrialData) {
   if (!config.decoyAnswers) return;
 
-  // Stale-trial guard
+  // Stale-trial guard: no trial current (it ended) or another one is.
   var currentTrial = getTrialData();
-  if (currentTrial && currentTrial.trialId !== expectedTrialId) {
+  if (!currentTrial || currentTrial.trialId !== expectedTrialId) {
     return;
   }
 

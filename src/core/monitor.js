@@ -212,6 +212,10 @@ export function init(userConfig) {
   var trialListeners = [];
   var intervals = [];        // session-scoped, cleared at destroy()
   var trialIntervals = [];   // trial-scoped, cleared at endTrial() AND destroy()
+  // The trial's deferred decoy injection (startTrial), cancelled with the
+  // trial's listeners: a decoy must never land after its trial ended or the
+  // monitor was destroyed.
+  var decoyTimer = null;
 
   // Module-level decoy state (cal-{N} numbering) must restart per instance.
   resetDecoyState();
@@ -256,6 +260,7 @@ export function init(userConfig) {
     trialListeners = [];
     trialIntervals.forEach(function (id) { clearInterval(id); });
     trialIntervals = [];
+    if (decoyTimer !== null) { clearTimeout(decoyTimer); decoyTimer = null; }
     removeDecoyElement();
   }
 
@@ -350,7 +355,8 @@ export function init(userConfig) {
               typeof opts.decoyAnswer + ". Falling through to auto-detection."
             );
           }
-          setTimeout(inject, 0);
+          if (decoyTimer !== null) clearTimeout(decoyTimer);
+          decoyTimer = setTimeout(function () { decoyTimer = null; inject(); }, 0);
         }
       }
 
