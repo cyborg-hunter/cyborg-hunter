@@ -18,6 +18,7 @@ import { attachTraceCapture } from './capture-trace.js';
 import { attachDomCapture } from './capture-dom.js';
 import { createSpan } from './span.js';
 import { serialize, SCHEMA_VERSION } from './serializer.js';
+import { createPieceTaker } from './pieces.js';
 import {
   replayFilename, buildReplayMeta, autoSave, compressRecording,
 } from './persistence.js';
@@ -145,6 +146,15 @@ export function attach(userConfig) {
 
     getRecording: function (opts) {
       return serialize(rec.getState(), opts || {});
+    },
+
+    // The recording in pieces, one per call to take(), each holding what
+    // closed since the last (pieces.js). The one-line setup writes them into
+    // the rows the experiment already saves, so a save trial that takes its
+    // snapshot mid-session still has every earlier trial's recording.
+    // opts: { host, recordingId }.
+    pieceTaker: function (opts) {
+      return createPieceTaker(rec.getState, opts || {});
     },
 
     getRecordingCompressed: function (opts) {

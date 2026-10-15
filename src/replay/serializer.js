@@ -118,18 +118,47 @@ export function serialize(state, opts) {
   if (s0 == null) {
     throw new Error('[cyborg-hunter-replay] cannot serialize before startSession() — call startSession() first, or the timestamps would be meaningless (Unix epoch).');
   }
-  var ch = opts.chSessionReport || null;
 
   // The last moment the recording observed, on the capture clock. Kept
   // absolute so it sits in the same frame as `recording_started_at_perf`;
   // their difference is the recording's duration in wire time.
   var lastT = s0;
   var segments = state.trials.map(function (trial, i) {
-    var events = byTime(trial.events);
-    var lastEventT = events.length > 0 ? events[events.length - 1].t : trial.tLoad;
-    if (lastEventT > lastT) lastT = lastEventT;
-    if (trial.tEnd != null && trial.tEnd > lastT) lastT = trial.tEnd;
-    return {
+    var out = segmentOut(trial, i, s0);
+    if (out.lastT > lastT) lastT = out.lastT;
+    return out.segment;
+  });
+
+  return assembleRecording({
+    header: headerOut(state, opts),
+    stylesheets: state.stylesheets || [],
+    // Time-sorted on the way out (spec §7): the capture side coalesces both
+    // viewport channels through RAF callbacks, and this is the last place that
+    // can guarantee the property for the file.
+    viewportChanges: streamOut(byTime(state.viewportChanges || []), s0),
+    guardViolations: convertTimes(state.guardViolations, s0),
+    rootAttrEvents: convertTimes(state.rootAttrEvents, s0),
+    captureFailures: convertTimes(state.captureFailures, s0),
+    captureStopped: !!state.captureStopped,
+    chReport: chReportOut(opts.chSessionReport || null, s0),
+    end: { ended_at_perf: lastT, end_reason: state.endReason || 'aborted' },
+    segments: segments
+  });
+}
+
+// One segment on the wire, and the last moment it observed (absolute), which
+// the recording's `ended_at_perf` is the maximum of. Exported for the piece
+// taker (pieces.js), which serializes segments as they close rather than the
+// whole buffer at every trial end: one code path, so a piece's segment is the
+// segment serialize() would have written.
+export function segmentOut(trial, i, s0) {
+  var events = byTime(trial.events);
+  var lastEventT = events.length > 0 ? events[events.length - 1].t : trial.tLoad;
+  var lastT = lastEventT;
+  if (trial.tEnd != null && trial.tEnd > lastT) lastT = trial.tEnd;
+  return {
+    lastT: lastT,
+    segment: {
       // Positional, not the recorder's counter: spec §7 makes the array
       // position authoritative and strict validation rejects disagreement.
       index: i,
@@ -156,10 +185,34 @@ export function serialize(state, opts) {
       }),
       host_data: trial.hostData != null ? trial.hostData : null,
       extensions: segmentExtensions(trial),
-    };
-  });
+    }
+  };
+}
 
-  var chExtensions = {
+// Entries of a session-level stream with their `t` on the wire clock, in the
+// order given (serialize sorts the viewport stream first; see there).
+export function streamOut(entries, s0) {
+  return (entries || []).map(function (c) {
+    var out = Object.assign({}, c);
+    out.t = wireT(c.t, s0);
+    return out;
+  });
+}
+
+export { byTime, convertTimes };
+
+// What a recording states about itself once, at the start: everything but the
+// segments, the session streams and the end. A piece taker sends it once.
+export function headerOut(state, opts) {
+  return {
+    host: (opts && opts.host) || null,
+    participant_id: state.participantId != null ? state.participantId : null,
+    recording_started_at: new Date(state.sessionStartEpoch).toISOString(),
+    recording_started_at_perf: state.sessionStart,
+    user_agent: state.userAgent || '',
+    viewport: viewportState(state.viewport),
+    observed_root: state.observedRoot || null,
+    // CH's vendor facts known at the start (spec §9 namespace).
     replay_version: VERSION,
     // v1 kept these in `metadata`; spec §14 routes the config echo here.
     tier: state.tier,
@@ -169,6 +222,20 @@ export function serialize(state, opts) {
     // where an interaction happened, but it is the box the page was laid out
     // against — what a viewer should size its reconstruction by.
     viewport_client: state.viewportClient || null,
+    // Spec §8 redaction is a property of the file, but the mechanism enforcing
+    // it (redaction.js's taint set) has PAGE lifetime — so a recording that is
+    // not the page's first can inherit withholding it never configured. Without
+    // this flag an empty field means two things the file cannot distinguish:
+    // the participant typed nothing, or an earlier recording withheld it.
+    // Always present, like every other key here, so its absence means an old
+    // file rather than a clean page.
+    inherited_redaction_taint: !!state.inheritedRedactionTaint
+  };
+}
+
+// CH's session report, merged on request (pull model: the caller passes it).
+function chReportOut(ch, s0) {
+  return {
     ch_version: ch ? (ch.libraryVersion || null) : null,
     preset: ch && ch.config ? ch.config.preset : null,
     scoring: ch ? {
@@ -186,62 +253,68 @@ export function serialize(state, opts) {
       layout_shifts: convertTimes(ch.layoutShifts, s0),
       zoom_changes: convertTimes(ch.zoomChanges, s0),
       extension_injections: convertTimes(ch.extensionInjections, s0)
-    } : null,
+    } : null
+  };
+}
+
+// The one place a recording's shape and key order are written, shared by
+// serialize() and by reassembly from pieces (pieces.js), so the two cannot
+// drift apart. `p.reassembly`, when given, is pieces.js's note about a
+// delivery with parts missing.
+export function assembleRecording(p) {
+  var h = p.header;
+  var ch = p.chReport || chReportOut(null, 0);
+  var chExtensions = {
+    replay_version: h.replay_version,
+    tier: h.tier,
+    keys: h.keys,
+    viewport_client: h.viewport_client,
+    ch_version: ch.ch_version,
+    preset: ch.preset,
+    scoring: ch.scoring,
+    session_signals: ch.session_signals,
     // Guard-friction violations are CH events with no standard type (§5.8
     // forbids vendor events in the stream), so they live here with their
     // times converted like every other session-scoped CH array.
-    guard_violations: convertTimes(state.guardViolations, s0),
+    guard_violations: p.guardViolations,
     // <html>'s attribute changes (root-attrs.js), on the wire clock; the
     // keyframe snapshots ride the segments (segmentExtensions above).
-    root_attr_events: convertTimes(state.rootAttrEvents, s0),
-    capture_failures: convertTimes(state.captureFailures, s0),
-    capture_stopped: !!state.captureStopped,
-    // Spec §8 redaction is a property of the file, but the mechanism enforcing
-    // it (redaction.js's taint set) has PAGE lifetime — so a recording that is
-    // not the page's first can inherit withholding it never configured. Without
-    // this flag an empty field means two things the file cannot distinguish:
-    // the participant typed nothing, or an earlier recording withheld it.
-    // Always present, like every other key here, so its absence means an old
-    // file rather than a clean page.
-    inherited_redaction_taint: !!state.inheritedRedactionTaint
+    root_attr_events: p.rootAttrEvents,
+    capture_failures: p.captureFailures,
+    capture_stopped: p.captureStopped,
+    inherited_redaction_taint: h.inherited_redaction_taint
   };
+  if (p.reassembly) chExtensions.reassembly = p.reassembly;
 
   return {
     schema_version: SCHEMA_VERSION,
-    recorder: { name: 'cyborg-hunter-replay', version: VERSION },
-    host: opts.host || null,
-    participant_id: state.participantId != null ? state.participantId : null,
-    recording_started_at: new Date(state.sessionStartEpoch).toISOString(),
-    recording_started_at_perf: s0,
-    user_agent: state.userAgent || '',
-    viewport: viewportState(state.viewport),
-    observed_root: state.observedRoot || null,
-    stylesheets: state.stylesheets || [],
+    recorder: { name: 'cyborg-hunter-replay', version: h.replay_version },
+    host: h.host,
+    participant_id: h.participant_id,
+    recording_started_at: h.recording_started_at,
+    recording_started_at_perf: h.recording_started_at_perf,
+    user_agent: h.user_agent,
+    viewport: h.viewport,
+    observed_root: h.observed_root,
+    stylesheets: p.stylesheets,
     // Known gap: CH captures the initial sheets only. Stylesheet mutations
     // (spec §2 StylesheetEvent) need a CSSOM observer CH does not have, so the
     // array is empty rather than absent — the format's way of saying "capture
     // was on and nothing is recorded here".
     stylesheet_events: [],
-    // Time-sorted on the way out (spec §7): the capture side coalesces both
-    // viewport channels through RAF callbacks, and this is the last place that
-    // can guarantee the property for the file.
-    viewport_changes: byTime(state.viewportChanges || []).map(function (c) {
-      var out = Object.assign({}, c);
-      out.t = wireT(c.t, s0);
-      return out;
-    }),
+    viewport_changes: p.viewportChanges,
     // CH never patches Math.random and never re-executes experiment code, so
     // RNG capture was off — which §7 spells as both fields null.
     rng: null,
     rng_calls: null,
-    ended_at_perf: lastT,
-    end_reason: state.endReason || 'aborted',
+    ended_at_perf: p.end.ended_at_perf,
+    end_reason: p.end.end_reason,
     // Spec §5.7: the standard mirror of the capture-stopped signal, so a
     // player can surface truncation without reading a vendor namespace.
-    truncated: !!state.captureStopped,
+    truncated: p.captureStopped,
     extensions: { 'cyborg-hunter': chExtensions },
     // Last, matching the canonical fixture's reading order: the bulk of the
     // file after everything a reader needs to interpret it.
-    segments: segments,
+    segments: p.segments,
   };
 }
