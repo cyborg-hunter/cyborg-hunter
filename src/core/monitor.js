@@ -47,7 +47,6 @@ let _activeInstance = null; // Track for idempotent init
 var COLLECT_FOR_POST_HOC_DEFAULTS = {
   fullKeystrokeTimestamps: false,
   rawMouseTrack: true,   // see the privacy note at endTrial (flipped on 2026-09-02)
-  responseText: false,
   windowPositionLog: true,
   elementTrace: false,
   pasteDropContent: true,

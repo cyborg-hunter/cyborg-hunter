@@ -60,6 +60,8 @@ Collected data, configuration and reports all change: read
   image map; `triage.md` escapes IDs.
 - A misspelt nested privacy switch, and an invalid `redactSelector`, are now
   reported instead of silently leaving collection on.
+- `collectForPostHoc.responseText`, which no code ever read, is removed;
+  passing it now warns as an unknown key.
 - Privacy switches given an unexpected value (`'false'`, `keys: false`) now
   turn collection off with a warning instead of leaving it on; the recorder
   warns on unknown option names.

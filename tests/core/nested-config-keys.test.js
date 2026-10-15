@@ -50,6 +50,15 @@ describe('unknown keys inside nested config sections', () => {
     ]);
   });
 
+  // responseText was a placeholder that no code ever read; it is gone, and a
+  // config that still passes it is told so instead of being silently accepted.
+  it('warns for collectForPostHoc.responseText, which does nothing', () => {
+    const warnings = captureWarnings(() => {
+      monitor = init({ participantId: 'N0', collectForPostHoc: { responseText: true } });
+    });
+    assert.deepStrictEqual(warnings, ['[cyborg-hunter] Unknown config key "collectForPostHoc.responseText"']);
+  });
+
   it('warns for typos in signals and thresholds too', () => {
     const warnings = captureWarnings(() => {
       monitor = init({ participantId: 'N2', signals: { tabAWay: false }, thresholds: { typingSpeedCPS: 12, zzzz: 1 } });
@@ -66,7 +75,7 @@ describe('unknown keys inside nested config sections', () => {
       const warnings = captureWarnings(() => {
         monitor = init({
           participantId: 'N3', preset,
-          collectForPostHoc: { pasteDropContent: false, rawMouseTrack: false, responseText: true, elementTrace: true,
+          collectForPostHoc: { pasteDropContent: false, rawMouseTrack: false, elementTrace: true,
             fullKeystrokeTimestamps: true, windowPositionLog: false, foreignInputContent: false },
           signals: { keystrokeDynamics: true, paste: true, mouseTracking: false },
           thresholds: { tabAwayDurationMs: 5000, maxWindowPositions: null, typingSpeedCps: 12 }

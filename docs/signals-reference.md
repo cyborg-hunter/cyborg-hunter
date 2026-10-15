@@ -141,7 +141,7 @@ The full set of toggles (matching `PRESETS.standard.signals` in `constants.js`):
 
 `paste`, `copy`, `drop`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `keystrokeDynamics`.
 
-What is stored, beside which signals run, is set by `collectForPostHoc`: `pasteDropContent` (pasted and dropped text, default on), `foreignInputContent` (characters typed outside the experiment container, default on), `rawMouseTrack` (default on), `windowPositionLog` (default on), `fullKeystrokeTimestamps` and `elementTrace` (default off). `responseText` is accepted but has no effect. Each takes `true` or `false`; any other value turns it off, with a warning. A misspelt key in `collectForPostHoc`, `signals` or `thresholds` is reported with a console warning.
+What is stored, beside which signals run, is set by `collectForPostHoc`: `pasteDropContent` (pasted and dropped text, default on), `foreignInputContent` (characters typed outside the experiment container, default on), `rawMouseTrack` (default on), `windowPositionLog` (default on), `fullKeystrokeTimestamps` and `elementTrace` (default off). Each takes `true` or `false`; any other value turns it off, with a warning. A misspelt key in `collectForPostHoc`, `signals` or `thresholds` is reported with a console warning.
 
 ## AI-extension detector
 
