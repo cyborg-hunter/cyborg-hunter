@@ -405,6 +405,16 @@ describe('mapMutations — batch semantics', () => {
 describe('mapMutations — redaction (spec §8)', () => {
   const SENTINEL = 'hunter2-sentinel';
 
+  it('a data: URL set inside a redacted subtree patches as a removal, never the file', () => {
+    const s = session('<div id="stage"><div class="secret"><img id="i" src="pic.png"></div></div>',
+      { redactSelector: '.secret' });
+    const img = s.doc.getElementById('i');
+    const id = s.registry.peekId(img);
+    img.setAttribute('src', 'data:image/png;base64,' + SENTINEL);
+    assert.deepStrictEqual(s.flush(20),
+      [{ type: 'dom.attr', t: 20, node: id, name: 'src', value: null }]);
+  });
+
   it('suppresses dom.text inside a redacted subtree', () => {
     const s = session('<div id="stage"><div class="secret"><p>old</p></div></div>',
       { redactSelector: '.secret' });

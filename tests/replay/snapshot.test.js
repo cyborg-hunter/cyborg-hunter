@@ -447,6 +447,38 @@ describe('serializeTree — redaction (spec §8)', () => {
   });
 });
 
+describe('serializeTree — inline media in a redacted subtree (spec §8)', () => {
+  // A data: URL is the file itself: a webcam frame or a signature drawn on a
+  // canvas and shown through img.src = canvas.toDataURL() is participant
+  // content, not page content. Inside a redacted subtree such attributes are
+  // withheld; outside it, and for ordinary URLs, nothing changes.
+  const S = 'QQREDIMGDATA7';
+  it('withholds data: and blob: values of src, srcset, poster and href', () => {
+    const { root } = build(
+      '<div class="private">' +
+      `<img src="data:image/png;base64,${S}">` +
+      `<img src="pic.png" srcset="pic.png 1x, data:image/png;base64,${S} 2x">` +
+      `<video poster="data:image/png;base64,${S}" src="blob:https://example.org/1"></video>` +
+      `<a href="DATA:text/plain,${S}">x</a>` +
+      '</div>');
+    const tree = serializeTree(root, createSpan(), { redactSelector: '.private' });
+    assert.ok(!JSON.stringify(tree).includes(S));
+    assert.ok(!JSON.stringify(tree).includes('blob:'));
+    const [img1, img2, video, a] = tree.children;
+    assert.ok(!('src' in img1.attrs));
+    assert.strictEqual(img2.attrs.src, 'https://example.org/exp/pic.png');
+    assert.ok(!('srcset' in img2.attrs));
+    assert.ok(!('poster' in video.attrs) && !('src' in video.attrs));
+    assert.ok(!('href' in a.attrs));
+  });
+
+  it('keeps them outside a redacted subtree', () => {
+    const { root } = build(`<div><img src="data:image/png;base64,${S}"></div>`);
+    const tree = serializeTree(root, createSpan(), { redactSelector: '.private' });
+    assert.ok(tree.children[0].attrs.src.includes(S));
+  });
+});
+
 describe('serializeTree — annotations (spec §4)', () => {
   it('annotates canvas elements with canvas_size', () => {
     const { root } = build('<div><canvas width="120" height="80"></canvas></div>');

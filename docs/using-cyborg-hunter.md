@@ -108,7 +108,7 @@ rec.destroy();
 | `tier` | `'trace'` | `'trace'` events only; `'dom'` adds initial-DOM snapshots + a mutation log (visual replay). `'canvas'` is reserved for a future canvas tier and currently records at `dom` fidelity. |
 | `keys` | `'full'` | `'full'` records the identity of every key pressed anywhere on the page (key, code, modifiers), so typed text can be read back keystroke by keystroke, on both tiers; `'off'` records no key events. Password fields and fields matching `redactSelector` record only that a key was pressed, and when. |
 | `mouseHz` | `30` | mousemove sampling ceiling. |
-| `redactSelector` | `[data-ch-redact]` | Matching elements and everything inside them: text, the `value` attribute, typed keys, input values, form state and clipboard contents are withheld; value lengths and keystroke times are kept. Other attributes the page wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) are kept: they are page content, not what the participant entered. `input[type=password]` is always redacted, not overridable. A selector that is not valid CSS redacts nothing and is reported once (console and `capture_failures`). |
+| `redactSelector` | `[data-ch-redact]` | Matching elements and everything inside them: text, the `value` attribute, `data:` and `blob:` URLs in `src`, `srcset`, `poster` and `href` (an image drawn from a webcam or a signature pad), typed keys, input values, form state and clipboard contents are withheld; value lengths and keystroke times are kept. Other attributes the page wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) are kept: they are page content, not what the participant entered. `input[type=password]` is always redacted, not overridable. A selector that is not valid CSS redacts nothing and is reported once (console and `capture_failures`). |
 | `clipboardContent` | `false` | Paste and drop events record the text length only; copy and cut record neither text nor length. `true` records the pasted or dropped text and HTML (the jsPsych recorder's behaviour). Fields matching `redactSelector` and password inputs stay length-only either way. This is the recorder's switch; the integrity monitor has its own (see [Privacy model](#privacy-model)). |
 | `keepBait` | `false` | Keep honeypot/decoy nodes in DOM captures (red-team analysis). |
 | `root` | `document.body` | Capture root for the DOM tier. |
@@ -184,9 +184,11 @@ your code reads from that event is yours to declare.
   example), URLs with their query strings, and content a browser extension
   injects into `<body>` (a password manager's or Grammarly's UI, an AI
   sidebar). The contents of shadow roots and iframes are not recorded.
-- Redaction removes what the participant entered; attributes the page
-  itself wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) stay,
-  so a page that copies typed text into one of them exposes it.
+- Redaction removes what the participant entered, and embedded `data:` and
+  `blob:` media in the redacted area; attributes the page itself wrote
+  (`placeholder`, `title`, `aria-*`, `data-*`, `style`) stay, so a page that
+  copies typed text into one of them exposes it. Outside redaction, an image
+  shown from a `data:` URL is recorded whole.
 
 **When collection starts.** At page load, or when jsPsych starts, before the
 first trial: a consent screen on the same page is covered. Whether that

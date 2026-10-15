@@ -160,6 +160,19 @@ function isEmittedAttr(tagName, name, redacted) {
   return true;
 }
 
+// URL attributes whose value can embed a whole file. Inside a redacted
+// subtree a data: URL is the content itself (a webcam frame or a drawn
+// signature shown through img.src = canvas.toDataURL()), and a blob: URL
+// names participant-supplied media, so such values are withheld there: the
+// keyframe drops the attribute and a patch removes it. Ordinary URLs and
+// everything outside redaction are kept. Stricter than the author-attribute
+// residual above, and in line with spec §8's "not in initial_dom attributes".
+var URL_ATTRS = { src: true, srcset: true, poster: true, href: true, 'xlink:href': true };
+var INLINE_URL_RE = /(^|[\s,])(data|blob):/i;
+function isInlineMedia(name, value, redacted) {
+  return redacted && URL_ATTRS[name] === true && INLINE_URL_RE.test(String(value));
+}
+
 // The value a snapshot carries for an attribute it does emit. Images prefer
 // the resolved `src` PROPERTY: reconstruction happens in a document with a
 // different base URL, where the relative stimulus path a page author wrote
@@ -178,10 +191,13 @@ function buildAttrs(node, tagName, redacted) {
   for (var i = 0; i < attrs.length; i++) {
     var name = attrs[i].name;
     if (!isEmittedAttr(tagName, name, redacted)) continue;
-    out[name] = emittedAttrValue(node, tagName, name, attrs[i].value);
     if (name === 'src') wroteSrc = true;
+    var value = emittedAttrValue(node, tagName, name, attrs[i].value);
+    if (isInlineMedia(name, value, redacted)) continue;
+    out[name] = value;
   }
-  if (!wroteSrc && tagName === 'IMG' && typeof node.src === 'string' && node.src) {
+  if (!wroteSrc && tagName === 'IMG' && typeof node.src === 'string' && node.src &&
+      !isInlineMedia('src', node.src, redacted)) {
     out.src = node.src;
   }
   if (node.shadowRoot) out[SHADOW_FLAG_ATTR] = '';
@@ -208,7 +224,10 @@ export function attrPatchValue(node, name, redacted) {
   if (!isEmittedAttr(tagName, name, redacted)) return ATTR_WITHHELD;
   var raw = attrValue(node, name);
   if (raw === null) return null;               // removed (spec §5.1)
-  return emittedAttrValue(node, tagName, name, raw);
+  var value = emittedAttrValue(node, tagName, name, raw);
+  // Withheld inline media reads as a removal, so the player's tree matches
+  // what a keyframe of the same element would hold.
+  return isInlineMedia(name, value, redacted) ? null : value;
 }
 
 /**
