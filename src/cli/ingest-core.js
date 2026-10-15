@@ -679,19 +679,20 @@ async function attachReplayArtifacts(participants, census, config, warnings, ent
     // same start on both clocks: kept once, silently: the copy from the
     // participant's own data, else the one with more segments.
     owned = sameRecordingOnce(owned);
-    // Recordings from more than one browser (user_agent) are not one
-    // participant's pages to join, nor one session's reload: a file that
-    // names this participant is not enough to put it beside their own. The
-    // participant's own data, when it holds a recording, says which browser
-    // is theirs; without it, which is theirs cannot be told and none is
-    // attached, as for duplicate records below.
+    // A recording found outside the participant's own data, from another
+    // browser (user_agent) than theirs, is not one of their pages to join,
+    // nor one session's reload: a file that names this participant is not
+    // enough to put it beside their own. Recordings in their own data are
+    // theirs whatever browser made them (a switch to another device mid-study
+    // is itself worth seeing), and say which browsers are theirs; without
+    // any, which is theirs cannot be told and none is attached, as for
+    // duplicate records below.
     if (owned.length > 1 && new Set(owned.map(userAgentOf)).size > 1) {
       const ownAgents = new Set(owned.filter((c) => c.own).map(userAgentOf));
-      if (ownAgents.size === 1) {
-        const [agent] = ownAgents;
-        const other = owned.filter((c) => userAgentOf(c) !== agent);
-        owned = owned.filter((c) => userAgentOf(c) === agent);
-        warnings.push({ file: dir, warnings: [
+      if (ownAgents.size > 0) {
+        const other = owned.filter((c) => !c.own && !ownAgents.has(userAgentOf(c)));
+        owned = owned.filter((c) => c.own || ownAgents.has(userAgentOf(c)));
+        if (other.length) warnings.push({ file: dir, warnings: [
           `Replay recording${other.length === 1 ? '' : 's'} ${other.map((c) => c.file).sort().join(', ')} for ` +
           `${p.participantId} ${other.length === 1 ? 'was' : 'were'} recorded in another browser than the one ` +
           'in the participant\'s own data — not attached.'] });

@@ -263,6 +263,20 @@ describe('ingest: which participant a recording is credited to', () => {
     assert.match(text(warnings), /session-x\.json.*another browser/);
   });
 
+  // A participant who moved to another device mid-study (a reload on a phone)
+  // has recordings from two browsers in their own data. Both are theirs:
+  // the browser check is for recordings found elsewhere, and the switch is
+  // itself worth seeing.
+  it('two browsers within the participant\'s own data: both are kept and joined', async () => {
+    const first = withUa(recordedPieces('B', 2, 1_700_000_000_000, { recordingId: 'b-desk' }), 'Browser-Desk');
+    const second = withUa(recordedPieces('B', 1, 1_700_000_900_000, { recordingId: 'b-phone' }), 'Browser-Phone');
+    const rows = jsPsychRows('B', first).concat(jsPsychRows('B', second));
+    const { participants, warnings } = await run({ 'B.json': JSON.stringify(rows) });
+    assert.ok(participants[0].replay && participants[0].replay.recording, text(warnings));
+    assert.deepStrictEqual(labels(participants[0]), ['t0', 't1', 't0']);
+    assert.doesNotMatch(text(warnings), /another browser|different browsers/);
+  });
+
   it('recording files for one participant from different browsers, with none in their own data: none is attached, and that is reported', async () => {
     const blob = { participantId: 'P-UA', trials: [{ integrity: integrity('P-UA', 'span-0') }] };
     const page1 = withUa(recordedPieces('P-UA', 1, 1_751_600_000_000, { final: false }), 'Browser-1');
