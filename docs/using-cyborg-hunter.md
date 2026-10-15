@@ -221,7 +221,11 @@ this means a separate consent survey).
 **The participant ID.** Under the one-line setup the ID is the platform's
 (Prolific's participant ID, MTurk's worker ID) when the study URL carries one. It is the
 key of every row and of every report output (CSVs, file names, annotations),
-so the report is identifiable; treat the whole output folder as raw data.
+so the report is identifiable; treat the whole output folder as raw data. To
+share a report, build it with `--pseudonymize` (or the analyzer's
+*Pseudonymize participant IDs* box): every ID becomes a stable code, and the
+key back to the IDs is kept apart from the report. Codes replace IDs, not
+content, so pasted text and recorded pages can still identify someone.
 
 The honeypot adds hidden fields with text addressed to AI agents and records
 what an agent writes there: read its [ethics and IRB note](advanced-integration.md#honeypot-ethics-and-irb-note).

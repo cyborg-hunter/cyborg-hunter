@@ -29,6 +29,8 @@ Running `cyborg-hunter` with no subcommand defaults to `report`.
 | `--qualtrics-field <name>` | Override `qualtricsField`, the Qualtrics export column holding the payload (default `__js_cyborg_hunter`) |
 | `--participant <id>` | Filter to a single participant, by the key the report shows (for lab.js data keyed by the study's own `participantId`, that id, not ch-labjs.js's) |
 | `--no-visuals` | Skip image generation (no `canvas` package required) |
+| `--pseudonymize` | Replace participant IDs with stable codes in every output, for sharing ([configuration.md](configuration.md#output)) |
+| `--pseudonym-key-file <path>` | Where the code-to-ID key is kept (default `./cyborg-hunter-pseudonyms.csv`; never inside the output folder) |
 
 Unknown flags exit with an error rather than silently falling back to whatever config file is in cwd (fixed in v0.3.0).
 
@@ -121,7 +123,10 @@ Every output is keyed by participant ID, which under the one-line setup is the
 platform's (Prolific, MTurk). `index.html` carries pasted texts, `event-log.csv`
 every pasted, dropped and synthetically inserted text, `summary.csv` the
 honeypot's free-text answer, and `replay/` the whole recordings (typed text
-included). Treat the folder as raw, identifiable data. The CLI writes into
+included). Treat the folder as raw, identifiable data; to share it, run
+with `--pseudonymize`, which replaces every ID with a code and keeps the key
+to them outside the folder (it does not remove identifying content such as
+pasted text). The CLI writes into
 `outputDir` without deleting what an earlier run left there, so a participant
 you later exclude keeps their old files until you empty the folder.
 
