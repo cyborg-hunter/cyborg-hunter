@@ -84,6 +84,9 @@ describe('jsPsych extension lifecycle', () => {
         trialsCompleted: 5, softScoreThreshold: 6,
         config: { preset: 'strict', participantId: 'P1', thresholds: { tabAwayDurationMs: 5000, typingSpeedCps: 8 } },
         libraryVersion: '0.3.0',
+        // A session field without its own destructured name: must still
+        // reach integritySession through ...extras.
+        windowPositionsCapped: true,
       }),
       destroy: () => {},
     };
@@ -114,6 +117,7 @@ describe('jsPsych extension lifecycle', () => {
     assert.ok(last.integritySession.config, 'integritySession must carry runtime config');
     assert.equal(last.integritySession.config.preset, 'strict');
     assert.equal(last.integritySession.config.thresholds.tabAwayDurationMs, 5000);
+    assert.strictEqual(last.integritySession.windowPositionsCapped, true);
   });
 
   it('finalize() is a no-op when monitor was never initialized', () => {

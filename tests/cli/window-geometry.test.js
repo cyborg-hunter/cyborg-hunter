@@ -6,7 +6,7 @@ import { pickWindowGeometryForTrial, chooseScreenFrame, computeZoomScale } from 
 // trajectories-core.js already had chooseScreenFrame() that knows how to draw
 // nested rectangles when given metadata.{screenWidth,screenHeight,windowX,Y,W,H}.
 // What was missing: a step that translates session.windowPositions[] (the
-// 2-second-poll samples from core/signals/browser.js) into that per-trial
+// window/screen rows from core/signals/browser.js) into that per-trial
 // metadata shape, picking the sample whose timestamp is nearest the trial's
 // trialStart_perfNow anchor.
 
@@ -124,6 +124,53 @@ describe('pickWindowGeometryForTrial', () => {
     assert.equal(g.windowWidth, 1200);
     assert.equal(g.screenWidth, undefined);
     assert.equal(g.screenHeight, undefined);
+  });
+});
+
+// Change-only window logs: core/signals/browser.js pushes a row only
+// when the geometry changes, so the state in force at a trial's start is the
+// LAST row at or before the anchor, which may lie long before the trial. The
+// picker must keep that row as a candidate and prefer it over a later row.
+describe('pickWindowGeometryForTrial: change-only window logs', () => {
+  const stateA = { x: 0,   y: 0, w: 1200, h: 800, iw: 1180, ih: 760, sw: 2560, sh: 1440 };
+  const stateB = { x: 900, y: 0, w: 900,  h: 700, iw: 880,  ih: 660, sw: 2560, sh: 1440 };
+
+  it('picks the row in force at the anchor, not a row from after the trial', () => {
+    const rows = [{ ...stateA, t: 0 }, { ...stateB, t: 70000 }];
+    const g = pickWindowGeometryForTrial({ trialStart_perfNow: 60000, duration_ms: 5000 }, rows);
+    assert.equal(g.windowX, 0);
+    assert.equal(g.innerWidth, 1180);
+  });
+
+  it('picks the row in force at the anchor when the trial has no duration', () => {
+    const rows = [{ ...stateA, t: 0 }, { ...stateB, t: 70000 }];
+    const g = pickWindowGeometryForTrial({ trialStart_perfNow: 60000 }, rows);
+    assert.equal(g.windowX, 0);
+  });
+
+  it('uses the single start-of-session row for a late trial', () => {
+    const rows = [{ ...stateA, t: 0 }];
+    const g = pickWindowGeometryForTrial({ trialStart_perfNow: 600000, duration_ms: 8000 }, rows);
+    assert.equal(g.windowX, 0);
+  });
+
+  it('keeps the in-force row as a candidate when a resize happens mid-trial', () => {
+    // The mouse reaches x=1000, which only the pre-trial state A contains
+    // (1000 * 900/880 > 900 for state B). The fit rule must be able to
+    // choose A even though its row lies 60 s before the trial.
+    const rows = [{ ...stateA, t: 0 }, { ...stateB, t: 62000 }];
+    const trial = {
+      trialStart_perfNow: 60000, duration_ms: 5000,
+      mouseEvents: [{ type: 'move', x: 1000, y: 100 }],
+    };
+    const g = pickWindowGeometryForTrial(trial, rows);
+    assert.equal(g.innerWidth, 1180);
+  });
+
+  it('falls back to the earliest later row when no row precedes the anchor', () => {
+    const rows = [{ ...stateA, t: 80000 }, { ...stateB, t: 90000 }];
+    const g = pickWindowGeometryForTrial({ trialStart_perfNow: 60000, duration_ms: 5000 }, rows);
+    assert.equal(g.windowX, 0);
   });
 });
 

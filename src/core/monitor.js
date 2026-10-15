@@ -179,6 +179,10 @@ export function init(userConfig) {
     sidebarEvents: [], devToolsEvents: [],
     aiExtensionsFound: [], keyboardShortcuts: [],
     windowPositions: [], idleGaps: [],
+    // Set to true when a changed window/screen row was dropped because the
+    // log reached thresholds.maxWindowPositions (signals/browser.js).
+    // Initialised so every report carries the column, capped or not.
+    windowPositionsCapped: false,
     extensionInjections: [],
     viewportWidthShifts: _viewportWidthShifts,
     layoutShifts: _viewportWidthShifts,

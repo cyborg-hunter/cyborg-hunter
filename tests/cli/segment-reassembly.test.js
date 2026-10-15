@@ -31,6 +31,15 @@ describe('reassembleSegments', () => {
     assert.deepStrictEqual(reassembleSegments([seg(0, {}, { device }), seg(1, {})]).session.device, device);
     assert.ok(!('device' in reassembleSegments([seg(0, {}), seg(1, {})]).session));
   });
+  it('restores windowPositionsCapped as true when any segment says so, and leaves the key out when none carries it', () => {
+    const capped = (v) => ({ windowPositionsCapped: v });
+    assert.strictEqual(reassembleSegments([seg(0, {}, capped(false)), seg(1, {}, capped(false))]).session.windowPositionsCapped, false);
+    assert.strictEqual(reassembleSegments([seg(0, {}, capped(false)), seg(1, {}, capped(true))]).session.windowPositionsCapped, true);
+    // Two pages, two monitors: the first page's cap stays visible after the second page starts afresh.
+    const page2 = { ...seg(1, {}, capped(false)), pageOrigin: 31000 };
+    assert.strictEqual(reassembleSegments([seg(0, {}, capped(true)), page2]).session.windowPositionsCapped, true);
+    assert.ok(!('windowPositionsCapped' in reassembleSegments([seg(0, {}), seg(1, {})]).session));
+  });
   it('re-bases t/start of later pages to the first page origin', () => {
     const s0 = seg(0, { tabAwayEvents: [{ start: 100, duration_ms: 5 }] });
     const s1 = { ...seg(1, { tabAwayEvents: [{ start: 50, duration_ms: 5 }], sidebarEvents: [{ t: 60 }] }), pageOrigin: 1000 + 30000 };

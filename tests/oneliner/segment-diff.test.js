@@ -68,6 +68,19 @@ describe('segment differ', () => {
     assert.ok(!('device' in s1));
     assert.ok(!('device' in createSegmentDiffer(fakeMonitor()).cut(meta(0))));
   });
+  it('carries windowPositionsCapped on every segment, and only when the report has it', () => {
+    // Unlike device, the flag can turn true mid-session (the window log hits
+    // its cap), so every segment carries its current value.
+    const m = fakeMonitor();
+    m.session.windowPositionsCapped = false;
+    const d = createSegmentDiffer(m);
+    const s0 = d.cut(meta(0));
+    m.session.windowPositionsCapped = true;
+    const s1 = d.cut(meta(1));
+    assert.strictEqual(s0.windowPositionsCapped, false);
+    assert.strictEqual(s1.windowPositionsCapped, true);
+    assert.ok(!('windowPositionsCapped' in createSegmentDiffer(fakeMonitor()).cut(meta(0))));
+  });
   it('folds only non-empty gap reports into the segment', () => {
     const m = fakeMonitor();
     const d = createSegmentDiffer(m);

@@ -162,7 +162,13 @@ export function attachBrowserSignals(ctx) {
   }
 
   // ── Window position tracking ──
-  // Polls screenX/screenY every 2s for multi-monitor analysis.
+  // Records where the window sits on the screen for multi-monitor analysis:
+  // one row when the signal starts, then a row only when something changed
+  // (checked every windowPositionPollMs and 250 ms after a resize). An
+  // unchanged poll pushes nothing, so a participant who never moves the
+  // window leaves one row, not ~1,800 per hour. The state in force at any
+  // time is therefore the LAST row at or before it (the report's
+  // pickWindowGeometryForTrial relies on this).
   // Captures three coordinate systems so post-hoc plots can show the
   // browser nested inside the physical screen, plus zoom diagnostics so
   // the renderer can correctly scale mouse coords to the window outline:
@@ -176,9 +182,25 @@ export function attachBrowserSignals(ctx) {
   // CSS-level browser zoom (Cmd-Plus/Minus) has no direct API, but is
   // inferable from the w/iw ratio: zoom = w / iw (≈ 1 at 100%, < 1 zoomed
   // out, > 1 zoomed in). The renderer uses this to scale mouse coords.
+  //
+  // Session cap: thresholds.maxWindowPositions rows (null = no cap). Once
+  // the log is full, a further changed row is dropped and
+  // sessionData.windowPositionsCapped is set to true, so the flag means
+  // "a change went unrecorded", not merely "the log is full".
   if (config.signals.windowPosition && config.collectForPostHoc.windowPositionLog) {
+    var maxWindowPositions = config.thresholds.maxWindowPositions;
+    var lastWindowRow = null;
+    // Every field except `t`: a row is new only if one of these differs.
+    var WINDOW_ROW_FIELDS = ["x", "y", "w", "h", "iw", "ih", "sw", "sh", "dpr", "vvScale"];
+    var sameWindowRow = function (a, b) {
+      for (var k = 0; k < WINDOW_ROW_FIELDS.length; k++) {
+        if (a[WINDOW_ROW_FIELDS[k]] !== b[WINDOW_ROW_FIELDS[k]]) return false;
+      }
+      return true;
+    };
     var captureWindowPosition = function () {
-      sessionData.windowPositions.push({
+      if (sessionData.windowPositionsCapped) return;
+      var row = {
         x: window.screenX, y: window.screenY,
         w: window.outerWidth, h: window.outerHeight,
         iw: window.innerWidth, ih: window.innerHeight,
@@ -186,8 +208,20 @@ export function attachBrowserSignals(ctx) {
         dpr: window.devicePixelRatio,
         vvScale: window.visualViewport ? window.visualViewport.scale : null,
         t: performance.now()
-      });
+      };
+      if (lastWindowRow && sameWindowRow(row, lastWindowRow)) return;
+      // != null: a user's `maxWindowPositions: null` survives the threshold
+      // merge (Object.assign keeps null) and switches the cap off.
+      if (maxWindowPositions != null && sessionData.windowPositions.length >= maxWindowPositions) {
+        sessionData.windowPositionsCapped = true;
+        return;
+      }
+      sessionData.windowPositions.push(row);
+      lastWindowRow = row;
     };
+    // First row now, so the state at session start is on record even if
+    // the first trial begins before the first poll.
+    captureWindowPosition();
     ctx.addInterval(setInterval(captureWindowPosition, config.thresholds.windowPositionPollMs));
 
     // Resize-event capture (debounced). 2-second polling alone misses any

@@ -111,7 +111,7 @@ export function collectSegments(raw) {
 
 // Concatenates segment deltas in segmentIndex order into the finalize() dump
 // shape: { pasteCount, copyCount, dropCount, <every array key>, layoutShifts,
-// config, device? } — score fields and libraryVersion are NOT in the session (finalize()
+// config, device?, windowPositionsCapped? } — score fields and libraryVersion are NOT in the session (finalize()
 // stores them separately). Returns { session, score, pageOrigins } or null for
 // no segments. Segments from a later page (different pageOrigin) have their
 // times re-based to the first page's origin. Counters and score add up the
@@ -153,6 +153,11 @@ export function reassembleSegments(segments) {
   // existed leave the key out, as their finalize() dump does.
   const withDevice = sorted.find(s => s.device);
   if (withDevice) session.device = withDevice.device;
+  // True when any segment says so: every page runs its own monitor, and a
+  // page whose window log hit its cap stays capped for the session. Left out
+  // when no segment carries the flag (segments from before it existed).
+  const capFlags = sorted.filter(s => typeof s.windowPositionsCapped === 'boolean');
+  if (capFlags.length) session.windowPositionsCapped = capFlags.some(s => s.windowPositionsCapped);
 
   return { session, score: sessionScore(lasts), pageOrigins };
 }

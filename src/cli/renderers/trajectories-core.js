@@ -143,8 +143,8 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
     PANEL_PAD, 80
   );
 
-  // session.windowPositions is the 2-second-poll-plus-resize-event record
-  // from core/signals/browser.js. Per-trial geometry uses the sample whose
+  // session.windowPositions is the window/screen record from
+  // core/signals/browser.js (a row per change; older data: every 2 s). Per-trial geometry uses the sample whose
   // timestamp best fits the trial's mouse extent (see
   // pickWindowGeometryForTrial). Older recordings without sw/sh fields
   // yield a window-only geometry; chooseScreenFrame degrades gracefully.
@@ -484,10 +484,19 @@ export function pickWindowGeometryForTrial(trial, windowPositions) {
   //      candidates.
   //   2. If no in-range sample fits, pick the in-range sample with the
   //      largest viewport (best chance of mouse showing inside outline).
-  //   3. If nothing in range at all, fall back to the global closest-in-time.
+  //   3. If nothing in range at all, fall back to the last sample at or
+  //      before the anchor, else the global closest-in-time.
   //
   // Without this, a trial that spanned a resize would get an arbitrary
   // snapshot and mouse plotted outside the outline — visually misleading.
+  //
+  // The sample in force at the anchor (the LAST one with t <= anchor) is
+  // always a candidate. Since the monitor logs on change rather than every
+  // 2 s (core/signals/browser.js), that row can lie long before the trial;
+  // without it, a trial in a stretch with no changes would have no in-range
+  // sample and fall back to whatever row was closest in time, possibly one
+  // from after the trial. With old 2 s data the row in force is at most one
+  // poll before the anchor, so adding it changes little there.
 
   const duration = trial.duration_ms || 0;
   const trialEnd = anchor + duration;
@@ -502,11 +511,17 @@ export function pickWindowGeometryForTrial(trial, windowPositions) {
   function viewportArea(s) { return (s.iw || 0) * (s.ih || 0); }
   function timeDelta(s) { return Math.abs(s.t - anchor); }
 
+  // The sample in force at the anchor: the latest one with t <= anchor.
+  const inForce = windowPositions.reduce(
+    (a, s) => (s.t <= anchor && (!a || s.t >= a.t)) ? s : a, null);
+
   // Allow a 1-second slop on each end of the trial to account for resize
   // event debouncing (samples may land slightly outside the trial window).
-  const inRange = duration > 0
-    ? windowPositions.filter(s => s.t >= anchor - 1000 && s.t <= trialEnd + 1000)
-    : windowPositions;
+  // A trial without a duration is treated as a point at the anchor (same
+  // slop); considering every sample would let a row from minutes after the
+  // trial outrank the one in force.
+  const inRange = windowPositions.filter(s => s.t >= anchor - 1000 && s.t <= trialEnd + 1000);
+  if (inForce && !inRange.includes(inForce)) inRange.unshift(inForce);
 
   let best;
   const fitting = inRange.filter(fits);
@@ -515,7 +530,10 @@ export function pickWindowGeometryForTrial(trial, windowPositions) {
   } else if (inRange.length > 0) {
     best = inRange.reduce((a, b) => viewportArea(a) >= viewportArea(b) ? a : b);
   } else {
-    best = windowPositions.reduce((a, b) => timeDelta(a) <= timeDelta(b) ? a : b);
+    // Only reached when no sample precedes the anchor (inForce would
+    // otherwise be in inRange); the inForce preference is kept explicit so
+    // the rule does not depend on that.
+    best = inForce || windowPositions.reduce((a, b) => timeDelta(a) <= timeDelta(b) ? a : b);
   }
 
   const out = {

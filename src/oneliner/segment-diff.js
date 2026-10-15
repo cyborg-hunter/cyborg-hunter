@@ -27,10 +27,10 @@
 // (src/cli/segment-reassembly.js keeps a copy; a test pins the two equal).
 export const ALIAS_KEYS = { layoutShifts: 'viewportWidthShifts' };
 
-// Session arrays the core fills on a timer whatever the participant does
-// (windowPositions: one sample every 2 s, src/core/signals/browser.js). A cut
-// saves them like any other, but their new entries alone do not make a span
-// worth cutting (see newEntries()).
+// Session arrays the core fills in the background, not from participant
+// evidence (windowPositions: a row per window/screen change, checked on a
+// timer, src/core/signals/browser.js). A cut saves them like any other, but
+// their new entries alone do not make a span worth cutting (see newEntries()).
 export const BACKGROUND_KEYS = { windowPositions: true };
 
 export function createSegmentDiffer(monitor) {
@@ -80,6 +80,10 @@ export function createSegmentDiffer(monitor) {
       // The device facts are read once, at startSession, and are not an
       // array, so the first segment carries them, as it carries config.
       if (meta.segmentIndex === 0 && report.device) seg.device = report.device;
+      // windowPositionsCapped is not an array either, but unlike the device
+      // facts it can turn true mid-session (the window log reaching its cap,
+      // signals/browser.js), so every segment carries its current value.
+      if (typeof report.windowPositionsCapped === 'boolean') seg.windowPositionsCapped = report.windowPositionsCapped;
       return seg;
     }
   };

@@ -21,6 +21,7 @@ export const DEFAULT_THRESHOLDS = {
   sidebarPollMs: 2000,         // sidebar + zoom check interval
   extensionScanMs: 30000,      // AI extension DOM re-scan interval
   windowPositionPollMs: 2000,  // screenX/screenY polling interval
+  maxWindowPositions: 2000,    // session cap on windowPositions rows (null = no cap)
   elementTraceHz: 500,         // elementsFromPoint sampling interval (ms)
   tabAwayDurationMs: 3000,     // tab-away longer than this counts toward soft score (and is classified as "long" in reports)
   typingSpeedCps: 10           // chars/sec above this counts toward soft score

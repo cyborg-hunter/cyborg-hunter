@@ -163,7 +163,7 @@ var TRIAL = /* @__PURE__ */ Object.assign({
 }, EVENTS);
 
 // The monitor's session arrays as segment-diff.js ships them, without
-// windowPositions (a 2 s poll of where the window sits on the screen).
+// windowPositions (where the window sits on the screen, a row per change).
 var DELTAS = {
   tabAwaySums: nums, tabAwayEvents: TAB_AWAY, charsPerSec: nums, idleGaps: IDLE,
   sidebarEvents: /* @__PURE__ */ listOf({ type: label, method: label, deltaIW: num, innerWidth: num, baselineIW: num, gap: num, duration_ms: num, t: num }),
