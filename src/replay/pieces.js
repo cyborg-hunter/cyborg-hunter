@@ -180,7 +180,9 @@ export function groupPieces(list) {
  * without a framework never sends one, and 'aborted' would claim a
  * screenout) with ended_at_perf at the last observed moment, and the CH vendor block names what is missing as
  * `reassembly: { complete: false, missing_seq_ranges, missing_end }`, the
- * gaps as [from, to] ranges of seq (never one entry per seq). Throws only
+ * gaps as [from, to] ranges of seq (never one entry per seq), plus
+ * `skipped_segments` when dom-tier continuations after a gap were left out
+ * (their keyframe may be the missing piece). Throws only
  * when the first piece, the one with the header, is missing.
  *
  * Stream order: each piece's viewport entries are sorted, and pieces hold
@@ -210,14 +212,29 @@ export function reassemblePieces(pieces) {
     expect = sq + 1;
   });
 
+  // A dom-tier continuation (initial_dom null) patches the tree of the
+  // keyframe before it, by node id. After a gap that keyframe may be the
+  // missing one, and the patches would land on another tree's nodes (typed
+  // text on the wrong element), so continuations are left out from a gap to
+  // the next keyframe. The trace tier has no keyframes: nothing is left out.
+  var keyframed = first.header.tier === 'dom' || first.header.tier === 'canvas';
   var segments = [];
+  var skipped = 0;
+  var orphaned = false;
   var vc = [], gv = [], ra = [], cf = [];
   var stylesheets = [];
   var captureStopped = false;
   var end = null;
+  var prevSeq = -1;
   seqs.forEach(function (sq) {
     var p = bySeq.get(sq);
+    if (sq !== prevSeq + 1) orphaned = true;
+    prevSeq = sq;
     p.segments.forEach(function (seg) {
+      if (keyframed && orphaned) {
+        if (seg.initial_dom == null) { skipped++; return; }
+        orphaned = false;
+      }
       segments.push(Object.assign({}, seg, { index: segments.length }));
     });
     var st = p.streams || {};
@@ -244,6 +261,7 @@ export function reassemblePieces(pieces) {
   var reassembly = (missing.length || finalSeq == null)
     ? { complete: false, missing_seq_ranges: missing, missing_end: finalSeq == null }
     : null;
+  if (reassembly && skipped) reassembly.skipped_segments = skipped;
 
   return assembleRecording({
     header: h,

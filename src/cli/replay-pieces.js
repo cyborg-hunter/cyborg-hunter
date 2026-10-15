@@ -85,7 +85,11 @@ export function recordingsFromPieces(sources) {
         warnings.push({ file: paths.join(', '), warnings: [
           `Replay for ${recording.participant_id} rebuilt from the pieces in the saved data, but ` +
           `${count} of them are missing (rows not saved, or a file left out): ` +
-          'the replay skips those parts.'] });
+          'the replay skips those parts.' +
+          (note.skipped_segments
+            ? ` ${note.skipped_segments} more segment${note.skipped_segments === 1 ? ' was' : 's were'} left out ` +
+              'after a gap, because the page snapshot they build on is in a missing piece.'
+            : '')] });
       }
       recordings.push({ recording, recordingId: id, paths });
     } catch (e) {

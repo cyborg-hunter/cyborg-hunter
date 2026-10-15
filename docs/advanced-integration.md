@@ -338,6 +338,8 @@ The saved object:
 - **lab.js:** the same columns on lab.js's own rows (`cyborgHunterReplayFinal` on the root row and the last trial row).
 - **Pages without a framework:** in the second hidden field of every POST form, and in `CyborgHunter.data()` as `cyborgHunterReplay` ([The hidden form fields](#vanilla-segmentation-reference)).
 
+Keep every row's `cyborgHunterReplay`: a filter applied before saving (`jsPsych.data.get().filter(...)`) drops pieces. The CLI rebuilds the recording without the missing ones and says how many are missing; on the `dom` tier it also leaves out the parts that follow a gap until the next full page snapshot, since they only make sense on top of the one that is missing.
+
 The rows grow by the recording's size, about 0.5–1.5 MB per participant on the trace tier for a 15-minute study ([Data volume](using-cyborg-hunter.md#data-volume-and-delivery) has the platform limits). `CyborgHunter.replay()` still returns the whole recording, for code that already saves it; the CLI counts a recording it finds both ways once.
 
 **`ch-qualtrics.js`** does not carry the recorder: a survey field holds about 20 KB, so a recording could never be kept there, and replay stays opt-in. With `data-replay` it loads `cyborg-hunter-replay.js` from the directory `ch-qualtrics.js` came from (or `data-replay-src="…"`), and you send `CyborgHunter.replay()` to your own server ([qualtrics.md](qualtrics.md)).
