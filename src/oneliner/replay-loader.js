@@ -242,6 +242,9 @@ export function createVanillaReplay(opts) {
     var R = win.CyborgHunterReplay;
     if (!R || typeof R.attach !== 'function') throw new Error(src + ' loaded but did not define CyborgHunterReplay');
     var api = R.attach(recorderConfig(ctx, ctx.config.replay));
+    // Pieces for the saved data (replayAutoSaved): the lab.js rows, or the
+    // POST of a page without a framework.
+    if (replayAutoSaved(ctx)) ctx.replayTaker = api.pieceTaker({ host: null });
     var handle = {
       api: api,
       stopped: false,
@@ -270,6 +273,8 @@ export function createVanillaReplay(opts) {
             }
             handle.api = fresh;
             ctx.replayRecording = null;   // replay() takes the new recording
+            // A new recording, so new pieces (a new recording_id).
+            if (replayAutoSaved(ctx)) ctx.replayTaker = fresh.pieceTaker({ host: null });
           } else {
             return;   // still recording: no pagehide stopped it
           }
@@ -291,6 +296,13 @@ export function createVanillaReplay(opts) {
     }
     return handle;
   });
+}
+
+// The next piece (pieces.js) for a host's row or POST, or null: replay is
+// off or not auto-saved, the recorder is not running yet, or nothing closed
+// since the last piece. Throws on failure; the caller records the note.
+export function takePiece(ctx) {
+  return ctx.replayTaker ? ctx.replayTaker.take({ skipEmpty: true }) : null;
 }
 
 // The session's last piece (pieces.js), for the host's session end: stops

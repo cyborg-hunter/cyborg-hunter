@@ -40,6 +40,7 @@
 import { VERSION } from '../../shared/constants.js';
 import { MESSAGES } from '../errors.js';
 import { startFrictionNow } from '../guards.js';
+import { takePiece, takeFinalPiece } from '../replay-loader.js';
 
 function message(e) { return String((e && e.message) || e); }
 
@@ -381,6 +382,15 @@ export function installLabJsAdapter(opts) {
       });
     }
     step(function () { if (ctx.replay) ctx.replay.endTrial(); });
+    // The recording's last piece, with the other final fields (root row and
+    // last trial row; the reader counts a repeated piece once).
+    step(function () {
+      var last = takeFinalPiece(ctx);
+      if (last) {
+        fields.cyborgHunterReplayFinal = last.piece;
+        fields.integrityReplayMeta = last.meta;
+      }
+    });
     step(function () { ctx.monitor.destroy(); });
     if (problems.length) {
       console.error(MESSAGES.sessionEndFailed(problems.join('; ')));
@@ -426,6 +436,12 @@ export function installLabJsAdapter(opts) {
     var params = paramsOf(c);
     for (var k in fields) put(c, params, ds, k, fields[k]);
     followReplay();
+    // The recording's piece that just closed (the trial's segment), in the
+    // same row as its integrity segment (pieces.js).
+    try {
+      var piece = takePiece(ctx);
+      if (piece) put(c, params, ds, 'cyborgHunterReplay', piece);
+    } catch (e) { noteError(data, 'replay: ' + message(e)); }
     try {
       if (ctx.debug && ctx.debug.stats) ctx.debug.stats().segmentWriteMs.push(performance.now() - t0);
       if (ctx.debug && ctx.debug.refresh) ctx.debug.refresh();
