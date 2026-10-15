@@ -196,4 +196,28 @@ describe('file names made from participant ids', () => {
       rmSync(out, { recursive: true, force: true });
     }
   });
+
+  it('ids that differ only in case get plot files that differ in more than case, and each pane shows its own', async () => {
+    const { participants, config } = await ingestFilesOf({
+      'lower.json': participantFile('abc', 2, { charsPerSec: 4 }),
+      'upper.json': participantFile('ABC', 2, { charsPerSec: 5 }),
+      'other.json': participantFile('Xyz', 2, { charsPerSec: 5 }),
+    });
+    const { files } = await report(participants, config);
+    const images = [...files.keys()].filter((f) => f.startsWith('images/'));
+    // One file per participant and plot on a file system that ignores case.
+    assert.strictEqual(new Set(images.map((f) => f.toLowerCase())).size, images.length, images.join(', '));
+    assert.ok(files.has('images/trajectories_Xyz.png'), 'an id that meets no other keeps its name');
+    const html = files.get('index.html');
+    assert.strictEqual(images.filter((f) => f.startsWith('images/trajectories_')).length, 3);
+    const srcs = ['abc', 'ABC'].map((pid) => {
+      const from = html.indexOf(`id="p-${pid}"`);
+      const next = html.indexOf('id="p-', from + 1);
+      const pane = html.slice(from, next === -1 ? undefined : next);
+      const src = pane.match(/src="(images\/trajectories_[^"]+)"/)[1];
+      assert.ok(files.has(src), src);
+      return src;
+    });
+    assert.notStrictEqual(srcs[0].toLowerCase(), srcs[1].toLowerCase(), 'the two panes show two files');
+  });
 });

@@ -28,7 +28,7 @@ import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
 import { inlineSafeSrc } from '../../shared/inline-safe.js';
 import { annotationBlock } from './annotation-client.js';
-import { sanitize } from './report-id.js';
+import { sanitize, fileIds } from './report-id.js';
 
 /**
  * Renders the report's index.html as a string. `opts.replayClientSrc` is the
@@ -116,9 +116,13 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // longer need a top-level swap — the per-participant fallback is the contract
   // exercised by html-index.test.js (default note) and
   // html-index-core.test.js (injected override).
+  // The plots' file names, as report-core.js wrote them (report-id.js).
+  let imageNames = null;
   const detailHtml = triage.map((t, i) => {
     const participant = participants.find(p => p.participantId === t.participantId);
-    return renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, /* defaultVisible */ i === 0, imageSources, replayShownExternally);
+    imageNames = imageNames || fileIds(participants.map(p => p.participantId));
+    return renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, /* defaultVisible */ i === 0, imageSources, replayShownExternally,
+      imageNames.get(String(t.participantId)) ?? sanitize(t.participantId));
   }).join('\n');
 
   const html = `<!DOCTYPE html>
@@ -1187,7 +1191,7 @@ function esc(str) {
 // and images. The `hidden` attribute is omitted on the
 // first pane so the report has a default selection on load; client JS toggles
 // `hidden` on the others when the user clicks a different cohort row.
-function renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, defaultVisible, imageSources, replayShownExternally) {
+function renderDetail(t, participant, config, visualsRendered, visualsUnavailableNote, defaultVisible, imageSources, replayShownExternally, imageName) {
   const sanitized = sanitize(t.participantId);
   const tier = tierOf(t);
   const s = t.summary || {};
@@ -1206,7 +1210,7 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
   // pointing at a PNG that doesn't exist in the sandboxed iframe.
   const inlineImages = imageSources ? imageSources[t.participantId] : null;
   const imageBlock = (key, file, label, alt) => {
-    const src = inlineImages ? inlineImages[key] : `images/${file}_${sanitized}.png`;
+    const src = inlineImages ? inlineImages[key] : `images/${file}_${imageName}.png`;
     if (inlineImages && (src === null || src === undefined)) return '';
     return `
     <div class="image-block">

@@ -35,9 +35,10 @@ import { buildCursorLimitsJson } from './renderers/cursor-limits-core.js';
 import { buildTriageMd } from './renderers/triage-md-core.js';
 import { buildEventLogCsv } from './renderers/event-log-core.js';
 import { buildExtensionsCsv } from './renderers/extensions-core.js';
-import { drawTrajectoryGrid, sanitize as sanitizeTrajectory } from './renderers/trajectories-core.js';
-import { drawSessionTimeline, sanitize as sanitizeTimeline, shortId } from './renderers/session-timeline-core.js';
-import { drawTypingProfile, sanitize as sanitizeTyping } from './renderers/typing-profile-core.js';
+import { drawTrajectoryGrid } from './renderers/trajectories-core.js';
+import { drawSessionTimeline, shortId } from './renderers/session-timeline-core.js';
+import { drawTypingProfile } from './renderers/typing-profile-core.js';
+import { fileIds } from './renderers/report-id.js';
 import { buildReplayAssets } from './renderers/replay-assets-core.js';
 import { renderIndexHtml } from './renderers/html-index-core.js';
 import { bytesToBase64 } from '../shared/base64.js';
@@ -193,13 +194,16 @@ export async function buildReport(participants, config, deps) {
       if (deps.keepImages) (images[pid] = images[pid] || {})[kind] = bytes;
     };
     const triageMap = new Map(triage.map(t => [t.participantId, t]));
+    // The names html-index-core.js links the plots by (report-id.js).
+    const names = fileIds(participants.map(p => p.participantId));
+    const fileId = (p) => names.get(String(p.participantId));
     // Each participant's plot in a try of its own, as the session timeline
     // below: one participant's data must never stop the report.
     for (const p of participants) {
       try {
         const canvas = drawTrajectoryGrid(p, triageMap.get(p.participantId), config, deps.createCanvas);
         if (!canvas) continue;
-        await emit(`images/trajectories_${sanitizeTrajectory(p.participantId)}.png`, canvas, p.participantId, 'trajectories');
+        await emit(`images/trajectories_${fileId(p)}.png`, canvas, p.participantId, 'trajectories');
       } catch (err) {
         warn(`  [warn] trajectories failed for ${shortId(p.participantId)}: ${err.message}`);
       }
@@ -210,7 +214,7 @@ export async function buildReport(participants, config, deps) {
       try {
         const canvas = await drawSessionTimeline(p, config, deps.createCanvas);
         if (!canvas) continue;
-        await emit(`images/session_timeline_${sanitizeTimeline(p.participantId)}.png`, canvas, p.participantId, 'sessionTimeline');
+        await emit(`images/session_timeline_${fileId(p)}.png`, canvas, p.participantId, 'sessionTimeline');
         rendered++;
       } catch (err) {
         // Defensive: never let one bad payload kill the whole report.
@@ -222,7 +226,7 @@ export async function buildReport(participants, config, deps) {
       try {
         const canvas = drawTypingProfile(p, config, deps.createCanvas);
         if (!canvas) continue;
-        await emit(`images/typing_profile_${sanitizeTyping(p.participantId)}.png`, canvas, p.participantId, 'typingProfile');
+        await emit(`images/typing_profile_${fileId(p)}.png`, canvas, p.participantId, 'typingProfile');
       } catch (err) {
         warn(`  [warn] typing profile failed for ${shortId(p.participantId)}: ${err.message}`);
       }
