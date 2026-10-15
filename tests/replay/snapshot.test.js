@@ -460,6 +460,7 @@ describe('serializeTree — inline media in a redacted subtree (spec §8)', () =
       `<img src="pic.png" srcset="pic.png 1x, data:image/png;base64,${S} 2x">` +
       `<video poster="data:image/png;base64,${S}" src="blob:https://example.org/1"></video>` +
       `<a href="DATA:text/plain,${S}">x</a>` +
+      `<object data="data:image/png;base64,${S}"></object>` +
       '</div>');
     const tree = serializeTree(root, createSpan(), { redactSelector: '.private' });
     assert.ok(!JSON.stringify(tree).includes(S));
