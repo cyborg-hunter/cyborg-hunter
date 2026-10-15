@@ -13,6 +13,7 @@
   "scripts": {
     "build": "node build.js",
     "sync:conformance": "node scripts/sync-conformance.mjs",
+    "pin:snippets": "node scripts/pin-snippets.mjs",
     "pretest": "node scripts/sync-conformance.mjs --check",
     "prepack": "node scripts/sync-conformance.mjs",
     "test:pack-smoke": "node scripts/pack-smoke.mjs",
