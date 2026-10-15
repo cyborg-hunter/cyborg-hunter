@@ -3,7 +3,7 @@
 // creates the key file and a second one that reuses it.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -55,6 +55,30 @@ describe('CLI flags: pseudonymize', () => {
     assert.equal(keyFileInsideOutput('/s/k.csv', '/s/report'), false);
     assert.equal(keyFileInsideOutput('/s/report-keys/k.csv', '/s/report'), false);
     assert.equal(keyFileInsideOutput('/s/..k.csv', '/s/report'), false);
+  });
+
+  it('keyFileInsideOutput: the output folder reached through a symbolic link is the same folder', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ch-pseudo-link-'));
+    try {
+      mkdirSync(join(dir, 'real-out'));
+      symlinkSync(join(dir, 'real-out'), join(dir, 'link-out'));
+      assert.equal(keyFileInsideOutput(join(dir, 'real-out', 'k.csv'), join(dir, 'link-out')), true);
+      assert.equal(keyFileInsideOutput(join(dir, 'link-out', 'new', 'k.csv'), join(dir, 'real-out')), true);
+      assert.equal(keyFileInsideOutput(join(dir, 'k.csv'), join(dir, 'link-out')), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keyFileInsideOutput: on a file system that ignores case, a path that differs only in case is the same folder', { skip: !['darwin', 'win32'].includes(process.platform) }, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ch-pseudo-case-'));
+    try {
+      mkdirSync(join(dir, 'out'));
+      assert.equal(keyFileInsideOutput(join(dir, 'Out', 'k.csv'), join(dir, 'out')), true);
+      assert.equal(keyFileInsideOutput(join(dir, 'OUT2', 'k.csv'), join(dir, 'out2')), true, 'neither folder exists yet');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

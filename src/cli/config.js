@@ -6,8 +6,8 @@
 //   2. cyborg-hunter.config.json (or --config path) — project-specific
 //   3. CLI flags (--data, --output, etc.) — ad-hoc overrides
 
-import { readFileSync, existsSync } from 'fs';
-import { resolve, join, relative, isAbsolute, sep } from 'path';
+import { readFileSync, existsSync, realpathSync } from 'fs';
+import { resolve, join, relative, isAbsolute, sep, dirname, basename } from 'path';
 import { mergeConfig, cliConfigWarnings } from './config-core.js';
 import { KEY_FILE_NAME } from './pseudonymize-core.js';
 
@@ -125,8 +125,32 @@ export function parseFlags(args) {
 
 // True when `keyFile` would be written inside `outputDir` (or is it): the
 // pseudonym key must never travel with a report that is shared. Both paths
-// are absolute (loadConfig resolves them).
+// are absolute (loadConfig resolves them). They are compared as the file
+// system sees them, not as written: through symbolic links (realPath), and
+// ignoring case where the file system does (the defaults on macOS and
+// Windows), or `link-out/` and `Out/` would pass for other folders than
+// `real-out/` and `out/`.
 export function keyFileInsideOutput(keyFile, outputDir) {
-  const rel = relative(outputDir, keyFile);
+  const fold = process.platform === 'darwin' || process.platform === 'win32'
+    ? (p) => p.toLowerCase() : (p) => p;
+  const rel = relative(fold(realPath(outputDir)), fold(realPath(keyFile)));
   return rel === '' || (rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel));
+}
+
+// The real path of `p` when it exists; otherwise that of its nearest
+// existing parent with the rest appended (neither the key file nor the
+// output folder need exist before the run).
+function realPath(p) {
+  const rest = [];
+  let at = p;
+  for (;;) {
+    try {
+      return join(realpathSync.native(at), ...rest);
+    } catch {
+      const up = dirname(at);
+      if (up === at) return p;
+      rest.unshift(basename(at));
+      at = up;
+    }
+  }
 }
