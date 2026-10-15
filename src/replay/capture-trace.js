@@ -872,7 +872,25 @@ export function attachTraceCapture(rec, env) {
   // wiring's.
   rec.onTrialStart(function () {
     pruneScrolledElements();
+    markRedactedContents();
   });
+
+  // The taint the snapshot walk gives the dom tier, for every tier: each
+  // element inside a redacted container is marked at the session's start and
+  // at every trial's, so a field the page moves out of the container before
+  // the participant types in it stays withheld (floorsFor reads the mark).
+  // Without it the trace tier marked only fields typed into while inside.
+  // An invalid selector redacts nothing (index.js reports it).
+  function markRedactedContents() {
+    var found;
+    try { found = doc.querySelectorAll(config.redactSelector); } catch (err) { return; }
+    for (var i = 0; i < found.length; i++) {
+      markRedacted(found[i], opts.taint);
+      var inside = found[i].querySelectorAll('*');
+      for (var j = 0; j < inside.length; j++) markRedacted(inside[j], opts.taint);
+    }
+  }
+  markRedactedContents();
 
   // ── Frame-coalesced work at segment boundaries ──
   // Inputs, scrolls, touch moves and viewport changes wait for the next

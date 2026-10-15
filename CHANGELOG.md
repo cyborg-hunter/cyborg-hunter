@@ -67,6 +67,8 @@ Collected data, configuration and reports all change: read
 - Friction no longer traps a participant whose browser cannot go fullscreen
   (the tab and focus checks still run; the sidebar check does not).
 - The same recording found in the rows and in a saved file counts once.
+- On the trace tier, a field the page moves out of a `data-ch-redact`
+  container stays redacted, as on the dom tier.
 
 ## [0.15.0] — 2026-10-11
 
