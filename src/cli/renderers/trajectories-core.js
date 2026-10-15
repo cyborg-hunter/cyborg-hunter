@@ -35,6 +35,10 @@ const PANEL_PAD = 40;
 const TITLE_HEIGHT = 40;
 const HEADER_HEIGHT = 96;   // accommodates 3-line legend
 const PANEL_MARGIN = 15;    // inset between panel border and content area
+// At most this many panels, the first trials in display order: the canvas
+// grows by a row per five trials, and node-canvas and browsers refuse a side
+// longer than 32767 pixels (86 rows). The header says when trials are left out.
+const MAX_PANELS = 400;
 
 // Color palette. Hoisted from inline string literals to give the rendering
 // style one place to look. Names match the visual element they style.
@@ -104,8 +108,10 @@ export function orderTrials(trials, config) {
 // canvas, or null when the participant has no trials to plot; report-core.js
 // writes no PNG in that case.
 export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
-  const trials = orderTrials(p.trials, config);
-  if (trials.length === 0) return null;
+  const ordered = orderTrials(p.trials, config);
+  if (ordered.length === 0) return null;
+  const trials = ordered.slice(0, MAX_PANELS);
+  const shown = trials.length < ordered.length ? ` — first ${trials.length} of ${ordered.length} trials` : '';
 
   // Compute grid layout
   const cols = Math.min(5, trials.length);
@@ -121,7 +127,7 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   ctx.fillRect(0, 0, canvasW, canvasH);
 
   // Header
-  const headerText = `${p.participantId} — Score: ${formatScore(triageEntry?.score ?? '?')} — ${triageEntry?.reason ?? ''}`;
+  const headerText = `${p.participantId}${shown} — Score: ${formatScore(triageEntry?.score ?? '?')} — ${triageEntry?.reason ?? ''}`;
   ctx.fillStyle = COLORS.headerText;
   ctx.font = 'bold 16px sans-serif';
   ctx.fillText(headerText, PANEL_PAD, 30);

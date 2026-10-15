@@ -193,10 +193,16 @@ export async function buildReport(participants, config, deps) {
       if (deps.keepImages) (images[pid] = images[pid] || {})[kind] = bytes;
     };
     const triageMap = new Map(triage.map(t => [t.participantId, t]));
+    // Each participant's plot in a try of its own, as the session timeline
+    // below: one participant's data must never stop the report.
     for (const p of participants) {
-      const canvas = drawTrajectoryGrid(p, triageMap.get(p.participantId), config, deps.createCanvas);
-      if (!canvas) continue;
-      await emit(`images/trajectories_${sanitizeTrajectory(p.participantId)}.png`, canvas, p.participantId, 'trajectories');
+      try {
+        const canvas = drawTrajectoryGrid(p, triageMap.get(p.participantId), config, deps.createCanvas);
+        if (!canvas) continue;
+        await emit(`images/trajectories_${sanitizeTrajectory(p.participantId)}.png`, canvas, p.participantId, 'trajectories');
+      } catch (err) {
+        warn(`  [warn] trajectories failed for ${shortId(p.participantId)}: ${err.message}`);
+      }
     }
     log(`  trajectories — ${participants.length} images`);
     let rendered = 0;
@@ -213,9 +219,13 @@ export async function buildReport(participants, config, deps) {
     }
     log(`  session timelines — rendered (${rendered}/${participants.length})`);
     for (const p of participants) {
-      const canvas = drawTypingProfile(p, config, deps.createCanvas);
-      if (!canvas) continue;
-      await emit(`images/typing_profile_${sanitizeTyping(p.participantId)}.png`, canvas, p.participantId, 'typingProfile');
+      try {
+        const canvas = drawTypingProfile(p, config, deps.createCanvas);
+        if (!canvas) continue;
+        await emit(`images/typing_profile_${sanitizeTyping(p.participantId)}.png`, canvas, p.participantId, 'typingProfile');
+      } catch (err) {
+        warn(`  [warn] typing profile failed for ${shortId(p.participantId)}: ${err.message}`);
+      }
     }
     log(`  typing profiles — rendered`);
     visualsRendered = true;

@@ -20,13 +20,18 @@ const CHART_HEIGHT = 200;
 const TOP_PAD = 50;
 const BOTTOM_PAD = 50;
 const LEFT_PAD = 60;
+// At most this many bars, the first trials: the canvas grows by a bar per
+// trial, and node-canvas and browsers refuse a side longer than 32767 pixels
+// (861 bars). The title says when trials are left out.
+const MAX_BARS = 800;
 
 // ── Per-participant renderer ─────────────────────────────────────────────
 // Returns the drawn canvas, or null if there's no data to draw (caller
 // decides what "no data" means — report-core.js writes no PNG).
 export function drawTypingProfile(p, config, createCanvas) {
-  const trials = p.trials;
-  if (trials.length === 0) return null;
+  if (p.trials.length === 0) return null;
+  const trials = p.trials.slice(0, MAX_BARS);
+  const shown = trials.length < p.trials.length ? ` (first ${trials.length} of ${p.trials.length} trials)` : '';
 
   // Per-participant threshold line: prefer the typing-speed cutoff the library
   // actually screened this participant with (saved in session.config.thresholds)
@@ -63,7 +68,7 @@ export function drawTypingProfile(p, config, createCanvas) {
   // Title
   ctx.fillStyle = '#333';
   ctx.font = 'bold 14px sans-serif';
-  ctx.fillText(`Typing Speed Profile — ${p.participantId}`, LEFT_PAD, 20);
+  ctx.fillText(`Typing Speed Profile — ${p.participantId}${shown}`, LEFT_PAD, 20);
   ctx.font = '10px sans-serif';
   ctx.fillStyle = '#666';
   ctx.fillText(`Threshold: ${threshold} chars/sec`, LEFT_PAD, 35);

@@ -78,3 +78,59 @@ describe('an entry that is not an object in a signal array', () => {
     assert.ok(files.has('event-log.csv'));
   });
 });
+
+// node-canvas refuses a side longer than 32767 pixels, and so do browsers.
+const MAX_SIDE = 32767;
+function limitedCanvasFactory(log) {
+  const make = makeRecordingCanvasFactory(log);
+  return (w, h) => {
+    if (w > MAX_SIDE) throw new Error('Canvas width cannot exceed ' + MAX_SIDE);
+    if (h > MAX_SIDE) throw new Error('Canvas height cannot exceed ' + MAX_SIDE);
+    return make(w, h);
+  };
+}
+
+describe('the plots of one participant', () => {
+  it('a plot that fails for one participant is a warning naming them; the report and the others\' plots are written', async () => {
+    const { participants, config } = await ingestFilesOf({
+      'BOOM.json': participantFile('BOOM', 2, { charsPerSec: 4 }),
+      'B.json': participantFile('B', 2, { charsPerSec: 4 }),
+    });
+    // A canvas whose text drawing fails whenever it names BOOM.
+    const make = makeRecordingCanvasFactory([]);
+    const createCanvas = (w, h) => {
+      const c = make(w, h);
+      const ctx = c.getContext();
+      const failing = new Proxy(ctx, { get: (t, k) => (k === 'fillText'
+        ? (s, ...rest) => { if (String(s).includes('BOOM')) throw new Error('cannot draw'); return t.fillText(s, ...rest); }
+        : t[k]) });
+      return { ...c, getContext: () => failing };
+    };
+    const { built, files } = await report(participants, config, { createCanvas });
+    assert.ok(files.has('index.html'));
+    for (const kind of ['trajectories', 'typing_profile']) {
+      assert.ok(files.has(`images/${kind}_B.png`), kind + ' for B');
+      assert.ok(!files.has(`images/${kind}_BOOM.png`), kind + ' for BOOM');
+      const label = kind === 'trajectories' ? 'trajectories' : 'typing profile';
+      assert.ok(built.warnings.some((w) => w.includes(label) && w.includes('BOOM') && w.includes('cannot draw')),
+        `a warning names BOOM for ${label}: ${built.warnings.join(' / ')}`);
+    }
+  });
+
+  it('a participant with many trials still gets plots, each canvas within the size browsers and node-canvas allow', async () => {
+    const { participants, config } = await ingestFilesOf({
+      'MANY.json': participantFile('MANY', 900, { charsPerSec: 4 }),
+    });
+    const log = [];
+    const { built, files } = await report(participants, config, { createCanvas: limitedCanvasFactory(log) });
+    assert.deepStrictEqual(built.warnings, []);
+    assert.ok(files.has('images/trajectories_MANY.png'));
+    assert.ok(files.has('images/typing_profile_MANY.png'));
+    const sizes = log.filter((e) => e[0] === 'createCanvas');
+    assert.ok(sizes.every(([, w, h]) => w <= MAX_SIDE && h <= MAX_SIDE), JSON.stringify(sizes));
+    // Each capped plot says how many trials it shows.
+    const texts = log.filter((e) => e[0] === 'fillText').map((e) => String(e[1]));
+    assert.ok(texts.some((t) => /first 400 of 900 trials/.test(t)), 'the trajectory grid says it is capped');
+    assert.ok(texts.some((t) => /first 800 of 900 trials/.test(t)), 'the typing profile says it is capped');
+  });
+});
