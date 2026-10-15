@@ -740,6 +740,45 @@ describe('tolerant instantiation — a malformed node must not abort a mount', (
     assert.equal(skipped, N - 99999);
   });
 
+  // A chain of nested elements deeper than any engine's HTML parser builds
+  // (512) is small on the wire and used to overflow the walk's stack, which
+  // ended the mount. Below the depth limit the subtree is dropped and counted.
+  // Depths are measured with loops, and nodes are never handed to assert's
+  // diff (see `same`).
+  const chain = (depth, firstId) => {
+    let node = { id: firstId, kind: 'element', tag: 'i', attrs: {}, children: [] };
+    for (let i = 1; i < depth; i++) node = { id: firstId + i, kind: 'element', tag: 'i', attrs: {}, children: [node] };
+    return node;
+  };
+  const depthBelow = (node) => {
+    let d = 0;
+    for (let n = node; n.firstChild; n = n.firstChild) d++;
+    return d;
+  };
+
+  it('drops what lies deeper than 512 levels instead of overflowing the stack', () => {
+    const { root, skipped, idMap } = instantiateTree(chain(20000, 1), freshDoc());
+    assert.equal(depthBelow(root), 512, 'the root, and 512 levels under it');
+    assert.equal(idMap.size, 513);
+    assert.equal(skipped, 1, 'one dropped subtree, counted once');
+
+    const doc = freshDoc();
+    const mount = mountTree({ id: 0, kind: 'element', tag: 'body', attrs: {}, children: [chain(20000, 1)] }, doc.body, doc);
+    assert.equal(depthBelow(doc.body), 512, 'the body counts as the top level');
+    assert.equal(mount.skipped, 1);
+  });
+
+  it('a dom.add cannot stack subtrees past the same depth', () => {
+    const doc = freshDoc();
+    const mount = mountTree({ id: 0, kind: 'element', tag: 'body', attrs: {}, children: [chain(500, 1)] }, doc.body, doc);
+    // Node 1 is the innermost of the chain, 500 levels under the body.
+    applyPatches([{ type: 'dom.add', t: 1, parent: 1, before: null, node: chain(100, 1000) }], mount);
+    assert.equal(depthBelow(doc.body), 512);
+    assert.equal(mount.skipped, 1);
+    assert.equal(mount.idMap.has(1000 + 99 - 11), true, 'the add kept the levels that fit');
+    assert.equal(mount.idMap.has(1000 + 99 - 12), false);
+  });
+
   it('a well-formed tree reports zero skips, and the corpus has one bad name', () => {
     // NAME-TOKEN refusals are routed into the
     // same counter, so the corpus's single malformed attribute — the `<` in

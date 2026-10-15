@@ -342,21 +342,25 @@
       var url = v.slice(ASSET_REF.length);
       return own.call(assets, url) && typeof assets[url] === 'string' ? assets[url] : v;
     }
-    function tree(node) {
-      if (!node || typeof node !== 'object') return;
+    // Nothing past dom-instantiate.js's MAX_DEPTH is ever mounted, so the walk
+    // stops there too, which keeps a nested chain from overflowing the stack
+    // here before the mount can drop it. The constant is in scope because the
+    // build concatenates that module ahead of this file.
+    function tree(node, depth) {
+      if (!node || typeof node !== 'object' || depth > MAX_DEPTH) return;
       var attrs = node.attrs;
       if (attrs && typeof attrs === 'object') {
         for (var name in attrs) if (own.call(attrs, name)) attrs[name] = value(attrs[name]);
       }
       var kids = Array.isArray(node.children) ? node.children : [];
-      for (var i = 0; i < kids.length; i++) tree(kids[i]);
+      for (var i = 0; i < kids.length; i++) tree(kids[i], depth + 1);
     }
     (Array.isArray(model.segments) ? model.segments : []).forEach(function (s) {
       if (!s || typeof s !== 'object') return;
-      tree(s.initialDom);
+      tree(s.initialDom, 0);
       (Array.isArray(s.events) ? s.events : []).forEach(function (e) {
         if (!e || typeof e !== 'object') return;
-        if (e.type === 'dom.add') tree(e.node);
+        if (e.type === 'dom.add') tree(e.node, 0);
         else if (e.type === 'dom.attr') e.value = value(e.value);
       });
     });

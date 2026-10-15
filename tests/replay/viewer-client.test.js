@@ -546,6 +546,23 @@ describe('counters, chips and defects', () => {
     assert.equal(v.chip('data-ch-defect').style.display, 'none');
   });
 
+  it('plays a keyframe nested far deeper than any page, dropping what lies past 512 levels', () => {
+    // Small on the wire, and it used to overflow the stack in the viewer's
+    // own walks over the model (the experiment-asset expansion runs over
+    // every keyframe before anything mounts) as well as in the mount.
+    let node = { id: 2, kind: 'element', tag: 'i', attrs: {}, children: [] };
+    for (let i = 3; i < 20002; i++) node = { id: i, kind: 'element', tag: 'i', attrs: {}, children: [node] };
+    const model = buildViewerModel(baseRecording({
+      segments: [segment({ initial_dom: bodyKeyframe([node]) })],
+    }));
+    model.assets = {};
+    const v = bootModel(model);
+    // The body is level 0; its child (id 20001) is level 1.
+    assert.ok(v.dbg.getNode(20001 - 511), 'level 512 is mounted');
+    assert.equal(v.dbg.getNode(20001 - 512), undefined, 'level 513 is not');
+    assert.equal(v.dbg.getCounters().skipped, 1);
+  });
+
   it('renders a trace-tier recording without an iframe and still folds the camera', () => {
     const v = boot(baseRecording({
       extensions: { 'cyborg-hunter': { tier: 'trace' } },

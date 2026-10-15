@@ -62,6 +62,20 @@
 // under 1,000 nodes.
 var MAX_NODES = 100000;
 
+// And at most MAX_DEPTH levels under the reconstruction root (the root is
+// level 0; on the body-root path the frame's <body> is). The walk recurses
+// once per level, so a nested chain that is small on the wire overflowed the
+// stack and ended the mount: thousands of levels in node, tens of thousands
+// in a browser. A subtree that would start below the limit is dropped and
+// counted into `skipped` once, like any node no DOM here could hold. 512 is
+// where the HTML parser stops nesting in Chromium, Firefox and WebKit
+// (measured: 5,000 nested <div>s through innerHTML come out 512, 512 and 511
+// deep), so no page built from markup loses anything; the committed
+// fixtures' deepest keyframe is 11 levels. A `dom.add` is measured from its
+// live parent, so stacked adds stay under the same limit, and so does every
+// other walk over the live tree (`purgeSubtree`).
+var MAX_DEPTH = 512;
+
 // Executable content never enters the reconstruction as itself. A foreign
 // producer may serialise `script`/`noscript` (CH's own capture skips them
 // outright); they are instantiated as inert `<template>`s, which the UA never
@@ -364,7 +378,7 @@ function skipSetFor(tag) {
   return null;
 }
 
-function instantiateNode(domNode, ctx, parentNs) {
+function instantiateNode(domNode, ctx, parentNs, depth) {
   // Tolerant posture (design §4): an unusable node is skipped and counted, not
   // thrown on. `instantiateTree` has no try/catch by design — one guard at the
   // boundary, one predicate, the same answer in every realm — so this is the
@@ -372,7 +386,7 @@ function instantiateNode(domNode, ctx, parentNs) {
   // keyframe mount. The §11 tolerant loader admits all of these shapes into
   // the model, so the viewer is where they arrive.
   ctx.budget--;   // every visit counts against MAX_NODES; the loop checks it
-  if (!domNode || typeof domNode !== 'object') {
+  if (!domNode || typeof domNode !== 'object' || depth > MAX_DEPTH) {
     ctx.skipped++;
     return null;
   }
@@ -388,7 +402,7 @@ function instantiateNode(domNode, ctx, parentNs) {
       ctx.skipped++;
       return null;
     }
-    node = instantiateElement(domNode, ctx, tag, parentNs);
+    node = instantiateElement(domNode, ctx, tag, parentNs, depth);
   }
   if (!bind(ctx, domNode.id, node)) {
     // The id belongs to the reconstruction root and `bind` refused to move it
@@ -404,7 +418,7 @@ function instantiateNode(domNode, ctx, parentNs) {
   return node;
 }
 
-function instantiateElement(domNode, ctx, tag, parentNs) {
+function instantiateElement(domNode, ctx, tag, parentNs, depth) {
   var inert = INERT_TAGS[tag] === true;
   var isFrame = tag === 'iframe';
   var ns = namespaceFor(tag, parentNs);
@@ -470,7 +484,7 @@ function instantiateElement(domNode, ctx, tag, parentNs) {
     ctx.canvases.set(domNode.id, { w: size.w, h: size.h });
   }
 
-  instantiateChildren(el, childrenOf(domNode, ctx), ctx, childNamespaceOf(tag, createdNs));
+  instantiateChildren(el, childrenOf(domNode, ctx), ctx, childNamespaceOf(tag, createdNs), depth + 1);
   return el;
 }
 
@@ -482,13 +496,13 @@ function childrenOf(domNode, ctx) {
   return [];
 }
 
-function instantiateChildren(parent, kids, ctx, ns) {
+function instantiateChildren(parent, kids, ctx, ns, depth) {
   for (var i = 0; i < kids.length; i++) {
     if (ctx.budget <= 0) {
       ctx.skipped += kids.length - i;
       return;
     }
-    var child = instantiateNode(kids[i], ctx, ns);
+    var child = instantiateNode(kids[i], ctx, ns, depth);
     if (child) parent.appendChild(child);
   }
 }
@@ -613,7 +627,7 @@ function purgeSubtree(ctx, node) {
  */
 function instantiateTree(domNode, doc) {
   var ctx = newContext(doc);
-  return result(ctx, instantiateNode(domNode, ctx, null));
+  return result(ctx, instantiateNode(domNode, ctx, null, 0));
 }
 
 /**
@@ -662,7 +676,7 @@ function mountTree(domNode, body, doc) {
   var tag = domNode.kind === 'element' || domNode.kind == null
     ? String(domNode.tag == null ? '' : domNode.tag).toLowerCase() : null;
   if (tag !== 'body') {
-    var root = instantiateNode(domNode, ctx, null);
+    var root = instantiateNode(domNode, ctx, null, 0);
     if (root) body.appendChild(root);
     return result(ctx, root);
   }
@@ -673,7 +687,7 @@ function mountTree(domNode, body, doc) {
   // keyframe whose descendant repeats the root's id cannot re-bind it away from
   // the frame's own body mid-mount — the mount-time half of `bind`'s exception.
   ctx.root = body;
-  instantiateChildren(body, childrenOf(domNode, ctx), ctx, null);
+  instantiateChildren(body, childrenOf(domNode, ctx), ctx, null, 1);
   return result(ctx, body);
 }
 
@@ -700,6 +714,15 @@ function resolve(mount, id) {
   return mount.idMap.get(id);
 }
 
+// A live node's level under the reconstruction root (see MAX_DEPTH), counted
+// with a loop: the tree it measures is the one a recursive walk could not be
+// trusted with.
+function depthOf(node, mount) {
+  var d = 0;
+  for (var n = node; n && n !== mount.root; n = n.parentNode) d++;
+  return d;
+}
+
 function tagNameOf(node) {
   return node && node.tagName ? String(node.tagName).toLowerCase() : '';
 }
@@ -717,7 +740,7 @@ function applyAdd(patch, mount) {
   // moves.
   var childNs = childNamespaceOf(tagNameOf(parent), parent.namespaceURI);
   mount.budget = MAX_NODES;   // each dom.add subtree is its own instantiation
-  var node = instantiateNode(patch.node, mount, childNs);
+  var node = instantiateNode(patch.node, mount, childNs, depthOf(parent, mount) + 1);
   if (!node) return;              // already counted into `skipped`
 
   var ref = null;
