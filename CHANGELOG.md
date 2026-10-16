@@ -26,7 +26,8 @@ Collected data, configuration and reports all change: read
   `pseudonymKeyFile`, and an analyzer setting; the key stays out of the report.
 - `scripts/pin-snippets.mjs` (`npm run pin:snippets`): every documented
   script tag names an exact version and carries an SRI `integrity` hash;
-  `--check` runs in the tests.
+  `--check` runs in the tests, and after each release a workflow job checks
+  the tags against the files published on npm.
 - `thresholds.maxWindowPositions`; the session report's
   `windowPositionsCapped`.
 - `thresholds.maxPasteDropChars` (20,000) and `maxPasteDropCharsPerTrial`
@@ -95,8 +96,21 @@ Collected data, configuration and reports all change: read
 - The same recording found in the rows and in a saved file counts once.
 - On the trace tier, a field the page moves out of a `data-ch-redact`
   container stays redacted, as on the dom tier.
-- In a page served as `application/xhtml+xml` (lower-case tag names), the
-  password floor now holds; element ids are read from the attribute, so a
+- On a page without a framework, a back/forward-cache restore (Back, then a
+  resubmit) records the restored visit as a new recording, which the CLI
+  joins with the other pages; a recording the page started itself before
+  ch.js attached goes on (ch.js records nothing and warns); ch.js warns once,
+  and notes it in the data, when its hidden POST fields pass 1 MB; a
+  `data-replay-src` on ch.js is reported as doing nothing.
+- A patch refused by a per-trial cap no longer leaves later replay segments
+  pointing at nodes the recording never got; friction's page copies are
+  taken only when they will be kept, and a destroyed recorder unsubscribes.
+- `signals` switches fail closed like `collectForPostHoc`.
+- The kept participant ID continues from a parent folder only for the
+  study's own bare link, and is per survey on every Qualtrics address but
+  the legacy layout's.
+- In a page served as `application/xhtml+xml` (lower-case tag names), inline
+  scripts are no longer recorded and the password floor holds; element ids are read from the attribute, so a
   form with a field named `id` no longer corrupts a click's anchor.
 
 ## [0.15.0] — 2026-10-11
