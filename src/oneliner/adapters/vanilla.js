@@ -110,6 +110,10 @@ import { piecesSoFar } from '../replay-loader.js';
 
 var KEY_PREFIX = 'cyborg-hunter:oneliner:session:';
 var WARN_CHARS = 4000000;
+// The hidden POST fields together above this many characters (about 1 MB)
+// get one warning: nginx refuses a request body over 1 MB by default and
+// Express's form parser over 100 kb, which loses the participant's answers.
+var POST_WARN_CHARS = 1000000;
 var HIDDEN_INPUT = 'cyborgHunterData';
 var REPLAY_INPUT = 'cyborgHunterReplay';
 
@@ -149,6 +153,7 @@ export function installVanillaAdapter(opts) {
   var warnedSize = false;
   var noticedGet = false;       // the GET-form console.info, once per page
   var notes = [];               // cyborgHunterError notes, this page's and earlier pages'
+  var warnedPost = false;       // the POST-size warning, once per page
 
   function readState() {
     try {
@@ -422,8 +427,18 @@ export function installVanillaAdapter(opts) {
     }
     if (!input) input = hiddenInput(form, HIDDEN_INPUT);
     else input.setAttribute('data-record-exclude', '');   // one the page placed itself (hiddenInput)
-    input.value = JSON.stringify(blob());
-    setReplayInput(form);
+    var replay = replayJson();
+    var data = JSON.stringify(blob());
+    var chars = data.length + (replay === null ? 0 : replay.length);
+    if (chars > POST_WARN_CHARS && !warnedPost) {
+      warnedPost = true;
+      console.warn(MESSAGES.postFieldsLarge());
+      notes.push('the hidden POST fields were ' + (chars / 1e6).toFixed(1) + ' MB on page ' + pageCount +
+        '; a server that refuses bodies this large loses the submission (nothing is missing from this data)');
+      data = JSON.stringify(blob());
+    }
+    input.value = data;
+    setReplayInput(form, replay);
     written = { form: form, cuts: cuts };
     return replaces;
   }
@@ -439,8 +454,7 @@ export function installVanillaAdapter(opts) {
       return null;
     }
   }
-  function setReplayInput(form) {
-    var json = replayJson();
+  function setReplayInput(form, json) {
     var input = form.querySelector('input[name="' + REPLAY_INPUT + '"]');
     if (json === null) {
       if (input) input.parentNode.removeChild(input);

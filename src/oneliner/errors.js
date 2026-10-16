@@ -355,6 +355,15 @@ export const MESSAGES = {
       'nothing is lost; rename your ' + key + ' column if you want ch-labjs.js\'s value under its usual name',
       DOCS + 'labjs.md#where-the-data-goes');
   },
+  // console.warn, once per page (adapters/vanilla.js carry()): the two hidden
+  // POST fields together passed about 1 MB. Common server defaults refuse a
+  // body that large, and a refused POST loses the participant's answers.
+  postFieldsLarge: function () {
+    return formatError('The data ch.js adds to this form is over 1 MB',
+      'the session and its recording ride in hidden POST fields, and common server defaults refuse a request body that large (nginx 1 MB, Express\'s form parser 100 kb), which loses the participant\'s answers',
+      'raise your server\'s request-body limit (nginx client_max_body_size, Express urlencoded limit) and check one full-length pilot\'s saved size',
+      DOCS + 'advanced-integration.md#vanilla-segmentation-reference');
+  },
   // console.warn, once per page: the study's lab.js datastore has persistence
   // (its storage is set), so lab.js rewrites every row into sessionStorage or
   // localStorage at each commit; past the browser's limit its commit() throws

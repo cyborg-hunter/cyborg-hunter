@@ -11,6 +11,7 @@ import { CyborgHunterReplayExtension } from '../../src/jspsych/extension-cyborg-
 import { groupPieces, reassemblePieces } from '../../src/replay/pieces.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
 import { mergeRecordings } from '../../src/replay/merge.js';
+import { MESSAGES } from '../../src/oneliner/errors.js';
 
 class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
 const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
@@ -189,6 +190,30 @@ describe('ch.js with the bundled recorder on a page without a framework', () => 
     for (const r of recs) assert.deepStrictEqual(validateStrict(r).errors, []);
     assert.doesNotThrow(() => mergeRecordings(recs), 'the two visits join in time order');
     assert.deepStrictEqual(errors, []);
+  });
+
+  // Common server defaults refuse a POST body above 1 MB (nginx) or 100 kb
+  // (Express), losing the participant's answers. Past 1 MB of hidden fields
+  // ch.js warns once in the console and notes it in the saved data.
+  it('hidden fields past 1 MB: one console warning and a note in the data', async () => {
+    const warns = [];
+    console.warn = (m) => warns.push(String(m));
+    await start();
+    const f = form();
+    const ta = f.querySelector('textarea');
+    // Six trials of 200,000 pasted characters (the per-trial cap) each.
+    for (let round = 0; round < 6; round++) {
+      for (let i = 0; i < 10; i++) {
+        const paste = new win.Event('paste', { bubbles: true, cancelable: true });
+        paste.clipboardData = { getData: () => 'x'.repeat(20000) };
+        ta.dispatchEvent(paste);
+      }
+      submit(f);
+    }
+    submit(f);
+    const data = JSON.parse(f.querySelector('input[name="cyborgHunterData"]').value);
+    assert.match(String(data.cyborgHunterError), /MB/);
+    assert.equal(warns.filter((w) => w === MESSAGES.postFieldsLarge()).length, 1);
   });
 
   it('a GET form gets no replay input', async () => {

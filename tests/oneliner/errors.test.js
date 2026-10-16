@@ -228,6 +228,11 @@ const CASES = {
     fix: 'nothing is lost; rename your integrity column if you want ch-labjs.js\'s value under its usual name',
     link: DOCS + 'labjs.md#where-the-data-goes'
   },
+  postFieldsLarge: {
+    args: [],
+    fix: 'raise your server\'s request-body limit (nginx client_max_body_size, Express urlencoded limit) and check one full-length pilot\'s saved size',
+    link: DOCS + 'advanced-integration.md#vanilla-segmentation-reference'
+  },
   labjsPersistentStore: {
     args: [],
     fix: 'remove persistence from your lab.js datastore, or set data-replay="off" and collectForPostHoc: { rawMouseTrack: false } for a long study',
