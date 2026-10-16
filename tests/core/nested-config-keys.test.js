@@ -134,3 +134,19 @@ describe('collectForPostHoc switches fail closed', () => {
     assert.deepStrictEqual(off.warnings, []);
   });
 });
+
+// The same for the detection switches in `signals`: `paste: 'false'` used to
+// leave paste capture on (the listeners test truthiness).
+describe('signals switches fail closed', () => {
+  it("signals.paste: 'false' turns paste capture off, with a warning", () => {
+    const warnings = captureWarnings(() => { monitor = init({ participantId: 'SF', signals: { paste: 'false' } }); });
+    monitor.startSession();
+    monitor.startTrial({ trialId: 't1' });
+    const ev = new win.Event('paste', { bubbles: true });
+    ev.clipboardData = { getData: () => 'PASTED' };
+    win.document.body.dispatchEvent(ev);
+    const trial = monitor.endTrial();
+    assert.strictEqual(trial.pasteEvents.length, 0);
+    assert.ok(warnings.some((w) => /signals\.paste/.test(w) && /off/.test(w)), warnings.join('\n'));
+  });
+});

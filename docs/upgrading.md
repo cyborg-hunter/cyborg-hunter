@@ -76,8 +76,8 @@ study with it: it lists what is collected by default.
 - `thresholds.maxWindowPositions` (default 2000, `null` for no cap).
 - `thresholds.maxPasteDropChars` (default 20000) and
   `thresholds.maxPasteDropCharsPerTrial` (default 200000); `null` for no cap.
-- Privacy switches fail closed: a `collectForPostHoc` switch that is not
-  `true` or `false`, or a recorder `keys`, `tier`, `clipboardContent` or
+- Privacy switches fail closed: a `collectForPostHoc` or `signals` switch
+  that is not `true` or `false`, or a recorder `keys`, `tier`, `clipboardContent` or
   `keepBait` outside its documented values, now collects the less (off,
   `'trace'`) and warns. Before, `'false'` or `keys: false` left collection
   on. The recorder also warns on unknown option names.
