@@ -519,8 +519,17 @@ export function attachDomCapture(rec, env) {
           redactSelector: opts.redactSelector,
           taint: opts.taint,
         });
+        var refused = false;
         for (var i = 0; i < events.length; i++) {
-          rec.pushRecord(events[i], events[i].t);
+          if (rec.pushRecord(events[i], events[i].t) === false) refused = true;
+        }
+        // mapMutations numbered these patches into the span as delivered; a
+        // patch the recorder refused (a per-trial cap, or not recording) never
+        // reached the file, so the span now names nodes no player holds. Empty
+        // it and keyframe the next segment, as a resume does (onResume).
+        if (refused) {
+          span.reset();
+          cadence.hasKeyframe = false;
         }
         // What the span has cost in deltas so far (see `shouldKeyframe`).
         // Measured once per batch rather than once per patch: one stringify of

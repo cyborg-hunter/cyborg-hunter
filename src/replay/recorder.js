@@ -415,11 +415,14 @@ export function createRecorder(userConfig) {
 
   // The single path into the buffer, behind `pushRecord`. Lifecycle gate,
   // implicit trial opening and both per-trial caps live here.
+  // Returns whether the event was stored: false when the recorder is not
+  // recording or a per-trial cap refused it (capture-dom resets its span
+  // then, since a refused dom.* patch was already numbered into it).
   function storeEvent(e) {
     if (state === 'destroyed') {
       throw new Error('[cyborg-hunter-replay] event pushed to a destroyed recorder');
     }
-    if (state === 'created' || state === 'stopped') return; // not recording
+    if (state === 'created' || state === 'stopped') return false; // not recording
     if (!currentTrial) {
       // RE-ENTRANT: the hooks below run while the caller is halfway through
       // pushing, and one of them is capture-dom's keyframe hook. That is why
@@ -438,10 +441,10 @@ export function createRecorder(userConfig) {
     }
     // Per-trial stop (not the session-wide flag): a trial that already hit a
     // cap drops further events, but a fresh trial is unaffected.
-    if (stoppedTrials.has(currentTrial)) return;
+    if (stoppedTrials.has(currentTrial)) return false;
     if (currentTrial.events.length >= config.maxEventsPerTrial) {
       signalCaptureStopped(currentTrial, e.t, { limit_events: config.maxEventsPerTrial });
-      return;
+      return false;
     }
     // Size cap: stop capturing once the trial's estimated serialized length
     // exceeds maxCharsPerTrial, so a few huge values can't blow up the payload
@@ -454,11 +457,12 @@ export function createRecorder(userConfig) {
       soFar += estimateEventChars(e);
       if (soFar > config.maxCharsPerTrial) {
         signalCaptureStopped(currentTrial, e.t, { limit_chars: config.maxCharsPerTrial });
-        return;
+        return false;
       }
       trialChars.set(currentTrial, soFar);
     }
     currentTrial.events.push(e);
+    return true;
   }
 
   var recorder = {
@@ -585,7 +589,7 @@ export function createRecorder(userConfig) {
     pushRecord: function (record, tOverride) {
       var e = Object.assign({ type: record.type, t: null }, record);
       e.t = tOverride != null ? tOverride : performance.now();
-      storeEvent(e);
+      return storeEvent(e);
     },
 
     // Session-level viewport stream (spec §2). Not a segment event: the format

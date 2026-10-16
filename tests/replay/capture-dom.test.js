@@ -422,6 +422,29 @@ describe('guard-friction cooperation', () => {
   // The subscription is the recorder's like its DOM listeners: destroyed
   // with it. Before, a destroyed recorder (CyborgHunter.replay(), a re-attach)
   // stayed subscribed and serialized the page at every later violation.
+  // A dom.* patch the per-trial cap refused was still numbered into the
+  // span, so the span claimed the player holds nodes the file never got, and
+  // the next segment could continue from them. A refusal now empties the
+  // span and the next segment keyframes.
+  it('after the per-trial cap refuses patches, the next segment keyframes', () => {
+    // A page large enough that three small patches do not trigger a size keyframe.
+    const big = '<div id="stage">' + '<p>' + 'text '.repeat(40) + '</p>'.repeat(1) + '<p>filler paragraph</p>'.repeat(200) + '</div>';
+    const h = withFriction(big, { maxEventsPerTrial: 1, keyframeEvery: 10 });
+    h.rec.startTrial({ trialId: 't1' });
+    h.flush();
+    const add = (id) => { const el = h.doc.createElement('span'); el.id = id; h.root().appendChild(el); h.flush(); };
+    add('a'); add('b'); add('c');
+    h.rec.endTrial();
+    h.rec.startTrial({ trialId: 't2' });
+    h.rec.endTrial();
+    h.rec.startTrial({ trialId: 't3' });
+    h.rec.endTrial();
+    const [t1, t2] = h.rec.getState().trials;
+    assert.ok(t1.initialDom || t1.initial_dom, 'sanity: the first segment keyframes');
+    assert.ok(h.rec.getState().trials.length >= 2);
+    assert.ok(t2.initialDom || t2.initial_dom, 'the segment after the refusal carries a keyframe');
+  });
+
   it('destroy() unsubscribes from friction', () => {
     const h = withFriction('<div id="stage"><p>x</p></div>');
     h.rec.destroy();
