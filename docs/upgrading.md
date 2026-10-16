@@ -5,7 +5,7 @@ What each release changes in **collected data**, **configuration** and
 the CLI on data collected with an older version. The complete change list is
 in [CHANGELOG.md](../CHANGELOG.md).
 
-## Unreleased — from 0.15
+## 0.16.0 — from 0.15
 
 This release changes all three: collected data (replay is on by default),
 configuration (new switches, stricter warnings) and reports (joined replays,

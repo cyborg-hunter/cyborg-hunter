@@ -3,7 +3,7 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.16.0] — 2026-10-15
 
 Hardening before an institutional review: what is collected, kept and sent is
 now stated in the docs and matches the code, session replay is on by default
