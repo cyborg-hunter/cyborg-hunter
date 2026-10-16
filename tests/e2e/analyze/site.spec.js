@@ -4,10 +4,13 @@
 // dropped stylesheet with the recorded external image blocked, and the
 // participant switch, and the files the demo hands over; first, the top
 // bar. Every test runs under the same request guard as engines.spec.js.
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { parseKeyFile } from '../../../src/cli/pseudonymize-core.js';
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame, reportSelected, downloadZip,
-  sampleFiles, sampleRecordingFiles, cliSampleTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, ROOT, OFFLINE_FILE } from './support.mjs';
+  sampleFiles, sampleRecordingFiles, cliSampleTree, withoutRunTime, makeReplayCohort, startSentinel, requested, settleRequests, SAMPLE_ORDER, ROOT, OFFLINE_FILE, SAMPLE_DIR } from './support.mjs';
 
 test('the top bar names the page and links the demo, GitHub and the offline file; the files step has no policy paragraph', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
@@ -254,4 +257,43 @@ test('annotations made in the report frame are kept by the page through a re-ana
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="annotations-csv"]')]);
   expect(readFileSync(await csv.path(), 'utf8').split('\n')[1]).toMatch(/^DEMO-9mop,hard,[^,]+,exclude,/);
   await assertOnlyAllowed(page, seen, allow);
+});
+
+// The pseudonym key the analyzer remembers: the CLI's key file, loaded in the
+// settings, gives the CLI's codes; the page keeps its secret through a
+// reload, and Forget key removes it.
+test('the CLI\'s pseudonym key file: the same codes as the CLI, remembered after a reload, gone after Forget key', async ({ page, baseURL }) => {
+  const out = mkdtempSync(join(tmpdir(), 'ch-e2e-key-'));
+  try {
+    const keyPath = join(out, 'keys.csv');
+    execFileSync(process.execPath, [join(ROOT, 'bin', 'cyborg-hunter.js'), 'report', '--pseudonymize', '--pseudonym-key-file', keyPath, '--output', join(out, 'report')],
+      { cwd: SAMPLE_DIR, env: { ...process.env, NO_UPDATE_NOTIFIER: '1' }, stdio: 'pipe' });
+    const secret = parseKeyFile(readFileSync(keyPath, 'utf8')).secret;
+    const allow = siteAllowlist(baseURL);
+    const seen = await guardNetwork(page, allow);
+    await page.goto('/analyze/');
+    await waitReady(page);
+    await page.setInputFiles('[data-role="file-input"]', sampleFiles());
+    await expect(page.locator('[data-role="key-status"]')).toHaveText('No key yet: the first pseudonymized report makes one.');
+    await page.setInputFiles('[data-role="key-input"]', keyPath);
+    await expect(page.locator('[data-role="key-note"]')).toHaveText('Key loaded from keys.csv.');
+    await expect(page.locator('[data-role="key-status"]')).toHaveText(/^Key in use: [0-9a-f]{8}$/);
+    const status = await page.locator('[data-role="key-status"]').textContent();
+    await page.check('[name="pseudonymize"]');
+    await buildReport(page);
+    const zip = await downloadZip(page);
+    expect(zip.text('summary.csv')).toEqual(readFileSync(join(out, 'report', 'summary.csv'), 'utf8'));
+    expect(await page.evaluate(() => localStorage.getItem('ch-pseudonym-key'))).toEqual(secret);
+
+    await page.reload();
+    await waitReady(page);
+    await page.setInputFiles('[data-role="file-input"]', sampleFiles());
+    await expect(page.locator('[data-role="key-status"]')).toHaveText(status);
+    await page.click('[data-action="forget-key"]');
+    await expect(page.locator('[data-role="key-status"]')).toHaveText('No key yet: the first pseudonymized report makes one.');
+    expect(await page.evaluate(() => localStorage.getItem('ch-pseudonym-key'))).toBeNull();
+    await assertOnlyAllowed(page, seen, allow);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
 });

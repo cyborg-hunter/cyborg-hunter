@@ -113,6 +113,12 @@ var PANEL_HTML =
   '<p><label><input type="checkbox" name="pseudonymize"> Pseudonymize participant IDs</label> ' +
   '<span class="hint">The report and its zip show a code in place of each ID; the key that maps the codes back is a separate download, never in the zip. ' +
   'Codes replace IDs, not content: typed or pasted text and what a replay recorded can still identify a participant.</span></p>' +
+  // The pseudonym key (pseudonym-key.js), which the page wires: not a
+  // config value, so neither read nor written with the fields above.
+  '<p><span data-role="key-status"></span> ' +
+  '<button type="button" class="secondary" data-action="forget-key" hidden>Forget key</button> ' +
+  '<label class="file-link">Use a key file…<input type="file" accept=".csv,text/csv" data-role="key-input"></label></p>' +
+  '<div class="hint" data-role="key-note" role="status" hidden></div>' +
   '<p><button type="button" class="secondary" data-action="export-config">Export config</button> ' +
   '<span class="hint" data-role="assets-hint" hidden>The exported config sets assetsDir to ./assets: for the CLI, put the experiment\'s CSS and image files in an assets folder beside it.</span></p>' +
   '</fieldset></form>';
@@ -127,7 +133,8 @@ export function createSettingsPanel(container, onChange) {
   var form = container.querySelector('form');
   var field = function (name) { return form.elements.namedItem(name); };
   form.addEventListener('submit', function (e) { e.preventDefault(); });
-  form.addEventListener('change', function () { onChange(); });
+  // A key file picked is not a settings change (the page handles it).
+  form.addEventListener('change', function (e) { if (!(e.target && e.target.dataset && e.target.dataset.role === 'key-input')) onChange(); });
   return {
     write: function (s) {
       field('softScoreThreshold').value = s.softScoreThreshold == null ? '' : String(s.softScoreThreshold);

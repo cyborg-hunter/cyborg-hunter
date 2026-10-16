@@ -2266,7 +2266,9 @@ test('Pseudonymize participant IDs: off by default, a re-analysis, and the key a
   assert.notEqual(key.dataset.action, 'download', 'not one of the report\'s own files');
   setField('pseudonymize', true);
   await tick();
-  assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID', config: { ...PANEL_DEFAULTS, pseudonymize: true } });
+  const { pseudonymSecret, ...reanalyze } = t.sent.at(-1);
+  assert.deepEqual(reanalyze, { type: 'reanalyze', participantIdField: 'subject_ID', config: { ...PANEL_DEFAULTS, pseudonymize: true } });
+  assert.match(pseudonymSecret, /^[0-9a-f]{64}$/, 'the key\'s secret goes beside the config, never in it');
   assert.equal(key.disabled, true, 'waits for the answer, like the other downloads');
   const text = '# cyborg-hunter pseudonym key — keep private; do not share with the report\n# secret,' + 'a'.repeat(64) + '\ncode,participantId\nP-0123456789,A\n';
   t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
@@ -2285,4 +2287,181 @@ test('Pseudonymize participant IDs: off by default, a re-analysis, and the key a
     assert.deepEqual(names, ['cyborg-hunter-pseudonyms.csv']);
     assert.equal(await made.at(-1).text(), text);
   } finally { URL.createObjectURL = saved; win.HTMLAnchorElement.prototype.click = click; }
+});
+
+// The pseudonym key the analyzer remembers (demo/analyze/pseudonym-key.js):
+// its secret in this page's localStorage, loaded from a key file (picked in
+// the settings, or dropped among the files) or made by the first
+// pseudonymized report, and sent beside the config with every pseudonymized
+// run, so the codes stay the same from one visit to the next and match the
+// CLI's for the same key file.
+describe('the pseudonym key', () => {
+  const STORED = 'ch-pseudonym-key';
+  const SECRET = 'a'.repeat(64);
+  const BANNER = '# cyborg-hunter pseudonym key — keep private; do not share with the report';
+  const keyText = (secret) => BANNER + '\n# secret,' + secret + '\ncode,participantId\nP-0123456789,A\n';
+  const NO_KEY = 'No key yet: the first pseudonymized report makes one.';
+  let fingerprint;
+  before(async () => { ({ keyFingerprint: fingerprint } = await import('../../demo/analyze/pseudonym-key.js')); });
+  const pick = (text, name) => {
+    const input = role('key-input');
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File([text], name)] });
+    input.dispatchEvent(new win.Event('change', { bubbles: true }));
+  };
+  const status = () => role('key-status').textContent;
+  const note = () => role('key-note').textContent;
+  const lastRunLike = (t) => t.sent.filter((m) => m.type === 'run' || m.type === 'reanalyze').at(-1);
+
+  test('Use a key file: a key is kept (its secret alone) and sent with each pseudonymized run; a file that is not one is refused', async () => {
+    window.localStorage.clear();
+    const t = boot();
+    await toCheck(t);
+    assert.equal(status(), NO_KEY);
+    assert.equal(action('forget-key').hidden, true);
+    const label = role('key-input').closest('label');
+    assert.equal(label.textContent.trim(), 'Use a key file…');
+    const sent = t.sent.length;
+    pick('participantId,trial\nA,1\n', 'data.csv');
+    await until(() => note() !== '');
+    assert.equal(note(), 'data.csv was not used as the pseudonym key: its first line is not the key file\'s banner ("' + BANNER + '").');
+    assert.equal(window.localStorage.getItem(STORED), null, 'never silently adopted');
+    assert.equal(status(), NO_KEY);
+    pick(keyText(SECRET), 'cyborg-hunter-pseudonyms.csv');
+    const fp = await fingerprint(SECRET);
+    await until(() => status() === 'Key in use: ' + fp);
+    assert.equal(status(), 'Key in use: ' + fp);
+    assert.equal(note(), 'Key loaded from cyborg-hunter-pseudonyms.csv.');
+    assert.equal(window.localStorage.getItem(STORED), SECRET, 'the secret, not the file');
+    assert.equal(action('forget-key').hidden, false);
+    assert.equal(t.sent.length, sent, 'picking a key is not a settings change: nothing re-runs');
+    action('run').click();
+    await tick();
+    assert.equal('pseudonymSecret' in lastRunLike(t), false, 'a plain run carries no key');
+    t.emit({ type: 'zip', chunk: new Uint8Array([1]) });
+    t.emit(DONE);
+    await tick();
+    setField('pseudonymize', true);
+    await tick();
+    assert.equal(lastRunLike(t).pseudonymSecret, SECRET);
+    assert.equal('pseudonymSecret' in lastRunLike(t).config, false);
+  });
+
+  test('no stored key: the first pseudonymized report makes one and stores it; the next visit uses it; a key loaded over a report re-analyses it', async () => {
+    window.localStorage.clear();
+    const t = boot();
+    await toResults(t);
+    setField('pseudonymize', true);
+    await tick();
+    const made = lastRunLike(t).pseudonymSecret;
+    assert.match(made, /^[0-9a-f]{64}$/);
+    assert.equal(window.localStorage.getItem(STORED), made);
+    const madeFp = 'Key in use: ' + await fingerprint(made);
+    await until(() => status() === madeFp);
+    assert.equal(status(), madeFp);
+    t.emit({ type: 'zip', chunk: new Uint8Array([1]) });
+    t.emit(DONE);
+    await tick();
+
+    const later = boot();                       // another visit: the page is opened again
+    await until(() => status() === madeFp);
+    assert.equal(status(), madeFp);
+    await toResults(later);
+    setField('pseudonymize', true);
+    await tick();
+    assert.equal(lastRunLike(later).pseudonymSecret, made, 'the same codes as the last visit');
+    later.emit({ type: 'zip', chunk: new Uint8Array([1]) });
+    later.emit(DONE);
+    await tick();
+    pick(keyText(SECRET), 'from-the-cli.csv');
+    await until(() => lastRunLike(later).pseudonymSecret === SECRET);
+    assert.equal(lastRunLike(later).type, 'reanalyze', 'the report on screen takes the loaded key\'s codes');
+  });
+
+  test('Forget key removes it from storage; the next pseudonymized report makes a new one', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(STORED, SECRET);
+    const t = boot();
+    await toResults(t);
+    const fp = 'Key in use: ' + await fingerprint(SECRET);
+    await until(() => status() === fp);
+    assert.equal(status(), fp);
+    action('forget-key').click();
+    assert.equal(window.localStorage.getItem(STORED), null);
+    assert.equal(status(), NO_KEY);
+    assert.equal(action('forget-key').hidden, true);
+    assert.equal(note(), 'Key forgotten: the next pseudonymized report makes a new one, unless you use a key file.');
+    setField('pseudonymize', true);
+    await tick();
+    const fresh = lastRunLike(t).pseudonymSecret;
+    assert.match(fresh, /^[0-9a-f]{64}$/);
+    assert.notEqual(fresh, SECRET);
+    assert.equal(window.localStorage.getItem(STORED), fresh);
+  });
+
+  test('storage refused: the key lasts as long as the page, and a line says so', async () => {
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', { configurable: true, get: () => { throw new Error('SecurityError'); } });
+    try {
+      const t = boot();
+      await toResults(t);
+      const UNSTORED = 'This browser does not let the page keep the key: it lasts until the page is closed. Download the key beside a pseudonymized report to keep it.';
+      assert.equal(note(), UNSTORED);
+      setField('pseudonymize', true);
+      await tick();
+      const made = lastRunLike(t).pseudonymSecret;
+      assert.match(made, /^[0-9a-f]{64}$/);
+      t.emit({ type: 'zip', chunk: new Uint8Array([1]) });
+      t.emit(DONE);
+      await tick();
+      setField('showPlatformId', true);
+      await tick();
+      assert.equal(lastRunLike(t).pseudonymSecret, made, 'the same key for the rest of the visit');
+      const fp = 'Key in use: ' + await fingerprint(made);
+      await until(() => status() === fp);
+      assert.equal(status(), fp);
+      assert.equal(note(), 'A new key was made for this report: download it beside the report to use it with the CLI. ' + UNSTORED);
+    } finally {
+      Object.defineProperty(window, 'localStorage', original);
+    }
+  });
+
+  test('a key file among the dropped files becomes the key and leaves the list; one that is not a key is named and left out too', async () => {
+    window.localStorage.clear();
+    const t = boot();
+    const input = role('file-input');
+    const files = [new File(['participantId\nA\n'], 'a.csv'), new File([keyText(SECRET)], 'keys.csv'), new File(['x'], 'cyborg-hunter-pseudonyms.csv')];
+    Object.defineProperty(input, 'files', { configurable: true, value: files });
+    input.dispatchEvent(new win.Event('change'));
+    await tick();
+    assert.deepEqual(paths(t.sent.at(-1)), ['a.csv', 'keys.csv', 'cyborg-hunter-pseudonyms.csv']);
+    t.emit({ ...CHECKED, files: [{ path: 'a.csv', kind: 'data' }, { path: 'keys.csv', kind: 'key' }, { path: 'cyborg-hunter-pseudonyms.csv', kind: 'key' }],
+      configFound: false, configPath: null,
+      pseudonymKeys: [{ path: 'keys.csv', secret: SECRET }, { path: 'cyborg-hunter-pseudonyms.csv', error: 'it has no "# secret,<hex>" line' }] });
+    await tick();
+    assert.equal(window.localStorage.getItem(STORED), SECRET);
+    const fp = 'Key in use: ' + await fingerprint(SECRET);
+    await until(() => status() === fp);
+    assert.equal(status(), fp);
+    assert.equal(note(), 'keys.csv was read as the pseudonym key, not as data, and left out of the file list. ' +
+      'cyborg-hunter-pseudonyms.csv was not used as the pseudonym key: it has no "# secret,<hex>" line. It was left out of the file list.');
+    assert.deepEqual([...role('file-rows').querySelectorAll('code')].map((c) => c.textContent), ['a.csv'], 'the table lists the data only');
+    action('run').click();
+    await tick();
+    assert.deepEqual(paths(lastRunLike(t)), ['a.csv'], 'the run never sends a key file');
+  });
+
+  test('two dropped key files with different secrets: neither is used', async () => {
+    window.localStorage.clear();
+    const t = boot();
+    const input = role('file-input');
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File(['participantId\nA\n'], 'a.csv'), new File(['k'], 'k1.csv'), new File(['k'], 'k2.csv')] });
+    input.dispatchEvent(new win.Event('change'));
+    await tick();
+    t.emit({ ...CHECKED, files: [{ path: 'a.csv', kind: 'data' }, { path: 'k1.csv', kind: 'key' }, { path: 'k2.csv', kind: 'key' }],
+      pseudonymKeys: [{ path: 'k1.csv', secret: SECRET }, { path: 'k2.csv', secret: 'b'.repeat(64) }] });
+    await tick();
+    assert.equal(window.localStorage.getItem(STORED), null);
+    assert.equal(status(), NO_KEY);
+    assert.equal(note(), 'k1.csv and k2.csv are key files with different secrets: none of them was used, and they were left out of the file list.');
+  });
 });

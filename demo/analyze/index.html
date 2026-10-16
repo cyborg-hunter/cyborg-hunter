@@ -38,10 +38,10 @@ table.files th:last-child,table.files td:last-child{ width:1%; text-align:right 
 table.weights .hint{ max-width:20em } table.weights td{ vertical-align:baseline }
 .dropzone{ border:2px dashed var(--line); padding:28px; text-align:center; margin:12px 0 } .dropzone.over{ border-color:var(--ink); background:var(--bg) }
 .dropzone.busy{ opacity:.55; pointer-events:none; }
-/* The file inputs stay in the tab order but out of sight: their labels ("choose files", "choose a folder") are the controls, as links. */
-.dropzone label{ position:relative; text-decoration:underline; text-underline-offset:2px; cursor:pointer }
-.dropzone label input{ position:absolute; left:0; top:0; width:1px; height:1px; opacity:0; overflow:hidden }
-.dropzone label:has(input:focus-visible){ outline:2px solid var(--ink); outline-offset:2px }
+/* The file inputs stay in the tab order but out of sight: their labels ("choose files", "choose a folder", "Use a key file…") are the controls, as links. */
+.dropzone label, label.file-link{ position:relative; text-decoration:underline; text-underline-offset:2px; cursor:pointer }
+.dropzone label input, label.file-link input{ position:absolute; left:0; top:0; width:1px; height:1px; opacity:0; overflow:hidden }
+.dropzone label:has(input:focus-visible), label.file-link:has(input:focus-visible){ outline:2px solid var(--ink); outline-offset:2px }
 button{ font:600 13px var(--ff-recursive); padding:6px 12px; border:1px solid var(--ink); background:var(--ink); color:var(--surface); cursor:pointer }
 button.secondary{ background:var(--surface); color:var(--ink) } button:disabled{ opacity:.5; cursor:default }
 /* The annotations import: the browser's file button in the secondary buttons' dress, without its "No file chosen"

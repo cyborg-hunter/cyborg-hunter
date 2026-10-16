@@ -114,8 +114,6 @@ export async function webHmacSha256(secretHex, text) {
   var key = await crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return toHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)));
 }
-// A new key file's secret: 32 random bytes, hex.
-export function webRandomSecret() { return toHex(crypto.getRandomValues(new Uint8Array(32))); }
 function toHex(buffer) {
   var view = new Uint8Array(buffer), out = '';
   for (var i = 0; i < view.length; i++) out += view[i].toString(16).padStart(2, '0');

@@ -4,7 +4,9 @@
 // participant data stays in the worker (File handles go over,
 // the worker reads the bytes one file at a time); this module only holds
 // what the page shows: counts, warnings, the report HTML, the zip chunks,
-// and the report's annotations, which the page keeps (annotations.js).
+// and the report's annotations, which the page keeps (annotations.js), as
+// it keeps the pseudonym key's secret (pseudonym-key.js), sent with each
+// pseudonymized run.
 // One exception, opts.transferBytes (main.js sets it for a page opened from
 // file:): WebKit's worker cannot read a File there, so the page reads each
 // dropped file itself and transfers the bytes, for every check and run.
@@ -25,11 +27,15 @@ import { storageKey, pageStorage, readAnnotations, loadAnnotations, saveAnnotati
 import { annotationsCsv, annotationsJson, readAnnotationsImport, importMessage } from '../../src/cli/renderers/annotations-core.js';
 import { sanitize } from '../../src/cli/renderers/report-id.js';
 import { KEY_FILE_NAME } from '../../src/cli/pseudonymize-core.js';
+import { readStoredSecret, storeSecret, forgetStoredSecret, keyFingerprint, keyFileSecret, newSecret } from './pseudonym-key.js';
 
 var ZIP_NAME = 'cyborg-hunter-report.zip';
 // The annotations status line once storage has not taken a write
 // (changeAnnotations); the CLI report says the same of its own storage.
 var UNSTORED_TEXT = 'This browser does not let the page store annotations: they last until Start over or until the page is closed. Export JSON keeps them.';
+// The pseudonym key line (showKey).
+var NO_KEY_TEXT = 'No key yet: the first pseudonymized report makes one.';
+var UNSTORED_KEY_TEXT = 'This browser does not let the page keep the key: it lasts until the page is closed. Download the key beside a pseudonymized report to keep it.';
 
 function q(root, role) { return root.querySelector('[data-role="' + role + '"]'); }
 function download(name, blobOrText, type) {
@@ -122,6 +128,17 @@ export function createPage(root, worker, opts) {
   // config only when that config's values changed (check). Created first: it
   // holds the id field the page wires below.
   var settingsPanel = createSettingsPanel(q(root, 'settings'), onSettingsChange);
+  // The pseudonym key (pseudonym-key.js): the secret every pseudonymized run
+  // is sent with, so the codes stay the same from one visit to the next and
+  // match the CLI's for the same key file. Read from this browser's storage
+  // at start; a key file (picked in the settings, or among the dropped
+  // files) replaces it, and the first pseudonymized run with none makes one;
+  // each is stored. Where storage is refused (keyUnstored) the secret lasts
+  // as long as the page, and the key line says so. Start over keeps it.
+  var keyStorage = pageStorage();
+  var keySecret = null, keyUnstored = false;
+  try { keySecret = readStoredSecret(keyStorage); } catch (e) { keyUnstored = true; }
+  showKey('');
   var runButton = root.querySelector('[data-action="run"]');
   var resetButtons = root.querySelectorAll('[data-action="reset"]');
 
@@ -188,6 +205,32 @@ export function createPage(root, worker, opts) {
   function discardZip() {
     state.zipParts = [];
     if (state.zipUrl) { URL.revokeObjectURL(state.zipUrl); state.zipUrl = null; }
+  }
+
+  // The key line: the key's fingerprint (never the secret) and Forget key,
+  // or that there is none yet; `note` says what just happened to it, and the
+  // storage note follows it while storage refuses the key.
+  function showKey(note) {
+    var status = q(root, 'key-status');
+    var secret = keySecret;
+    status.textContent = secret ? 'Key in use' : NO_KEY_TEXT;
+    if (secret) keyFingerprint(secret).then(function (fp) { if (keySecret === secret) status.textContent = 'Key in use: ' + fp; }, function () { /* the line stays without it */ });
+    root.querySelector('[data-action="forget-key"]').hidden = !secret;
+    var line = q(root, 'key-note');
+    line.textContent = [note, keyUnstored ? UNSTORED_KEY_TEXT : ''].filter(Boolean).join(' ');
+    line.hidden = !line.textContent;
+  }
+  // A secret the page takes: stored where storage allows, and shown.
+  function adoptKey(secret, note) {
+    keySecret = secret;
+    if (!keyUnstored && !storeSecret(keyStorage, secret)) keyUnstored = true;
+    showKey(note);
+  }
+  // The secret a pseudonymized run is sent with: the key in use, or a new
+  // one, which the report's key download then carries.
+  function runSecret() {
+    if (!keySecret) adoptKey(newSecret(), 'A new key was made for this report: download it beside the report to use it with the CLI.');
+    return keySecret;
   }
 
   // Every failure lands here, from the worker ({ type: 'error', phase }) or
@@ -331,6 +374,7 @@ export function createPage(root, worker, opts) {
     sendWithFiles({ type: 'check' });
     var checked = await reply;
     state.checked = checked;
+    takeDroppedKeys(checked);
     renderFiles(checked);
     // The settings are taken from the config only when the config's values
     // differ from the ones last taken: a drop that adds data files, or a
@@ -387,6 +431,28 @@ export function createPage(root, worker, opts) {
     return checked.configPath ? 'Settings replaced from ' + checked.configPath + '.' : 'Settings replaced with the defaults.';
   }
 
+  // Pseudonym key files among the dropped files, which the worker read as
+  // keys and never as data (checked.pseudonymKeys). They leave the list, so
+  // no later check or run sends them; a usable one becomes the key, as one
+  // picked in the settings does. Several with different secrets are all
+  // refused: which one the analyst meant cannot be told.
+  function takeDroppedKeys(checked) {
+    var found = checked.pseudonymKeys || [];
+    if (!found.length) return;
+    var gone = found.map(function (k) { return k.path; });
+    state.entries = state.entries.filter(function (e) { return gone.indexOf(e.path) < 0; });
+    var usable = found.filter(function (k) { return k.secret; });
+    var secrets = usable.map(function (k) { return k.secret; }).filter(function (x, i, all) { return all.indexOf(x) === i; });
+    var named = usable.map(function (k) { return k.path; }).join(' and ');
+    var notes = [];
+    if (secrets.length > 1) notes.push(named + ' are key files with different secrets: none of them was used, and they were left out of the file list.');
+    else if (secrets.length === 1) notes.push(named + (usable.length > 1 ? ' were' : ' was') + ' read as the pseudonym key, not as data, and left out of the file list.');
+    found.forEach(function (k) {
+      if (k.error) notes.push(k.path + ' was not used as the pseudonym key: ' + k.error + '. It was left out of the file list.');
+    });
+    if (secrets.length === 1) adoptKey(secrets[0], notes.join(' ')); else showKey(notes.join(' '));
+  }
+
   function kindCount(checked, kind) {
     return (checked.files || []).filter(function (f) { return f.kind === kind; }).length;
   }
@@ -404,10 +470,12 @@ export function createPage(root, worker, opts) {
   // The fonts the tour handed over stay in the list the worker reads, for
   // the replay, but not in the table or the counts: one line under the table
   // says they are there.
+  // Key files are not listed: they left the list (takeDroppedKeys).
   function renderFiles(checked) {
     var rows = q(root, 'file-rows');
     rows.innerHTML = '';
-    var shown = (checked.files || []).filter(function (f) { return !handedOverAsset(f); });
+    var listed = (checked.files || []).filter(function (f) { return f.kind !== 'key'; });
+    var shown = listed.filter(function (f) { return !handedOverAsset(f); });
     shown.forEach(function (f) {
       var tr = document.createElement('tr');
       var name = document.createElement('td');
@@ -435,7 +503,7 @@ export function createPage(root, worker, opts) {
       countSpan(checked.configFound ? 1 : 0, 'config file', 'config files') +
       (ignored ? countSpan(ignored, 'ignored', 'ignored') : '') +
       (unreadable ? countSpan(unreadable, 'unreadable', 'unreadable') : '');
-    q(root, 'handoff-assets').hidden = shown.length === (checked.files || []).length;
+    q(root, 'handoff-assets').hidden = shown.length === listed.length;
   }
 
   // The config this page's settings stand for (the check's merged config,
@@ -454,7 +522,11 @@ export function createPage(root, worker, opts) {
     updateControls();
     armStallHint();
     var config = effectiveConfig();
-    sendWithFiles({ type: 'run', config: config, participantIdField: state.idField });
+    // The key's secret beside the config, never in it: the config is
+    // exported, and the worker hands it back as the run's.
+    var msg = { type: 'run', config: config, participantIdField: state.idField };
+    if (config.pseudonymize) msg.pseudonymSecret = runSecret();
+    sendWithFiles(msg);
     var done = await reply;
     state.ranWith = { config: config, idField: state.idField };
     showResults(done);
@@ -488,6 +560,7 @@ export function createPage(root, worker, opts) {
     updateControls();
     armStallHint();
     var msg = { type: type, config: config, participantIdField: state.idField };
+    if (config.pseudonymize) msg.pseudonymSecret = runSecret();
     if (type === 'run') sendWithFiles(msg); else send(msg);
     var done = await reply;
     status.hidden = true;
@@ -641,7 +714,7 @@ export function createPage(root, worker, opts) {
     state.entries = removeEntry(state.entries, path);
     state.handoffPaths.delete(path);
     var listed = state.checked
-      ? (state.checked.files || []).filter(function (f) { return f.path !== path && !handedOverAsset(f); }).length
+      ? (state.checked.files || []).filter(function (f) { return f.path !== path && !handedOverAsset(f) && f.kind !== 'key'; }).length
       : state.entries.length;
     if (!state.entries.length || !listed) { reset(); return Promise.resolve(); }
     return check();
@@ -786,6 +859,29 @@ export function createPage(root, worker, opts) {
   root.querySelector('[data-action="download-zip"]').addEventListener('click', function () {
     if (!state.zipUrl) return;
     var a = document.createElement('a'); a.href = state.zipUrl; a.download = ZIP_NAME; document.body.appendChild(a); a.click(); a.remove();
+  });
+  // A key file picked in the settings: read here (it never reaches the
+  // worker), taken if it is one, refused with the reason if not. A report on
+  // screen under pseudonymize is re-analysed with its codes.
+  q(root, 'key-input').addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    file.text().then(function (text) {
+      var secret;
+      try { secret = keyFileSecret(text); }
+      catch (err) { showKey(file.name + ' was not used as the pseudonym key: ' + err.message + '.'); return; }
+      var changed = secret !== keySecret;
+      adoptKey(secret, 'Key loaded from ' + file.name + '.');
+      if (changed && settingsPanel.read().pseudonymize) onSettingsChange();
+    }).catch(function (err) { showKey(file.name + ' could not be read: ' + (err && err.message ? err.message : String(err)) + '.'); });
+  });
+  // Forget key: gone from storage and from the page; the report on screen
+  // and its key download stay as they are.
+  root.querySelector('[data-action="forget-key"]').addEventListener('click', function () {
+    keySecret = null;
+    if (!keyUnstored) forgetStoredSecret(keyStorage);
+    showKey('Key forgotten: the next pseudonymized report makes a new one, unless you use a key file.');
   });
   // The key file is its own download: the worker never puts it in the zip.
   root.querySelector('[data-action="download-key"]').addEventListener('click', function () {

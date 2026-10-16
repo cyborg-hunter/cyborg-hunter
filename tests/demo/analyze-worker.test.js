@@ -13,6 +13,8 @@ import { buildWorkerSrc } from '../../tools/build-analyze.mjs';
 import { REPORT_FILES } from '../../src/cli/report-core.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
 import { NODE_IMPORT } from '../cli/node-import-pattern.js';
+import { nodeDeps } from '../../src/cli/ingest.js';
+import { KEY_FILE_BANNER, assignCodes, keyFileUpdate, pseudonymCode } from '../../src/cli/pseudonymize-core.js';
 
 if (!globalThis.crypto) globalThis.crypto = (await import('node:crypto')).webcrypto;
 
@@ -44,6 +46,9 @@ function startWorker() {
     },
   };
 }
+
+// The pseudonym key's secret the page sends with a pseudonymized run.
+const SECRET = 'a'.repeat(64);
 
 function concat(chunks) {
   const out = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
@@ -549,9 +554,10 @@ test('plots reach the zip and the in-page report as the same PNG bytes', { skip:
 
 // config.pseudonymize: the zip, the in-page report and everything done
 // carries for the page use codes; the key that maps them back comes in
-// done.pseudonymKey, never in the zip. One secret per cohort: a re-analysis
-// keeps the codes (and gives the same zip again), and turning the setting
-// off gives the plain report back.
+// done.pseudonymKey, never in the zip. The page sends its secret with each
+// run (demo/analyze/pseudonym-key.js): a re-analysis under it keeps the
+// codes (and gives the same zip again), and turning the setting off gives
+// the plain report back.
 test('a pseudonymized run: no raw id in the zip or the in-page report, the key apart, the codes kept by a re-analysis', async () => {
   const RAW = 'PROLIFICX5d1e9f00aa';
   const dir = 'tests/fixtures/demo';
@@ -569,7 +575,7 @@ test('a pseudonymized run: no raw id in the zip or the in-page report, the key a
   const checked = await w.next('checked', 'error');
   assert.equal(checked.config.pseudonymize, false, 'off by default');
   const config = { ...checked.config, pseudonymize: true };
-  w.send({ type: 'run', files, config, participantIdField: 'participantId' });
+  w.send({ type: 'run', files, config, participantIdField: 'participantId', pseudonymSecret: SECRET });
   const done = await w.next('done', 'error');
   assert.equal(done.type, 'done', done.message);
   const zip = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
@@ -590,7 +596,7 @@ test('a pseudonymized run: no raw id in the zip or the in-page report, the key a
   assert.equal(model.type, 'replay-model', model.message);
   assert.equal(model.model.pid, code, 'the replay card shows the code too');
 
-  w.send({ type: 'reanalyze', config, participantIdField: 'participantId' });
+  w.send({ type: 'reanalyze', config, participantIdField: 'participantId', pseudonymSecret: SECRET });
   const again = await w.next('done', 'error');
   assert.equal(again.type, 'done', again.message);
   const zip2 = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
@@ -617,13 +623,96 @@ test('a pseudonymized run: a missing recording\'s save pointer names no raw id i
   const w = startWorker();
   w.send({ type: 'check', files });
   const checked = await w.next('checked', 'error');
-  w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId' });
+  w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId', pseudonymSecret: SECRET });
   const done = await w.next('done', 'error');
   assert.equal(done.type, 'done', done.message);
   const zip = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
   for (const [name, bytes] of Object.entries(zip)) assert.ok(!Buffer.from(bytes).toString('latin1').includes(RAW), name + ' names the participant');
   assert.ok(!done.html.includes(RAW), 'the in-page report names the participant');
   assert.match(strFromU8(zip['index.html']), /saved_to: <strong>datapipe:EXP\/P-[0-9a-f]{10}-replay-1\.json<\/strong>/);
+});
+
+// The key file the analyzer remembers (demo/analyze/pseudonym-key.js): one
+// among the dropped files is read as the key, never as data. Its secret goes
+// back to the page in checked.pseudonymKeys, and it stays out of every
+// output, even in a run whose files still list it.
+const PSEUDO_RAW = 'PROLIFICX5d1e9f00aa';
+function pseudoCohort() {
+  const data = readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8').replaceAll('DEMO-FIXT', PSEUDO_RAW);
+  return [{ path: 'data/' + PSEUDO_RAW + '.json', file: new File([data], PSEUDO_RAW + '.json') }];
+}
+async function cliKeyFile(ids) {
+  return keyFileUpdate(null, SECRET, await assignCodes(ids, SECRET, nodeDeps.hmacSha256)).text;
+}
+function zipOf(w) { return unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk))); }
+
+test('a key file among the dropped files is the key, not data: its secret goes to the page, and the codes are the CLI\'s for it', async () => {
+  // A key the CLI wrote for another cohort, renamed: told by its banner.
+  const keyText = await cliKeyFile(['MTURKA2Z9QX7YYB']);
+  const files = [...pseudoCohort(), { path: 'keys/old-key.csv', file: new File([keyText], 'old-key.csv') }];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.deepEqual(checked.pseudonymKeys, [{ path: 'keys/old-key.csv', secret: SECRET }]);
+  assert.deepEqual(checked.files.find((f) => f.path === 'keys/old-key.csv'), { path: 'keys/old-key.csv', kind: 'key' });
+  assert.equal(checked.counts.participant, 1, 'not counted as a data file');
+  assert.equal(checked.sampled, 1, 'not peeked for the id field');
+  // The page leaves it out of later runs; a run that still sends it must not read it either.
+  w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId', pseudonymSecret: checked.pseudonymKeys[0].secret });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.participants.map((p) => p.participantId), [await pseudonymCode(SECRET, PSEUDO_RAW, nodeDeps.hmacSha256)], 'the CLI\'s code for this key');
+  assert.deepEqual(done.warnings, [], 'nothing was read from the key file');
+  const zip = zipOf(w);
+  for (const [name, bytes] of Object.entries(zip)) {
+    const text = Buffer.from(bytes).toString('utf8');
+    for (const s of [SECRET, 'MTURKA2Z9QX7YYB', PSEUDO_RAW, 'old-key', KEY_FILE_BANNER]) assert.ok(!text.includes(s) && !name.includes(s), name + ' carries ' + s);
+  }
+  for (const s of [SECRET, 'MTURKA2Z9QX7YYB', 'old-key', KEY_FILE_BANNER]) assert.ok(!done.html.includes(s), 'the in-page report carries ' + s);
+  assert.ok(done.pseudonymKey.startsWith(KEY_FILE_BANNER + '\n# secret,' + SECRET + '\n'), 'the key download is made from the same secret');
+});
+
+test('a file that looks like a key file but is not one is refused, and is not read as data either', async () => {
+  const files = [...pseudoCohort(),
+    { path: 'cyborg-hunter-pseudonyms.csv', file: new File(['code,participantId\nP-0123456789,MTURKA2Z9QX7YYB\n'], 'cyborg-hunter-pseudonyms.csv') },
+    { path: 'k.csv', file: new File([KEY_FILE_BANNER + '\n# secret,xyz\n'], 'k.csv') }];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  assert.deepEqual(checked.pseudonymKeys.map((k) => [k.path, 'secret' in k]), [['cyborg-hunter-pseudonyms.csv', false], ['k.csv', false]]);
+  assert.match(checked.pseudonymKeys[0].error, /banner/);
+  assert.match(checked.pseudonymKeys[1].error, /secret/);
+  assert.deepEqual(checked.files.filter((f) => f.kind === 'key').map((f) => f.path), ['cyborg-hunter-pseudonyms.csv', 'k.csv']);
+  w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  assert.deepEqual(done.participants.map((p) => p.participantId), [PSEUDO_RAW], 'the refused files are not participants');
+  for (const [name, bytes] of Object.entries(zipOf(w))) assert.ok(!Buffer.from(bytes).toString('utf8').includes('MTURKA2Z9QX7YYB'), name);
+});
+
+test('the same secret in two worker sessions gives the same codes and the same key; a pseudonymized run without one is refused', async () => {
+  const run = async () => {
+    const w = startWorker();
+    const files = pseudoCohort();
+    w.send({ type: 'check', files });
+    const checked = await w.next('checked', 'error');
+    w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId', pseudonymSecret: SECRET });
+    const done = await w.next('done', 'error');
+    assert.equal(done.type, 'done', done.message);
+    return { w, checked, done };
+  };
+  const first = await run();
+  const second = await run();
+  assert.deepEqual(second.done.participants.map((p) => p.participantId), first.done.participants.map((p) => p.participantId));
+  assert.equal(second.done.pseudonymKey, first.done.pseudonymKey);
+  // The page always sends one: a run without it would make codes no later
+  // visit could make again.
+  first.w.send({ type: 'reanalyze', config: { ...first.checked.config, pseudonymize: true }, participantIdField: 'participantId' });
+  const refused = await first.w.next('done', 'error');
+  assert.equal(refused.type, 'error');
+  assert.match(refused.message, /pseudonym key/);
 });
 
 // Ingest's warnings are listed on the page beside the report, so under
@@ -639,7 +728,7 @@ test('a pseudonymized run: the warnings the page lists name participants by thei
   const w = startWorker();
   w.send({ type: 'check', files });
   const checked = await w.next('checked', 'error');
-  w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId' });
+  w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId', pseudonymSecret: SECRET });
   const done = await w.next('done', 'error');
   assert.equal(done.type, 'done', done.message);
   assert.ok(done.warnings.some((x) => /duplicate participantId/.test(x.warnings.join(' '))), 'the warning is still there');

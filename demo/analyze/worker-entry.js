@@ -12,12 +12,15 @@
 //     { type: 'sample' }  → { type: 'sample', files: [{ path, text }] }: the bundled
 //                   sessions as text, for the page to list as files of its own
 //     { type: 'check',  files: [{ path, file: File } | { path, bytes: ArrayBuffer }] }
-//     { type: 'run',    files, config, participantIdField }
-//     { type: 'reanalyze', config, participantIdField }  the last run's participants
-//                   again under another config: analysis, figures, report and
-//                   zip, with no file read (the settings panel's post-hoc keys);
-//                   the keys only ingest reads (participantIdField,
-//                   qualtricsField, singleParticipant) stay the run's
+//     { type: 'run',    files, config, participantIdField, pseudonymSecret? }
+//     { type: 'reanalyze', config, participantIdField, pseudonymSecret? }  the last
+//                   run's participants again under another config: analysis,
+//                   figures, report and zip, with no file read (the settings
+//                   panel's post-hoc keys); the keys only ingest reads
+//                   (participantIdField, qualtricsField, singleParticipant) stay
+//                   the run's. pseudonymSecret: under config.pseudonymize, the
+//                   pseudonym key's secret, which the page keeps
+//                   (pseudonym-key.js); a pseudonymized run without one fails
 //     { type: 'replay', participantId }
 //     { type: 'reset' }  start over: the last run's participants are let go
 //   worker → page
@@ -30,7 +33,10 @@
 //                   the data files the suggestion was read from; recordings:
 //                   the replay recordings among the JSON files, never sampled;
 //                   and every file with what it was read as (files: [{path, kind}],
-//                   kind data | recording | asset | config | ignored | unreadable)
+//                   kind data | recording | asset | config | key | ignored |
+//                   unreadable); pseudonymKeys: each pseudonym key file among
+//                   the files, never read as data, as { path, secret } or
+//                   { path, error } for one that is not a usable key
 //     progress      { phase: 'check' | 'ingest' | 'report', done, total, label? }
 //     zip           { chunk } — the report zip, in order, buffer transferred
 //     done          the in-page report html and what the page lists beside it;
@@ -61,7 +67,8 @@ import { peekParticipantFile } from './peek-files.js';
 import { suggestIdField } from './participant-id-suggest.js';
 import { createZipSink } from './zip-sink.js';
 import { assignCodes, keyFileUpdate, pseudonymizeParticipants, pseudonymizeWarnings } from '../../src/cli/pseudonymize-core.js';
-import { webGunzip, webSha256, webHmacSha256, webRandomSecret, bytesToBase64, offscreenCreateCanvas, offscreenEncodePng } from './web-deps.js';
+import { webGunzip, webSha256, webHmacSha256, bytesToBase64, offscreenCreateCanvas, offscreenEncodePng } from './web-deps.js';
+import { isKeyFile, keyFileSecret } from './pseudonym-key.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from './limits.js';
 
 var post = function (msg, transfer) { self.postMessage(msg, transfer || []); };
@@ -79,6 +86,11 @@ function fileReader(entry) {
     read: function () {
       if (bytes) return Promise.resolve(bytes.slice());
       return entry.file.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+    },
+    // The first n bytes only (the key-file sniff), not the whole file.
+    head: function (n) {
+      if (bytes) return Promise.resolve(bytes.slice(0, n));
+      return entry.file.slice(0, n).arrayBuffer().then(function (b) { return new Uint8Array(b); });
     } };
 }
 function readersFor(msg) {
@@ -91,15 +103,35 @@ function readersFor(msg) {
 // and the report rendered again under another config without reading the
 // files again (reanalyze).
 var lastRun = null;
-// The pseudonym secret (config.pseudonymize), made on the first pseudonymized
-// report and kept until reset: a re-analysis, or a run that reads the files
-// again, gives each participant the code it had. The page holds no key file
-// to reuse, so codes made here are not the CLI's.
-var pseudonymSecret = null;
+
+// Pseudonym key files (pseudonym-key.js) among the CSVs the classifier put
+// in the participant list, told by name or by their first line: taken out
+// of the list here, before any peek or ingest reads them, so a key, its
+// secret and the participant IDs its rows hold reach no output. Every check
+// and run takes them out: the page drops them from its list after a check,
+// and a run that still sent one must not read it as data either.
+var KEY_HEAD_BYTES = 256;
+async function takeKeyFiles(groups) {
+  var keys = [], rest = [];
+  for (var i = 0; i < groups.participant.length; i++) {
+    var r = groups.participant[i];
+    var key = /\.csv$/i.test(r.name) && isKeyFile(r.name, decode(await r.head(KEY_HEAD_BYTES)));
+    (key ? keys : rest).push(r);
+  }
+  groups.participant = rest;
+  return keys;
+}
 
 async function check(msg) {
   var readers = readersFor(msg);
   var groups = classifyFiles(readers);
+  var keyFiles = await takeKeyFiles(groups);
+  // Each key's secret for the page to keep, or why it is not one.
+  var pseudonymKeys = [];
+  for (var k = 0; k < keyFiles.length; k++) {
+    try { pseudonymKeys.push({ path: keyFiles[k].path, secret: keyFileSecret(decode(await keyFiles[k].read())) }); }
+    catch (e) { pseudonymKeys.push({ path: keyFiles[k].path, error: e && e.message ? e.message : String(e) }); }
+  }
   var fileConfig, configWarnings = [];
   if (groups.config) {
     try { fileConfig = JSON.parse(decode(await groups.config.read())); }
@@ -118,6 +150,7 @@ async function check(msg) {
   readers.forEach(function (r) { kinds[r.path] = 'ignored'; });
   groups.assets.forEach(function (r) { kinds[r.path] = 'asset'; });
   if (groups.config) kinds[groups.config.path] = 'config';
+  keyFiles.forEach(function (r) { kinds[r.path] = 'key'; });
   for (var i = 0; i < groups.participant.length; i++) {
     var peek = await peekParticipantFile(groups.participant[i]);
     kinds[groups.participant[i].path] = peek && peek.recording ? 'recording' : peek ? 'data' : 'unreadable';
@@ -135,7 +168,7 @@ async function check(msg) {
     configFound: !!groups.config, config: merged.config, configWarnings: configWarnings,
     idSuggestion: idSuggestion, sampled: peeks.length, recordings: recordings,
     files: readers.map(function (r) { return { path: r.path, kind: kinds[r.path] }; }),
-    configPath: groups.config ? groups.config.path : null });
+    configPath: groups.config ? groups.config.path : null, pseudonymKeys: pseudonymKeys });
 }
 
 // The config a run uses: the page's, with the file-system keys this page
@@ -151,6 +184,7 @@ var INGEST_KEYS = ['participantIdField', 'qualtricsField', 'singleParticipant'];
 async function run(msg) {
   var readers = readersFor(msg);
   var groups = classifyFiles(readers);
+  await takeKeyFiles(groups);
   var config = runConfig(msg);
   post({ type: 'progress', phase: 'ingest', done: 0, total: groups.participant.length });
   var ingested = await ingestFiles({ participantFiles: groups.participant, replayFiles: groups.replay }, config,
@@ -173,7 +207,7 @@ async function run(msg) {
   });
   var state = lastRun = { participants: participants, assetMap: assets.assetMap, assetNotes: assetNotes,
     warnings: ingested.warnings.concat(assets.report.warnings), assetReport: assets.report, config: config };
-  await renderRun(state, config);
+  await renderRun(state, config, msg.pseudonymSecret);
 }
 
 // A re-analysis: the participants the last run read, under the config the
@@ -190,7 +224,7 @@ async function reanalyze(msg) {
   INGEST_KEYS.forEach(function (k) {
     if (k in state.config) config[k] = state.config[k]; else delete config[k];
   });
-  await renderRun(state, config);
+  await renderRun(state, config, msg.pseudonymSecret);
 }
 
 // The report pass over a run's participants. `state` is the run's, passed in:
@@ -200,13 +234,17 @@ async function reanalyze(msg) {
 // wrote because replay-assets-core.js keeps the first note and asset-match.js
 // rewrites each stylesheet once (tests/demo/analyze-worker.test.js compares
 // two zips file for file, with a stylesheet two others import).
-async function renderRun(state, config) {
+// `secret`: the pseudonym key's, which the page sends with the message.
+async function renderRun(state, config, secret) {
   var raw = state.participants, assetNotes = state.assetNotes;
   var participants = raw, pseudonymKey = null, warnings = state.warnings;
   if (config.pseudonymize) {
-    var coded = await codedParticipants(state, config);
+    // A secret made here would last only as long as this worker, and its
+    // codes would match no later visit's: the page always sends its own.
+    if (typeof secret !== 'string' || !/^[0-9a-f]{64}$/.test(secret)) throw new Error('No pseudonym key came with the run: reload the page and build the report again.');
+    var coded = await codedParticipants(state, config, secret);
     participants = coded.participants;
-    pseudonymKey = keyFileUpdate(null, pseudonymSecret, coded.codes).text;
+    pseudonymKey = keyFileUpdate(null, secret, coded.codes).text;
     // The page lists ingest's warnings beside the report: codes there too.
     warnings = pseudonymizeWarnings(state.warnings, raw, coded.codes);
   }
@@ -247,11 +285,11 @@ async function renderRun(state, config) {
 // field settings and kept on its state: a re-analysis renders the same copies,
 // whose replays carry the asset note the first pass wrote
 // (replay-assets-core.js words it once), as the plain participants do.
-async function codedParticipants(state, config) {
-  if (!pseudonymSecret) pseudonymSecret = webRandomSecret();
-  var sig = JSON.stringify([pseudonymSecret, config.participantIdField, config.platformIdField]);
+// Another secret (the page loaded or forgot a key) codes them again.
+async function codedParticipants(state, config, secret) {
+  var sig = JSON.stringify([secret, config.participantIdField, config.platformIdField]);
   if (!state.coded || state.coded.sig !== sig) {
-    var codes = await assignCodes(state.participants.map(function (p) { return p.participantId; }), pseudonymSecret, webHmacSha256);
+    var codes = await assignCodes(state.participants.map(function (p) { return p.participantId; }), secret, webHmacSha256);
     state.coded = { sig: sig, codes: codes, participants: pseudonymizeParticipants(state.participants, codes, config) };
   }
   return state.coded;
@@ -270,7 +308,7 @@ function replay(msg) {
 
 self.onmessage = function (ev) {
   var msg = ev.data || {};
-  if (msg.type === 'reset') { lastRun = null; pseudonymSecret = null; return; }
+  if (msg.type === 'reset') { lastRun = null; return; }
   if (msg.type === 'sample') { post({ type: 'sample', files: sample.files }); return; }
   var job = msg.type === 'check' ? check(msg) : msg.type === 'run' ? run(msg) : msg.type === 'reanalyze' ? reanalyze(msg)
     : msg.type === 'replay' ? Promise.resolve().then(function () { replay(msg); }) : null;
