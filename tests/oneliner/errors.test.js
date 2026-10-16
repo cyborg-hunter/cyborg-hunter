@@ -139,7 +139,7 @@ const CASES = {
     link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
   },
   replayAutoSaveVanilla: {
-    args: [],
+    args: [false],
     fix: 'save the recording yourself: call CyborgHunter.replay() in your submit or save code and send what it returns (autoSave works only with jsPsych)',
     link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
   },

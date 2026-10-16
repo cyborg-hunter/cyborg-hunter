@@ -434,7 +434,7 @@ export function installReplay(opts) {
   }
   var autoSave = ctx.config.replay.autoSave;
   if (standaloneRecorder(ctx) && autoSave && autoSave.mode && autoSave.mode !== 'none') {
-    console.warn(MESSAGES.replayAutoSaveVanilla());
+    console.warn(MESSAGES.replayAutoSaveVanilla(replayAutoSaved(ctx)));
   }
   // With data-debug the summary says it (debug.js), so the page gets one line.
   // Under Qualtrics the reminder also says the recording never goes into

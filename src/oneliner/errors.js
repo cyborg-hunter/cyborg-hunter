@@ -201,10 +201,15 @@ export const MESSAGES = {
   },
   // console.warn at boot, vanilla host: CyborgHunterConfig.replay.autoSave
   // has no effect there (no session-end hook to run the recorder's save from).
-  replayAutoSaveVanilla: function () {
+  // `saved`: the file saves the recording with the data itself (ch.js and
+  // ch-labjs.js: the cyborgHunterReplay POST field or lab.js rows), so there
+  // is nothing for the researcher to save.
+  replayAutoSaveVanilla: function (saved) {
     return formatError('CyborgHunterConfig.replay.autoSave is ignored',
       'autoSave is jsPsych-only under the one-liner, and this page has no jsPsych',
-      'save the recording yourself: call CyborgHunter.replay() in your submit or save code and send what it returns (autoSave works only with jsPsych)',
+      saved
+        ? 'remove autoSave: the recording is already saved with your data (the cyborgHunterReplay form field and CyborgHunter.data(), or the lab.js rows)'
+        : 'save the recording yourself: call CyborgHunter.replay() in your submit or save code and send what it returns (autoSave works only with jsPsych)',
       DOCS + 'advanced-integration.md#replay-with-the-one-liner');
   },
   // console.warn, jsPsych host: the autoSave finalize() did not settle in time;

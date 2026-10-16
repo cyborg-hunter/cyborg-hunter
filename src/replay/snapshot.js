@@ -166,7 +166,7 @@ function isEmittedAttr(tagName, name, redacted) {
 // names participant-supplied media, so such values are withheld there: the
 // keyframe drops the attribute and a patch removes it. Ordinary URLs and
 // everything outside redaction are kept. Stricter than the author-attribute
-// residual above, and in line with spec §8's "not in initial_dom attributes".
+// residual above, and in line with spec §8's list of withheld channels.
 var URL_ATTRS = { src: true, srcset: true, poster: true, href: true, 'xlink:href': true, data: true };
 var INLINE_URL_RE = /(^|[\s,])(data|blob):/i;
 function isInlineMedia(name, value, redacted) {

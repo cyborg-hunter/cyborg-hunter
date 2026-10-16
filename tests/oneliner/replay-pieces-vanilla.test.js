@@ -226,6 +226,14 @@ describe('ch.js with the bundled recorder on a page without a framework', () => 
     assert.equal(infos.filter((m) => m === MESSAGES.replaySrcIgnored('ch.js')).length, 1, infos.join('\n'));
   });
 
+  it('autoSave on a page without a framework: the warning says the recording is already saved', async () => {
+    const warns = [];
+    console.warn = (m) => warns.push(String(m));
+    win.CyborgHunterConfig = { replay: { tier: 'trace', autoSave: { mode: 'datapipe', experimentId: 'X' } } };
+    await start();
+    assert.ok(warns.includes(MESSAGES.replayAutoSaveVanilla(true)), warns.join('\n'));
+  });
+
   it('a GET form gets no replay input', async () => {
     await start();
     click(el('<button>x</button>'));
