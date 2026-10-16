@@ -355,6 +355,14 @@ export const MESSAGES = {
       'nothing is lost; rename your ' + key + ' column if you want ch-labjs.js\'s value under its usual name',
       DOCS + 'labjs.md#where-the-data-goes');
   },
+  // console.info (replay-loader.js installReplay): data-replay-src on a file
+  // that carries the recorder, which loads nothing.
+  replaySrcIgnored: function (file) {
+    return formatError('data-replay-src is ignored on ' + own(file),
+      own(file) + ' carries the session recorder and loads no replay file; data-replay-src applies to ch-qualtrics.js',
+      'remove data-replay-src from the ' + own(file) + ' tag',
+      DOCS + 'advanced-integration.md#replay-with-the-one-liner');
+  },
   // console.warn, once per page (adapters/vanilla.js carry()): the two hidden
   // POST fields together passed about 1 MB. Common server defaults refuse a
   // body that large, and a refused POST loses the participant's answers.

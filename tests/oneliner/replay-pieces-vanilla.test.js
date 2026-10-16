@@ -216,6 +216,16 @@ describe('ch.js with the bundled recorder on a page without a framework', () => 
     assert.equal(warns.filter((w) => w === MESSAGES.postFieldsLarge()).length, 1);
   });
 
+  // ch.js carries the recorder, so data-replay-src (where ch-qualtrics.js
+  // loads it from) means nothing on its tag; it is said once, not ignored
+  // in silence.
+  it('data-replay-src on a file that carries the recorder: one console note', async () => {
+    const infos = [];
+    console.info = (m) => infos.push(String(m));
+    await start({ replaySrc: 'https://cdn.example/cyborg-hunter-replay.js' });
+    assert.equal(infos.filter((m) => m === MESSAGES.replaySrcIgnored('ch.js')).length, 1, infos.join('\n'));
+  });
+
   it('a GET form gets no replay input', async () => {
     await start();
     click(el('<button>x</button>'));

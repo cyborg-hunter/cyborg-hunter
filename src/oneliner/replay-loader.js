@@ -420,6 +420,9 @@ export function installReplay(opts) {
   var none = { startVanilla: function () {} };
   if (!ctx.config.replay) return none;
   ctx.replayBundled = bundled(win);
+  // data-replay-src says where ch-qualtrics.js loads the recorder from; a
+  // file that carries it loads nothing, so the attribute does nothing there.
+  if (ctx.replayBundled && ctx.config.replaySrc) console.info(MESSAGES.replaySrcIgnored(ctx.file));
   if (!ctx.replayBundled) {
     try {
       ctx.replaySrc = replaySrcFor(ctx.scriptSrc, ctx.config.replaySrc, ctx.file);

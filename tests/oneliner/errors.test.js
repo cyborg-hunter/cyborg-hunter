@@ -228,6 +228,11 @@ const CASES = {
     fix: 'nothing is lost; rename your integrity column if you want ch-labjs.js\'s value under its usual name',
     link: DOCS + 'labjs.md#where-the-data-goes'
   },
+  replaySrcIgnored: {
+    args: ['ch.js'],
+    fix: 'remove data-replay-src from the ch.js tag',
+    link: DOCS + 'advanced-integration.md#replay-with-the-one-liner'
+  },
   postFieldsLarge: {
     args: [],
     fix: 'raise your server\'s request-body limit (nginx client_max_body_size, Express urlencoded limit) and check one full-length pilot\'s saved size',
