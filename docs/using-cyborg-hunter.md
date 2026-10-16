@@ -541,7 +541,12 @@ you need to, and download the report as a `.zip` with the CLI's output
 layout, or `summary.csv`, `triage.md` and `event-log.csv` on their own.
 The settings are the ones a report can apply after collection: the
 soft-score threshold, the score weights, the ID, integrity and
-session-report fields, and the platform ID field. Changing one on the results
+session-report fields, the platform ID field and whether the report shows
+it, and **Pseudonymize participant IDs** (as `--pseudonymize`: codes in
+place of IDs, see [The participant ID](#privacy-model)). With that box
+ticked, the results offer **Pseudonym key (keep private)**, which downloads
+`cyborg-hunter-pseudonyms.csv`, the key from codes back to IDs; keep it
+apart from the report. Changing a setting on the results
 re-analyses at once, without dropping the files again.
 "Load sample data" adds four sessions recorded on the demo tour (three by a
 human tester, one by an AI agent) to the files already listed, and on the
@@ -557,7 +562,9 @@ The report's annotations (Include, Exclude, Flag and a note; see
 [Annotating participants](#annotating-participants)) work the same way on
 this page. The page keeps them in this browser under the report's run id, so
 they stay through a re-analysis with other settings, and the results step
-has the exports (`annotations.csv`, `annotations.json`) and the import. The
+has the exports and the import. The buttons read `annotations.csv` and
+`annotations.json`; the files they save are named
+`annotations-<run id>.csv` and `annotations-<run id>.json`. The
 report itself runs sealed off in its frame, where it can neither store nor
 download anything.
 
@@ -704,9 +711,10 @@ bottom, how many are reviewed.
 
 The report keeps the annotations in this browser, under its run id, so they
 are there when you open the same `index.html` again. **Export JSON** saves
-them to a file, and **Import…** reads such a file back into a report of the
-same participants (entries for other participants are listed, not applied).
-**Export CSV** writes one row per participant in triage order:
+them to a file (`annotations-<run id>.json`), and **Import…** reads such a
+file back into a report of the same participants (entries for other
+participants are listed, not applied). **Export CSV**
+(`annotations-<run id>.csv`) writes one row per participant in triage order:
 `participantId, tier, triageScore, label, note, annotatedAt, runId`. Tick
 "count unreviewed as included" to write `include` for everyone you did not
 label, for an exclusion list.
