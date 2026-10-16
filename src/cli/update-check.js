@@ -5,7 +5,7 @@
 // request to npm's registry for the `latest` dist-tag, throttled to once per
 // day via a small cache file. A report run must never break, slow down, or
 // complain because npm is unreachable. It runs only in the CLI on the
-// researcher's machine — the browser library never makes network requests.
+// researcher's machine; the participant's browser never contacts npm.
 //
 // Opt-outs (checked before any network or cache access):
 //   NO_UPDATE_NOTIFIER — the convention established by update-notifier

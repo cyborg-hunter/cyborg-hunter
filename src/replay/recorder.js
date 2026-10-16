@@ -44,7 +44,7 @@ export const REPLAY_DEFAULTS = {
   // but stores multi-megabyte values (a giant textarea edited repeatedly, a large
   // DOM subtree). The budget covers events AND the initial DOM snapshot. ~8M chars
   // is far above any normal trial yet bounds a runaway before it breaks the tab or
-  // the DataPipe/localStorage upload. Set null to disable.
+  // the saved row, POST or upload. Set null to disable.
   maxCharsPerTrial: 8000000,
   // Ceiling for the SESSION-level viewport stream (spec §2 `viewport_changes`).
   // Both caps above are per-trial, so the one stream that outlives trials is the

@@ -1,8 +1,9 @@
 // src/oneliner/replay-loader.js
-// Session replay under the one-line setup, opt-in with data-replay. ch.js does
-// not bundle the recorder: cyborg-hunter-replay.js (self-contained, the same
-// file manual mode loads) is fetched only when data-replay is set, from the
-// directory ch.js itself was loaded from, or from data-replay-src.
+// Session replay under the one-line setup. ch.js and ch-labjs.js carry the
+// recorder (entry-replay.js) and record by default (data-replay="off" turns
+// it off); ch-qualtrics.js does not, and with data-replay fetches
+// cyborg-hunter-replay.js (the same file manual mode loads) from the
+// directory it was loaded from, or from data-replay-src.
 //
 //   jsPsych  initJsPsych runs synchronously in the experiment code, before
 //            the script can have loaded. ch.js therefore lists a proxy

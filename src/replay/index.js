@@ -200,8 +200,8 @@ export function attach(userConfig) {
       // a property of the seam, not one today's tests can see.
       var trace = attachTraceCapture(rec, { span: span });
       if (rec.config.tier === 'dom' || rec.config.tier === 'canvas') {
-        // 'canvas' is accepted for forward compat but captures at dom tier
-        // in v0.7 (canvas snapshots arrive with the v0.8 diff codec).
+        // 'canvas' is accepted for forward compatibility and captures at the
+        // dom tier.
         attachDomCapture(rec, {
           span: span,
           scrolled: trace.getScrolledElements,

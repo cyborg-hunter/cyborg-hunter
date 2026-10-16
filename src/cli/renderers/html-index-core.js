@@ -17,7 +17,9 @@
 //     sticky totals footer (interactivity is wired in the client script)
 //   - Empty placeholders for: legend modal, lightbox, IIFE script
 //
-// References linked images in images/ (not base64-embedded). Works offline.
+// References linked images in images/ (not base64-embedded). Opens from disk;
+// a dom-tier replay loads the recorded page's images, fonts and stylesheets
+// from their own addresses (docs: Viewing replays).
 
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';

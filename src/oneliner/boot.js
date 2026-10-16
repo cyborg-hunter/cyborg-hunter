@@ -67,7 +67,8 @@
 //      check reports a ch.js tag above jspsych.js or below the experiment
 //      code, and a jsPsych page that turns out not hookable falls back to the
 //      vanilla host (its guards and adapter start then);
-//   8. replay, only with data-replay (replay-loader.js): on the jsPsych
+//   8. replay, on by default in a file that carries the recorder (ch.js,
+//      ch-labjs.js) and with data-replay in ch-qualtrics.js (replay-loader.js): on the jsPsych
 //      host a proxy extension the initJsPsych wrap lists, which loads
 //      cyborg-hunter-replay.js in jsPsych's run(); on the vanilla and lab.js
 //      hosts (and on the not-hookable fallback) the standalone recorder, started after

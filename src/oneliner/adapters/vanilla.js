@@ -30,8 +30,8 @@
 //
 // Several pages. Every page load runs a new monitor whose performance.now()
 // starts at 0 again. The accumulated blob is kept in sessionStorage (per tab;
-// not the core's storage helpers, which are localStorage-first and would leak
-// into the next participant on a shared browser) under
+// not localStorage, which outlives the tab and would leak into the next
+// participant on a shared browser) under
 // cyborg-hunter:oneliner:session:<keyScope>:<participantId> (boot.js passes
 // the study's scope, the page's directory or a Qualtrics survey id, and keeps
 // the id itself under cyborg-hunter:oneliner:pid:<keyScope>), so the next

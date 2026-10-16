@@ -11,7 +11,7 @@ export const DEFAULT_THRESHOLDS = {
   dropMinChars: 0,             // record ALL drops
   maxPasteDropChars: 20000,    // text kept per paste/drop (null = no cap); the full length is always kept
   maxPasteDropCharsPerTrial: 200000, // text kept per trial across pastes and drops (null = no cap)
-  sidebarGapPx: 100,           // outerWidth - innerWidth above this = sidebar
+  sidebarGapPx: 100,           // innerWidth shrinking this far below its session baseline = sidebar opened
   layoutCompressionPx: 20,     // innerWidth - clientWidth above scrollbar width
   viewportShiftDebounceMs: 250, // quiet period before a viewport-width shift is logged (one gesture = one event)
   syntheticGapMs: 100,         // keydown-to-input gap above this = synthetic insertion
