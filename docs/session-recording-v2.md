@@ -239,9 +239,9 @@ Cost honesty (eng-review): alignment fields never ride `mouse.move`, but typing-
 **Scope [strengthened, eng-review]: redaction is a property of the FILE, not of event capture.** Redaction protects what the participant entered in a redacted subtree. That content MUST NOT appear anywhere in the serialized recording, in any of these channels:
 
 - typed text and key identities (`key.*`, `input.value`);
-- field values: the `value` attribute (in `initial_dom` and in `dom.attr` mutations) and form state (`initial_state.form`);
+- field values: the `value` attribute (in `initial_dom` and in `dom.attr` mutations), form state (`initial_state.form`), and selections and checked state (a redacted control emits no `input.select` or `input.checked`);
 - clipboard payloads;
-- text nodes: in `initial_dom` and in `dom.text` mutations they keep their node but carry an empty string;
+- text: text and comment nodes keep their node and position, `initial_dom` carries them with an empty string, and no `dom.text` mutation carries their content;
 - anchor identity (§6);
 - embedded media given as a `data:` or `blob:` URL in `src`, `srcset`, `poster`, `href`, `xlink:href` or `data` (a webcam frame or a drawn signature shown through `canvas.toDataURL()`, a file the participant supplied), and the resolved `media_src` annotation (§4).
 
