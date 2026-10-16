@@ -381,8 +381,9 @@ describe('guard-friction cooperation', () => {
     opts = opts || {};
     let onViolation = null;
     const stateReads = [];
+    const unsubscribed = [];
     const friction = {
-      onViolation: (fn) => { onViolation = fn; },
+      onViolation: (fn) => { onViolation = fn; return () => { unsubscribed.push(fn); }; },
       // `ongoing` models a violation that STARTED BEFORE replay attached, whose
       // phase:'start' emission is long gone by subscription time. The call is
       // counted because the pre-session gate is only observable that way: the
@@ -409,7 +410,7 @@ describe('guard-friction cooperation', () => {
       },
     });
     return {
-      rec, win, span, stateReads,
+      rec, win, span, stateReads, unsubscribed,
       doc: win.document,
       root: () => win.document.querySelector('#stage'),
       violate: (v) => onViolation(v),
@@ -417,6 +418,34 @@ describe('guard-friction cooperation', () => {
       events: () => rec.getState().trials.flatMap(t => t.events),
     };
   }
+
+  // The subscription is the recorder's like its DOM listeners: destroyed
+  // with it. Before, a destroyed recorder (CyborgHunter.replay(), a re-attach)
+  // stayed subscribed and serialized the page at every later violation.
+  it('destroy() unsubscribes from friction', () => {
+    const h = withFriction('<div id="stage"><p>x</p></div>');
+    h.rec.destroy();
+    assert.equal(h.unsubscribed.length, 1);
+  });
+
+  // The page copy is taken only when the recorder will keep it: not past
+  // maxGuardViolations, and not while stopped.
+  it('no page copy is taken when the violation would not be kept', () => {
+    const h = withFriction('<div id="stage"><p>x</p></div>', { maxGuardViolations: 1 });
+    h.rec.startTrial({ trialId: 't1' });
+    let reads = 0;
+    const stage = h.root();
+    const real = stage.attributes;
+    Object.defineProperty(stage, 'attributes', { get: () => { reads++; return real; } });
+    h.violate({ phase: 'start', reason: 'a' });
+    assert.ok(reads > 0, 'sanity: the first copy walks the page');
+    reads = 0;
+    h.violate({ phase: 'start', reason: 'b' });   // past the cap
+    assert.equal(reads, 0, 'past the cap the page is not walked');
+    h.rec.stopSession('finished');
+    h.violate({ phase: 'start', reason: 'c' });   // stopped
+    assert.equal(reads, 0, 'a stopped recorder does not walk the page');
+  });
 
   it('a violation is a session-level vendor entry, not an event (spec §5.8)', () => {
     const h = withFriction('<div id="stage"><p>clean</p></div>');

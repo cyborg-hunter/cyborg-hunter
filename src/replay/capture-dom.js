@@ -617,10 +617,17 @@ export function attachDomCapture(rec, env) {
           }, now());
         }
       }
-      win.GuardFriction.onViolation(function (violation) {
+      // Unsubscribed at destroy(), like the DOM listeners: a destroyed
+      // recorder must not keep copying the page at every violation.
+      rec.addTeardown(win.GuardFriction.onViolation(function (violation) {
         try {
           if (violation && violation.phase === 'start') {
-            rec.pushGuardViolation({
+            // The page copy only when the entry will be kept: past the cap
+            // the push records the cap note and nothing else, and a stopped
+            // recorder keeps nothing.
+            var room = rec.guardViolationRoom();
+            if (room === 'closed') return;
+            rec.pushGuardViolation(room === 'full' ? { reason: violation.reason, phase: 'start' } : {
               reason: violation.reason,
               phase: 'start',
               pre_scramble_dom: guardSnapshot()
@@ -632,7 +639,7 @@ export function attachDomCapture(rec, env) {
             }, now());
           }
         } catch (e) { rec.captureFailure('guard_violation', e); }
-      });
+      }));
     } catch (e) { rec.captureFailure('guard_violation', e); }
   }
 

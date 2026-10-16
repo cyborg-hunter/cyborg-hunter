@@ -150,6 +150,7 @@ export function createRecorder(userConfig) {
   var state = 'created';
   var listeners = [];
   var intervals = [];
+  var teardowns = [];
   // Channels with undelivered state to hand over before the recording closes
   // (see addPreCloseFlush). Run once per close: the flag keeps
   // stop-then-destroy from running them twice, and resumeSession() clears it,
@@ -649,6 +650,15 @@ export function createRecorder(userConfig) {
       }));
     },
 
+    // Whether a guard violation pushed now would be kept: 'open', 'full'
+    // (past maxGuardViolations) or 'closed' (not recording). Lets capture-dom
+    // skip the page copy a 'start' carries when nothing would keep it.
+    guardViolationRoom: function () {
+      if (state !== 'session' && state !== 'trial') return 'closed';
+      var gcap = config.maxGuardViolations;
+      return gcap != null && session.guardViolations.length >= gcap ? 'full' : 'open';
+    },
+
     // One change to <html>'s attributes ({name, value}; root-attrs.js). Vendor
     // data like the guard violations above, with the same lifecycle gate, cap
     // and single note.
@@ -723,6 +733,12 @@ export function createRecorder(userConfig) {
       listeners.push({ target: target, event: event, handler: handler, options: options || false });
     },
 
+    // A function to run at destroy(), for subscriptions that are not DOM
+    // listeners (GuardFriction.onViolation's unsubscribe).
+    addTeardown: function (fn) {
+      if (typeof fn === 'function') teardowns.push(fn);
+    },
+
     addInterval: function (id) {
       intervals.push(id);
     },
@@ -787,6 +803,8 @@ export function createRecorder(userConfig) {
       listeners = [];
       intervals.forEach(function (id) { clearInterval(id); });
       intervals = [];
+      teardowns.forEach(function (fn) { try { fn(); } catch (_) { /* best effort */ } });
+      teardowns = [];
     }
   };
 
