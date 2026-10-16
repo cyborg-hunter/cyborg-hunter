@@ -18,7 +18,7 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 | Mouse metrics | Mouse | Path efficiency, direction changes, speed variance | Computed from ≥3 move events |
 | AI extensions | Browser | DOM scan for known extension content-script selectors | 30s rescan interval |
 | Sidebar gap | Browser | `innerWidth` against its rolling baseline | 100px gap by default |
-| Viewport-width shift | Browser | ResizeObserver on `<html>` (`innerWidth − clientWidth` delta) | 20px delta; debounced 250ms so one resize gesture logs one event. Recorded as `viewportWidthShifts` since 0.6.1, with `layoutShifts` kept as a deprecated alias (the signal never measured Web-Vitals CLS) |
+| Viewport-width shift | Browser | ResizeObserver on `<html>`: the change in `<html>`'s width since the last width logged (or since the session started). The `innerWidth − clientWidth` gap is a different check, the sidebar signal's `layout_compression` method | More than 20px; debounced 250ms so one resize gesture logs one event, with the net change. Runs with the sidebar signal (`sidebarGap`). Recorded as `viewportWidthShifts` since 0.6.1, with `layoutShifts` kept as a deprecated alias (the signal never measured Web-Vitals CLS) |
 | Keyboard shortcuts | Browser | `keydown` listener for DevTools hotkeys (Ctrl/Cmd+Shift+I/J/C, F12) | All occurrences logged in `keyboardShortcuts` |
 | Window position | Browser | Window position on the desktop (`screenX`/`screenY`), window and viewport sizes, screen resolution, pixel ratio and zoom; checked every 2 s and after a resize | One row at session start, then a row only when something changed, up to `maxWindowPositions` rows (`windowPositionsCapped` says when a change went unrecorded). Device information: see [Privacy model](using-cyborg-hunter.md#privacy-model) |
 | Zoom changes | Browser | Inferred from `devicePixelRatio` change | Diagnostic |
@@ -127,7 +127,10 @@ CyborgHunter.init({
 **`keystrokeDynamics`** controls whether the **raw per-edit timestamps** are
 persisted in each trial report. When off (the default in `permissive`/`standard`),
 the typing-speed signal still works — only the derived `charsPerSec` is saved, and
-the raw timings never leave the browser. Turn it on (or set
+the trial report's `editTimestamps` array is empty. Other records still carry
+times: each synthetic insertion and each foreign-input event has its own `t`, and
+the session recorder (on by default in `ch.js` and `ch-labjs.js`) records every key
+press with its time. Turn it on (or set
 `collectForPostHoc.fullKeystrokeTimestamps: true`) to keep the full timestamp array
 for keystroke-dynamics analysis.
 
