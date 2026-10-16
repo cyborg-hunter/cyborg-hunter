@@ -117,6 +117,16 @@ export function attach(userConfig) {
       'record with your own attach() instead.');
     return refusedApi(userConfig);
   }
+  // The other order: the page started its own recorder before the one-line
+  // setup attached (an inline script runs before DOMContentLoaded, when
+  // ch.js attaches). The page's recording is the researcher's choice and
+  // would be lost, so ch.js steps aside and records nothing.
+  if (_active && !_active.config._ownerSavesRecording && userConfig && userConfig._ownerSavesRecording) {
+    console.warn('[cyborg-hunter-replay] ch.js does not record: the page already records this page with its own ' +
+      'CyborgHunterReplay.attach(), which goes on. Save that recording yourself, or remove your attach() to let ' +
+      'ch.js record and save it with your data (data-replay="off" silences this).');
+    return refusedApi(userConfig);
+  }
   if (_active) {
     console.warn('[cyborg-hunter-replay] attach() called while a recorder is active — replacing the previous instance (its unsaved recording is discarded).');
     _active.destroy();

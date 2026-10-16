@@ -149,6 +149,20 @@ describe('ch.js with the bundled recorder on a page without a framework', () => 
     assert.equal(f.querySelector('input[name="cyborgHunterData"]').getAttribute('data-record-exclude'), '');
   });
 
+  it('a recorder the page started before ch.js goes on; ch.js saves no pieces and logs no error', async () => {
+    const own = attachRecorder({ participantId: 'P-PAGE', autoSave: { mode: 'none' } });
+    own.startSession();
+    await start();
+    click(el('<button>x</button>'));
+    const f = form();
+    submit(f);
+    assert.equal(fieldOf(f), null, 'no replay field');
+    assert.equal(win.CyborgHunter.data().cyborgHunterReplay, undefined);
+    assert.ok(own.getRecording().segments.some((s) => s.events.some((e) => e.type === 'mouse.click')), 'the page recorder recorded the click');
+    assert.deepStrictEqual(errors, []);
+    own.destroy();
+  });
+
   it('a GET form gets no replay input', async () => {
     await start();
     click(el('<button>x</button>'));

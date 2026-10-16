@@ -48,6 +48,30 @@ describe('CyborgHunterReplay.attach', () => {
     }
   });
 
+  // The other order: the page's own recorder started first (an inline
+  // script before DOMContentLoaded, when ch.js attaches). ch.js used to
+  // destroy it; now ch.js steps aside with a warning and the page's
+  // recording goes on.
+  it('the one-line setup does not replace a recorder the page started first', () => {
+    const warns = [];
+    const origWarn = console.warn;
+    console.warn = (msg) => warns.push(String(msg));
+    try {
+      const page = CHReplay.attach({ participantId: 'P1', autoSave: { mode: 'none' } });
+      page.startSession();
+      const owner = CHReplay.attach({ participantId: 'P1', autoSave: { mode: 'none' }, _ownerSavesRecording: true });
+      assert.strictEqual(owner.refused, true);
+      assert.ok(warns.some((w) => /already records this page/.test(w)), warns.join('\n'));
+      page.startTrial({ trialId: 't1' });
+      page.endTrial();
+      page.stopSession('finished');
+      assert.strictEqual(page.getRecording().end_reason, 'finished', 'the page recorder was not destroyed');
+      page.destroy();
+    } finally {
+      console.warn = origWarn;
+    }
+  });
+
   it('second attach destroys the first and warns', () => {
     const warnings = [];
     const origWarn = console.warn;
