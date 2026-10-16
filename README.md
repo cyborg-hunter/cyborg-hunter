@@ -2,7 +2,7 @@
 
 Detects AI-tool use during browser-based behavioral experiments. Captures paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that compromise data quality on Prolific / MTurk / classroom studies and Qualtrics surveys. Produces a triage report ranking participants by suspiciousness.
 
-Optional companion deterrence modules ship in the same package (`ch.js` bundles both; the separate `extension-guard-friction.js` and `extension-guard-honeypot.js` files are for manual mode): friction enforces fullscreen + blocks sidebars + scrambles content during violations + asks cooperative LLMs to refuse; honeypot exposes both hidden and visible bait fields that AI agents fill while human participants don't see them.
+Optional companion deterrence modules ship in the same package (`ch.js` bundles both; the separate `extension-guard-friction.js` and `extension-guard-honeypot.js` files are for manual mode): friction enforces fullscreen (where the browser allows it) + blocks sidebars + scrambles content during violations + asks cooperative LLMs to refuse; honeypot exposes hidden and near-invisible (4×4 px) bait fields that AI agents fill and participants rarely notice (screen readers announce their labels).
 
 **[Try the live demo →](https://cyborg-hunter.github.io/cyborg-hunter/)** — run the tour in your browser; nothing leaves your machine.
 
@@ -89,7 +89,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 - `data-guards`: the honeypot is on by default (read the [ethics and IRB note](docs/advanced-integration.md#honeypot-ethics-and-irb-note)); `data-guards="honeypot,friction"` adds friction, which enforces only after a start mark (`CyborgHunter.frictionEntryTrial()` in the timeline, or `data-ch-friction-start`) and otherwise just observes ([Friction](docs/advanced-integration.md#friction)); `data-guards="none"` turns both off.
 - Session replay: on by default in `ch.js` and `ch-labjs.js`, saved with the rows (or the POST) your experiment already saves; `data-replay="dom"` adds the page itself, `data-replay="off"` turns it off. What is collected, for your ethics protocol: [docs/using-cyborg-hunter.md § Privacy model](docs/using-cyborg-hunter.md#privacy-model).
 - `data-debug`: an on-page badge and a console summary while piloting; remove it before launch, because participants see the badge.
-- Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (every POST form gets it as hidden `cyborgHunterData` and `cyborgHunterReplay` fields, whatever address it posts to).
+- Without jsPsych: mark trials with `data-ch-trial="q1"` or `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` (every POST form gets it as hidden `cyborgHunterData` and `cyborgHunterReplay` fields, whatever address it posts to). Together they are about 1 MB for a half-hour study, more than nginx's or Express's default limit: raise your server's limit and check a full-length pilot ([quickstart](docs/quickstart.md)).
 - Qualtrics: paste the `ch-qualtrics.js` tag into the survey's Look & Feel header and declare one embedded-data field; the CLI reads the CSV export ([docs/qualtrics.md](docs/qualtrics.md)).
 - lab.js: the `ch-labjs.js` tag below `lib/lab.js` and above the study script; every lab.js screen is a trial, and the integrity data lands in lab.js's own rows ([docs/labjs.md](docs/labjs.md)).
 
@@ -106,6 +106,8 @@ open cyborg-hunter-report/index.html
 ```
 
 Output: `summary.csv` (per-participant columns), `triage.md` (ranked list), `event-log.csv` (chronological events), `images/` (per-participant mouse paths, session timelines, typing profiles), `replay/` (session recordings), `index.html` (landing page). Every output is keyed by the participant ID, under the one-line setup the platform's: treat the folder as identifiable data.
+
+The CLI works on local files only, with one exception: once a day `report` asks the npm registry for the latest version, to tell you about an update. The request carries no study data; set `NO_UPDATE_NOTIFIER=1` to turn it off ([docs/cli-reference.md](docs/cli-reference.md)).
 
 ## Session replay
 
@@ -173,7 +175,7 @@ downloads for localhost; `datapipe` saves are unaffected.
 | Signal | How | Class |
 |---|---|---|
 | Paste | Clipboard `paste` events | Hard (count threshold) |
-| Drag-and-drop | `drop` events on inputs | Hard (count threshold) |
+| Drag-and-drop | `drop` events anywhere on the page | Hard (count threshold) |
 | Copy | Clipboard `copy` events | Soft (weighted) |
 | Tab-away | `visibilitychange` + `blur`/`focus` | Soft (weighted) |
 | Browser sidebar | `innerWidth` delta + layout compression | Soft (weighted) |
