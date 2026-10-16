@@ -257,8 +257,10 @@ this means a separate consent survey).
 - On a page without a framework, the one-line setup adds two hidden fields,
   `cyborgHunterData` and `cyborgHunterReplay`, to **every POST form** the page
   submits, whatever server the form posts to. A third-party form on the page
-  (a sign-up box, a form service) receives them too. Together they are often
-  several MB; a server with a small upload limit rejects the submission
+  (a sign-up box, a form service) receives them too. Together they are
+  about 1 MB for a half-hour study on the trace tier, up to about 3 MB; a
+  server with a small upload limit (nginx's 1 MB default) rejects the
+  submission
   ([advanced-integration.md → The hidden form field](advanced-integration.md#vanilla-segmentation-reference)).
 - The recorder's optional DataPipe save posts the recording to
   `pipe.jspsych.org`, which forwards it to your OSF project.

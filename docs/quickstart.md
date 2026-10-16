@@ -2,7 +2,9 @@
 
 From zero to a triage report, for a jsPsych 7 experiment.
 
-**Not using jsPsych?** `ch.js` also works on a page without a framework; on a [Qualtrics](qualtrics.md) survey load `ch-qualtrics.js`, on a [lab.js](labjs.md) study `ch-labjs.js` ([Which file](#which-file)). `ch-labjs.js` takes the trials from lab.js's components and writes into lab.js's rows; [labjs.md](labjs.md) has the setup. On other pages, mark trials with `data-ch-trial="q1"` on a clickable element or with `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` with your own save code (a POST form gets it automatically, as a hidden `cyborgHunterData` field). The details are in [advanced-integration.md → Vanilla segmentation reference](advanced-integration.md#vanilla-segmentation-reference). Steps 1 and 4–6 apply unchanged.
+**Not using jsPsych?** `ch.js` also works on a page without a framework; on a [Qualtrics](qualtrics.md) survey load `ch-qualtrics.js`, on a [lab.js](labjs.md) study `ch-labjs.js` ([Which file](#which-file)). `ch-labjs.js` takes the trials from lab.js's components and writes into lab.js's rows; [labjs.md](labjs.md) has the setup. On other pages, mark trials with `data-ch-trial="q1"` on a clickable element or with `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` with your own save code (a POST form gets it automatically, with the session recording, as two hidden fields, `cyborgHunterData` and `cyborgHunterReplay`). The details are in [advanced-integration.md → Vanilla segmentation reference](advanced-integration.md#vanilla-segmentation-reference). Steps 1 and 4–6 apply unchanged.
+
+**Without a framework, raise your server's upload limit first.** Every POST form carries both hidden fields, and they are large. On a 27-minute single-page study on the default trace tier they came to about 1.1 MB (session data about 0.2 MB, recording about 0.9 MB; the recording grows by about 35 KB a minute), and up to about 3 MB. Common server defaults refuse that and fail the participant's submission: nginx's `client_max_body_size` is 1 MB and Express's `express.urlencoded()` takes 100 kb (PHP's `post_max_size`, 8 MB, is enough). Raise the limit ([Server limits](advanced-integration.md#vanilla-segmentation-reference) has nginx, Express and PHP examples), then run one full-length pilot and check the size of what your server saved. When the two fields together pass 1 MB, ch.js logs a console warning and adds a note to `cyborgHunterError`.
 
 **You need:** a jsPsych 7 experiment, Node.js ≥ 18 on the machine where you'll analyze data, and a way to save each participant's data to a file (CSV or JSON). You almost certainly have all three already.
 
@@ -133,7 +135,7 @@ While testing, paste something into a response box and switch tabs for a few sec
 
 ## 4. Collect data
 
-Run your study as usual. Put every participant's saved file in one directory, e.g. `./data/`.
+Before launch, run one pilot session at full length on the real server and check the size of the saved file against your server's or platform's limit ([Data volume](using-cyborg-hunter.md#data-volume-and-delivery) has the limits of DataPipe and JATOS). Then run your study as usual. Put every participant's saved file in one directory, e.g. `./data/`.
 
 ## 5. Generate the report
 
