@@ -129,7 +129,7 @@ cyborg-hunter-report/
 
 Every output is keyed by participant ID, which under the one-line setup is the
 platform's (Prolific, MTurk). `index.html` carries pasted texts, `event-log.csv`
-every pasted and dropped text (a synthetic insertion carries its length only), `summary.csv` the
+every pasted and dropped text (a synthetic insertion's row has no text: the monitor records only its length, which the log does not show), `summary.csv` the
 honeypot's free-text answer, and `replay/` the whole recordings (typed text
 included). Treat the folder as raw, identifiable data; to share it, run
 with `--pseudonymize`, which replaces every ID with a code and keeps the key
@@ -294,10 +294,10 @@ Every clipboard, drop, synthetic-insertion, and tab-away event recorded during a
 |---|---|
 | `participantId` | Who |
 | `trialId` | Which trial |
-| `eventType` | `paste`, `copy`, `drop`, `synthetic`, or `tabAway` |
+| `eventType` | `paste`, `copy` (a cut is listed as `copy`), `drop`, `synthetic`, or `tabAway` |
 | `timestamp` | When (session-absolute `performance.now()` ms — same scale across all rows) |
 | `duration_ms` | Populated for `tabAway` (the duration); empty for instantaneous events |
-| `text` | Pasted/dropped text if available; for `tabAway` carries the trigger type (`windowBlur`, `visibilityChange`, etc.) |
+| `text` | For `paste` and `drop`, the text when it was collected (`collectForPostHoc.pasteDropContent`, on by default; up to `thresholds.maxPasteDropChars`, 20,000 characters by default, per event); empty for `copy` and `synthetic`; for `tabAway`, the trigger: `tabHidden` (the tab was hidden) or `windowBlur` (the window lost focus) |
 
 A text cell that begins with `=`, `+`, `-`, `@`, a tab or a carriage return
 is written with a leading apostrophe (`'`), so a spreadsheet reads it as text
