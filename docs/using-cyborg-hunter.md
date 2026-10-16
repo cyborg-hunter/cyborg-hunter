@@ -546,7 +546,17 @@ it, and **Pseudonymize participant IDs** (as `--pseudonymize`: codes in
 place of IDs, see [The participant ID](#privacy-model)). With that box
 ticked, the results offer **Pseudonym key (keep private)**, which downloads
 `cyborg-hunter-pseudonyms.csv`, the key from codes back to IDs; keep it
-apart from the report. Changing a setting on the results
+apart from the report. The page remembers the key in this browser, so a
+participant keeps the same code from one visit to the next: load the CLI's
+key file once (**Use a key file…** under the box, or drop it with your data
+files; it is never read as data) and the codes match the CLI's from then on.
+Without a key, the first pseudonymized report makes one. The settings show
+the key in use by a fingerprint (the first 8 hex digits of the SHA-256 of
+its secret), never the secret; **Forget key** removes it from the browser.
+Only the secret is stored, never participant IDs. In a private window, or
+where the browser blocks site storage, the key lasts until the page is
+closed. The page's key download lists only the participants of the report
+on screen, so do not overwrite a CLI key file with it. Changing a setting on the results
 re-analyses at once, without dropping the files again.
 "Load sample data" adds four sessions recorded on the demo tour (three by a
 human tester, one by an AI agent) to the files already listed, and on the

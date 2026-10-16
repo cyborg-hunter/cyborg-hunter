@@ -24,6 +24,8 @@ Collected data, configuration and reports all change: read
   consecutive recordings (pages, reloads) into one replay.
 - Pseudonymized export: `pseudonymize` / `--pseudonymize` and
   `pseudonymKeyFile`, and an analyzer setting; the key stays out of the report.
+  The analyzer remembers the key in the browser and accepts the CLI's key
+  file, so its codes stay the same across visits and match the CLI's.
 - `scripts/pin-snippets.mjs` (`npm run pin:snippets`): every documented
   script tag names an exact version and carries an SRI `integrity` hash;
   `--check` runs in the tests, and after each release a workflow job checks
@@ -73,8 +75,8 @@ Collected data, configuration and reports all change: read
   across participants are not joined.
 - Plot files of IDs that differ only in case no longer overwrite each other
   on macOS and Windows.
-- Pseudonymized output: replay reasons and the analyzer's warnings use the
-  codes; the key-file guard compares real paths; deeply nested data no
+- Pseudonymized output: replay reasons, the analyzer's warnings and a
+  missing recording's save location use the codes; the key-file guard compares real paths; deeply nested data no
   longer stops the run; `triage.md` escapes the Reason column.
 - Participant IDs that clean up to the same file name no longer overwrite
   each other's plots; an ID of `__proto__` no longer pollutes the analyzer's
