@@ -235,7 +235,7 @@ export function attrPatchValue(node, name, redacted) {
  * the set an exclusion transition has to clear or restore wholesale.
  */
 export function emittedAttrs(node, redacted) {
-  return buildAttrs(node, node.tagName || '', redacted);
+  return buildAttrs(node, String(node.tagName || '').toUpperCase(), redacted);
 }
 
 /**
@@ -252,7 +252,7 @@ export function isEmittableNode(node) {
   var type = node.nodeType;
   if (type === TEXT_NODE || type === COMMENT_NODE) return true;
   if (type !== ELEMENT_NODE) return false;
-  return !SKIP_TAGS[node.tagName || ''];
+  return !SKIP_TAGS[String(node.tagName || '').toUpperCase()];   // XHTML pages report lower case
 }
 
 /**
@@ -270,7 +270,7 @@ export function carriesChildren(el, excluded) {
   // Frames are the element only (spec §13): the child document is a separate
   // browsing context this recorder never observes, and any parser fallback
   // content inside the element was never rendered.
-  return (el.tagName || '') !== 'IFRAME';
+  return String(el.tagName || '').toUpperCase() !== 'IFRAME';
 }
 
 /**

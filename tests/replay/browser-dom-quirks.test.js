@@ -33,6 +33,31 @@ describe('XHTML: lower-case tag names', () => {
   });
 });
 
+describe('XHTML: lower-case tag names in the snapshot rules', () => {
+  const lower = (el) => { const t = el.tagName.toLowerCase(); Object.defineProperty(el, 'tagName', { get: () => t }); };
+  it('an inline <script> is skipped, its source never recorded', () => {
+    const win = new Window({ url: 'https://example.org/' });
+    win.document.body.innerHTML = '<div><p>x</p></div>';
+    const script = win.document.createElement('script');
+    script.textContent = 'var SCRIPTSECRET = 1;';
+    win.document.body.firstElementChild.appendChild(script);
+    lower(script);
+    const tree = serializeTree(win.document.body.firstElementChild, createSpan(), {});
+    assert.ok(!JSON.stringify(tree).includes('SCRIPTSECRET'));
+  });
+
+  it('an <iframe> is recorded without its fallback children', () => {
+    const win = new Window({ url: 'https://example.org/' });
+    win.document.body.innerHTML = '<div></div>';
+    const frame = win.document.createElement('iframe');
+    frame.appendChild(win.document.createTextNode('FALLBACKTEXT'));
+    win.document.body.firstElementChild.appendChild(frame);
+    lower(frame);
+    const tree = serializeTree(win.document.body.firstElementChild, createSpan(), {});
+    assert.ok(!JSON.stringify(tree).includes('FALLBACKTEXT'));
+  });
+});
+
 describe('a form whose field is named "id"', () => {
   it('the keyframe reads the id attribute, not the shadowing field', () => {
     const win = new Window({ url: 'https://example.org/' });
