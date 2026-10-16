@@ -140,15 +140,23 @@ describe('a recording whose page nests elements very deeply', () => {
     const fixture = (name) => readFileSync(join('tests/fixtures/demo', name), 'utf8');
     const rec = JSON.parse(fixture('DEMO-FIXT-replay-1785352263344.json'));
     const keyframe = rec.segments.find((s) => s.initial_dom);
-    // Small on the wire, but deeper than JSON.stringify can follow.
-    let node = { id: 700000, kind: 'element', tag: 'div', attrs: {}, children: [] };
-    for (let i = 1; i <= 30000; i++) node = { id: 700000 + i, kind: 'element', tag: 'div', attrs: {}, children: [node] };
-    keyframe.initial_dom.children.push(node);
+    // Small on the wire, but deeper than JSON.stringify can follow. The text
+    // is built by hand: the test's own JSON.stringify of it overflowed the
+    // stack on the Node CI runs (20), which is the failure under test.
+    const DEPTH = 30000;
+    const open = [], close = [];
+    for (let i = DEPTH; i >= 1; i--) {
+      open.push('{"id":' + (700000 + i) + ',"kind":"element","tag":"div","attrs":{},"children":[');
+      close.push(']}');
+    }
+    const deepJson = open.join('') + '{"id":700000,"kind":"element","tag":"div","attrs":{},"children":[]}' + close.join('');
+    keyframe.initial_dom.children.push({ deepMarker: true });
+    const recJson = JSON.stringify(rec).replace('{"deepMarker":true}', deepJson);
     const other = JSON.parse(fixture('DEMO-FIXT-replay-1785352263344.json'));
     other.participant_id = 'OTHER';
     const { participants, config } = await ingestFilesOf({
       'DEMO-FIXT.json': fixture('DEMO-FIXT.json'),
-      'DEMO-FIXT-replay-1785352263344.json': JSON.stringify(rec),
+      'DEMO-FIXT-replay-1785352263344.json': recJson,
       'OTHER.json': fixture('DEMO-FIXT.json').replaceAll('DEMO-FIXT', 'OTHER'),
       'OTHER-replay-1785352263344.json': JSON.stringify(other),
     });
