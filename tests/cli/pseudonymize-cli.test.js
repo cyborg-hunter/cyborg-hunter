@@ -3,7 +3,7 @@
 // creates the key file and a second one that reuses it.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, copyFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -130,6 +130,31 @@ describe('CLI run: pseudonymize', () => {
       assert.ok(key3.startsWith(key1), 'the old rows stay as they were');
       assert.match(key3.slice(key1.length), /^P-[0-9a-f]{10},P-THIRD\n$/);
       assert.equal(parseKeyFile(key3).secret, parseKeyFile(key1).secret);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // A missing recording's save pointer (integrityReplayMeta.saved_to) is
+  // printed in index.html; a DataPipe save names the file after the id.
+  it('a missing recording\'s save pointer names no raw id in any file of the report', () => {
+    const RAW = 'PROLIFICX5d1e9f00aa';
+    const dir = studyDir();
+    try {
+      const p = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8').replaceAll('DEMO-FIXT', RAW));
+      p.trials.forEach((t) => { t.integrityReplayMeta = { schema_version: 2, tier: 'dom', saved_to: 'datapipe:EXP/' + RAW + '-replay-1.json' }; });
+      writeFileSync(join(dir, 'data', RAW + '.json'), JSON.stringify(p));
+      const run = cli(['--pseudonymize'], dir);
+      assert.equal(run.status, 0, run.stderr);
+      assert.ok(!(run.stdout + run.stderr).includes(RAW), 'the console names no raw id');
+      const entries = readdirSync(join(dir, 'report'), { withFileTypes: true, recursive: true });
+      assert.ok(entries.some((e) => e.name === 'index.html'));
+      for (const e of entries) {
+        const path = join(e.parentPath || e.path, e.name);
+        assert.ok(!path.includes(RAW), path);
+        if (e.isFile()) assert.ok(!readFileSync(path).toString('latin1').includes(RAW), path + ' names the participant');
+      }
+      assert.match(readFileSync(join(dir, 'report', 'index.html'), 'utf8'), /saved_to: <strong>datapipe:EXP\/P-[0-9a-f]{10}-replay-1\.json<\/strong>/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

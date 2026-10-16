@@ -245,6 +245,43 @@ describe('pseudonymized text that names participants', () => {
     }
   });
 
+  // The replay extension stamps its save pointer on every trial
+  // (integrityReplayMeta); a manual-mode DataPipe save names the file after
+  // the id, and the report prints saved_to for a participant whose recording
+  // is missing. Codes replace ids by key, so the strings need the text pass.
+  it('the replay save pointer (integrityReplayMeta) of a missing recording names no raw id', async () => {
+    const RAWID = 'PROLIFICX5d1e9f00aa';
+    const dir = mkdtempSync(join(tmpdir(), 'ch-pseudo-meta-'));
+    try {
+      const p = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8').replaceAll('DEMO-FIXT', RAWID));
+      const meta = { schema_version: 2, tier: 'dom', saved_to: 'datapipe:EXP/' + RAWID + '-replay-1.json', save_error: 'upload of ' + RAWID + '-replay-1.json failed' };
+      p.trials.forEach((t) => { t.integrityReplayMeta = meta; });
+      p.trials[0].replayFinalizeError = 'could not save ' + RAWID;
+      writeFileSync(join(dir, RAWID + '.json'), JSON.stringify(p));
+      const { config } = mergeConfig({ dataDir: dir, pseudonymize: true });
+      const { participants } = await ingest(config);
+      assert.equal(participants[0].replay, null, 'no recording');
+      const plain = await buildAll(participants, mergeConfig({}).config, null);
+      assert.match(plain.out['index.html'], new RegExp('saved_to: <strong>datapipe:EXP/' + RAWID + '-replay-1\\.json</strong>'), 'the fixture is a fair test');
+      const codes = await assignCodes(participants.map((x) => x.participantId), SECRET, hmac);
+      const coded = pseudonymizeParticipants(participants, codes, config);
+      const { out } = await buildAll(coded, config, null);
+      for (const [path, data] of Object.entries(out)) {
+        const text = typeof data === 'string' ? data : Buffer.from(data).toString('latin1');
+        assert.ok(!text.includes(RAWID), path + ' names the participant');
+      }
+      const code = codes.get(RAWID);
+      assert.match(out['index.html'], new RegExp('saved_to: <strong>datapipe:EXP/' + code + '-replay-1\\.json</strong>'), 'the pointer stays, coded');
+      assert.ok(coded[0].trials.every((t) => t.integrityReplayMeta.saved_to === 'datapipe:EXP/' + code + '-replay-1.json'));
+      assert.equal(coded[0].trials[1].integrityReplayMeta.save_error, 'upload of ' + code + '-replay-1.json failed');
+      assert.equal(coded[0].trials[0].integrityReplayMeta.tier, 'dom', 'other values as they were');
+      assert.equal(coded[0].trials[0].replayFinalizeError, 'could not save ' + code);
+      assert.equal(participants[0].trials[0].integrityReplayMeta.saved_to, meta.saved_to, 'the raw participants are not changed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('pseudonymizeWarnings: ids, Qualtrics response ids and ch.js ids become codes; a longer id is not cut', async () => {
     const participants = [
       { participantId: 'P1', metadata: { qualtricsResponseId: 'R_abc123' } },

@@ -607,6 +607,25 @@ test('a pseudonymized run: no raw id in the zip or the in-page report, the key a
   assert.equal(plain.pseudonymKey, null);
 });
 
+// A missing recording's save pointer (integrityReplayMeta.saved_to, which a
+// DataPipe save names after the id) is printed in the report: coded too.
+test('a pseudonymized run: a missing recording\'s save pointer names no raw id in the zip or the in-page report', async () => {
+  const RAW = 'PROLIFICX5d1e9f00aa';
+  const p = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT.json', 'utf8').replaceAll('DEMO-FIXT', RAW));
+  p.trials.forEach((t) => { t.integrityReplayMeta = { schema_version: 2, tier: 'dom', saved_to: 'datapipe:EXP/' + RAW + '-replay-1.json' }; });
+  const files = [{ path: 'data/' + RAW + '.json', file: new File([JSON.stringify(p)], RAW + '.json') }];
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  w.send({ type: 'run', files, config: { ...checked.config, pseudonymize: true }, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  const zip = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  for (const [name, bytes] of Object.entries(zip)) assert.ok(!Buffer.from(bytes).toString('latin1').includes(RAW), name + ' names the participant');
+  assert.ok(!done.html.includes(RAW), 'the in-page report names the participant');
+  assert.match(strFromU8(zip['index.html']), /saved_to: <strong>datapipe:EXP\/P-[0-9a-f]{10}-replay-1\.json<\/strong>/);
+});
+
 // Ingest's warnings are listed on the page beside the report, so under
 // config.pseudonymize they name participants by their codes too.
 test('a pseudonymized run: the warnings the page lists name participants by their codes', async () => {

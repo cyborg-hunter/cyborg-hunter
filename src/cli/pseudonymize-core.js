@@ -115,7 +115,11 @@ export function isPseudonymized(p) { return coded.has(p); }
 //   - the replay: the recording's top-level participant_id (v1:
 //     metadata.participant_id) set to the code, its source filename (named
 //     after the id) dropped, and the id, as written and as file names carry
-//     it, replaced in the reason a replay that is not shown gives.
+//     it, replaced in the reason a replay that is not shown gives;
+//   - the replay extension's save pointer on the trials (TEXT_KEYS): its
+//     strings name the file the recording was saved to, which a DataPipe save
+//     names after the id, and the report prints saved_to when the recording
+//     is missing; the id is replaced in them as in the reason.
 // Matching is by key, never by value, so content that happens to equal an id
 // is left alone (a trial labelled "1" in a cohort with participant "1"). The
 // configured field names are matched only where ingest and the report read
@@ -129,6 +133,9 @@ export function pseudonymizeParticipants(participants, codes, config) {
   const idField = named(config && config.participantIdField);
   const platformField = named(config && config.platformIdField);
   const swap = textPseudonymizer(namesOf(participants, codes));
+  // Values whose strings name the participant by design: every string inside
+  // them, at any depth, goes through the text pass.
+  const TEXT_KEYS = new Set(['integrityReplayMeta', 'replayFinalizeError']);
 
   return participants.map((p) => {
     const raw = String(p.participantId);
@@ -138,16 +145,18 @@ export function pseudonymizeParticipants(participants, codes, config) {
     // nested far deeper than the call stack, and a recursive copy of it
     // stopped the run. Each step copies one array or object and leaves its
     // children on the stack; a key is set when its object is copied, so the
-    // copy keeps the key order.
+    // copy keeps the key order. `text`: the value is under one of TEXT_KEYS.
     const scrub = (value) => {
       const box = {};
-      const stack = [[box, 'v', value]];
+      const stack = [[box, 'v', value, false]];
       while (stack.length > 0) {
-        const [target, key, v] = stack.pop();
+        const [target, key, v, text] = stack.pop();
         if (Array.isArray(v)) {
           const out = new Array(v.length);
           target[key] = out;
-          for (let i = 0; i < v.length; i++) stack.push([out, i, v[i]]);
+          for (let i = 0; i < v.length; i++) stack.push([out, i, v[i], text]);
+        } else if (typeof v === 'string' && text) {
+          target[key] = swap(v);
         } else if (!v || typeof v !== 'object') {
           target[key] = v;
         } else {
@@ -160,7 +169,7 @@ export function pseudonymizeParticipants(participants, codes, config) {
               out[k] = code;
             } else {
               out[k] = undefined;
-              stack.push([out, k, x]);
+              stack.push([out, k, x, text || TEXT_KEYS.has(k)]);
             }
           }
         }
