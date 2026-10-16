@@ -236,7 +236,18 @@ Cost honesty (eng-review): alignment fields never ride `mouse.move`, but typing-
 
 ## 8. Privacy and redaction
 
-**Scope [strengthened, eng-review]: redaction is a property of the FILE, not of event capture.** A redacted subtree's content must not appear anywhere in the serialized recording: not in `initial_dom` attributes or text, not in `initial_state.form`, not in `dom.text`/`dom.attr` mutations, not in key identities, not in clipboard payloads, not in anchor identity. The conformance leak-scan fixture verifies exactly this property (a typed sentinel and its per-character keystrokes appear nowhere in the JSON).
+**Scope [strengthened, eng-review]: redaction is a property of the FILE, not of event capture.** Redaction protects what the participant entered in a redacted subtree. That content MUST NOT appear anywhere in the serialized recording, in any of these channels:
+
+- typed text and key identities (`key.*`, `input.value`);
+- field values: the `value` attribute (in `initial_dom` and in `dom.attr` mutations) and form state (`initial_state.form`);
+- clipboard payloads;
+- text nodes: in `initial_dom` and in `dom.text` mutations they keep their node but carry an empty string;
+- anchor identity (§6);
+- embedded media given as a `data:` or `blob:` URL in `src`, `srcset`, `poster`, `href`, `xlink:href` or `data` (a webcam frame or a drawn signature shown through `canvas.toDataURL()`, a file the participant supplied), and the resolved `media_src` annotation (§4).
+
+**Exception: page-authored attributes stay.** The element's tag, the subtree's structure, and the attributes the page author wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`, and every other attribute outside the list above) are kept in a redacted subtree, because a player needs them to rebuild the page. A page that copies entered text into such an attribute exposes that text in the recording; a page that needs the text protected SHOULD NOT mirror it into attributes.
+
+The conformance leak-scan fixture verifies the MUST above (a typed sentinel and its per-character keystrokes appear nowhere in the JSON).
 
 Floor (MUST): values of `<input type="password">` are never recorded, in any channel.
 
@@ -266,7 +277,7 @@ UTF-8 JSON; optionally gzip-compressed. Consumers detect gzip by extension (`.js
 
 ## 13. Known capture limitations [NEW section]
 
-The format does not capture: **shadow DOM** (web-component internals), **iframes** (embedded surveys/videos: only the frame element itself is recorded), **`<input type="file">`** (file names/contents never recorded), **CSSOM-bypass style changes** (rules edited via the CSSOM API without DOM mutation, common in CSS-in-JS — the stylesheet observer misses them), **media/WebGL pixel content** (canvas 2D snapshots excepted), and **DOM outside the observed root** (including extension-injected UI). For analysts: absence of evidence in these channels is not evidence of absence — e.g., "no paste event" cannot distinguish "didn't paste" from "pasted into an embedded iframe." Players render placeholders per §12.
+The format does not capture: **shadow DOM** (web-component internals), **iframes** (embedded surveys/videos: only the frame element itself is recorded), **`<input type="file">`** (file names/contents never recorded), **CSSOM-bypass style changes** (rules edited via the CSSOM API without DOM mutation, common in CSS-in-JS — the stylesheet observer misses them), **media/WebGL pixel content**, and **DOM outside the observed root** (CH observes `<body>` by default; UI a browser extension adds outside that root, or inside a shadow root or an iframe, is not captured; extension content that is ordinary DOM inside the root is). **Canvas pixels** are optional: the format carries 2D canvas drawings as `canvas.snapshot` events (§5.4), and a player that receives them composites them, but a producer need not emit them. CH's recorder emits none: it records a canvas as the element with its `canvas_size` (§4), and CH's viewer shows it as an empty canvas of that size. For analysts: absence of evidence in these channels is not evidence of absence — e.g., "no paste event" cannot distinguish "didn't paste" from "pasted into an embedded iframe." Players render placeholders per §12.
 
 **Asset rot**: reconstruction loads images/fonts/linked CSS from their original URLs; recordings replayed years later may show a different page than the participant saw as hosting decays. Recordings used as adjudication evidence should be replayed near collection time, or their assets archived alongside (asset inlining is a possible future extension, out of scope for v2.0).
 

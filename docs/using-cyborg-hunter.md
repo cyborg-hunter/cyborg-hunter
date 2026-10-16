@@ -108,7 +108,7 @@ rec.destroy();
 | `tier` | `'trace'` | `'trace'` events only; `'dom'` adds initial-DOM snapshots + a mutation log (visual replay). `'canvas'` is reserved for a future canvas tier and currently records at `dom` fidelity. |
 | `keys` | `'full'` | `'full'` records the identity of every key pressed anywhere on the page (key, code, modifiers), so typed text can be read back keystroke by keystroke, on both tiers; `'off'` records no key events. Password fields and fields matching `redactSelector` record only that a key was pressed, and when. |
 | `mouseHz` | `30` | mousemove sampling ceiling. |
-| `redactSelector` | `[data-ch-redact]` | Matching elements and everything inside them: text, the `value` attribute, `data:` and `blob:` URLs in `src`, `srcset`, `poster`, `href` and `data` (an image drawn from a webcam or a signature pad), typed keys, input values, form state and clipboard contents are withheld from the recording; value lengths and keystroke times are kept. The integrity monitor does not read this selector: it stores text pasted into a matching field like any other ([Privacy model](#privacy-model)). Other attributes the page wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) are kept: they are page content, not what the participant entered. `input[type=password]` is always redacted, not overridable. A selector that is not valid CSS redacts nothing and is reported once (console and `capture_failures`). |
+| `redactSelector` | `[data-ch-redact]` | Matching elements and everything inside them: text, the `value` attribute, `data:` and `blob:` URLs in `src`, `srcset`, `poster`, `href`, `xlink:href` and `data` (an image drawn from a webcam or a signature pad), typed keys, input values, form state and clipboard contents are withheld from the recording; value lengths and keystroke times are kept. The integrity monitor does not read this selector: it stores text pasted into a matching field like any other ([Privacy model](#privacy-model)). Other attributes the page wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) are kept: they are page content, not what the participant entered. `input[type=password]` is always redacted, not overridable. A selector that is not valid CSS redacts nothing and is reported once (console and `capture_failures`). |
 | `clipboardContent` | `false` | Paste and drop events record the text length only; copy and cut record neither text nor length. `true` records the pasted or dropped text and HTML (the jsPsych recorder's behaviour). Fields matching `redactSelector` and password inputs stay length-only either way. This is the recorder's switch; the integrity monitor has its own (see [Privacy model](#privacy-model)). |
 | `keepBait` | `false` | Keep honeypot/decoy nodes in DOM captures (red-team analysis). |
 | `root` | `document.body` | Capture root for the DOM tier. |
@@ -142,9 +142,11 @@ names the switch that turns it down.
   only the selected length; cut records only that it happened (both count
   toward the copy total).
 - **Characters typed into fields outside the experiment** (an AI sidebar's
-  prompt, a chat widget), with the field's `id`, `class` and input type,
-  once you set an `experimentContainer`
-  (`collectForPostHoc.foreignInputContent`, default `true`).
+  prompt, a chat widget), with the field's tag, `id` and `class` and the
+  kind of edit, once you set an `experimentContainer`
+  (`collectForPostHoc.foreignInputContent`, default `true`). Password
+  fields are not skipped: what is typed into a password field outside the
+  container (a login box in a widget, say) is stored as typed.
 - **Raw mouse coordinates** (`mouseTrack`, the per-sample {x, y, cx, cy, t,
   type} trace the report's trajectory panels draw and its cursor section
   reads; since 0.14 presses, releases and clicks also carry `trusted`,
@@ -193,6 +195,9 @@ your code reads from that event is yours to declare.
   them from the integrity data too, or set
   `collectForPostHoc.pasteDropContent: false` to keep pasted and dropped
   text out of it altogether.
+- When recording started, as wall-clock time (UTC, to the millisecond,
+  `recording_started_at`), so the recording shows when the participant
+  took part.
 - Pointer, scroll, touch, focus and tab visibility; the browser's user agent
   and the viewport (size, pixel ratio, zoom). For each click, tap and key
   press, the tag, `id` and on-screen rectangle of the element it landed on
@@ -210,11 +215,20 @@ your code reads from that event is yours to declare.
   browser fetches it once more, without cookies, to store its text; and
   with friction on, a further copy of the page at each violation
   (`maxGuardViolations`).
-- Redaction removes what the participant entered, and embedded `data:` and
-  `blob:` media in the redacted area; attributes the page itself wrote
-  (`placeholder`, `title`, `aria-*`, `data-*`, `style`) stay, so a page that
-  copies typed text into one of them exposes it. Outside redaction, an image
+- Redaction removes what the participant entered (keys, field values, form
+  state, clipboard contents, text), and embedded `data:` and `blob:` media
+  in the redacted area; the page's elements and the attributes the page
+  itself wrote (`placeholder`, `title`, `aria-*`, `data-*`, `style`) stay,
+  so a page that copies typed text into one of them exposes it
+  ([spec §8](session-recording-v2.md#8-privacy-and-redaction)). Outside redaction, an image
   shown from a `data:` URL is recorded whole.
+- A whole recording taken with `CyborgHunter.replay()` (`ch-qualtrics.js`,
+  or code of your own) or with manual mode's `finalize()` also carries part
+  of the integrity report, under `extensions["cyborg-hunter"]`: the scores
+  and preset, and the session's sidebar, AI-extension, DevTools, window
+  position, viewport-width, zoom and extension-injection records. The
+  window positions are device information (see above). The pieces `ch.js`
+  and `ch-labjs.js` write into your rows do not carry this part.
 
 **When collection starts.** At page load, or when jsPsych starts, before the
 first trial: a consent screen on the same page is covered. Whether that
