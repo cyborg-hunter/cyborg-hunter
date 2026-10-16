@@ -10,6 +10,7 @@ import { attach as attachRecorder } from '../../src/replay/index.js';
 import { CyborgHunterReplayExtension } from '../../src/jspsych/extension-cyborg-hunter-replay.js';
 import { groupPieces, reassemblePieces } from '../../src/replay/pieces.js';
 import { validateStrict } from '../../src/shared/schema-v2-validator.js';
+import { mergeRecordings } from '../../src/replay/merge.js';
 
 class StubResizeObserver { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} }
 const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
@@ -161,6 +162,33 @@ describe('ch.js with the bundled recorder on a page without a framework', () => 
     assert.ok(own.getRecording().segments.some((s) => s.events.some((e) => e.type === 'mouse.click')), 'the page recorder recorded the click');
     assert.deepStrictEqual(errors, []);
     own.destroy();
+  });
+
+  // Back, then a resubmit: the browser shows page A again from the
+  // back/forward cache. Resuming A's recording made it span page B's time,
+  // and the CLI could not join the pages (they overlapped). With the pieces
+  // saved by ch.js, the restored visit is a new recording that starts after
+  // B, and A's pieces so far still ride in the POST.
+  it('a back/forward-cache restore starts a new recording that joins after the others', async () => {
+    await start();
+    click(el('<button>first</button>'));
+    const f = form();
+    submit(f);
+    win.dispatchEvent(new win.Event('pagehide'));
+    await tick(30);
+    const shown = new win.Event('pageshow');
+    Object.defineProperty(shown, 'persisted', { value: true });
+    win.dispatchEvent(shown);
+    await tick();
+    click(el('<button>second</button>'));
+    submit(f);
+    const groups = groupPieces(JSON.parse(fieldOf(f).value));
+    assert.equal(groups.size, 2, 'the first visit and the restored one');
+    const recs = [...groups.values()].map((g) => reassemblePieces(g))
+      .sort((a, b) => Date.parse(a.recording_started_at) - Date.parse(b.recording_started_at));
+    for (const r of recs) assert.deepStrictEqual(validateStrict(r).errors, []);
+    assert.doesNotThrow(() => mergeRecordings(recs), 'the two visits join in time order');
+    assert.deepStrictEqual(errors, []);
   });
 
   it('a GET form gets no replay input', async () => {

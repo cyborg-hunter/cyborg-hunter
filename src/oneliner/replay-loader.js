@@ -220,7 +220,12 @@ var RESTORED_FROM_BFCACHE = { 'cyborg-hunter': { restored_from: 'bfcache' } };
 // restore(trialId): the browser showed the page again from the back/forward
 // cache (pageshow with persisted; adapters/vanilla.js). No script runs again,
 // and pagehide stopped the recorder, so without this everything the
-// participant does after pressing Back is missing from the replay. The
+// participant does after pressing Back is missing from the replay. When ch.js
+// saves the pieces itself (replayAutoSaved: ch.js and ch-labjs.js on a page
+// without a framework), the restored visit is a NEW recording, because a
+// resumed one would span the later pages' time and the CLI cannot join
+// recordings that overlap; the first one's pieces stay in this page's POST.
+// Otherwise (the researcher saves CyborgHunter.replay()) the
 // recording RESUMES (recorder resumeSession) rather than a new one starting:
 // a stop finalizes only end_reason, so the stopped recording can take later
 // segments, and CyborgHunter.replay() keeps returning one recording per page,
@@ -263,9 +268,20 @@ export function createVanillaReplay(opts) {
       },
       restore: function (trialId) {
         try {
-          if (handle.api && handle.stopped) {
+          if (handle.api && handle.stopped && !replayAutoSaved(ctx)) {
             handle.api.resumeSession();
-          } else if (!handle.api) {
+          } else if (!handle.api || handle.stopped) {
+            // With the pieces saved by ch.js (replayAutoSaved), a restored
+            // visit is a recording of its own: resumed, the first one would
+            // span the later pages' time, and the CLI cannot join recordings
+            // that overlap. The first one's pieces so far stay in this page's
+            // POST (taken now, before its recorder goes).
+            var carried = null;
+            if (handle.api) {
+              if (replayAutoSaved(ctx)) carried = piecesSoFar(ctx);
+              try { handle.api.destroy(); } catch (_) { /* replaced below */ }
+              handle.api = null;
+            }
             var fresh = win.CyborgHunterReplay.attach(recorderConfig(ctx, ctx.config.replay));
             try { fresh.startSession(); } catch (e) {
               try { fresh.destroy(); } catch (_) { /* already failing */ }
@@ -274,7 +290,10 @@ export function createVanillaReplay(opts) {
             handle.api = fresh;
             ctx.replayRecording = null;   // replay() takes the new recording
             // A new recording, so new pieces (a new recording_id).
-            if (replayAutoSaved(ctx)) ctx.replayTaker = fresh.pieceTaker({ host: null });
+            if (replayAutoSaved(ctx)) {
+              ctx.replayTaker = fresh.pieceTaker({ host: null });
+              if (carried) ctx.replayTaker.sent = carried;
+            }
           } else {
             return;   // still recording: no pagehide stopped it
           }
