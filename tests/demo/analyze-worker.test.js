@@ -744,15 +744,21 @@ test('a recording nested very deeply: the run finishes, that replay is reported 
   const dir = 'tests/fixtures/demo';
   const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
   const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
-  let node = { id: 700000, kind: 'element', tag: 'img', attrs: { src: 'img/x.png' }, children: [] };
-  for (let i = 1; i <= 20000; i++) node = { id: 700000 + i, kind: 'element', tag: 'div', attrs: {}, children: [node] };
-  rec.segments.find((s) => s.initial_dom).initial_dom.children.push(node);
+  // The deep tree's text is built by hand: the test's own JSON.stringify of
+  // it overflowed the stack on the Node CI runs (20).
+  const open = [], close = [];
+  for (let i = 20000; i >= 1; i--) {
+    open.push('{"id":' + (700000 + i) + ',"kind":"element","tag":"div","attrs":{},"children":[');
+    close.push(']}');
+  }
+  const deepJson = open.join('') + '{"id":700000,"kind":"element","tag":"img","attrs":{"src":"img/x.png"},"children":[]}' + close.join('');
+  rec.segments.find((s) => s.initial_dom).initial_dom.children.push({ deepMarker: true });
   const other = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
   other.participant_id = 'OTHER';
   const data = readFileSync(dir + '/DEMO-FIXT.json', 'utf8');
   const files = [
     { path: 'data/DEMO-FIXT.json', file: new File([data], 'DEMO-FIXT.json') },
-    { path: 'data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'data/' + recName, file: new File([JSON.stringify(rec).replace('{"deepMarker":true}', deepJson)], recName) },
     { path: 'data/OTHER.json', file: new File([data.replaceAll('DEMO-FIXT', 'OTHER')], 'OTHER.json') },
     { path: 'data/other-session.json', file: new File([JSON.stringify(other)], 'other-session.json') },
   ];
