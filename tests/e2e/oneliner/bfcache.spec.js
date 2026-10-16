@@ -1,8 +1,10 @@
 // tests/e2e/oneliner/bfcache.spec.js
 // data-replay on a page without jsPsych, shown again from the back/forward
-// cache. pagehide stops the recorder; the persisted pageshow resumes it, so
-// what the participant does after pressing Back is in the same recording, in
-// a keyframe segment whose extensions say { restored_from: "bfcache" }.
+// cache. pagehide stops the recorder; the persisted pageshow starts a new
+// recording (ch.js saves the pieces itself, and a resumed recording would
+// overlap the pages in between, which the CLI cannot join), whose first
+// segment is a keyframe whose extensions say { restored_from: "bfcache" }.
+// The page's saved data carries both recordings, and they join in time order.
 //
 // Whether the engine really restored the page from the cache is checked, not
 // assumed: the pageshow listener in the fixture saw persisted === true, and
@@ -18,6 +20,8 @@
 
 import { test, expect, collectConsole } from './support.mjs';
 import { validateStrict } from '../../../src/shared/schema-v2-validator.js';
+import { groupPieces, reassemblePieces } from '../../../src/replay/pieces.js';
+import { mergeRecordings } from '../../../src/replay/merge.js';
 
 const FIX = '/tests/e2e/oneliner/fixtures/';
 
@@ -28,7 +32,7 @@ test.use({
 
 function chErrors(log) { return log.error.filter((t) => t.startsWith('[cyborg-hunter]')); }
 
-test('back/forward cache: the replay records on after Back, in a keyframe segment marked as a restore', async ({ page, browserName }) => {
+test('back/forward cache: after Back the restored visit is a new recording, marked as a restore, saved beside the first', async ({ page, browserName }) => {
   const log = collectConsole(page);
   await page.goto(FIX + 'vanilla-bfcache.html');
   await page.waitForFunction(() => typeof window.CyborgHunterReplay !== 'undefined');
@@ -60,21 +64,28 @@ test('back/forward cache: the replay records on after Back, in a keyframe segmen
   await expect(page.locator('#answer')).toHaveValue('before');
   await page.locator('#answer').pressSequentially(' after', { delay: 50 });
   await page.click('[data-ch-trial="q1"]');
+  const pieces = await page.evaluate(() => CyborgHunter.data().cyborgHunterReplay);
   const rec = await page.evaluate(() => CyborgHunter.replay());
 
+  // replay(): the restored visit, from its keyframe on.
   expect(validateStrict(rec).errors).toEqual([]);
   expect(rec.participant_id).toBe('E2E-BFC-1');
   expect(rec.end_reason).toBe('finished');
-  const marked = rec.segments.filter((s) => s.extensions && s.extensions['cyborg-hunter'] &&
-    s.extensions['cyborg-hunter'].restored_from === 'bfcache');
-  expect(marked).toHaveLength(1);
-  const at = marked[0].index;
-  expect(marked[0].initial_dom).not.toBeNull();
-  expect(marked[0].initial_dom.id).toBe(1);
-  // Before the restore: the typing before leaving. From it on: the typing after Back.
+  const first = rec.segments[0];
+  expect(first.extensions && first.extensions['cyborg-hunter'] && first.extensions['cyborg-hunter'].restored_from).toBe('bfcache');
+  expect(first.initial_dom).not.toBeNull();
   const values = (segs) => segs.flatMap((s) => s.events).filter((e) => e.type === 'input.value').map((e) => e.value);
-  expect(values(rec.segments.slice(0, at)).some((v) => v === 'before')).toBe(true);
-  expect(values(rec.segments.slice(at)).some((v) => v === 'before after')).toBe(true);
-  expect(values(rec.segments.slice(0, at)).some((v) => v.includes('after'))).toBe(false);
+  expect(values(rec.segments).some((v) => v === 'before after')).toBe(true);
+  expect(values(rec.segments).some((v) => v === 'before')).toBe(false);
+
+  // The saved data: both visits, as two recordings that join in time order.
+  const groups = groupPieces(pieces);
+  expect(groups.size).toBe(2);
+  const recs = [...groups.values()].map((g) => reassemblePieces(g))
+    .sort((a, b) => Date.parse(a.recording_started_at) - Date.parse(b.recording_started_at));
+  for (const r of recs) expect(validateStrict(r).errors).toEqual([]);
+  expect(values(recs[0].segments).some((v) => v === 'before')).toBe(true);
+  expect(values(recs[0].segments).some((v) => v.includes('after'))).toBe(false);
+  expect(() => mergeRecordings(recs)).not.toThrow();
   expect(chErrors(log)).toEqual([]);
 });
