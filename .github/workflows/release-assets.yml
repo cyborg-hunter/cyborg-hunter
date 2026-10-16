@@ -50,3 +50,39 @@ jobs:
           TAG="$GITHUB_REF_NAME"
           gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "See CHANGELOG.md for this version."
           gh release upload "$TAG" .demo-site/analyze/cyborg-hunter-analyze.html .demo-site/analyze/sample/*.replay.json --clobber
+
+  # The documented <script> tags carry the SRI hash of each dist file
+  # (scripts/pin-snippets.mjs). The hashes are right only if the published
+  # package holds the very dist/ they were computed from; any other build
+  # makes browsers refuse the file, and a study then runs unmonitored. After
+  # every release this job waits for the version on npm (what unpkg serves),
+  # downloads it and checks every documented tag against its files.
+  pinned-snippets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Wait for this version on npm
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          for i in $(seq 1 30); do
+            if npm view "cyborg-hunter@$VERSION" version > /dev/null 2>&1; then exit 0; fi
+            echo "cyborg-hunter@$VERSION not on npm yet; waiting ($i/30)"
+            sleep 60
+          done
+          echo "cyborg-hunter@$VERSION did not appear on npm within 30 minutes" >&2
+          exit 1
+
+      - name: Documented tags match the published files
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p "$RUNNER_TEMP/published"
+          npm pack "cyborg-hunter@$VERSION" --pack-destination "$RUNNER_TEMP/published"
+          tar -xzf "$RUNNER_TEMP/published/cyborg-hunter-$VERSION.tgz" -C "$RUNNER_TEMP/published"
+          node scripts/pin-snippets.mjs --check --dist "$RUNNER_TEMP/published/package/dist"
