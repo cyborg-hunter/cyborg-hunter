@@ -654,6 +654,26 @@ describe('vanilla host: page-load edge cases', () => {
     assert.strictEqual(ctx2.segmenter.state().segmentIndex, 1);
   });
 
+  // The folder above is adopted only for the study it belongs to: when the
+  // page kept there was this folder's own bare link (/study for /study/…).
+  // Another study that merely sits in a parent folder (a study at the site's
+  // root, then one at /b/) is not continued.
+  it('a study in a parent folder is not continued by a study in a subfolder', () => {
+    win.close();
+    useWindow(new Window({ url: 'https://lab.example/index.html' }));
+    const ctx1 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx1);
+    paste('study A');
+    endPage(ctx1);
+
+    nextPage(30000, 'https://lab.example/b/p1.html');
+    const ctx2 = boot({ script: { dataset: { guards: 'none' } }, win });
+    contexts.push(ctx2);
+    assert.notStrictEqual(ctx2.participantId, ctx1.participantId);
+    assert.strictEqual(ctx2.participantIdSource, 'random');
+    assert.strictEqual(ctx2.segmenter.state().segmentIndex, 0);
+  });
+
   it('a different id in the address never takes the session of the folder above', () => {
     win.close();
     useWindow(new Window({ url: 'https://lab.example/study?participant=AAA' }));

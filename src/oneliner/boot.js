@@ -169,19 +169,29 @@ function pageDirectory(win) {
   } catch (_) { return '/'; }
 }
 
-// The nearest folder above `scope` that kept an id, as { scope, id }, or
-// null. With `wantId` (the page's address named an id) only a folder that
-// kept that same id counts. A study link without a trailing slash (/study,
+// Beside each kept id, the address path of the page that first kept it
+// (PID_PAGE_KEY:<scope>), so keptAbove can tell a study's bare link from
+// another study in a parent folder.
+var PID_PAGE_KEY = 'cyborg-hunter:oneliner:pidpage';
+
+// The nearest folder above `scope` that kept an id for THIS study, as
+// { scope, id }, or null. A study link without a trailing slash (/study,
 // served as /study/index.html) keeps the id at '/', and its next page at
 // /study/p2.html looks in '/study/' first: without this it would start over
-// under a random id. The cost: a page whose folder kept nothing also takes
-// the id kept by an earlier study in a folder above it, in the same tab.
+// under a random id. The folder above counts only when the page that kept
+// the id there was this folder's own bare link (its path + '/' begins this
+// page's scope: '/study' for '/study/'), so a study at the site's root does
+// not pass its id or session to a study in a subfolder. With `wantId` (the
+// page's address named an id) the kept id must also be that one.
 function keptAbove(win, scope, wantId) {
   var s = scope;
   while (s !== '/' && s.length > 1) {
     s = s.slice(0, s.slice(0, -1).lastIndexOf('/') + 1) || '/';
     var id = sessionGet(win, PID_KEY + ':' + s);
-    if (id) return wantId === null || id === wantId ? { scope: s, id: id } : null;
+    if (!id) continue;
+    var page = sessionGet(win, PID_PAGE_KEY + ':' + s);
+    var ours = typeof page === 'string' && page !== '' && scope.indexOf(page + '/') === 0;
+    return ours && (wantId === null || id === wantId) ? { scope: s, id: id } : null;
   }
   return null;
 }
@@ -278,6 +288,10 @@ export function boot(opts) {
     if (pid.source === 'random') {
       if (kept) pid = { id: kept, source: 'session' };
       else console.warn(MESSAGES.randomId(pid.id, CH_FILE));
+    }
+    // The page that first kept this id here (keptAbove reads it).
+    if (keyScope && sessionGet(win, pidKey) !== pid.id) {
+      sessionSet(win, PID_PAGE_KEY + ':' + keyScope, String((win.location && win.location.pathname) || ''));
     }
     sessionSet(win, pidKey, pid.id);
 
