@@ -245,7 +245,12 @@ export function boot(opts) {
     // there: jsPsych inside a survey under ch.js too. Every survey of a
     // university's Qualtrics domain shares the folder /jfe/form/.
     var onJfe = /^\/jfe\//.test(String((win.location && win.location.pathname) || ''));
-    var surveyId = (HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new') || (HAS_JSPSYCH && jsPsychPage && onJfe)
+    // The survey id scopes every /jfe/ page but the legacy layout's, whose
+    // later pages may lose the id from the address (kept unscoped, as
+    // documented): ch-qualtrics.js, jsPsych inside a survey under ch.js, and
+    // a file without the Qualtrics adapter put on a survey (wrongBuild).
+    var legacy = !!(qualtricsSeen && qualtricsSeen.layout === 'legacy');
+    var surveyId = (HAS_QUALTRICS && qualtrics && qualtrics.layout === 'new') || (onJfe && !legacy)
       ? qualtricsSurveyId(win, config.qualtricsSurveyIdAttr) : null;
     // The study the kept id and the saved session belong to (step 3): the
     // survey, else (off Qualtrics) the page's directory, else none.

@@ -31,15 +31,20 @@ afterEach(() => {
   delete global.MutationObserver; delete global.ResizeObserver;
 });
 
-// A jsPsych page at `url`, in the same tab as the pages before it (the tab's
-// sessionStorage carried over).
-function jsPsychPage(url) {
+// A page at `url` in the same tab as the pages before it (the tab's
+// sessionStorage carried over): a jsPsych page, or (qualtrics) a Qualtrics
+// survey page of the new layout without jsPsych.
+function jsPsychPage(url, opts = {}) {
   if (win) win.close();
   win = new Window({ url });
   if (storage) for (const [k, v] of storage) win.sessionStorage.setItem(k, v);
   global.window = win; global.document = win.document; global.Node = win.Node;
   global.MutationObserver = win.MutationObserver; global.ResizeObserver = StubResizeObserver;
-  win.initJsPsych = function () { return { data: { addProperties() {} }, run() {} }; };
+  if (opts.qualtrics) {
+    win.Qualtrics = { SurveyEngine: { addOnPageSubmit() {}, setJSEmbeddedData() {}, getJSEmbeddedData() {} } };
+  } else {
+    win.initJsPsych = function () { return { data: { addProperties() {} }, run() {} }; };
+  }
   const ctx = boot({ script: { dataset: { guards: 'none', replay: 'off' }, src: 'https://cdn/x/ch.js' }, win });
   contexts.push(ctx);
   storage = [];
@@ -65,5 +70,14 @@ describe('ch.js on a Qualtrics /jfe/ page keeps the ID per survey', () => {
     const again = jsPsychPage('https://uni.example.qualtrics.com/jfe/form/SV_AAAAAAAA');
     assert.strictEqual(again.participantId, 'P1');
     assert.strictEqual(again.participantIdSource, 'session');
+  });
+
+  // ch.js (not ch-qualtrics.js) put on a survey without jsPsych: a wrong
+  // file, logged, recorded as a page without a framework. Its kept ID is
+  // per survey too, not shared by every survey in the tab.
+  it('ch.js on a survey page without jsPsych keeps the ID per survey', () => {
+    jsPsychPage('https://uni.example.qualtrics.com/jfe/form/SV_AAAAAAAA?participant=P1', { qualtrics: true });
+    const b = jsPsychPage('https://uni.example.qualtrics.com/jfe/form/SV_BBBBBBBB', { qualtrics: true });
+    assert.notStrictEqual(b.participantId, 'P1');
   });
 });
