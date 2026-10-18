@@ -1,8 +1,9 @@
 // src/cli/analyzers/cursor.js
-// The report's cursor section: three browser-reported checks, two rules,
+// The report's cursor section: three browser-reported checks, three rules,
 // the shape of each movement and the pointer verdict, from the core's
-// per-trial mouse samples. Pure: no DOM, no I/O. Imported by the lab's
-// calibration bench by this path (cyborg-hunter/src/cli/analyzers/cursor.js);
+// per-trial mouse samples and the session recording. Pure: no DOM, no I/O.
+// Imported by the lab's calibration bench by this path
+// (cyborg-hunter/src/cli/analyzers/cursor.js);
 // keep the exports stable or update the bench with the change.
 //
 // Checks (browser-reported): the automation flag the browser sets
@@ -11,12 +12,15 @@
 // arrived without a path (a first click whose movement has at most one
 // sample, starting away from where the pointer was last seen: a scripted
 // cursor appears at its target) and clicks after a pointer jump, both judged
-// on clicks with a known position before them. Features:
+// on clicks with a known position before them; and clicks at the exact
+// centre of the clicked control (centered-clicks.js), read from the session
+// recording when there is one (participant.replay.recording). Features:
 // the shape of each movement. The pointer verdict (assess) reads the checks
 // and the rules against the shares in CURSOR_LIMITS; every constant lives
 // there with its meaning, and the report writes them beside the results.
 
 import { pathLength, displacement, maxDeviation } from '../../shared/cursor-geometry.js';
+import { centeredClicks } from './centered-clicks.js';
 
 export const CURSOR_LIMITS = {
   movementGapMs:         { value: 400,  meaning: 'Two move samples more than this many milliseconds apart belong to different movements; a click ends the movement it follows.' },
@@ -25,8 +29,16 @@ export const CURSOR_LIMITS = {
   discontinuityPx:       { value: 100,  meaning: 'A movement ending in a click that starts at least this many pixels from the last known position is a click after a pointer jump.' },
   minSamplesForShape:    { value: 2,    meaning: 'A movement needs at least this many move samples to contribute to the shape features.' },
   minClicksForVerdict:   { value: 4,    meaning: 'A session needs at least this many first pointer clicks with a known position before them (the later clicks of a double- or triple-click are not counted; a click whose movement is the first since the session began, since more than staleGapMs passed unrecorded between trials, since a tab-away or, in page coordinates, since its trial began has no known position) before clicks that arrived without a path are judged, and this many first pointer clicks of any kind before trials clicked without pointer movement are; with too few of the former, and no tell against it, the session is not assessed.' },
-  shareSuspicious:       { value: 0.2,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, or of trials clicked without pointer movement, at or above which that tell makes the session suspicious. Provisional: set from a small number of sessions.' },
-  shareHighlySuspicious: { value: 0.5,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, of trials clicked without pointer movement, or of clicks the page’s own scripts dispatched, at or above which that tell makes the session highly suspicious. Provisional, like shareSuspicious.' }
+  shareSuspicious:       { value: 0.2,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, of trials clicked without pointer movement, or of qualifying clicks at the exact centre of the control, at or above which that tell makes the session suspicious. Provisional: set from a small number of sessions.' },
+  shareHighlySuspicious: { value: 0.5,  meaning: 'The share of first pointer clicks with a known position that arrived without a path, of trials clicked without pointer movement, or of clicks the page’s own scripts dispatched, at or above which that tell makes the session highly suspicious. Provisional, like shareSuspicious.' },
+  shareCenteredHighlySuspicious: { value: 0.9, meaning: 'The share of qualifying clicks at the exact centre of the control at or above which the centered tell makes the session highly suspicious ("near all"). Voice-control and screen-reader tools can also click the centre.' },
+  centerExactPx:         { value: 1.5,  meaning: 'A click within this many pixels of the clicked control\'s centre on both axes is an exact-centre click (browser automation clicks the centre; the recorded click point is a whole pixel, so 1 px is too tight).' },
+  centerNearPx:          { value: 5,    meaning: 'A click within this many pixels of the centre (straight-line distance) is a near-centre click. Reported, not judged: agents that aim from screenshots land here.' },
+  minTargetPx:           { value: 16,   meaning: 'Controls smaller than this many pixels on their shorter side are left out: a chance click lands near their centre.' },
+  maxTargetPx:           { value: 800,  meaning: 'Controls larger than this many pixels on their longer side are left out.' },
+  minClicksForCentered:  { value: 8,    meaning: 'The centered-clicks rule judges a session with at least this many qualifying clicks (pointer clicks on a button, link, input, select, textarea or label, inside its box, pressed within pressWindowMs).' },
+  pressWindowMs:         { value: 1000, meaning: 'A click counts as a pointer click when a mouse press or release came at most this many milliseconds before it.' },
+  repeatWindowMs:        { value: 500,  meaning: 'A click at the same point within this many milliseconds of the previous qualifying click is the same click.' }
 };
 
 const NOT_RECORDED = 'not recorded';
@@ -35,9 +47,11 @@ const MAX_IDS = 10;
 // The values of a limits object shaped like CURSOR_LIMITS ({ name: { value,
 // meaning } }), by name: what the analysis judges with, and what each result
 // carries so the section can print the constants that judged it.
+// A key the object lacks takes the default (a bench limits object written
+// before that constant existed still works).
 function valuesOf(limits) {
   const out = {};
-  for (const k of Object.keys(CURSOR_LIMITS)) out[k] = limits[k].value;
+  for (const k of Object.keys(CURSOR_LIMITS)) out[k] = (limits[k] || CURSOR_LIMITS[k]).value;
   return out;
 }
 
@@ -118,7 +132,9 @@ export const verdictWord = (level) => VERDICTS[level + 1];
 // dispatched) are judged whatever the number of clicks; clicks that arrived
 // without a path need minClicksForVerdict first pointer clicks with a known
 // position before them, trials clicked without pointer movement that many
-// first pointer clicks of any kind. The order of the tells is the order here.
+// first pointer clicks of any kind, and clicks at the exact centre of the
+// control minClicksForCentered qualifying clicks in the session recording.
+// The order of the tells is the order here.
 function assess(result, L) {
   const share = (x) => x.of > 0 ? x.count / x.of : 0;
   // Rounded down, so the printed percent never reaches a threshold the level
@@ -157,6 +173,13 @@ function assess(result, L) {
       tell('zeroMove', share(z) >= L.shareHighlySuspicious ? 'high' : 'low',
         `trials clicked without pointer movement: ${z.count} of ${z.of} (${pct(z)})`, `trials clicked without movement ${z.count}/${z.of}`, z.trialIds, z.trials);
     }
+  }
+  // Exact-centre clicks (centered-clicks.js), judged from minClicksForCentered
+  // qualifying clicks; the near tier is reported only.
+  const cc = result.cursor.rules.centeredClicks;
+  if (cc && cc.state === 'ok' && cc.of >= L.minClicksForCentered && share(cc) >= L.shareSuspicious) {
+    tell('centered', share(cc) >= L.shareCenteredHighlySuspicious ? 'high' : 'low',
+      `clicks at the exact centre of the control: ${cc.count} of ${cc.of} (${pct(cc)})`, `centered clicks ${cc.count}/${cc.of}`, cc.trialIds, cc.trials);
   }
   if (tells.some(t => t.level === 'high')) return done(2);
   if (tells.length) return done(1);
@@ -321,7 +344,7 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
       rules: {
         noPathClicks: { count: noPath.count, of: noPath.of, trialIds: cap(noPath.trialIds), trials: noPath.trials },
         jumpClicks: { count: jump.count, of: jump.of, trialIds: cap(jump.trialIds), trials: jump.trials },
-        centeredClicks: null
+        centeredClicks: centeredClicks(participant.replay && participant.replay.recording, L)
       },
       features: {
         durationMs: stat(f.durationMs), pathPx: stat(f.pathPx), displacementPx: stat(f.displacementPx),

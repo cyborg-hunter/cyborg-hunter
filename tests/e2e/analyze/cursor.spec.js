@@ -2,7 +2,7 @@
 // The pointer verdict on the analyze page, over the sample: the AI agent's
 // session (DEMO-bsq6, every first click arriving without a path, no
 // automation flag, no trial clicked without movement) reads highly
-// suspicious, with its tell, the checks, rules and shape in a closed details
+// suspicious, with its tells, the checks, rules and shape in a closed details
 // block, the tile, the rail cell and the run sentence; DEMO-681w reads clean,
 // with the counts its sentence gives; the two sessions recorded without
 // device facts read "not assessed", with the reason; sorting the rail by the
@@ -32,7 +32,7 @@ test('the sample shows the pointer verdict, its tells, the details, the tile, th
   await frame.locator('.cohort-row[data-pid="DEMO-bsq6"]').click();
   const section = frame.locator('#p-DEMO-bsq6 .cursor-section');
   await expect(section.locator('.verdict-badge')).toHaveText('highly suspicious');
-  await expect(section.locator('.cursor-tells li')).toHaveText(['clicks that arrived without a path: 12 of 12 first clicks with a known position (100%) (paste, tabaway, autotype, guard-entry, guard)']);
+  await expect(section.locator('.cursor-tells li')).toHaveText(['clicks that arrived without a path: 12 of 12 first clicks with a known position (100%) (paste, tabaway, autotype, guard-entry, guard)', 'clicks at the exact centre of the control: 8 of 11 (72%) (baseline, paste, tabaway, autotype, guard-entry, guard)']);
   const details = section.locator('details.cursor-details');
   await expect(details).not.toHaveAttribute('open', '');
   await details.locator('summary').click();

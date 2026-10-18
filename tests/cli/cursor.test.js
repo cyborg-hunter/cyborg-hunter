@@ -22,6 +22,13 @@ function path(x0, y0, x1, y1, t0, n = 12) {
   return pts;
 }
 
+// A clean session: six trials, each a curved path ending in a click, 1 s
+// apart, so every later movement starts about 22 px from the last click. The
+// existing rules judge it clean.
+const cleanTrials = () => Array.from({ length: 6 }, (_, i) => trial('t' + i, path(400, 300, 420, 310, 100), { startTime: 1000 + i * 6000 }));
+const cleanParticipant = () => participant(cleanTrials());
+const cleanParticipantWith = ({ device }) => participant(cleanTrials(), device);
+
 describe('segmentMovements', () => {
   it('splits at gaps over movementGapMs and a click closes a movement', () => {
     const events = [mv(0, 0, 0), mv(10, 0, 50), mv(20, 0, 100), ck(20, 0, 130), mv(30, 0, 600), mv(40, 0, 650)];
@@ -502,5 +509,64 @@ describe('the pointer verdict', () => {
     assert.equal(r.level, 1);                                       // 1 of 9 = 11% ≥ 5%
     assert.equal(r.limits.shareSuspicious, 0.05);
     assert.equal(r.limits.minClicksForVerdict, 2);
+  });
+});
+
+describe('centered clicks in the pointer verdict', () => {
+  // A recording of `n` clicks on a 100×40 button, each 80 ms after its press
+  // and 2 s apart: `exact` of them at its centre (150, 120), the rest 31 px
+  // from it.
+  const recording = (n, exact) => {
+    const events = [];
+    for (let i = 0; i < n; i++) {
+      const t = 1000 + i * 2000, x = i < exact ? 150 : 120, y = i < exact ? 120 : 110;
+      events.push({ type: 'mouse.down', t: t - 80, x, y, button: 0, camera: { vv_scale: 1 } });
+      events.push({ type: 'mouse.click', t, x, y, button: 0, camera: { vv_scale: 1 }, anchor: { tag: 'button', id: null, rect: { x: 100, y: 100, w: 100, h: 40 }, node: 1 } });
+    }
+    return { schema_version: 2, segments: [{ label: 'q1', events }] };
+  };
+  const withRecording = (p, rec) => ({ ...p, replay: { recording: rec } });
+  const judged = (rec) => analyzeCursorForParticipant(withRecording(cleanParticipant(), rec));
+  const centeredTell = (r) => r.tells.find((t) => t.id === 'centered');
+
+  it('the session the cases below build on is clean without a recording', () => {
+    assert.equal(analyzeCursorForParticipant(cleanParticipant()).verdict, 'clean');
+  });
+
+  it('fills rules.centeredClicks from the recording', () => {
+    const r = judged(recording(10, 1));
+    assert.deepEqual([r.cursor.rules.centeredClicks.count, r.cursor.rules.centeredClicks.of], [1, 10]);
+  });
+
+  it('a fifth or more exact-centre clicks make the session suspicious; nine in ten or more, highly suspicious', () => {
+    const levels = [1, 2, 8, 9].map((exact) => { const r = judged(recording(10, exact)); const t = centeredTell(r); return [exact, t ? t.level : null, r.verdict]; });
+    assert.deepEqual(levels, [[1, null, 'clean'], [2, 'low', 'suspicious'], [8, 'low', 'suspicious'], [9, 'high', 'highly suspicious']]);
+    assert.deepEqual(centeredTell(judged(recording(10, 9))), { id: 'centered', level: 'high', text: 'clicks at the exact centre of the control: 9 of 10 (90%)', short: 'centered clicks 9/10', trialIds: ['q1'], trials: 1 });
+  });
+
+  it('fewer than 8 qualifying clicks are not judged; the near tier never makes a tell', () => {
+    const few = judged(recording(7, 7));
+    assert.equal(centeredTell(few), undefined);
+    assert.equal(few.cursor.rules.centeredClicks.of, 7);
+    assert.equal(centeredTell(judged(recording(8, 8))).level, 'high');
+    // Ten clicks 3 px right of and below the centre: within 5 px (4.2), not within 1.5 px.
+    const near = recording(10, 10);
+    for (const e of near.segments[0].events) { e.x += 3; e.y += 3; }
+    const r = judged(near);
+    assert.deepEqual([r.cursor.rules.centeredClicks.count, r.cursor.rules.centeredClicks.near.count], [0, 10]);
+    assert.deepEqual([centeredTell(r), r.verdict], [undefined, 'clean']);
+  });
+
+  it('without a recording the slot stays null, as before', () => {
+    const r = analyzeCursorForParticipant(cleanParticipant());
+    assert.equal(r.cursor.rules.centeredClicks, null);
+  });
+
+  it('a limits object without the new keys (the bench passes its own) judges with their defaults', () => {
+    const added = ['centerExactPx', 'centerNearPx', 'minTargetPx', 'maxTargetPx', 'minClicksForCentered', 'pressWindowMs', 'repeatWindowMs', 'shareCenteredHighlySuspicious'];
+    const old = Object.fromEntries(Object.entries(CURSOR_LIMITS).filter(([k]) => !added.includes(k)));
+    const r = analyzeCursorForParticipant(withRecording(cleanParticipant(), recording(10, 9)), old);
+    assert.equal(r.verdict, 'highly suspicious');
+    assert.deepEqual(added.map((k) => r.limits[k]), [1.5, 5, 16, 800, 8, 1000, 500, 0.9]);
   });
 });

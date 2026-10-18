@@ -39,7 +39,7 @@ describe('examples/demo-sessions', () => {
       .map((l) => l.split('|').map((c) => c.trim()));
     assert.deepEqual(rows.map((r) => [r[2], r[3], r[4]]),
       [['DEMO-9mop', '**HARD**', '45'], ['DEMO-bsq6', '**HARD**', '21'], ['DEMO-681w', 'soft', '13'], ['DEMO-a3f3', 'clean', '11']]);
-    assert.match(rows[1][5], /pointer verdict: highly suspicious \(clicks without a path 12\/12\)$/);
+    assert.match(rows[1][5], /pointer verdict: highly suspicious \(clicks without a path 12\/12; centered clicks 8\/11\)$/);
     assert.match(stdout, /Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 2 not assessed \(4 sessions; 2 recorded without device facts\)/);
   });
 
