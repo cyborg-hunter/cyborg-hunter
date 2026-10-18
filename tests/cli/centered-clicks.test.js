@@ -76,6 +76,20 @@ describe('centeredClicks', () => {
     assert.deepEqual(centeredClicks(badIndex, L).trialIds, ['1']);
   });
 
+  it('a click with a malformed camera does not qualify; a click without a camera reads as unzoomed', () => {
+    const r = rect(100, 100, 100, 40);
+    const out = centeredClicks(rec([
+      press(1000, 150, 120), { ...click(1000, 150, 120, r), camera: 'z' },
+      press(3000, 150, 120), { ...click(3000, 150, 120, r), camera: { vv_scale: 'x' } },
+      press(5000, 150, 120), { ...click(5000, 150, 120, r), camera: { vv_scale: null } },
+    ]), L);
+    assert.equal(out.of, 0);
+    const noCamera = { ...click(7000, 150, 120, r) };
+    delete noCamera.camera;
+    const bare = centeredClicks(rec([press(7000, 150, 120), noCamera]), L);
+    assert.deepEqual([bare.of, bare.count], [1, 1]);
+  });
+
   it('the Playwright fixture recording: every qualifying click is exact', () => {
     const r = JSON.parse(readFileSync('tests/fixtures/demo/DEMO-FIXT-replay-1785352263344.json', 'utf8'));
     const out = centeredClicks(r, L);

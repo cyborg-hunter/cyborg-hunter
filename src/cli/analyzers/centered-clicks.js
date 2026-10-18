@@ -30,7 +30,8 @@ function rectOf(e) {
   return r;
 }
 const tagOf = (e) => (isObj(e.anchor) && typeof e.anchor.tag === 'string' ? e.anchor.tag.toLowerCase() : '');
-const zoom = (e) => (isObj(e.camera) && isNum(e.camera.vv_scale) ? e.camera.vv_scale : 1);
+// The pinch zoom: an absent camera reads as unzoomed; a malformed one gives NaN, which excludes the click.
+const zoom = (e) => (e.camera === undefined ? 1 : isObj(e.camera) && isNum(e.camera.vv_scale) ? e.camera.vv_scale : NaN);
 
 // A click's offset from the centre over the half-size, clamped to [-1, 1]
 // and rounded to 3 decimals. A qualifying click lies inside its box, so the
