@@ -165,8 +165,10 @@ names the switch that turns it down.
   (`session.device.softwareRenderer`). For that last fact only the family
   name of a software renderer is kept (such as `swiftshader`), never the
   name of the graphics hardware: the value is `false` (a graphics card),
-  `'none'` (no WebGL), the family name, or `null` (the switch off, or the
-  browser did not answer). It is read when the browser is next idle,
+  `'none'` (no WebGL), the family name, or `null` (the switch off, the
+  browser did not answer, or, under the one-line setup, a first page or
+  trial that ended before the read:
+  [upgrading.md](upgrading.md#unreleased--from-016)). It is read when the browser is next idle,
   within about 1 s of the session start. `signals.softwareRenderer`
   (default on) turns it off; the other facts have no switch.
 - **Browser extensions**: the names of known AI extensions found on the
