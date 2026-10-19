@@ -235,9 +235,9 @@ describe('the Typing dynamics section', () => {
     assert.match(bot, /<tr class="fired"><th>gap variation under 0\.2<\/th><td>1 of 1 fields \(q1\)<\/td><\/tr>/);
     assert.match(bot, /<tr class="fired"><th>typing rate over 10 cps, trials with 20\+ keystrokes<\/th><td>1 of 1 trials \(q1 24\.4\)<\/td><\/tr>/);
     assert.match(bot, /<tr class=""><th>too short to judge<\/th><td>none<\/td><\/tr>/);
-    // One note: where the numbers came from, and what a rate rebuilt from
+    // Two notes: where the rhythm came from, and what a rate rebuilt from
     // the recording can miss.
-    assert.match(bot, /<p class="muted note">Computed from the session recording: data from libraries before 0\.17 carry no rhythm summaries\. A rate rebuilt from a recording can undercount keys typed faster than the page’s frames\.<\/p>/);
+    assert.match(bot, /<p class="muted note">Computed from the session recording: data from libraries before 0\.17 carry no rhythm summaries\.<\/p><p class="muted note">A rate rebuilt from a recording can undercount keys typed faster than the page’s frames\.<\/p><\/div>/);
     // Its own classes: the analyzer's tests address the cursor section's by name.
     const section = bot.slice(bot.indexOf('<div class="typing-section">'), bot.indexOf('<div class="cursor-section">'));
     assert.doesNotMatch(section, /class="cursor-/);
@@ -251,7 +251,7 @@ describe('the Typing dynamics section', () => {
     assert.match(html, /<span class="verdict-badge" data-level="-1">not assessed<\/span> <span class="muted">typing rhythm not recorded \(library before 0\.17 or signals\.typingRhythm off\) and no session recording\.<\/span>/);
     assert.match(html, /<tr class=""><th>none<\/th><td>not recorded<\/td><\/tr>/);
     assert.match(html, /<td>1 of 1 trials \(age 11\.8 \(old formula\)\)<\/td>/);
-    assert.match(html, /<p class="muted note">A rate marked “old formula” is the one a library before 0\.17 saved \(keystrokes over time, from 2 keystrokes\), for a trial with no recording to recompute it from\.<\/p>/);
+    assert.match(html, /<p class="muted note">A rate marked “old formula” is the one a library before 0\.17 saved \(keystrokes over time, from 2 keystrokes\), for a trial with neither saved edit times nor a recording to recompute it from\.<\/p>/);
   });
   it('a rate from saved edit times is not marked: only the old formula is', async () => {
     // 25 edits 50 ms apart: 20 cps from the edit times, beside the old
@@ -261,11 +261,61 @@ describe('the Typing dynamics section', () => {
     assert.match(fast, /<td>1 of 1 trials \(age 20\)<\/td>/);
     assert.doesNotMatch(fast, /old formula/);
   });
-  it('a recording without the page: the rhythm is not recorded, and no note says it was computed from the recording', async () => {
+  it('a recording without the page: the rhythm is not recorded, and no note says it was computed from the recording; its rate was, and that note stays', async () => {
     const trace = pane((await report([TRACE()])).files['index.html'], 'TRACE');
     assert.match(trace, /<span class="verdict-badge" data-level="-1">not assessed<\/span> <span class="muted">the session recording does not say which field each key went to \(recorded without the page\)\.<\/span>/);
     assert.match(trace, /<tr class=""><th>none<\/th><td>not recorded<\/td><\/tr>/);
     assert.doesNotMatch(trace, /Computed from the session recording/);
+    assert.match(trace, /<td>1 of 1 trials \(q1 24\.4\)<\/td>/);
+    assert.match(trace, /<p class="muted note">A rate rebuilt from a recording can undercount keys typed faster than the page’s frames\.<\/p><\/div>/);
+  });
+  it('a recording that holds no typing: the placeholder says so, and no undercount note, since no rate came from it', async () => {
+    // A segment matched to q1 that holds nothing (the rhythm's source is
+    // the recording, its rate counts no edit), beside a trial with no
+    // segment whose old formula saved 11.8 cps.
+    const rec = keyRecording([['q1', 10, []]]);
+    rec.segments[0].events = [];
+    const p = participantFromRecording('EMPTY', rec);
+    p.trials.push({ ...OLD().trials[0], startTime: 900000 });
+    const empty = pane((await report([p])).files['index.html'], 'EMPTY');
+    assert.match(empty, /<span class="muted">the session recording holds no typed characters in a text field of the judged trials\.<\/span>/);
+    assert.match(empty, /<tr class=""><th>none<\/th><td>no typing in a text field<\/td><\/tr>/);
+    assert.match(empty, /<p class="muted note">Computed from the session recording: data from libraries before 0\.17 carry no rhythm summaries\.<\/p>/);
+    assert.doesNotMatch(empty, /undercount/);
+    // Its old-formula rate is fast, so it is marked and the note explains it.
+    assert.match(empty, /<td>1 of 1 trials \(age 11\.8 \(old formula\)\)<\/td>/);
+    assert.match(empty, /<p class="muted note">A rate marked “old formula”/);
+  });
+  it('a recording whose fields are too short: the placeholder, the short fields and the old rule\'s rate, and the undercount note', async () => {
+    // One gap in the only field (2 keystrokes); the old formula saved 11.8 cps.
+    const age = participantFromRecording('AGE', keyRecording([['age', 10, [170]]]));
+    age.trials[0].charsPerSec = 11.8;
+    const short = pane((await report([age])).files['index.html'], 'AGE');
+    assert.match(short, /<span class="muted">no text field reached 20 key gaps\.<\/span>/);
+    assert.match(short, /<tr class=""><th>none<\/th><td>no field reached 20 key gaps<\/td><\/tr>/);
+    assert.match(short, /<th>too short to judge<\/th><td>age \(2 keystrokes; the old rule counted it at 11\.8 cps\); 1 field under 20 key gaps<\/td>/);
+    assert.match(short, /<p class="muted note">A rate rebuilt from a recording can undercount keys typed faster than the page’s frames\.<\/p>/);
+    // The saved 11.8 is the old rule's, named as such, not a marked rate.
+    assert.doesNotMatch(short, /A rate marked “old formula”/);
+  });
+  it('the old-formula note comes only with a mark: none for an old rate that is neither fast nor the clean verdict\'s', async () => {
+    const slow = { participantId: 'SLOW', trials: [{ ...OLD().trials[0], charsPerSec: 5 }] };
+    const html = pane((await report([slow])).files['index.html'], 'SLOW');
+    assert.match(html, /<td>0 of 1 trials<\/td>/);
+    assert.doesNotMatch(html, /old formula/);
+  });
+  it('a clean verdict whose highest rate is the old formula\'s marks it, and the note explains the mark', async () => {
+    const p = HUMAN();
+    p.trials.push({ ...OLD().trials[0], startTime: 900000, charsPerSec: 5 });
+    const clean = pane((await report([p])).files['index.html'], 'HUMAN');
+    assert.match(clean, /typing rate at most 5 cps \(old formula\) over trials with 20\+ keystrokes\.<\/span>/);
+    assert.match(clean, /<td>0 of 2 trials<\/td>/);
+    assert.match(clean, /<p class="muted note">A rate marked “old formula”/);
+  });
+  it('a tell over more than ten trials names ten and counts the rest', async () => {
+    const many = participantFromRecording('MANY', keyRecording(Array.from({ length: 11 }, (_, i) => [`q${i + 1}`, 10 + 10000 * i, botGaps(30)])));
+    const html = pane((await report([many])).files['index.html'], 'MANY');
+    assert.match(html, /<li class="tell-high">keys pressed faster than a person types: median gap 41 ms, 100% of gaps under 60 ms <span class="muted">\(q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, \+1 more\)<\/span><\/li>/);
   });
   it('0.17 data: short trials are named with their keystrokes, and short fields are said to be unsaved', async () => {
     const p = { participantId: 'LIB', trials: [{ trialId: 'q1', startTime: 0, duration_ms: 1000, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, typingEdits: 3, typingRhythm: [] }] };
@@ -290,7 +340,7 @@ describe('the Typing dynamics section', () => {
   });
   it('the fast-typing tile says which trials count', async () => {
     const html = (await report([OLD()])).files['index.html'];
-    assert.match(html, /title="Trials of 20 or more keystrokes typed faster than the cps threshold \(older data without a recording: the saved rate\)"/);
+    assert.match(html, /title="Trials of 20 or more keystrokes typed faster than the cps threshold \(older data with neither saved edit times nor a recording: the saved rate\)"/);
   });
   it('a partial analysis (a hand-built summary) draws no section and does not throw', async () => {
     const partial = [{ level: 2 }, { level: 2, limits: {}, rate: {} }, { level: 2, limits: {}, rate: { trials: [] }, fields: 'x', tells: [] }];

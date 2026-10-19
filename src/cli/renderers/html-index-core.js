@@ -1071,7 +1071,7 @@ const SIGNALS = [
   { key: 'tabAwayLongCount',         label: 'Tab-away ≥10s',   tone: 'critical', hint: 'Window blurred for 10+ seconds' },
   { key: 'tabAwayMediumCount',       label: 'Tab-away (mid)',  tone: 'warn',     hint: 'Above the tab-away threshold (3s default, 5s strict), under 10s' },
   { key: 'tabAwayFlickerCount',      label: 'Flicker',         tone: 'muted',    hint: 'At or below the tab-away threshold (3s default) — not scored' },
-  { key: 'trialsWithFastTyping',     label: 'Fast typing',     tone: 'warn',     hint: 'Trials of 20 or more keystrokes typed faster than the cps threshold (older data without a recording: the saved rate)' },
+  { key: 'trialsWithFastTyping',     label: 'Fast typing',     tone: 'warn',     hint: 'Trials of 20 or more keystrokes typed faster than the cps threshold (older data with neither saved edit times nor a recording: the saved rate)' },
   { key: 'totalSyntheticInsertions', label: 'Synthetic',       tone: 'warn',     hint: 'Text appeared without preceding keystrokes' },
   { key: 'totalForeignInputEvents',  label: 'Foreign input',   tone: 'warn',     hint: 'Typing landed outside the experiment container' },
   { key: 'sidebarEventCount',        label: 'Sidebar',         tone: 'warn',     hint: 'innerWidth shrank — side panel opened' },
@@ -1491,11 +1491,12 @@ function renderTypingSection(s) {
   // Only the old formula's number is marked: a rate from the library, the
   // saved edit times or the recording is the corrected one.
   const old = (r) => (r.source === 'old formula' ? ' (old formula)' : '');
+  // The highest judged rate, which a clean verdict names.
+  const top = judged.length ? judged.reduce((a, b) => (b.cps > a.cps ? b : a)) : null;
   let verdict;
   if (ta.level === -1) {
     verdict = `<p class="typing-verdict">${badge} <span class="muted">${str(ta.verdictReason)}.</span></p>`;
   } else if (ta.level === 0) {
-    const top = judged.length ? judged.reduce((a, b) => (b.cps > a.cps ? b : a)) : null;
     const rate = top ? `; typing rate at most ${num(top.cps)} cps${old(top)} over trials with ${num(L.minEdits)}+ keystrokes` : '';
     verdict = `<p class="typing-verdict">${badge} <span class="muted">${fields.length} field${fields.length === 1 ? '' : 's'} judged; none under ${num(L.fastGapMs)} ms (fastest median gap ${ms(least(fields, 'medianMs'))} ms) and none too even (lowest variation ${two(least(fields, 'cv'))})${rate}.</span></p>`;
   } else {
@@ -1518,7 +1519,11 @@ function renderTypingSection(s) {
   const fieldRows = fields.length
     ? fields.map((f, i) => row(`${str(f.trialId)} · ${names[i]}`,
       `${num(f.gaps)} · ${ms(f.medianMs)} ms · ${pct(f.under60Share)}% · ${two(f.cv)}`, f.speed || f.evenness)).join('')
-    : row('none', ta.state === 'not recorded' ? 'not recorded' : `no field reached ${num(L.minGaps)} key gaps`, false);
+    : row('none', ta.state === 'not recorded' ? 'not recorded'
+      // The analyzer's own test for its no-typing reason: from the
+      // recording, with no field too short either.
+      : ta.source === 'recording' && ta.shortFields === 0 ? 'no typing in a text field'
+        : `no field reached ${num(L.minGaps)} key gaps`, false);
   const rule = (label, hits) => row(label, `${hits.length} of ${fields.length} fields${hits.length ? ` (${list([...new Set(hits.map((f) => f.trialId))])})` : ''}`, hits.length > 0);
   const fast = judged.filter((r) => r.fast === true);
   const rateRow = row(`typing rate over ${num(cutoff)} cps, trials with ${num(L.minEdits)}+ keystrokes`,
@@ -1535,12 +1540,23 @@ function renderTypingSection(s) {
   if (isNum(ta.shortFields) && ta.shortFields > 0) short.push(`${num(ta.shortFields)} field${ta.shortFields === 1 ? '' : 's'} under ${num(L.minGaps)} key gaps`);
   if (ta.source === 'library') short.push(`fields under ${num(L.minGaps)} key gaps (the library saves nothing for them)`);
   const notes = [];
-  // The recording note, only where the rhythm was read from the recording:
-  // a recording without the page leaves it not recorded (the verdict says why).
+  // The rhythm note, only where the rhythm was read from the recording: a
+  // recording without the page leaves it not recorded (the verdict says why).
   if (ta.source === 'recording' && ta.state !== 'not recorded') {
-    notes.push('Computed from the session recording: data from libraries before 0.17 carry no rhythm summaries. A rate rebuilt from a recording can undercount keys typed faster than the page’s frames.');
+    notes.push('Computed from the session recording: data from libraries before 0.17 carry no rhythm summaries.');
   }
-  if (judged.some((r) => r.source === 'old formula')) notes.push('A rate marked “old formula” is the one a library before 0.17 saved (keystrokes over time, from 2 keystrokes), for a trial with no recording to recompute it from.');
+  // The undercount note follows the rate's source: wherever a trial's rate
+  // or keystrokes were rebuilt from the recording. A trial whose recording
+  // holds no edit is neither judged nor too short, and the section prints
+  // no number from it.
+  if (ta.rate.trials.some((r) => isObj(r) && r.source === 'recording' && isNum(r.edits) && r.edits > 0)) {
+    notes.push('A rate rebuilt from a recording can undercount keys typed faster than the page’s frames.');
+  }
+  // The old-formula note explains the mark, so it comes only with one: on a
+  // fast trial's rate, or on the rate a clean verdict names.
+  if (fast.some((r) => r.source === 'old formula') || (ta.level === 0 && top && top.source === 'old formula')) {
+    notes.push('A rate marked “old formula” is the one a library before 0.17 saved (keystrokes over time, from 2 keystrokes), for a trial with neither saved edit times nor a recording to recompute it from.');
+  }
   // "more than half": TYPING_LIMITS.fastShare is 0.5.
   return `<div class="typing-section"><h4 class="section-heading">Typing dynamics</h4>${verdict}
   <details class="typing-details" open><summary>every field, the rules and the typing rate</summary>
