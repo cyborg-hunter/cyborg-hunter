@@ -413,6 +413,25 @@ ${fontFaceCss}    :root {
     .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
     /* Closed, the summary is the block's only line: no bottom margin, so the frame sits evenly around it. */
     .cursor-details:not([open]) > summary { margin-bottom: 0; }
+
+    /* Typing dynamics section (renderTypingSection): the cursor section's
+       form under its own class names, so that a selector for one section
+       never reaches the other. */
+    .typing-section { font: 13px/1.45 var(--ff-recursive); }
+    .typing-verdict { margin: 8px 0 4px; }
+    .typing-tells { margin: 0 0 8px 20px; padding: 0; }
+    .typing-tells li.tell-high { font-weight: 600; }
+    .typing-details { border: 1px solid var(--line); padding: 10px 14px 12px; margin-top: 8px; }
+    .typing-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
+    .typing-details:not([open]) > summary { margin-bottom: 0; }
+    .typing-table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; }
+    .typing-table:last-of-type { margin-bottom: 2px; }
+    .typing-table caption { font-family: var(--ff-tomorrow); text-align: center; font-variant: small-caps; letter-spacing: 0.06em; font-size: 14px; color: var(--ink); padding: 2px 0 6px; }
+    .typing-table th, .typing-table td { padding: 5px 10px; vertical-align: top; }
+    .typing-table th { text-align: left; font-weight: normal; width: 46%; }
+    .typing-table td { font-family: var(--ff-sora); font-variant-numeric: tabular-nums; }
+    .typing-table tbody tr:nth-child(even) { background: rgba(26, 24, 20, 0.035); }
+    .typing-table tr.fired th { font-weight: 600; }
     /* The click picture under the verdict (renderClickPicture): an inline SVG that shrinks with a narrow pane. */
     .click-picture { margin: 6px 0 10px; display: inline-block; vertical-align: top; }
     .click-picture svg { max-width: 100%; height: auto; }
@@ -1052,7 +1071,7 @@ const SIGNALS = [
   { key: 'tabAwayLongCount',         label: 'Tab-away ≥10s',   tone: 'critical', hint: 'Window blurred for 10+ seconds' },
   { key: 'tabAwayMediumCount',       label: 'Tab-away (mid)',  tone: 'warn',     hint: 'Above the tab-away threshold (3s default, 5s strict), under 10s' },
   { key: 'tabAwayFlickerCount',      label: 'Flicker',         tone: 'muted',    hint: 'At or below the tab-away threshold (3s default) — not scored' },
-  { key: 'trialsWithFastTyping',     label: 'Fast typing',     tone: 'warn',     hint: 'Trials typed faster than the preset cps threshold' },
+  { key: 'trialsWithFastTyping',     label: 'Fast typing',     tone: 'warn',     hint: 'Trials of 20 or more keystrokes typed faster than the cps threshold (older data without a recording: the saved rate)' },
   { key: 'totalSyntheticInsertions', label: 'Synthetic',       tone: 'warn',     hint: 'Text appeared without preceding keystrokes' },
   { key: 'totalForeignInputEvents',  label: 'Foreign input',   tone: 'warn',     hint: 'Typing landed outside the experiment container' },
   { key: 'sidebarEventCount',        label: 'Sidebar',         tone: 'warn',     hint: 'innerWidth shrank — side panel opened' },
@@ -1251,6 +1270,7 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     ${renderSessionBlock(s, participant)}
     ${renderPasteEvidence(participant)}
     ${imagesHtml}
+    ${renderTypingSection(s)}
     ${renderCursorSection(s, participant, replayShownExternally)}
     ${renderReplaySection(participant, sanitized, replayShownExternally)}
   </section>`;
@@ -1424,6 +1444,117 @@ export function renderDeviceLine(s, participant) {
   const pointer = device && device.coarsePointer === true ? 'touch screen'
     : device && device.coarsePointer === false ? 'mouse or trackpad' : null;
   return `<p class="muted note device-line">device: ${[graphics, screen, flag, pointer].filter(Boolean).join(' · ')}</p>`;
+}
+
+// What the typing section calls a field, by its tag: a textarea is a text
+// box, an input a text field, anything else (an editable element) an
+// editable area. A Map, so that a tag such as "constructor" finds no name
+// on Object's prototype. The tag itself is never printed.
+const FIELD_NAMES = new Map([['textarea', 'text box'], ['input', 'text field']]);
+
+// The session's typing dynamics, above its cursor dynamics and in the same
+// form: the typing verdict first (the word, then the tells that decided it,
+// a tell at the highly-suspicious level in bold; or why the session is not
+// assessed; or what a clean session was judged on), then, in an open
+// <details>, every judged text field, the rules with their counts, the
+// typing rate and what was too short to judge, and a note when the rhythm
+// comes from the recording or a rate from the old formula. The classes are
+// its own (typing-*): the analyzer's tests address the cursor section's.
+//
+// It draws whatever the summary holds: each value is checked as it is
+// printed (text escaped, a number through String() since esc(0) is '', a
+// missing or non-finite number as —), and nothing here throws.
+function renderTypingSection(s) {
+  const ta = s.typingAnalysis;
+  // Fails closed: a summary built by hand, or by an older or later shape,
+  // without the analysis's limits, rate and lists draws nothing.
+  if (!ta || !ta.limits || !ta.rate || !Array.isArray(ta.fields) || !Array.isArray(ta.tells) || !Array.isArray(ta.rate.trials)) return '';
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  const isObj = (v) => v !== null && typeof v === 'object';
+  const num = (v) => (isNum(v) ? esc(String(v)) : '—');
+  const str = (v) => (typeof v === 'string' ? esc(v) : isNum(v) ? esc(String(v)) : '');
+  const ms = (v) => num(isNum(v) ? Math.round(v) : null);
+  const two = (v) => (isNum(v) ? esc(v.toFixed(2)) : '—');
+  const pct = (v) => num(isNum(v) ? Math.round(100 * v) : null);
+  // The lowest of one measure over the fields (a loop, not Math.min(...):
+  // a spread of some 200,000 fields overflows the stack). With no number
+  // among them it is Infinity, which prints as —.
+  const least = (xs, k) => xs.reduce((m, x) => (isNum(x[k]) && x[k] < m ? x[k] : m), Infinity);
+  const L = ta.limits;
+  const cutoff = ta.rate.cutoffCps;
+  const fields = ta.fields.filter(isObj);
+  const judged = ta.rate.trials.filter((r) => isObj(r) && r.judged === true);
+  const list = (ids) => ids.map(str).join(', ');
+  const idsOf = (t) => (Array.isArray(t.trialIds) && t.trialIds.length
+    ? ` <span class="muted">(${list(t.trialIds)}${isNum(t.trials) && t.trials > t.trialIds.length ? `, +${num(t.trials - t.trialIds.length)} more` : ''})</span>` : '');
+  const badge = `<span class="verdict-badge" data-level="${str(ta.level)}">${str(ta.verdict)}</span>`;
+  // Only the old formula's number is marked: a rate from the library, the
+  // saved edit times or the recording is the corrected one.
+  const old = (r) => (r.source === 'old formula' ? ' (old formula)' : '');
+  let verdict;
+  if (ta.level === -1) {
+    verdict = `<p class="typing-verdict">${badge} <span class="muted">${str(ta.verdictReason)}.</span></p>`;
+  } else if (ta.level === 0) {
+    const top = judged.length ? judged.reduce((a, b) => (b.cps > a.cps ? b : a)) : null;
+    const rate = top ? `; typing rate at most ${num(top.cps)} cps${old(top)} over trials with ${num(L.minEdits)}+ keystrokes` : '';
+    verdict = `<p class="typing-verdict">${badge} <span class="muted">${fields.length} field${fields.length === 1 ? '' : 's'} judged; none under ${num(L.fastGapMs)} ms (fastest median gap ${ms(least(fields, 'medianMs'))} ms) and none too even (lowest variation ${two(least(fields, 'cv'))})${rate}.</span></p>`;
+  } else {
+    verdict = `<p class="typing-verdict">${badge} <span class="muted">because of:</span></p>
+    <ul class="typing-tells">${ta.tells.filter(isObj).map((t) => `<li class="tell-${str(t.level)}">${str(t.text)}${idsOf(t)}</li>`).join('')}</ul>`;
+  }
+  const row = (th, td, fired) => `<tr class="${fired ? 'fired' : ''}"><th>${th}</th><td>${td}</td></tr>`;
+  // A trial's fields are named by tag in the order of their first keystroke
+  // (the order the analysis lists them): "text box", "text box 2", "text
+  // field". Counted per trial by its place, since two trials can share an
+  // id, and among the judged fields only: the library saves nothing for a
+  // shorter one.
+  const counts = new Map();
+  const names = fields.map((f) => {
+    const name = FIELD_NAMES.get(isObj(f.field) ? f.field.tag : null) || 'editable area';
+    const key = `${f.trialIndex} ${name}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+    return counts.get(key) === 1 ? name : `${name} ${counts.get(key)}`;
+  });
+  const fieldRows = fields.length
+    ? fields.map((f, i) => row(`${str(f.trialId)} · ${names[i]}`,
+      `${num(f.gaps)} · ${ms(f.medianMs)} ms · ${pct(f.under60Share)}% · ${two(f.cv)}`, f.speed || f.evenness)).join('')
+    : row('none', ta.state === 'not recorded' ? 'not recorded' : `no field reached ${num(L.minGaps)} key gaps`, false);
+  const rule = (label, hits) => row(label, `${hits.length} of ${fields.length} fields${hits.length ? ` (${list([...new Set(hits.map((f) => f.trialId))])})` : ''}`, hits.length > 0);
+  const fast = judged.filter((r) => r.fast === true);
+  const rateRow = row(`typing rate over ${num(cutoff)} cps, trials with ${num(L.minEdits)}+ keystrokes`,
+    `${fast.length} of ${judged.length} trials${fast.length ? ` (${fast.map((r) => `${str(r.trialId)} ${num(r.cps)}${old(r)}`).join(', ')})` : ''}`, fast.length > 0);
+  // Too short to judge: trials typed into with too few edits for the rate,
+  // and text fields with too few gaps for the rhythm (the library keeps no
+  // record of those, and the row says so).
+  const short = [];
+  for (const r of ta.rate.trials) {
+    if (!isObj(r) || r.judged === true || !(isNum(r.edits) && r.edits > 0)) continue;
+    const oldRule = isNum(r.oldCps) && isNum(cutoff) && r.oldCps > cutoff ? `; the old rule counted it at ${num(r.oldCps)} cps` : '';
+    short.push(`${str(r.trialId)} (${num(r.edits)} keystroke${r.edits === 1 ? '' : 's'}${oldRule})`);
+  }
+  if (isNum(ta.shortFields) && ta.shortFields > 0) short.push(`${num(ta.shortFields)} field${ta.shortFields === 1 ? '' : 's'} under ${num(L.minGaps)} key gaps`);
+  if (ta.source === 'library') short.push(`fields under ${num(L.minGaps)} key gaps (the library saves nothing for them)`);
+  const notes = [];
+  // The recording note, only where the rhythm was read from the recording:
+  // a recording without the page leaves it not recorded (the verdict says why).
+  if (ta.source === 'recording' && ta.state !== 'not recorded') {
+    notes.push('Computed from the session recording: data from libraries before 0.17 carry no rhythm summaries. A rate rebuilt from a recording can undercount keys typed faster than the page’s frames.');
+  }
+  if (judged.some((r) => r.source === 'old formula')) notes.push('A rate marked “old formula” is the one a library before 0.17 saved (keystrokes over time, from 2 keystrokes), for a trial with no recording to recompute it from.');
+  // "more than half": TYPING_LIMITS.fastShare is 0.5.
+  return `<div class="typing-section"><h4 class="section-heading">Typing dynamics</h4>${verdict}
+  <details class="typing-details" open><summary>every field, the rules and the typing rate</summary>
+  <table class="typing-table"><caption>text fields with at least ${num(L.minGaps)} key gaps</caption><tbody>
+    <tr><th class="muted">trial · field</th><td class="muted">gaps · median gap · gaps under ${num(L.fastGapMs)} ms · variation</td></tr>
+    ${fieldRows}
+  </tbody></table>
+  <table class="typing-table"><caption>rules</caption><tbody>
+    ${rule(`median gap under ${num(L.fastGapMs)} ms`, fields.filter((f) => f.medianMs < L.fastGapMs))}
+    ${rule(`more than half the gaps under ${num(L.fastGapMs)} ms`, fields.filter((f) => f.under60Share > L.fastShare))}
+    ${rule(`gap variation under ${num(L.evenCv)}`, fields.filter((f) => f.evenness))}
+    ${rateRow}
+    ${row('too short to judge', short.length ? short.join('; ') : 'none', false)}
+  </tbody></table></details>${notes.map((t) => `<p class="muted note">${esc(t)}</p>`).join('')}</div>`;
 }
 
 // The session's cursor dynamics: the pointer verdict first — the word, then
