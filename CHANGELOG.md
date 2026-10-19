@@ -8,7 +8,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 Pointer and device checks. Collected data changes (one device fact, read
 just after the session starts) and reports change (one new pointer tell, a
 device line, a click picture, three new `summary.csv` columns): read
-[docs/upgrading.md](docs/upgrading.md).
+[docs/upgrading.md](docs/upgrading.md). Typing: the typing rate is
+corrected, which changes the live soft score; trial reports gain a count of
+edits and the typing-rhythm summaries; reports gain a Typing dynamics
+section and six more `summary.csv` columns.
 
 ### Added
 - The centered-clicks rule in the pointer verdict, read from the session
@@ -35,10 +38,30 @@ device line, a click picture, three new `summary.csv` columns): read
   automation flag, kind of pointer) and, under the verdict, a picture of
   where each qualifying click landed on its control.
 - `scoreWeights` keys `softwareRenderer` and `deviceMasking` (default 0).
+- Typing rhythm: for each text field with 20 or more gaps between typed
+  characters, the library saves the gaps' count, median, share under 60 ms
+  and variation, with the field's tag and never its id (`typingRhythm`,
+  `signals.typingRhythm`, on by default); the keystroke times stay in the
+  browser. Trial reports also carry `typingEdits`, a count. The Qualtrics
+  payload carries both.
+- The report's Typing dynamics section: a typing verdict per session
+  (suspicious from one kind of rule, highly suspicious from fast and even
+  typing in one field), judged from the library's summaries or, for older
+  data, from a session recording that keeps the page (`dom` tier);
+  `typing-limits.json`; summary.csv columns `typingVerdict`, `typingTells`,
+  `typingFieldsJudged`, `typingFastestMedianMs`, `typingLowestCv`,
+  `typingRateSource`; the `typingRhythm` score weight (default 0); a typing
+  clause in the triage reason, before the pointer clause.
 
 ### Changed
 - `cursorChecksRecorded` counts the software-renderer fact: 3–4 with a
   cursor stream, 1–2 without one.
+- The typing rate is (edits − 1) per second between a trial's first edit
+  and its last, and needs 20 edits (`thresholds.typingMinEdits`). This
+  changes the library's live soft score: short fields no longer fire
+  `typingSpeed`. The report recomputes older data's rates from saved edit
+  times or the session recording when there is one, and marks the rest
+  "old formula".
 
 ## [0.16.0] — 2026-10-15
 

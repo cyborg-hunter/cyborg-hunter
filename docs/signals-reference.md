@@ -11,7 +11,8 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 | Drop | Clipboard | `drop` event listener on the whole page | Records every drop; the full text is stored (same switch as paste) |
 | Tab-away | Focus | Visibility API + window blur/focus | All tab-aways logged; soft score fires for durations **strictly greater than** `tabAwayDurationMs` (default 3s, 5s for strict). Reports bin durations as flicker (≤ cutoff, not scored) / medium (cutoff–10s) / long (≥10s) using that **per-participant** cutoff; the 10s line is a display split, not the soft cutoff. Since 0.6.1 the session report also carries timestamped `tabAwayEvents[]` (start, duration, type, wall-clock) for every tab-away **including off-trial ones** (consent, tutorial, comprehension); pre-0.6.1 payloads keep only durations (`tabAwaySums`) for those, so timelines can count but not place them |
 | Idle gap | Focus | No input activity for N ms | Default 10s threshold |
-| Typing speed | Typing | chars/sec from input edit timestamps | Default soft threshold 10 cps (15 for `permissive`, 8 for `strict`) |
+| Typing speed | Typing | chars/sec from a trial's edits: (edits − 1) per second between the first and the last, for trials with at least `typingMinEdits` (20) edits | Default soft threshold 10 cps (15 for `permissive`, 8 for `strict`). Before 0.17: edits over the time, from 2 edits |
+| Typing rhythm | Typing | Per trial and text field, the gaps between one-character typed insertions (`insertText` input events); a gap between two equal characters is left out | Saved for fields with 20 gaps or more: count, median, share under 60 ms, variation (`typingRhythm`), with the field's tag name and never its `id`. Judged by the report (below), never scored by the library |
 | Synthetic insertion | Typing | Text appears without preceding keystrokes | Default 100ms gap |
 | Foreign input | Typing | Typing lands outside the experiment container (needs `experimentContainer`) | All occurrences logged, with each typed character (`collectForPostHoc.foreignInputContent`, default on) |
 | Mouse track | Mouse | `mousemove` sampled at `mouseThrottleMs` (50 ms by default); every `mousedown`/`mouseup`/`click` | Cap of 2000 events per trial. Since 0.14 each sample carries viewport coordinates (`cx`, `cy`) beside the page ones (`x`, `y`) |
@@ -41,6 +42,17 @@ One verdict per session (`clean`, `suspicious`, `highly suspicious` or `not asse
 Sessions recorded before 0.14 carry no `device` object and no click provenance, so the report shows the browser-reported checks as "not recorded" and the session as not assessed, even when its recording gives a count of exact-centre clicks.
 
 **Device facts.** Two facts are shown in the cursor section's device line and never change the verdict. *Software renderer*: the WebGL renderer's family name, read once when the browser is next idle, within about 1 s of the session start (`session.device.softwareRenderer`, `signals.softwareRenderer`, since 0.17); software rendering is typical of cloud machines that run browser agents and of headless browsers, and a computer whose graphics driver the browser blocks reads the same. *Device masking*: contradictions in the window log (`session.windowPositions`) that fingerprint-masking tools leave (R1, R2, R3a; R3b as corroboration), read by the report with nothing new collected (since 0.17). Both have a `scoreWeights` key at weight 0 ([interpreting-signals.md](interpreting-signals.md#signals-that-never-score)).
+
+## Typing verdict
+
+One verdict per session (`clean`, `suspicious`, `highly suspicious` or `not assessed`), read by the report's typing section from the typing-rhythm summaries, or, for data recorded before 0.17, from the session recording's key presses. Only a recording that keeps the page (the recorder's `dom` tier) says which field each key went to; on the default `trace` tier the rhythm is not recorded, and the session is not assessed. None of it enters the library's soft score or the tier; `scoreWeights.typingRhythm` can add the verdict's level, times its weight, to the CLI's triage score ([configuration.md](configuration.md#report-score-weights-scoreweights)). What the rules mean and their limits: [interpreting-signals.md](interpreting-signals.md#typing-dynamics).
+
+| Tell | Fires when (per text field with 20 gaps or more) | Since |
+|---|---|---|
+| Keys pressed faster than a person types | the median gap is under 60 ms, or more than half the gaps are | 0.17 |
+| Keys pressed too evenly | the gaps' variation (standard deviation over mean) is under 0.2 | 0.17 |
+
+One kind of tell makes the session suspicious; both kinds in the same field make it highly suspicious.
 
 ## Two-tier scoring
 
@@ -97,6 +109,7 @@ Numeric defaults that apply across presets unless overridden:
 | `mouseBotMinEvents` | 3 | Minimum events needed to compute mouse metrics |
 | `tabAwayDurationMs` | 3000 | Tab-away durations longer than this add to the soft score (the `strict` preset raises it to 5000) |
 | `typingSpeedCps` | 10 | chars/sec above which typing is "fast" (15 in `permissive`, 8 in `strict`) |
+| `typingMinEdits` | 20 | Edits a trial needs before its typing rate is computed; shorter fields burst past 10 cps. Must be a whole number of 2 or more; any other value is 20, with a console warning |
 | `windowPositionPollMs` | 2000 | How often the window geometry is checked for a change |
 | `maxWindowPositions` | 2000 | Session cap on window-geometry rows; `null` disables it |
 
@@ -138,6 +151,12 @@ press with its time. Turn it on (or set
 `collectForPostHoc.fullKeystrokeTimestamps: true`) to keep the full timestamp array
 for keystroke-dynamics analysis.
 
+**`typingRhythm`** keeps, for each text field with 20 or more gaps between typed
+characters, four numbers that summarize the gaps (see the table above); the gaps
+themselves stay in the browser whatever `keystrokeDynamics` says. With it off, the
+report reads the rhythm from the session recording's key presses when the recording
+keeps the page (the `dom` tier).
+
 **`devTools` and `keyboardShortcuts`** both control the same detector: a `keydown`
 listener for DevTools hotkeys (Ctrl/Cmd+Shift+I/J/C, F12). Enabling **either** signal
 turns the listener on; the soft `devTools` scoring weight then scores the captured
@@ -146,7 +165,7 @@ DevTools detector.
 
 The full set of toggles (matching `PRESETS.standard.signals` in `constants.js`):
 
-`paste`, `copy`, `drop`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `softwareRenderer`, `keystrokeDynamics`.
+`paste`, `copy`, `drop`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `softwareRenderer`, `typingRhythm`, `keystrokeDynamics`.
 
 What is stored, beside which signals run, is set by `collectForPostHoc`: `pasteDropContent` (pasted and dropped text, default on), `foreignInputContent` (characters typed outside the experiment container, default on), `rawMouseTrack` (default on), `windowPositionLog` (default on), `fullKeystrokeTimestamps` and `elementTrace` (default off). Each takes `true` or `false`; any other value turns it off, with a warning. A misspelt key in `collectForPostHoc`, `signals` or `thresholds` is reported with a console warning.
 
@@ -190,4 +209,4 @@ Benign tags (Grammarly, LastPass, 1Password, etc.) are filtered out of the `Muta
 
 - Participant-level `hardTriggered` reads the session's `anyHardTriggered` when available. If no session score was saved, it falls back to the per-trial signals — a participant is hard only if some trial's cumulative `trialSignals.hard.*.sessionTotal` reached that signal's `countThreshold` (a single hit below the threshold is **not** hard). When that data is absent the participant is left un-flagged rather than promoted to hard.
 - Triage soft-flag check uses `(authoritativeSoftScore ?? totalSoftScore) >= threshold`, where `threshold` is an explicit analyst CLI override if set, otherwise the participant's own saved `softScoreThreshold`, otherwise 6.
-- The CLI **triage score** is a separate ranking heuristic (not the library soft score): by default `5 × paste + 5 × copy + 3 × sidebar-open + 1 × tab-away`, where a counted tab-away is one **longer than the participant's tab-away threshold** (3s by default, 5s for the strict preset — the same cutoff the runtime soft-scores against). Under the default weights no hard-trigger term, AI-extension, keyboard-shortcut, layout, zoom, edge-exit, synthetic, or foreign-input bonus, and, since 0.14, `cursor` (the pointer verdict's level), contributes to it; `scoreWeights` in the CLI config can weight any of them ([configuration.md → Report-score weights](configuration.md#report-score-weights-scoreweights)). The ranked list is then ordered tier-first (hard → soft → clean), score-desc within tier, so hard-triggered participants lead regardless of score. See [cli-reference.md → Triage scoring](cli-reference.md#triage-scoring).
+- The CLI **triage score** is a separate ranking heuristic (not the library soft score): by default `5 × paste + 5 × copy + 3 × sidebar-open + 1 × tab-away`, where a counted tab-away is one **longer than the participant's tab-away threshold** (3s by default, 5s for the strict preset — the same cutoff the runtime soft-scores against). Under the default weights no hard-trigger term, AI-extension, keyboard-shortcut, layout, zoom, edge-exit, synthetic, or foreign-input bonus, and, since 0.14, `cursor` (the pointer verdict's level), or, since 0.17, `typingRhythm` (the typing verdict's level), contributes to it; `scoreWeights` in the CLI config can weight any of them ([configuration.md → Report-score weights](configuration.md#report-score-weights-scoreweights)). The ranked list is then ordered tier-first (hard → soft → clean), score-desc within tier, so hard-triggered participants lead regardless of score. See [cli-reference.md → Triage scoring](cli-reference.md#triage-scoring).

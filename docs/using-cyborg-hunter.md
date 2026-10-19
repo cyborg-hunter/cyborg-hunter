@@ -176,9 +176,20 @@ names the switch that turns it down.
   `<body>`, which can reveal installed extensions.
 - A wall-clock time (UTC, to the millisecond) at the end of every trial and
   on every tab switch, so the data shows when the participant took part.
-- Tab switches and window blur, idle gaps, typing speed, DevTools
-  shortcuts. Keystroke timestamps only in the `strict` preset or with
-  `collectForPostHoc.fullKeystrokeTimestamps`.
+- Tab switches and window blur, idle gaps, DevTools shortcuts, typing
+  speed (for trials with 20 or more edits) and each trial's number of
+  edits to text fields (`typingEdits`, a count). Keystroke timestamps only
+  in the `strict` preset or with `collectForPostHoc.fullKeystrokeTimestamps`.
+- **Typing rhythm** (`signals.typingRhythm`, default on): for each text
+  field with at least 20 gaps between single typed characters in a trial,
+  four numbers: how many gaps, the median gap in milliseconds, the share of
+  gaps under 60 ms, and how much the gaps vary. With them, the field's tag
+  name only (`textarea`, `input`, or the tag of an editable element); the
+  field's `id` is never read. No key, character or text is stored, and the
+  rhythm keeps no keystroke times: the gaps are measured in the browser and
+  only the four numbers are saved. A field with fewer gaps stores nothing.
+  The Qualtrics payload carries `typingEdits` and the same four numbers
+  with the tag.
 - Opt-in: `collectForPostHoc.elementTrace` samples the tag and `id` of the
   element under the cursor (every 500 ms by default); `decoyAnswers: true`
   puts a hidden decoy on every trial and stores its text in the trial's
@@ -704,6 +715,7 @@ cyborg-hunter-report/
 ├── extensions.csv          # AI-extension + sidebar detections, one row per participant × detection
 ├── score-weights.json      # the triage-score weights this report used
 ├── cursor-limits.json      # the cursor section's constants and the cohort's verdicts
+├── typing-limits.json      # the typing section's constants, sources and the cohort's verdicts
 ├── replay/                 # each participant's whole session recording (typed text included)
 └── images/
     ├── trajectories_<participantId>.png      # per-trial mouse paths

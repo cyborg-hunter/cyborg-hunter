@@ -12,6 +12,10 @@ session starts) and reports (one new pointer tell, a device line, a click
 picture, three new `summary.csv` columns). Read
 [Privacy model](using-cyborg-hunter.md#privacy-model) before launching a
 study with it; `signals.softwareRenderer: false` turns the new fact off.
+It also changes the typing rate, and with it the live soft score, adds a
+count and the typing-rhythm summaries to every trial report
+(`signals.typingRhythm: false` turns the summaries off), and adds a Typing
+dynamics section with six more `summary.csv` columns.
 
 ### What changes for newly collected data
 
@@ -23,6 +27,20 @@ study with it; `signals.softwareRenderer: false` turns the new fact off.
 - Under the one-line setup, the device facts travel with the first segment
   saved. When the first trial or page ends before the renderer is read,
   the renderer is recorded as not checked (`null`).
+- The typing rate changes, and with it the live soft score. `charsPerSec`
+  is now (edits − 1) per second between a trial's first edit and its last,
+  and only for trials with 20 or more edits (`thresholds.typingMinEdits`,
+  default 20); the cps thresholds are unchanged. A short field no longer
+  fires the `typingSpeed` soft signal (an age typed as two keys 0.17 s apart
+  read 11.8 cps), so fewer sessions are soft-flagged or screened out on
+  typing. If your screenout relies on it, check it on your pilot.
+- Trial reports gain `typingEdits` (the number of edits to text fields, a
+  count) and, with `signals.typingRhythm` on (the default), `typingRhythm`:
+  for each text field with 20 or more gaps between typed characters,
+  `{ field: { tag }, gaps, medianMs, under60Share, cv }`. The field is named
+  by its tag only; its `id` is never read. Add both to your ethics protocol
+  ([Privacy model](using-cyborg-hunter.md#privacy-model)). The Qualtrics
+  payload carries both.
 
 ### What changes in reports
 
@@ -41,6 +59,28 @@ study with it; `signals.softwareRenderer: false` turns the new fact off.
 - Data recorded before 0.17 shows the software renderer as not recorded.
   Device masking reads the window log (`collectForPostHoc.windowPositionLog`,
   on by default); a session without one shows "screen facts not recorded".
+- A Typing dynamics section above Cursor dynamics, with a typing verdict
+  per session. Data recorded before 0.17 is judged from the session
+  recording when the recording keeps the page (the recorder's `dom` tier).
+  A `trace`-tier recording does not say which field each key went to: such
+  data gets the corrected rate but no rhythm verdict
+  ([interpreting-signals.md](interpreting-signals.md#typing-dynamics)).
+- `trialsWithFastTyping`, for older data with saved edit times or a
+  recording, counts each trial by its recomputed rate (from 20 edits) where
+  it has one, and by the saved rate where it does not: the bundled agent's
+  paste trial (2 edits, 157.5 cps by the old formula) no longer counts. A reduced Qualtrics payload keeps the
+  whole-session count it carries, unless the report is phase-scoped.
+- `summary.csv` gains six columns at the end: `typingVerdict`,
+  `typingTells`, `typingFieldsJudged`, `typingFastestMedianMs`,
+  `typingLowestCv`, `typingRateSource`. No existing column moves.
+- `typing-limits.json`, beside `cursor-limits.json`
+  ([cli-reference.md](cli-reference.md#typing-limitsjson)).
+- The triage reason names the typing verdict when it counts against the
+  session, before the pointer verdict; `scoreWeights.typingRhythm`
+  (default 0) can rank by it.
+- `typing_profile_*.png` still draws the rates the library saved, by the
+  old formula for data before 0.17; the section and `summary.csv` use the
+  corrected ones.
 
 ## 0.16.0 — from 0.15
 

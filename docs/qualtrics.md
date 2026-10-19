@@ -201,8 +201,9 @@ switches, idle gaps, keyboard shortcuts, sidebar and developer-tools
 openings). It never contains text the participant typed or pasted (a paste
 is kept as its length), the honeypot's free-text answer (only its length),
 the id or class of a field typed into outside the survey (only its tag name
-and the kind of input), mouse or element traces, keystroke timings, or window
-positions.
+and the kind of input), mouse or element traces, keystroke timings (a text
+field's typing rhythm travels as four numbers and the field's tag, never its
+id), or window positions.
 
 That holds for what reaches Qualtrics. The full session the summary is made
 from, pasted text, the honeypot's answer, the mouse trace and window

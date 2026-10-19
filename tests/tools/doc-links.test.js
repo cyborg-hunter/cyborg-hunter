@@ -228,3 +228,25 @@ describe('the cursor section is documented', () => {
     assert.ok(read('docs/interpreting-signals.md').includes('## Cursor dynamics'));
   });
 });
+
+// The typing section's numbers are on the report page and their meaning in
+// the docs: the output tree and columns, the section the report's notes
+// point to, and the Privacy model's line for the new collected field.
+describe('the typing section is documented', () => {
+  it('docs/cli-reference.md lists typing-limits.json and the typing columns', () => {
+    const text = read('docs/cli-reference.md');
+    for (const s of ['typing-limits.json', 'typingVerdict', 'typingTells', 'typingFieldsJudged', 'typingFastestMedianMs', 'typingLowestCv', 'typingRateSource', '`edit times`']) assert.ok(text.includes(s), 'no ' + s);
+  });
+  it('docs/interpreting-signals.md has the Typing dynamics section, with the mobile limit and the rebuilt rate\'s', () => {
+    const text = read('docs/interpreting-signals.md');
+    assert.ok(text.includes('## Typing dynamics'));
+    assert.ok(text.includes('virtual keyboard'));
+    assert.ok(text.includes('A rate rebuilt from a recording can undercount keys typed faster than the page\'s frames.'));
+  });
+  it('the Privacy model names the typing rhythm and its switch', () => {
+    assert.ok(read('docs/using-cyborg-hunter.md').includes('signals.typingRhythm'));
+  });
+  it('docs/configuration.md has the typing verdict weight', () => {
+    assert.ok(read('docs/configuration.md').includes('`typingRhythm`'));
+  });
+});

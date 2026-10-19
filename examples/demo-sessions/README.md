@@ -5,7 +5,7 @@ Four sessions recorded on this project's demo tour (the public demo at the repos
 | file | who | tour | recording | what it shows |
 |---|---|---|---|---|
 | `DEMO-9mop.json` | Mira, a human tester | an earlier two-act version of the tour | none | hard-flagged: four pastes, four copies, four long tab-aways |
-| `DEMO-bsq6.json` | a GPT agent | the current ten-step tour | `DEMO-bsq6.replay.json` | hard-flagged, and a highly suspicious pointer verdict: all twelve of its first clicks with a known position arrived without a path, and the centered-clicks tell fired; the click picture shows 8 of its 11 qualifying clicks at the exact centre of the control |
+| `DEMO-bsq6.json` | a GPT agent | the current ten-step tour | `DEMO-bsq6.replay.json` | hard-flagged, and a highly suspicious pointer verdict: all twelve of its first clicks with a known position arrived without a path, and the centered-clicks tell fired; the click picture shows 8 of its 11 qualifying clicks at the exact centre of the control; and a highly suspicious typing verdict: its first answer typed with a median of 58 ms between keys, too evenly for a person |
 | `DEMO-681w.json` | Mira, a human tester | the current ten-step tour | `DEMO-681w.replay.json` | soft-flagged at the threshold; a clean pointer verdict |
 | `DEMO-a3f3.json` | Mira, a human tester | an earlier two-act version of the tour | `DEMO-a3f3.replay.json` | clean, with reasons |
 

@@ -119,6 +119,7 @@ cyborg-hunter-report/
 ├── extensions.csv       # AI-extension + sidebar detections, one row per participant × detection
 ├── score-weights.json   # the triage-score weights this report used (defaults or scoreWeights)
 ├── cursor-limits.json   # the constants the cursor section judged with, their meanings, and the verdicts over the cohort
+├── typing-limits.json   # the constants the typing section judged with, their meanings, where the rhythm and the rate came from, and the verdicts over the cohort
 ├── replay/              # each participant's whole session recording, loaded by index.html (most sensitive output)
 │   └── <participantId>.replay.js
 └── images/              # canvas-rendered visuals (skipped if canvas missing)
@@ -157,6 +158,7 @@ Landing page (it needs the `images/` and `replay/` folders beside it):
 - Dashboard with hard/soft/clean participant counts
 - Sortable triage table (click a column header to sort)
 - Per-participant detail sections with linked images and signal summaries
+- In each participant's detail, a Typing dynamics section (the typing verdict, its tells, every judged text field and the typing rate) above the Cursor dynamics section
 
 Images are linked from `images/`, not base64-embedded — keeps the HTML readable and the page lightweight.
 
@@ -174,7 +176,8 @@ One row per participant:
 | `totalPasteEvents` | Total paste events across all trials |
 | `totalCopyEvents` | Total copy events across all trials |
 | `totalTabAways` | Total tab-away events |
-| `meanTypingSpeed` | Mean chars/sec across trials |
+| `meanTypingSpeed` | Mean of the saved chars/sec across trials, 0 for a trial with none (for data before 0.17, the old formula's numbers; the Typing dynamics section and `trialsWithFastTyping` use the corrected rate where they can) |
+| `trialsWithFastTyping` | Trials typed faster than the participant's cps threshold. From 0.17, trials of 20 or more edits; for older data, by the rate recomputed from the trial's saved edit times or the session recording, else by the saved rate (`typingRateSource` says which) |
 | `meanMouseEvents` | Mean mouse events per trial |
 | `totalSoftScore` | Accumulated soft score |
 | `sidebar_event_count` | Sidebar-gap detections (session-level) |
@@ -208,6 +211,12 @@ One row per participant:
 | `cursorCenteredNear` | Qualifying clicks within 5 px of the control's centre, as `count/qualifying clicks`; reported, not judged; `touch` for a touch recording; empty without a recording, and for a session without a cursor stream even with one |
 | `cursorSoftwareRenderer` | `YES (<family>)` when the browser drew without a graphics card (`swiftshader`, `llvmpipe`, `softpipe`, `microsoft-basic-render`, `mesa-offscreen`), `no`, `no WebGL`, or empty (not recorded: data before 0.17, the switch off, no answer, or, under the one-line setup, a first page or trial that ended before the read: [upgrading.md](upgrading.md#unreleased--from-016)). A device fact: not a tell, not in `cursorFactCount` |
 | `deviceMasking` | The device-masking rules that fired, space-separated: `R1` (a pixel ratio no browser produces), `R2` (a pixel ratio that stays fixed through a page zoom; not applied to Safari), `R3a` (a window larger than the screen it reports by more than 3% + 20 px; not applied to Firefox when the browser is known, nor with a second monitor in the log). Empty when none fired or the session has no window log. Read from `session.windowPositions` and the recording's browser line; nothing new is collected. Not evidence of AI use ([interpreting-signals.md](interpreting-signals.md#signals-that-never-score)) |
+| `typingVerdict` | The typing verdict: `clean`, `suspicious`, `highly suspicious` or `not assessed` |
+| `typingTells` | The tells behind a suspicious or highly suspicious verdict, `; `-separated: `median gap <n> ms` (keys faster than a person types), `gap variation <v>` (keys too even); empty otherwise |
+| `typingFieldsJudged` | Text fields with 20 or more key gaps that were judged. Empty when the session's typing rhythm was not recorded: no rhythm summaries (library before 0.17, or `signals.typingRhythm` off) and no usable recording (none, one that matches no trial, or a `trace`-tier one, which does not say which field each key went to). `0` when it was recorded but no field reached 20 key gaps |
+| `typingFastestMedianMs` | The smallest median gap among the judged fields, in ms (one decimal); empty when none was judged |
+| `typingLowestCv` | The smallest gap variation among the judged fields (three decimals); empty when none was judged |
+| `typingRateSource` | Where the typing rates behind `trialsWithFastTyping` came from: `library` (0.17 on: (edits − 1) per second, from 20 edits), `edit times` (older data saved with keystroke dynamics on: recomputed the same way from the trial's saved edit times), `recording` (older data: recomputed the same way from the session recording), `old formula` (older data with neither saved edit times nor a recording of the trial: the saved rate, edits over the time, from 2 edits). With several, the weakest any judged trial used (`old formula` < `recording` < `edit times` < `library`); with no judged trial, the strongest available. It is the rate's source, not the rhythm's: a session can read `recording` here while its typing rhythm is not recorded |
 | ... | (See the actual file for the full column set; the schema may grow.) |
 
 > Note: the early per-participant columns are camelCase (`totalPasteEvents`, …)
@@ -222,7 +231,9 @@ written unchanged.
 For a Qualtrics response written at a reduced level ([Payload size](qualtrics.md#payload-size)),
 the counts, `trialCount` and `totalSoftScore` cover the whole session, while `meanTypingSpeed`,
 `meanMouseEvents` and `meanPathEfficiency` average only the pages the payload kept; the CLI's
-note for that response says so.
+note for that response says so. `trialsWithFastTyping` stays the whole session's count the
+payload carries, even where the report recomputes older pages' rates from a recording; under a
+`phaseScope`, the kept pages are counted instead.
 
 ### `triage.md`
 
@@ -320,6 +331,40 @@ tier, near the centre. That tier is reported, not judged. A recording with
 touch events is not judged. Voice-control and screen-reader tools can also
 click the centre of a control, so watch the replay before excluding anyone.
 
+### `typing-limits.json`
+
+The constants the typing section judged with, written by every run:
+`{ "cliVersion": "<version>", "recordedWith": "<version>, …"|null, "limits": { "<constant>": { "value": n, "meaning": "<text>" } }, "sessions": { "total": n, "rhythmSource": { "library": l, "recording": r, "notRecorded": u }, "rateSource": { "library": l, "editTimes": e, "recording": r, "oldFormula": o }, "verdicts": { "highlySuspicious": h, "suspicious": s, "clean": c, "notAssessed": u } } }`.
+`cliVersion` and `recordedWith` are as in `cursor-limits.json`.
+The constants: `minGaps`, 20 gaps before a text field is judged; `fastGapMs`,
+60 ms, and `fastShare`, 0.5, the speed rule (a median gap under 60 ms, or
+more than half the gaps under it); `evenCv`, 0.2, the evenness rule (the
+gaps' standard deviation over their mean); `minEdits`, 20 edits before a
+trial's typing rate is judged. Calibrated on recorded human sessions: no
+text field of 20 gaps or more had a median gap under 75 ms, more than 0.39
+of its gaps under 60 ms, or a variation under 0.3. `rhythmSource` counts
+each session once, by where its typing rhythm came from: the library's
+summaries (`library`), the session recording (`recording`), or nowhere
+(`notRecorded`, which includes a session whose recording was read but does
+not say which field each key went to). `rateSource` counts
+`typingRateSource`'s values (`editTimes` is `edit times`, `oldFormula` is
+`old formula`). Each of the three blocks adds up to `total`. The run prints
+no line for the typing verdicts; `sessions.verdicts` holds their counts.
+
+For data without rhythm summaries (recorded before 0.17, or with
+`signals.typingRhythm` off), the section reads the session recording.
+Trials are matched to the recording's segments by trial id and, when both
+carry times, by start time (within 1 s); an id shared by several trials
+with no times to tell them apart matches nothing. Only the matched trials
+inside the `phaseScope` are judged: typing between trials, or in a segment
+no trial matches, is not. The rhythm needs a recording that keeps the page
+(the recorder's `dom` tier). On the default `trace` tier the key presses
+carry no field, so the rhythm is not recorded, with the reason
+"the session recording does not say which field each key went to (recorded without the page)";
+the rate is still rebuilt from the recording's edits on either tier. The
+recorder writes at most one value change per field per frame, so a rebuilt
+rate is a lower bound.
+
 ### `event-log.csv`
 
 Every clipboard, drop, synthetic-insertion, and tab-away event recorded during a trial, in chronological order (a tab-away between trials counts in the session's totals and has no row here):
@@ -359,10 +404,10 @@ signals:
 | Tab-aways longer than the participant's tab-away threshold (medium + long bins; 3s by default, 5s for strict) | `× 1` |
 
 Under the default weights no other signal affects the score; each of them,
-`cursor` (the pointer verdict's level, since 0.14) among them, can be given a weight
+`cursor` (the pointer verdict's level, since 0.14) and `typingRhythm` (the typing verdict's level, since 0.17) among them, can be given a weight
 (below), as can the two device facts `softwareRenderer` and `deviceMasking` (since 0.17). Hard-trigger status, AI-extension detections, keyboard shortcuts,
 layout shifts, zoom changes, edge-exit patterns, synthetic insertions, foreign
-inputs, and the pointer verdict are all still surfaced — in the per-participant detail panes and the one-line triage
+inputs, and the pointer and typing verdicts are all still surfaced — in the per-participant detail panes and the one-line triage
 reason — but they do not change the number. (Earlier versions added a `+100`
 hard-trigger term and several other bonuses; those were removed.)
 

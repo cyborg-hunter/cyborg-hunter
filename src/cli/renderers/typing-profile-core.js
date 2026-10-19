@@ -44,7 +44,7 @@ export function drawTypingProfile(p, config, createCanvas) {
   //   "typed"       — charsPerSec is a real number, draw a normal bar
   //   "paste-only"  — charsPerSec is null but there's a paste event; draw a
   //                   grey hatched marker so the absence is legible. Single
-  //                   paste fires one input event → editTimestamps.length < 2
+  //                   paste fires one input event, under typingMinEdits (20)
   //                   → computeTypingSpeed returns null. Without this, a
   //                   pasted response looks identical to a very slow one.
   //   "no-data"     — neither, leave blank
