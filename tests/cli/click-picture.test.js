@@ -2,8 +2,9 @@
 // The click picture under the pointer verdict: where each qualifying click
 // landed on its control, from the centered-clicks rule's points. The
 // exact-centre clicks are one red dot sized by their count, the rest grey
-// dots, with a legend giving both counts; nothing is drawn for a touch
-// recording, without a recording, or without a qualifying click.
+// dots, with a legend giving both counts; the title and the sentence about
+// the clicks are the figure's caption, under the SVG. Nothing is drawn for a
+// touch recording, without a recording, or without a qualifying click.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeCursor } from '../../src/cli/analyzers/cursor.js';
@@ -29,7 +30,11 @@ describe('renderClickPicture', () => {
     assert.match(svg, />3 at the exact centre \(within 1\.5 px\)</);
     assert.match(svg, />2 elsewhere</);
     assert.match(svg, /aria-label="5 qualifying clicks, each control scaled to this box"/);
-    assert.match(svg, />where each click landed on its control</);
+    assert.match(svg, /<\/svg>\s*<figcaption><b>Where each click landed on its control\.<\/b>/);
+    // The SVG itself holds no title and no caption sentence: both are in the figcaption.
+    const inSvg = svg.slice(0, svg.indexOf('</svg>'));
+    assert.doesNotMatch(inSvg, /where each click landed/i);
+    assert.doesNotMatch(inSvg, /<text[^>]*>[^<]*qualifying clicks/);
   });
   it('the red dot stops growing at ten exact clicks; with none there is no red dot', () => {
     assert.match(renderClickPicture(cc(20, 20, atCentre(20)), L), /cx="89" cy="44" r="10"/);
@@ -40,7 +45,9 @@ describe('renderClickPicture', () => {
   });
   it('says how many clicks it drew when the points were capped', () => {
     const many = Array.from({ length: 200 }, () => ({ u: 0.5, v: 0.5, exact: false }));
-    assert.match(renderClickPicture(cc(0, 250, many), L), /250 qualifying clicks, each control scaled to this box; the first 200 drawn/);
+    const svg = renderClickPicture(cc(0, 250, many), L);
+    assert.match(svg, /250 qualifying clicks, each control scaled to this box; the first 200 drawn/);
+    assert.match(svg, /<figcaption><b>Where each click landed on its control\.<\/b> 250 qualifying clicks, each control scaled to this box; the first 200 drawn\.<\/figcaption>/);
   });
   it('skips a point whose u or v is not a finite number', () => {
     const svg = renderClickPicture(cc(0, 4, [null, { u: 'x', v: 0 }, { u: NaN, v: 1 }, { u: Infinity, v: 0 }]), L);

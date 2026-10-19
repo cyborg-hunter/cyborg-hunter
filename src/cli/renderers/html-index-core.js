@@ -416,6 +416,8 @@ ${fontFaceCss}    :root {
     /* The click picture under the verdict (renderClickPicture): an inline SVG that shrinks with a narrow pane. */
     .click-picture { margin: 6px 0 10px; display: inline-block; vertical-align: top; }
     .click-picture svg { max-width: 100%; height: auto; }
+    /* Its caption: small and muted like the details' summary, wrapping at the SVG's width (renderClickPicture's W). */
+    .click-picture figcaption { max-width: 420px; font-size: 12px; color: var(--dim); }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -1349,11 +1351,16 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
 // control. Every control is scaled to one box and each click drawn at its
 // offset from the centre in half-widths and half-heights; the exact-centre
 // clicks are one red dot sized by their count, the others grey dots. Inline
-// SVG, no external asset. Only numbers and fixed words reach it, escaped all
-// the same; a point whose u or v is not a finite number is skipped.
+// SVG, no external asset: the box and its two-row legend (centred on the
+// box's middle line). The title and the sentence about the clicks are the
+// figure's caption, a <figcaption> under the SVG, so a long sentence wraps
+// instead of running past the SVG's edge. Only numbers and fixed words reach
+// it, escaped all the same; a point whose u or v is not a finite number is
+// skipped.
 export function renderClickPicture(cc, limits) {
   if (!cc || cc.state !== 'ok' || !(cc.of >= 1) || !Array.isArray(cc.points)) return '';
-  const BW = 150, BH = 60, PAD = 14, W = 520, H = BH + 2 * PAD + 22;
+  // W fits the legend's longer row with a four-digit count and room to spare.
+  const BW = 150, BH = 60, PAD = 14, W = 420, H = BH + 2 * PAD;
   const cx = PAD + BW / 2, cy = PAD + BH / 2, tx = PAD + BW + 16;
   const n = (v) => esc(String(v));
   const unit = (v) => Math.max(-1, Math.min(1, v));
@@ -1371,11 +1378,10 @@ export function renderClickPicture(cc, limits) {
     <line x1="${cx}" y1="${PAD}" x2="${cx}" y2="${PAD + BH}" stroke="#cfd8dc" stroke-dasharray="3 3"/>
     <line x1="${PAD}" y1="${cy}" x2="${PAD + BW}" y2="${cy}" stroke="#cfd8dc" stroke-dasharray="3 3"/>
     ${dots}${centre}
-    <text x="${tx}" y="${PAD + 14}" font-size="11" fill="#333">where each click landed on its control</text>
-    <text x="${tx}" y="${PAD + 30}" font-size="10" fill="#666">${caption}</text>
-    <circle cx="${tx + 5}" cy="${PAD + 44}" r="5" fill="#d32f2f" fill-opacity="0.85"/><text x="${tx + 15}" y="${PAD + 48}" font-size="10" fill="#b71c1c">${n(exact)} at the exact centre (within ${n(limits.centerExactPx)} px)</text>
-    <circle cx="${tx + 5}" cy="${PAD + 60}" r="3.2" fill="#455a64" fill-opacity="0.75"/><text x="${tx + 15}" y="${PAD + 64}" font-size="10" fill="#666">${n(cc.of - exact)} elsewhere</text>
-  </svg></figure>`;
+    <circle cx="${tx + 5}" cy="${cy - 8}" r="5" fill="#d32f2f" fill-opacity="0.85"/><text x="${tx + 15}" y="${cy - 4}" font-size="10" fill="#b71c1c">${n(exact)} at the exact centre (within ${n(limits.centerExactPx)} px)</text>
+    <circle cx="${tx + 5}" cy="${cy + 8}" r="3.2" fill="#455a64" fill-opacity="0.75"/><text x="${tx + 15}" y="${cy + 12}" font-size="10" fill="#666">${n(cc.of - exact)} elsewhere</text>
+  </svg>
+  <figcaption><b>Where each click landed on its control.</b> ${caption}.</figcaption></figure>`;
 }
 
 // The session's cursor dynamics: the pointer verdict first — the word, then

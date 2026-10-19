@@ -287,6 +287,8 @@
     /* The click picture under the verdict (renderClickPicture): an inline SVG that shrinks with a narrow pane. */
     .click-picture { margin: 6px 0 10px; display: inline-block; vertical-align: top; }
     .click-picture svg { max-width: 100%; height: auto; }
+    /* Its caption: small and muted like the details' summary, wrapping at the SVG's width (renderClickPicture's W). */
+    .click-picture figcaption { max-width: 420px; font-size: 12px; color: var(--dim); }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
