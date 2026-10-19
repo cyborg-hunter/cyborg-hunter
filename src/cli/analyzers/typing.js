@@ -8,7 +8,10 @@
 // Sources, in order: the library's per-field summaries (trial reports from
 // 0.17 on carry typingRhythm), else the session recording's key presses
 // (printable, not repeated, no Ctrl or Meta, gaps between two presses of
-// the same key left out), else nothing ("not recorded"). The rate: the
+// the same key left out), else nothing ("not recorded"). A recording whose
+// key presses name no field (the trace tier's, or keys typed outside a dom-
+// tier recording's page) also leaves the rhythm "not recorded", its source
+// still the recording. The rate: the
 // library's corrected charsPerSec (trials carrying typingEdits, 0.17 on),
 // else recomputed from the trial's saved edit times (editTimestamps, kept
 // when keystroke dynamics are on), else from the recording's input events
@@ -59,8 +62,10 @@ const SESSION_LABEL = '__session__';
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const eventsOf = (seg) => (isObj(seg) && Array.isArray(seg.events) ? seg.events.filter(isObj) : []);
-// A trial's own id as text (a string, or a number as text), else null.
-const ownIdOf = (t) => (isObj(t) && (typeof t.trialId === 'string' || isNum(t.trialId)) ? String(t.trialId) : null);
+// An id or a label as text (a string, or a finite number as text), else null.
+const asText = (v) => (typeof v === 'string' || isNum(v) ? String(v) : null);
+// A trial's own id as text, else null.
+const ownIdOf = (t) => (isObj(t) ? asText(t.trialId) : null);
 // A trial's id as text; a trial without a usable id is named by its place.
 const trialIdOf = (t, i) => ownIdOf(t) ?? `trial ${i + 1}`;
 
@@ -179,7 +184,8 @@ function matchOnClock(idx, segs, trials, base, take) {
  * at that trial's index). `trials` not an array gives [].
  *
  * A segment matches a trial whose id is its label (the recorder labels a
- * segment with its trial's id, src/replay/serializer.js; §3 `label`). When the
+ * segment with its trial's id, src/replay/serializer.js; §3 `label`), both
+ * read as text: the recorder writes a numeric id as a number. When the
  * recording's start time and the trial's start are both numbers (one page,
  * one clock), the segment must start within CLOCK_TOLERANCE_MS of the
  * trial, the nearest pairs taken first (matchOnClock); otherwise, and when
@@ -198,9 +204,10 @@ export function matchTrialSegments(trials, recording) {
   // written onto the segment).
   const byLabel = new Map();
   recording.segments.forEach((s, k) => {
-    if (!isObj(s) || typeof s.label !== 'string' || s.label === SESSION_LABEL) return;
-    if (!byLabel.has(s.label)) byLabel.set(s.label, []);
-    byLabel.get(s.label).push({ s, o: originOf(s), k, used: false });
+    const label = isObj(s) ? asText(s.label) : null;
+    if (label === null || label === SESSION_LABEL) return;
+    if (!byLabel.has(label)) byLabel.set(label, []);
+    byLabel.get(label).push({ s, o: originOf(s), k, used: false });
   });
   const ids = trials.map(ownIdOf);
   const idCount = new Map();
@@ -281,9 +288,18 @@ export function recordingKeyGaps(seg) {
 // Whether a segment holds a key press the rhythm would count that names no
 // field: a recording without the page's DOM (trace tier) keeps the anchor's
 // tag but gives the key press no target, so its keys cannot be told apart
-// by field.
+// by field. A recording that keeps the page (dom tier) does the same for a
+// key typed into a field outside the part of the page it records (§7,
+// "target: null").
 function hasUntargetedTyping(seg) {
   return eventsOf(seg).some((e) => typedKeyTag(e) !== null && !Number.isInteger(e.target));
+}
+
+// The recorder's tier as the recording names it
+// (extensions['cyborg-hunter'].tier), or null.
+function tierOf(recording) {
+  const ext = isObj(recording) && isObj(recording.extensions) ? recording.extensions['cyborg-hunter'] : null;
+  return isObj(ext) && typeof ext.tier === 'string' ? ext.tier : null;
 }
 
 /**
@@ -332,6 +348,16 @@ function cutoffOf(p, config) {
   return isObj(config) && isNum(config.typingSpeedThreshold_cps) ? config.typingSpeedThreshold_cps : 10;
 }
 
+// The typing-rate minimum the library judged this participant with (saved
+// in the session report from 0.17 on): a whole number of 2 or more, as the
+// library accepts, else TYPING_LIMITS.minEdits.
+function minEditsOf(p) {
+  const session = isObj(p.session) ? p.session : {};
+  const saved = isObj(session.config) ? session.config.thresholds : null;
+  const v = isObj(saved) ? saved.typingMinEdits : null;
+  return Number.isInteger(v) && v >= 2 ? v : TYPING_LIMITS.minEdits.value;
+}
+
 // The smallest and the largest of one measure over fields (a loop, not
 // Math.min(...): a spread of some 200,000 fields overflows the stack).
 const least = (fs, k) => fs.reduce((m, f) => Math.min(m, f[k]), Infinity);
@@ -358,7 +384,12 @@ const RATE_SOURCES = ['old formula', 'recording', 'edit times', 'library'];
  * apart. byTrial is keyed by trial id for readers that only have an id:
  * trials that share an id share an entry (judged if any of them was, with
  * the largest judged rate). fields[].trialIndex is the field's trial's
- * place among the analysed trials.
+ * place among the analysed trials. Both index the object trials of the
+ * analysed list (participant.trials.filter(isObj)), not participant.trials
+ * itself.
+ *
+ * rate.minEdits is the edits a trial needs before its rate is recomputed
+ * and judged: the participant's saved typingMinEdits, else 20.
  */
 export function analyzeTyping(participant, config = {}, options = {}) {
   const L = valuesOf(TYPING_LIMITS);
@@ -366,6 +397,7 @@ export function analyzeTyping(participant, config = {}, options = {}) {
   const trials = Array.isArray(p.trials) ? p.trials.filter(isObj) : [];
   const recording = isObj(p.replay) && isObj(p.replay.recording) ? p.replay.recording : null;
   const cutoff = cutoffOf(p, config);
+  const minEdits = minEditsOf(p);
 
   // Each analysed trial's recording segment, or null.
   const all = isObj(options) && Array.isArray(options.allTrials) ? options.allTrials : trials;
@@ -416,7 +448,12 @@ export function analyzeTyping(participant, config = {}, options = {}) {
     // area's keys are not counted), or every field was too short.
     if (source === 'recording' && segs.some((s) => s !== null && hasUntargetedTyping(s))) {
       state = 'not recorded';
-      verdictReason = 'the session recording does not say which field each key went to (recorded without the page)';
+      // A dom-tier recording: keys typed into a field outside the recorded
+      // part of the page. Otherwise (trace tier, or no tier named): a
+      // recording without the page.
+      verdictReason = tierOf(recording) === 'dom'
+        ? 'the session recording does not say which field each key went to (typed outside the recorded page)'
+        : 'the session recording does not say which field each key went to (recorded without the page)';
     } else {
       state = 'not assessed';
       verdictReason = source === 'recording' && shortFields === 0 ? 'the session recording holds no typed characters in a text field of the judged trials'
@@ -457,8 +494,8 @@ export function analyzeTyping(participant, config = {}, options = {}) {
     const fromRecording = segs[i] ? recordingEditTimes(segs[i]) : [];
     let r;
     if (isNum(t.typingEdits)) r = { source: 'library', cps: saved, edits: t.typingEdits, oldCps: null };
-    else if (times) r = { source: 'edit times', cps: typingRate(times, L.minEdits), edits: times.length, oldCps: saved };
-    else if (fromRecording.length) r = { source: 'recording', cps: typingRate(fromRecording, L.minEdits), edits: fromRecording.length, oldCps: saved };
+    else if (times) r = { source: 'edit times', cps: typingRate(times, minEdits), edits: times.length, oldCps: saved };
+    else if (fromRecording.length) r = { source: 'recording', cps: typingRate(fromRecording, minEdits), edits: fromRecording.length, oldCps: saved };
     else r = { source: 'old formula', cps: saved, edits: null, oldCps: null };
     const judged = r.cps !== null;
     return { trialId, ...r, judged, fast: judged && r.cps > cutoff };
@@ -480,7 +517,7 @@ export function analyzeTyping(participant, config = {}, options = {}) {
   const byIndex = rateTrials.map((r, i) => ({ cps: r.judged ? r.cps : null, judged: r.judged, rhythm: firedIndexes.has(i) }));
 
   return { state, level, verdict: verdictWord(level), verdictReason, source, tells, fields, shortFields,
-    rate: { source: rateSource, cutoffCps: cutoff, trials: rateTrials }, byTrial, byIndex, limits: L };
+    rate: { source: rateSource, cutoffCps: cutoff, minEdits, trials: rateTrials }, byTrial, byIndex, limits: L };
 }
 
 // How many trials typed faster than the cutoff, by the rates above.

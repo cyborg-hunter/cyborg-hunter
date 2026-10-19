@@ -113,6 +113,16 @@ describe('buildQualtricsPayload level 0', () => {
   });
 });
 
+describe('the saved typing-rate minimum in the payload', () => {
+  it('keeps the first segment\'s config.thresholds.typingMinEdits, which the CLI reads back', () => {
+    const b = blob({ pages: 2 });
+    b.trials[0].integritySegment.config.thresholds.typingMinEdits = 5;
+    const out = build(b, 12000);
+    assert.strictEqual(out.payload.trials[0].integritySegment.config.thresholds.typingMinEdits, 5);
+    assert.strictEqual(extractIntegrityData(JSON.parse(out.json), {}).session.config.thresholds.typingMinEdits, 5);
+  });
+});
+
 describe('typing-rhythm summaries in the payload', () => {
   it('keep their numbers and the field\'s tag; the field\'s id and unknown keys are left out', () => {
     const b = blob({ pages: 2 });

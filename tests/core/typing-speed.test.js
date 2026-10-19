@@ -126,3 +126,26 @@ describe('init: a bad thresholds.typingMinEdits falls back to 20 with one warnin
     assert.deepEqual(initWarnings({ thresholds: { typingMinEdits: 2 } }), []);
   });
 });
+
+// The session report saves the minimum the library judged with, so the
+// report judges the recomputed rates from the same number.
+describe('getSessionReport: config.thresholds.typingMinEdits', () => {
+  beforeEach(setUp);
+  afterEach(tearDown);
+
+  const savedMinEdits = (config) => {
+    const m = init({ participantId: 'R1', ...config });
+    try { return m.getSessionReport().config.thresholds.typingMinEdits; } finally { m.destroy(); }
+  };
+  it('the configured value', () => {
+    assert.equal(savedMinEdits({ thresholds: { typingMinEdits: 5 } }), 5);
+  });
+  it('20 by default, and 20 after a bad value falls back', () => {
+    assert.equal(savedMinEdits({}), 20);
+    const quiet = console.warn;
+    console.warn = () => {};
+    try {
+      for (const bad of ['5', 0, 1.5, NaN]) assert.equal(savedMinEdits({ thresholds: { typingMinEdits: bad } }), 20, String(bad));
+    } finally { console.warn = quiet; }
+  });
+});

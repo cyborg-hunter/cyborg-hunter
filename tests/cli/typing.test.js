@@ -140,6 +140,22 @@ describe('from the session recording', () => {
     assert.deepEqual(a.rate.trials.map((r) => [r.source, r.cps, r.edits, r.judged, r.fast, r.oldCps]), [['old formula', 24.4, null, true, true, null]]);
     assert.deepEqual([a.rate.source, fastTypingTrials(a)], ['old formula', 1]);
   });
+  it('a dom-tier recording whose typed keys name no field (typed outside the recorded page): not recorded, and the reason says so', () => {
+    const rec = traceTier(keyRecording([['q1', 10, botGaps(30)]]));
+    rec.extensions = { 'cyborg-hunter': { tier: 'dom' } };
+    const a = analyzeTyping(participantFromRecording('OUTSIDE', rec));
+    assert.deepEqual([a.state, a.level, a.fields], ['not recorded', -1, []]);
+    assert.equal(a.verdictReason, 'the session recording does not say which field each key went to (typed outside the recorded page)');
+  });
+  it('a recording that names the trace tier, or names no tier the analysis can read: the reason says recorded without the page', () => {
+    for (const extensions of [undefined, null, 'x', {}, { 'cyborg-hunter': null }, { 'cyborg-hunter': {} }, { 'cyborg-hunter': { tier: 5 } },
+      { 'cyborg-hunter': { tier: 'trace' } }, { 'cyborg-hunter': { tier: 'other' } }]) {
+      const rec = traceTier(keyRecording([['q1', 10, botGaps(30)]]));
+      if (extensions !== undefined) rec.extensions = extensions;
+      assert.equal(analyzeTyping(participantFromRecording('TRACE', rec)).verdictReason,
+        'the session recording does not say which field each key went to (recorded without the page)', JSON.stringify(extensions));
+    }
+  });
   it('typing into an editable area alone: not assessed, no typed characters in a text field', () => {
     const rec = keyRecording([['q1', 10, botGaps(30)]]);
     for (const e of rec.segments[0].events) if (e.type === 'key.down') e.anchor.tag = 'div';
@@ -330,6 +346,32 @@ describe('the typing rate from saved edit times (data saved with keystroke dynam
   });
 });
 
+describe('the typing rate from the participant\'s own typingMinEdits', () => {
+  // A session report that saved the library's typing-rate minimum (0.17 on).
+  const saved = (typingMinEdits) => ({ config: { thresholds: { typingMinEdits } } });
+  it('a saved typingMinEdits of 5: rates judged from 5 edits, from saved edit times and from the recording', () => {
+    const a = analyzeTyping({ session: saved(5), trials: [{ trialId: 'q1', editTimestamps: editTimes(5), charsPerSec: 12 },
+      { trialId: 'q2', editTimestamps: editTimes(4), charsPerSec: 12 }] });
+    assert.equal(a.rate.minEdits, 5);
+    // 5 edits 100 ms apart: 4 over 0.4 s, 10 cps; 4 edits are too few.
+    assert.deepEqual(a.rate.trials.map((r) => [r.source, r.cps, r.edits, r.judged, r.oldCps]),
+      [['edit times', 10, 5, true, 12], ['edit times', null, 4, false, 12]]);
+    const p = participantFromRecording('REC5', keyRecording([['q1', 10, Array(4).fill(100)]]));
+    p.session = saved(5);
+    assert.deepEqual(analyzeTyping(p).rate.trials.map((r) => [r.source, r.cps, r.edits, r.judged]), [['recording', 10, 5, true]]);
+  });
+  it('a missing or unusable saved typingMinEdits: 20, as the library\'s default', () => {
+    const trials = [{ trialId: 'q1', editTimestamps: editTimes(5) }, { trialId: 'q2', editTimestamps: editTimes(20) }];
+    const sessions = [undefined, 'x', { config: 'x' }, { config: { thresholds: 'x' } },
+      ...[undefined, null, '5', 5.5, 1, 0, -3, NaN, Infinity, {}, [5]].map(saved)];
+    for (const session of sessions) {
+      const a = analyzeTyping({ session, trials });
+      assert.equal(a.rate.minEdits, 20, JSON.stringify(session));
+      assert.deepEqual(a.rate.trials.map((r) => r.judged), [false, true], JSON.stringify(session));
+    }
+  });
+});
+
 describe('hostile data', () => {
   it('never throws, whatever the participant holds', () => {
     const junk = [null, 7, 'x', {}, { trials: 'x' },
@@ -347,7 +389,7 @@ describe('hostile data', () => {
       state: 'not recorded', level: -1, verdict: 'not assessed',
       verdictReason: 'typing rhythm not recorded (library before 0.17 or signals.typingRhythm off) and no session recording',
       source: null, tells: [], fields: [], shortFields: null,
-      rate: { source: 'old formula', cutoffCps: 10, trials: [] }, byTrial: {}, byIndex: [],
+      rate: { source: 'old formula', cutoffCps: 10, minEdits: 20, trials: [] }, byTrial: {}, byIndex: [],
       limits: { minGaps: 20, fastGapMs: 60, fastShare: 0.5, evenCv: 0.2, minEdits: 20 } });
     // A recording that is not an object is no recording.
     assert.equal(analyzeTyping({ trials: [{ trialId: 'q1' }], replay: { recording: 'x' } }).verdictReason,

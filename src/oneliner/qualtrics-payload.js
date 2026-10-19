@@ -197,7 +197,7 @@ var SEGMENT = /* @__PURE__ */ fields({
   score: /* @__PURE__ */ fields({ hardScore: /* @__PURE__ */ fields({ paste: HARD, copy: HARD, drop: HARD }), softScore: num,
     softScoreThreshold: num, anyHardTriggered: bool, trialsCompleted: num }),
   gap: /* @__PURE__ */ listOf({ duration_ms: num, pasteEvents: PASTE, copyEvents: COPY, dropEvents: DROP, syntheticInsertions: INSERTION }),
-  config: /* @__PURE__ */ fields({ preset: label, participantId: label, thresholds: /* @__PURE__ */ fields({ tabAwayDurationMs: num, typingSpeedCps: num }) }),
+  config: /* @__PURE__ */ fields({ preset: label, participantId: label, thresholds: /* @__PURE__ */ fields({ tabAwayDurationMs: num, typingSpeedCps: num, typingMinEdits: num }) }),
   libraryVersion: label,
   // What the browser said about the device (monitor.js readDeviceFacts),
   // first segment only: four facts, about a hundred bytes.

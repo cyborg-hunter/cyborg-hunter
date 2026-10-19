@@ -1071,7 +1071,7 @@ const SIGNALS = [
   { key: 'tabAwayLongCount',         label: 'Tab-away ≥10s',   tone: 'critical', hint: 'Window blurred for 10+ seconds' },
   { key: 'tabAwayMediumCount',       label: 'Tab-away (mid)',  tone: 'warn',     hint: 'Above the tab-away threshold (3s default, 5s strict), under 10s' },
   { key: 'tabAwayFlickerCount',      label: 'Flicker',         tone: 'muted',    hint: 'At or below the tab-away threshold (3s default) — not scored' },
-  { key: 'trialsWithFastTyping',     label: 'Fast typing',     tone: 'warn',     hint: 'Trials of 20 or more keystrokes typed faster than the cps threshold (older data with neither saved edit times nor a recording: the saved rate)' },
+  { key: 'trialsWithFastTyping',     label: 'Fast typing',     tone: 'warn',     hint: 'Trials of at least the study’s minimum of keystrokes (20 by default) typed faster than the cps threshold (older data with neither saved edit times nor a recording: the saved rate)' },
   { key: 'totalSyntheticInsertions', label: 'Synthetic',       tone: 'warn',     hint: 'Text appeared without preceding keystrokes' },
   { key: 'totalForeignInputEvents',  label: 'Foreign input',   tone: 'warn',     hint: 'Typing landed outside the experiment container' },
   { key: 'sidebarEventCount',        label: 'Sidebar',         tone: 'warn',     hint: 'innerWidth shrank — side panel opened' },
@@ -1482,6 +1482,9 @@ function renderTypingSection(s) {
   const least = (xs, k) => xs.reduce((m, x) => (isNum(x[k]) && x[k] < m ? x[k] : m), Infinity);
   const L = ta.limits;
   const cutoff = ta.rate.cutoffCps;
+  // The edits a trial needed for its rate: the participant's own minimum
+  // (the analysis's rate.minEdits), else the limits'.
+  const minEdits = isNum(ta.rate.minEdits) ? ta.rate.minEdits : L.minEdits;
   const fields = ta.fields.filter(isObj);
   const judged = ta.rate.trials.filter((r) => isObj(r) && r.judged === true);
   const list = (ids) => ids.map(str).join(', ');
@@ -1497,7 +1500,7 @@ function renderTypingSection(s) {
   if (ta.level === -1) {
     verdict = `<p class="typing-verdict">${badge} <span class="muted">${str(ta.verdictReason)}.</span></p>`;
   } else if (ta.level === 0) {
-    const rate = top ? `; typing rate at most ${num(top.cps)} cps${old(top)} over trials with ${num(L.minEdits)}+ keystrokes` : '';
+    const rate = top ? `; typing rate at most ${num(top.cps)} cps${old(top)} over trials with ${num(minEdits)}+ keystrokes` : '';
     verdict = `<p class="typing-verdict">${badge} <span class="muted">${fields.length} field${fields.length === 1 ? '' : 's'} judged; none under ${num(L.fastGapMs)} ms (fastest median gap ${ms(least(fields, 'medianMs'))} ms) and none too even (lowest variation ${two(least(fields, 'cv'))})${rate}.</span></p>`;
   } else {
     verdict = `<p class="typing-verdict">${badge} <span class="muted">because of:</span></p>
@@ -1526,7 +1529,7 @@ function renderTypingSection(s) {
         : `no field reached ${num(L.minGaps)} key gaps`, false);
   const rule = (label, hits) => row(label, `${hits.length} of ${fields.length} fields${hits.length ? ` (${list([...new Set(hits.map((f) => f.trialId))])})` : ''}`, hits.length > 0);
   const fast = judged.filter((r) => r.fast === true);
-  const rateRow = row(`typing rate over ${num(cutoff)} cps, trials with ${num(L.minEdits)}+ keystrokes`,
+  const rateRow = row(`typing rate over ${num(cutoff)} cps, trials with ${num(minEdits)}+ keystrokes`,
     `${fast.length} of ${judged.length} trials${fast.length ? ` (${fast.map((r) => `${str(r.trialId)} ${num(r.cps)}${old(r)}`).join(', ')})` : ''}`, fast.length > 0);
   // Too short to judge: trials typed into with too few edits for the rate,
   // and text fields with too few gaps for the rhythm (the library keeps no

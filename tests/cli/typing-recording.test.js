@@ -107,6 +107,26 @@ describe('matchTrialSegments', () => {
     const trials = [trial('a', 1020), trial('a', 5000), trial('b', 1030), trial('b', 5000), trial('c', 1040), trial('c', 5000)];
     assert.deepEqual(matchTrialSegments(trials, rec([a, b, c])), [a, null, b, null, c, null]);
   });
+  it('a numeric trial id matches the segment the recorder labelled with that number, on the clock and by a unique id', () => {
+    // The recorder writes a trial's id as it was given, so trialId 5 gives
+    // label 5; the trial's id is read as text, and so is the label.
+    const s = seg(5, 10);
+    assert.deepEqual(matchTrialSegments([trial(5, 1010)], rec([s])), [s]);
+    const noClock = rec([s]);
+    delete noClock.recording_started_at_perf;
+    assert.deepEqual(matchTrialSegments([trial(5, 1010)], noClock), [s]);
+    assert.deepEqual(matchTrialSegments([trial('5', 1010)], rec([s])), [s]);
+  });
+  it('a label that is neither text nor a finite number never matches, even a trial named as it prints', () => {
+    const labels = [NaN, Infinity, null, {}, [5], true];
+    const ids = ['NaN', 'Infinity', 'null', '[object Object]', '5', 'true'];
+    const segments = labels.map((label) => seg(label, 10));
+    const trials = ids.map((id) => trial(id, 1010));
+    assert.deepEqual(matchTrialSegments(trials, rec(segments)), ids.map(() => null));
+    const noClock = rec(segments);
+    delete noClock.recording_started_at_perf;
+    assert.deepEqual(matchTrialSegments(trials, noClock), ids.map(() => null));
+  });
   it('the whole-session segment never matches, even a trial with its label', () => {
     assert.deepEqual(matchTrialSegments([trial('__session__', 1010)], rec([seg('__session__', 10)])), [null]);
   });

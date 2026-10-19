@@ -581,13 +581,16 @@ export function init(userConfig) {
       // Carry the effective runtime settings the CLI report needs to interpret
       // this participant's data with the SAME thresholds the library screened
       // them against (e.g. a strict-preset participant's tab-away cutoff), rather
-      // than analyst-side CLI defaults.
+      // than analyst-side CLI defaults. typingMinEdits is the value after
+      // init's fallback (20 for a bad one), so the report recomputes a rate
+      // from as many edits as the library needed.
       report.config = {
         preset: config.preset,
         participantId: config.participantId,
         thresholds: {
           tabAwayDurationMs: config.thresholds.tabAwayDurationMs,
-          typingSpeedCps: config.thresholds.typingSpeedCps
+          typingSpeedCps: config.thresholds.typingSpeedCps,
+          typingMinEdits: config.thresholds.typingMinEdits
         }
       };
       report.libraryVersion = VERSION;

@@ -264,6 +264,17 @@ describe('the Typing dynamics section', () => {
     const { files } = await report([HUMAN()]);
     assert.match(files['index.html'], /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">1 field judged; none under 60 ms \(fastest median gap 182 ms\) and none too even \(lowest variation 1\.58\); typing rate at most 2\.8 cps over trials with 20\+ keystrokes\.<\/span>/);
   });
+  it('the rate row and a clean verdict name the participant\'s own minimum of keystrokes', async () => {
+    // Saved with thresholds.typingMinEdits 5: five edit times 50 ms apart, 20 cps.
+    const saved5 = { config: { thresholds: { typingMinEdits: 5 } } };
+    const min5 = { participantId: 'MIN5', session: saved5,
+      trials: [{ ...OLD().trials[0], editTimestamps: Array.from({ length: 5 }, (_, i) => 5000 + 50 * i) }] };
+    const human = { ...HUMAN(), participantId: 'HUMAN5', session: saved5 };
+    const html = (await report([min5, human, OLD()])).files['index.html'];
+    assert.match(pane(html, 'MIN5'), /<tr class="fired"><th>typing rate over 10 cps, trials with 5\+ keystrokes<\/th><td>1 of 1 trials \(age 20\)<\/td><\/tr>/);
+    assert.match(pane(html, 'HUMAN5'), /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">[^<]*; typing rate at most 2\.8 cps over trials with 5\+ keystrokes\.<\/span>/);
+    assert.match(pane(html, 'OLD'), /<th>typing rate over 10 cps, trials with 20\+ keystrokes<\/th>/);
+  });
   it('data with neither summaries nor a recording: not assessed, the reason, and the old formula marked', async () => {
     const html = (await report([OLD()])).files['index.html'];
     assert.match(html, /<span class="verdict-badge" data-level="-1">not assessed<\/span> <span class="muted">typing rhythm not recorded \(library before 0\.17 or signals\.typingRhythm off\) and no session recording\.<\/span>/);
@@ -362,7 +373,7 @@ describe('the Typing dynamics section', () => {
   });
   it('the fast-typing tile says which trials count', async () => {
     const html = (await report([OLD()])).files['index.html'];
-    assert.match(html, /title="Trials of 20 or more keystrokes typed faster than the cps threshold \(older data with neither saved edit times nor a recording: the saved rate\)"/);
+    assert.match(html, /title="Trials of at least the study’s minimum of keystrokes \(20 by default\) typed faster than the cps threshold \(older data with neither saved edit times nor a recording: the saved rate\)"/);
   });
   it('a partial analysis (a hand-built summary) draws no section and does not throw', async () => {
     const partial = [{ level: 2 }, { level: 2, limits: {}, rate: {} }, { level: 2, limits: {}, rate: { trials: [] }, fields: 'x', tells: [] }];
@@ -389,7 +400,7 @@ describe('the Typing dynamics section', () => {
       tells: [null, { level: '<q>', text: '<b>t</b>', trialIds: 'q1', trials: 'x' }, { level: 'low', text: 't', trialIds: ['<s>'], trials: {} }],
       fields: [null, { trialId: '<script>x</script>', trialIndex: 0, field: null, gaps: '30', medianMs: 'fast', under60Share: NaN, cv: {}, speed: true }],
       shortFields: 'many',
-      rate: { source: 'x', cutoffCps: '10', trials: [null, { trialId: '<s>', judged: true, fast: true, cps: 'x', source: 'old formula' },
+      rate: { source: 'x', cutoffCps: '10', minEdits: '<b>', trials: [null, { trialId: '<s>', judged: true, fast: true, cps: 'x', source: 'old formula' },
         { trialId: 'q2', judged: false, edits: '3', oldCps: 'x' }, { trialId: 'q3', judged: false, edits: 3, oldCps: 99 }] },
       limits: { minGaps: '<em>', minEdits: 20, fastShare: 0.5 } });
     for (const level of [-1, 0, 1, 2, '<x>']) {
@@ -400,6 +411,8 @@ describe('the Typing dynamics section', () => {
       const section = html.slice(at, html.indexOf('</section>', at));
       assert.doesNotMatch(section, /NaN|undefined|Infinity|\[object|<script|<b>|<i>|<u>|<s>|<em>|<x>|<q>/, `level ${level}`);
       assert.match(section, /&lt;script&gt;x&lt;\/script&gt; · text box|&lt;script&gt;x&lt;\/script&gt; · editable area/, `level ${level}`);
+      // A minimum on the rate that is not a number gives way to the limits'.
+      assert.match(section, /trials with 20\+ keystrokes/, `level ${level}`);
     }
   });
 });
