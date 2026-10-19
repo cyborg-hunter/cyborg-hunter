@@ -26,7 +26,8 @@ export const DEFAULT_THRESHOLDS = {
   maxWindowPositions: 2000,    // session cap on windowPositions rows (null = no cap)
   elementTraceHz: 500,         // elementsFromPoint sampling interval (ms)
   tabAwayDurationMs: 3000,     // tab-away longer than this counts toward soft score (and is classified as "long" in reports)
-  typingSpeedCps: 10           // chars/sec above this counts toward soft score
+  typingSpeedCps: 10,          // chars/sec above this counts toward soft score
+  typingMinEdits: 20           // edits a trial needs before its typing rate is computed (shorter fields burst past 10 cps)
 };
 
 // Named detection + scoring configurations.

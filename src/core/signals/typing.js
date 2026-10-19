@@ -5,8 +5,11 @@
 // This catches execCommand('insertText'), clipboard-manager pastes,
 // and browser extension injections that bypass the paste event.
 //
-// Typing speed: computed at endTrial() from edit timestamps. The threshold
+// Typing speed: computed at endTrial() from edit timestamps, (N − 1) edits
+// per second from thresholds.typingMinEdits edits (20). The threshold
 // (default 10 cps) flags unusually fast typing that suggests AI assistance.
+
+import { typingRate } from '../../shared/typing-metrics.js';
 
 /**
  * Attaches trial-scoped typing and synthetic insertion listeners.
@@ -111,15 +114,11 @@ export function attachForeignInputSignals(ctx) {
 
 /**
  * Computes typing speed (chars per second) from edit timestamps.
- * Called from monitor.js at endTrial() time.
- * Returns the computed charsPerSec or null if insufficient data.
+ * Called from monitor.js at endTrial() time with thresholds.typingMinEdits.
+ * (N − 1) edits per second over the span from the first edit to the last;
+ * null with fewer than minEdits edits or a zero span: a short field's burst
+ * says nothing about the typist (src/shared/typing-metrics.js).
  */
-export function computeTypingSpeed(editTimestamps) {
-  if (editTimestamps.length < 2) return null;
-  var firstEdit = editTimestamps[0];
-  var lastEdit = editTimestamps[editTimestamps.length - 1];
-  var spanSec = (lastEdit - firstEdit) / 1000;
-  if (spanSec <= 0) return null;
-  var charCount = editTimestamps.length;
-  return Math.round((charCount / spanSec) * 10) / 10;
+export function computeTypingSpeed(editTimestamps, minEdits) {
+  return typingRate(editTimestamps, minEdits);
 }

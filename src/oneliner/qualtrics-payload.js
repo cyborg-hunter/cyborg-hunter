@@ -158,7 +158,7 @@ var SOFT_SIGNAL = /* @__PURE__ */ fields({ hits: num, capped: num, score: num })
 // text).
 var TRIAL = /* @__PURE__ */ Object.assign({
   trialId: label, phase: label, startTime: num, duration_ms: num, libraryVersion: label, participantId: label,
-  timestamp: label, charsPerSec: num, trialSoftScore: num,
+  timestamp: label, charsPerSec: num, typingEdits: num, trialSoftScore: num,
   mouseMetrics: /* @__PURE__ */ fields({ pathEfficiency: num, directionChanges: num, speedVariance: num, moveCount: num }),
   trialSignals: /* @__PURE__ */ fields({
     hard: /* @__PURE__ */ fields({ paste: HARD_SIGNAL, copy: HARD_SIGNAL, drop: HARD_SIGNAL }),

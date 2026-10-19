@@ -162,6 +162,18 @@ export function init(userConfig) {
         JSON.stringify(v) + ", so it is off");
     });
   });
+  // The typing rate's floor must be a whole number of edits, 2 or more. Any
+  // other value (a string from a JSON file or a URL, 0, 1.5) would fall to
+  // the formula's own floor of 2 and judge short fields again, so it takes
+  // the default instead. A number is named with String() (JSON gives NaN as
+  // null), anything else with JSON (a string keeps its quotes).
+  var minEdits = config.thresholds.typingMinEdits;
+  if (!(Number.isInteger(minEdits) && minEdits >= 2)) {
+    config.thresholds.typingMinEdits = DEFAULT_THRESHOLDS.typingMinEdits;
+    warnings.push("thresholds.typingMinEdits must be a whole number of 2 or more; got " +
+      (typeof minEdits === "number" ? String(minEdits) : JSON.stringify(minEdits)) +
+      ", so it is " + DEFAULT_THRESHOLDS.typingMinEdits);
+  }
   warnings.forEach(function (w) { console.warn("[cyborg-hunter] " + w); });
 
   // Shape-check the MERGED scoring config: a nested typo in an override
@@ -466,8 +478,13 @@ export function init(userConfig) {
       // both are trial-end wall-clocks, so they agree to within milliseconds.
       report.timestamp = new Date().toISOString();
 
-      // Compute typing speed
-      var cps = computeTypingSpeed(trialData.editTimestamps);
+      // Compute typing speed: (N − 1) edits per second, from
+      // thresholds.typingMinEdits edits (signals/typing.js). typingEdits keeps
+      // the count (a number, never the times) so the report can say how short
+      // an unjudged trial was, and can tell this rate from the N/span one that
+      // libraries before 0.17 saved.
+      report.typingEdits = trialData.editTimestamps.length;
+      var cps = computeTypingSpeed(trialData.editTimestamps, config.thresholds.typingMinEdits);
       if (cps !== null) {
         report.charsPerSec = cps;
         sessionData.charsPerSec.push(cps);
