@@ -61,6 +61,27 @@ describe('examples/demo-sessions', () => {
     assert.deepEqual(ORDER.map((id) => col(byId[id], 'authoritative_soft_score')), ['12', '10', '6', '3']);
   });
 
+  test('the typing section: the agent highly suspicious from its recording, Mira\'s sessions not assessed, and where each rate came from', () => {
+    const [h, ...r] = readFileSync(join(out, 'summary.csv'), 'utf8').trim().split('\n');
+    const H = h.split(',');
+    const col = (line, name) => line.split(',')[H.indexOf(name)];
+    const byId = Object.fromEntries(r.map((l) => [col(l, 'participantId'), l]));
+    const column = (name) => ORDER.map((id) => col(byId[id], name));
+    assert.deepEqual(column('typingVerdict'), ['not assessed', 'highly suspicious', 'not assessed', 'not assessed']);
+    assert.deepEqual(column('typingTells'), ['', 'median gap 58 ms; gap variation 0.07', '', '']);
+    assert.deepEqual(column('typingFieldsJudged'), ['', '1', '0', '0']);
+    assert.deepEqual(column('typingFastestMedianMs'), ['', '57.9', '', '']);
+    assert.deepEqual(column('typingLowestCv'), ['', '0.067', '', '']);
+    assert.deepEqual(column('typingRateSource'), ['old formula', 'recording', 'old formula', 'recording']);
+    assert.deepEqual(column('trialsWithFastTyping'), ['0', '2', '2', '1']);
+    const limits = JSON.parse(readFileSync(join(out, 'typing-limits.json'), 'utf8'));
+    assert.deepEqual(limits.sessions, { total: 4, rhythmSource: { library: 0, recording: 3, notRecorded: 1 },
+      rateSource: { library: 0, editTimes: 0, recording: 2, oldFormula: 2 }, verdicts: { highlySuspicious: 1, suspicious: 0, clean: 0, notAssessed: 3 } });
+    assert.match(readFileSync(join(out, 'index.html'), 'utf8'), /keys pressed faster than a person types: median gap 58 ms, 70% of gaps under 60 ms/);
+    assert.match(readFileSync(join(out, 'triage.md'), 'utf8'),
+      /fast typing on 2 trials; 44 synthetic insertions; typing verdict: highly suspicious \(median gap 58 ms; gap variation 0\.07\); pointer verdict:/);
+  });
+
   test('the three recordings are attached to their sessions; DEMO-9mop has none', () => {
     assert.match(stdout, /replay\/ — 3 session replays/);
     const written = readdirSync(join(out, 'replay')).sort();

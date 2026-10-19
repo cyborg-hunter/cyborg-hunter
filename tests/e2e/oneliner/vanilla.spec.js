@@ -12,6 +12,8 @@
 
 import { test, expect, collectConsole, pasteInto, newTmpDir, cleanupTmpDirs, saveAndReport, rewriteFixture } from './support.mjs';
 import { MESSAGES } from '../../../src/oneliner/errors.js';
+import { recordingKeyGaps } from '../../../src/cli/analyzers/typing.js';
+import { summarizeGaps } from '../../../src/shared/typing-metrics.js';
 
 const FIX = '/tests/e2e/oneliner/fixtures/';
 const FIELD = 'cyborgHunterData';
@@ -465,4 +467,49 @@ test('a POST form with a control named "method" still carries cyborgHunterData',
   expect(new URLSearchParams(bodies[0]).get('method')).toBe('by-hand');
   expect(blobOf(bodies[0]), 'the post carries ' + FIELD).not.toBeNull();
   expect(chErrors(log)).toEqual([]);
+});
+
+// The page records at the DOM tier here: a recording without the page's DOM
+// gives a key press no target, so its keys cannot be told apart by field
+// and the recording yields no key gaps to compare.
+test('typing in a text field saves its rhythm as four numbers and a tag; the same run\'s recording rebuilds that rhythm; the CLI reads it as library data', async ({ page }) => {
+  await rewriteFixture(page, '**/vanilla-marks-fetch.html', (html) => html.replace(' data-replay data-debug', ' data-replay="dom" data-debug'));
+  let saved = null;
+  await page.route('**/save', async (route) => {
+    saved = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' });
+  });
+  await page.goto(FIX + 'vanilla-marks-fetch.html');
+  await page.waitForFunction(() => typeof window.CyborgHunterReplay !== 'undefined');
+  await page.waitForLoadState('load');
+  await page.click('[data-ch-trial="q1"]');
+  // 30 characters with no letter twice in a row: 29 gaps of at least 120 ms.
+  await page.locator('#answer').pressSequentially('the quick brown fox jumps over', { delay: 120 });
+  await page.click('#finish');
+  await page.waitForFunction(() => window.__saved === true);
+
+  const q1 = saved.data.trials.find((t) => t.trialId === 'q1').integrity;
+  expect(q1.typingEdits).toBe(30);
+  expect(typeof q1.charsPerSec).toBe('number');
+  expect(q1.typingRhythm).toHaveLength(1);
+  const [r] = q1.typingRhythm;
+  expect(Object.keys(r).sort()).toEqual(['cv', 'field', 'gaps', 'medianMs', 'under60Share']);
+  expect(r.field).toEqual({ tag: 'textarea' });
+  expect(r.gaps).toBe(29);
+  expect(r.medianMs).toBeGreaterThan(100);
+  expect(JSON.stringify(saved.data)).not.toMatch(/"lastChar"|"lastT"/);
+
+  // The same keys, read back from the recording's q1 segment the way the
+  // report reads older data: as many gaps, and a median within 5 ms.
+  expect(saved.replay.extensions['cyborg-hunter'].tier).toBe('dom');
+  const segs = saved.replay.segments.filter((s) => s.label === 'q1');
+  expect(segs).toHaveLength(1);
+  const fromRecording = recordingKeyGaps(segs[0]);
+  expect(fromRecording.map((f) => f.field)).toEqual([{ tag: 'textarea' }]);
+  expect(fromRecording[0].gaps).toHaveLength(r.gaps);
+  expect(Math.abs(summarizeGaps(fromRecording[0].gaps).medianMs - r.medianMs)).toBeLessThanOrEqual(5);
+
+  const out = saveAndReport(newTmpDir('van-typing'), 'E2E-VAN-2.json', JSON.stringify(saved.data));
+  expect(out.summaryCsv[0].typingFieldsJudged).toBe('1');
+  expect(out.summaryCsv[0].typingRateSource).toBe('library');
 });
