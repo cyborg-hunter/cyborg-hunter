@@ -95,7 +95,9 @@ describe('the click picture in the report', () => {
   it('sits under the verdict and above the details when the rule judged at least one click', async () => {
     const html = await render([person('PIC', { recording: recording(10, 3) })]);
     const fig = html.indexOf('<figure class="click-picture">');
-    assert.ok(fig > html.indexOf('class="cursor-verdict"'));
+    const verdict = html.indexOf('class="cursor-verdict"');
+    assert.ok(verdict >= 0);
+    assert.ok(fig > verdict);
     assert.ok(fig < html.indexOf('<details class="cursor-details">'));
     assert.match(html, />3 at the exact centre \(within 1\.5 px\)</);
     assert.match(html, />7 elsewhere</);

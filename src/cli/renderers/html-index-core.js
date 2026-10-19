@@ -1387,6 +1387,16 @@ export function renderClickPicture(cc, limits) {
   <figcaption><b>Where each click landed on its control.</b> ${caption}.</figcaption></figure>`;
 }
 
+// Why the software renderer is not recorded, worded once for the checks
+// table and the device line. It is recorded from 0.17, so the device object
+// tells: without the key the data is older; with it (null, or a value the
+// analyzer does not record) the switch was off, the browser did not answer
+// or, under the one-line setup, the first page or trial ended before the read.
+function rendererNotRecorded(device) {
+  const key = !!device && typeof device === 'object' && Object.prototype.hasOwnProperty.call(device, 'softwareRenderer');
+  return key ? 'not checked (switch off, no answer, or the first page or trial ended before the read)' : 'not recorded (library before 0.17)';
+}
+
 // The session's device facts in one line, first in the cursor section:
 // graphics (checks.softwareRenderer), the screen facts (summary.deviceMasking),
 // the automation flag (checks.webdriver) and the kind of pointer
@@ -1400,12 +1410,11 @@ export function renderDeviceLine(s, participant) {
   const device = session && session.device && typeof session.device === 'object' ? session.device : null;
   const red = (html) => `<b class="device-flag">${html}</b>`;
   // The analyzer says 'not recorded' both for data before 0.17 (no key) and
-  // for null (the switch off, or no answer); the device object tells them apart.
+  // for null; rendererNotRecorded tells them apart.
   const sr = checks.softwareRenderer;
   const graphics = sr && typeof sr === 'object'
     ? (sr.fired ? red(`software renderer (${esc(sr.family)}), as on cloud machines that run browser agents`) : sr.noWebgl ? 'no WebGL' : 'graphics card')
-    : device && device.softwareRenderer !== undefined ? 'graphics card not checked (switch off, or the browser did not answer)'
-      : 'graphics card not recorded (library before 0.17)';
+    : `graphics card ${rendererNotRecorded(device)}`;
   const dm = s && s.deviceMasking;
   const screen = !dm || dm.state !== 'ok' ? 'screen facts not recorded'
     : Array.isArray(dm.rules) && dm.rules.length ? red(`screen facts contradict: ${esc(dm.detail)} (a fingerprint-masking tool; not evidence of AI use)`)
@@ -1460,14 +1469,9 @@ function renderCursorSection(s, participant, replayShownExternally) {
       : cc.state === 'touch' ? centeredRow('not judged (touch recording)')
       : `${centeredRow(ofN(cc, ' qualifying clicks'))}
       <tr><th>clicks within ${esc(String(ca.limits.centerNearPx))} px of the centre</th><td>${esc(String(cc.near.count))} of ${esc(String(cc.near.of))} <span class="muted">(reported, not judged)</span></td></tr>`;
-    // The software renderer is recorded from 0.17, so why it is not
-    // recorded comes from the device object: without the key the data is
-    // older; with it (null, or a value the analyzer does not record) the
-    // switch was off or the browser did not answer. The family is the
-    // participant's data: escaped.
-    const device = participant && participant.session && participant.session.device;
-    const srKey = !!device && typeof device === 'object' && Object.prototype.hasOwnProperty.call(device, 'softwareRenderer');
-    const srNotRecorded = srKey ? 'not recorded (switch off, or the browser did not answer)' : 'not recorded (library before 0.17)';
+    // Why the software renderer is not recorded: rendererNotRecorded, in
+    // the device line's words. The family is the participant's data: escaped.
+    const srNotRecorded = rendererNotRecorded(participant && participant.session && participant.session.device);
     details = `<details class="cursor-details"><summary>every check, the rules and the movement shape</summary>
     <table class="cursor-table"><caption>browser-reported checks</caption>
       ${check('automation flag set by the browser', ca.checks.webdriver, (w) => w.fired ? 'yes' : 'no')}

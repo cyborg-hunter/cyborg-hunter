@@ -139,9 +139,9 @@ describe('the cursor section: browser draws without a graphics card', () => {
     assert.match(await checksOf(session(desktop)), row('', 'not recorded \\(library before 0\\.17\\)'));
     assert.match(await checksOf(session(undefined)), row('', 'not recorded \\(library before 0\\.17\\)'));
   });
-  it('null, or a value the analyzer does not record, says the switch was off or the browser did not answer', async () => {
+  it('null, or a value the analyzer does not record, reads not checked with its three causes', async () => {
     for (const v of [null, 7]) {
-      assert.match(await checksOf(session({ ...desktop, softwareRenderer: v })), row('', 'not recorded \\(switch off, or the browser did not answer\\)'), String(v));
+      assert.match(await checksOf(session({ ...desktop, softwareRenderer: v })), row('', 'not checked \\(switch off, no answer, or the first page or trial ended before the read\\)'), String(v));
     }
   });
   it('the family name is escaped', async () => {

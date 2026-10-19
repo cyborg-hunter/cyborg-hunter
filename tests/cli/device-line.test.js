@@ -30,7 +30,7 @@ describe('renderDeviceLine', () => {
       /^<p class="muted note device-line">device: <b class="device-flag">software renderer \(swiftshader\), as on cloud machines that run browser agents<\/b> · screen facts agree · /);
     assert.equal(text(line(part({ ...desktop, softwareRenderer: false }))), 'device: graphics card' + AGREE_OFF_MOUSE);
     assert.equal(text(line(part({ ...desktop, softwareRenderer: 'none' }))), 'device: no WebGL' + AGREE_OFF_MOUSE);
-    assert.equal(text(line(part({ ...desktop, softwareRenderer: null }))), 'device: graphics card not checked (switch off, or the browser did not answer)' + AGREE_OFF_MOUSE);
+    assert.equal(text(line(part({ ...desktop, softwareRenderer: null }))), 'device: graphics card not checked (switch off, no answer, or the first page or trial ended before the read)' + AGREE_OFF_MOUSE);
     assert.equal(text(line(part(desktop))), 'device: graphics card not recorded (library before 0.17)' + AGREE_OFF_MOUSE);
   });
   it('a session recorded before 0.14 (no device object): the automation flag not recorded, no pointer', () => {

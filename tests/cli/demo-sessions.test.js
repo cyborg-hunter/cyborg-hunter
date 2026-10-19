@@ -56,6 +56,8 @@ describe('examples/demo-sessions', () => {
     const byId = Object.fromEntries(r.map((l) => [col(l, 'participantId'), l]));
     assert.deepEqual(ORDER.map((id) => col(byId[id], 'cursorVerdict')), ['not assessed', 'highly suspicious', 'clean', 'not assessed']);
     assert.deepEqual(ORDER.map((id) => col(byId[id], 'cursorNoPathClicks')), ['0/112', '12/12', '0/22', '0/12']);
+    assert.deepEqual(ORDER.map((id) => col(byId[id], 'cursorCenteredClicks')), ['', '8/11', '0/8', '0/17']);
+    assert.deepEqual(ORDER.map((id) => col(byId[id], 'cursorCenteredNear')), ['', '10/11', '0/8', '0/17']);
     assert.deepEqual(ORDER.map((id) => col(byId[id], 'authoritative_soft_score')), ['12', '10', '6', '3']);
   });
 
