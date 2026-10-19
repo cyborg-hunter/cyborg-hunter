@@ -113,6 +113,58 @@ describe('buildQualtricsPayload level 0', () => {
   });
 });
 
+describe('typing-rhythm summaries in the payload', () => {
+  it('keep their numbers and the field\'s tag; the field\'s id and unknown keys are left out', () => {
+    const b = blob({ pages: 2 });
+    b.trials[0].integrity.typingRhythm = [
+      { field: { tag: 'textarea', id: 'answer-mirrors-typed-text' }, gaps: 23, medianMs: 57.9, under60Share: 0.696, cv: 0.067, gapsMs: [57.4, 56.2], chars: 'ab' },
+      { field: { tag: 'input', id: null }, gaps: 'x', medianMs: NaN, under60Share: 0.1, cv: Infinity },
+    ];
+    b.trials[1].integrity.typingRhythm = 'not a list';
+    const out = build(b, 12000);
+    assert.strictEqual(out.level, 0);
+    assert.deepStrictEqual(out.payload.trials[0].integrity.typingRhythm, [
+      { field: { tag: 'textarea' }, gaps: 23, medianMs: 57.9, under60Share: 0.696, cv: 0.067 },
+      { field: { tag: 'input' }, under60Share: 0.1 },
+    ]);
+    assert.ok(!('typingRhythm' in out.payload.trials[1].integrity));
+    assert.ok(!out.json.includes('answer-mirrors-typed-text'));
+    assert.deepStrictEqual(extractIntegrityData(JSON.parse(out.json), {}).trials[0].typingRhythm[0].field, { tag: 'textarea' });
+  });
+});
+
+// Each judged field adds one summary to its page's row, about 90 bytes. A
+// long survey reaches the cap sooner, and the ladder still brings it under
+// MAX_CHARS, itself under Qualtrics' 20,000 bytes per embedded-data value.
+describe('typing-rhythm summaries and the cap', () => {
+  const rhythm = (k) => ({ field: { tag: 'textarea', id: 'q' + k }, gaps: 120 + k, medianMs: 171.4, under60Share: 0.021, cv: 1.452 });
+  const withRhythm = (pages, perPage) => {
+    const b = blob({ pages, events: 1, tabAways: 1 });
+    b.trials.forEach((r) => { r.integrity.typingRhythm = Array.from({ length: perPage }, (_, k) => rhythm(k)); });
+    return b;
+  };
+  it('one more summary costs under 100 bytes at level 0', () => {
+    const one = build(withRhythm(1, 1), 10000000).chars;
+    const two = build(withRhythm(1, 2), 10000000).chars;
+    assert.ok(two - one < 100, (two - one) + ' bytes');
+  });
+  it('a 60-page survey with three judged fields per page stays under MAX_CHARS and keeps the newest page\'s summaries', () => {
+    assert.ok(MAX_CHARS < 20000);
+    const out = build(withRhythm(60, 3), MAX_CHARS);
+    assert.ok(out.chars <= MAX_CHARS, out.chars + ' bytes');
+    assert.ok(out.level <= 3, 'level ' + out.level);
+    const newest = out.payload.trials[out.payload.trials.length - 1].integrity;
+    assert.strictEqual(newest.typingRhythm.length, 3);
+    assert.strictEqual(extractIntegrityData(JSON.parse(out.json), {}).trials.at(-1).typingRhythm.length, 3);
+  });
+  it('level 2 keeps every page\'s summaries, and level 4 keeps none', () => {
+    const b = blob({ pages: 6, events: 12, tabAways: 0 });   // pastes enough for level 2 to be the smallest fit
+    b.trials.forEach((r) => { r.integrity.typingRhythm = [rhythm(0), rhythm(1), rhythm(2)]; });
+    for (const r of atLevel(b, 2).payload.trials) assert.strictEqual(r.integrity.typingRhythm.length, 3);
+    assert.ok(!('typingRhythm' in atLevel(b, 4).payload.trials[0].integrity));
+  });
+});
+
 // A blob carrying a marker in every field that holds text the participant
 // typed, pasted, dropped or wrote, and in fields ch.js does not know about at
 // every depth (top, row, trial report, event, segment, deltas, score, config).
@@ -294,9 +346,11 @@ describe('the payload is built from allowlists', () => {
 // so this list pins the allowlists: a string field added to the builder has
 // to be added here on purpose, after checking that no page can put a
 // participant's text in it. Left out on purpose: a foreign-input event's
-// targetId and targetClass (a widget can mirror its value into them). Not
-// listed: the device's softwareRenderer, whose kind keeps only a short
-// lowercase name (no sentinel passes it); its own test is above.
+// targetId and targetClass, and a typing-rhythm field's id (a widget can
+// mirror its value into them). Their tags are listed: the page's markup sets
+// a tag, and typing does not change it. Not listed: the device's
+// softwareRenderer, whose kind keeps only a short lowercase name (no
+// sentinel passes it); its own test is above.
 const STRING_PATHS = [
   'participantId', 'libraryVersion', 'cyborgHunterOneLiner.version', 'cyborgHunterError',
   'guard_assistance_violations_session[].reason',
@@ -307,6 +361,7 @@ const STRING_PATHS = [
   'trials[].integrity.tabAwayEvents[].type', 'trials[].integrity.tabAwayEvents[].timestamp',
   'trials[].integrity.syntheticInsertions[].type',
   'trials[].integrity.foreignInputEvents[].targetTag', 'trials[].integrity.foreignInputEvents[].inputType',
+  'trials[].integrity.typingRhythm[].field.tag',
   'trials[].integritySegment.source', 'trials[].integritySegment.trialId', 'trials[].integritySegment.libraryVersion',
   'trials[].integritySegment.deltas.tabAwayEvents[].type', 'trials[].integritySegment.deltas.tabAwayEvents[].timestamp',
   'trials[].integritySegment.deltas.sidebarEvents[].type', 'trials[].integritySegment.deltas.sidebarEvents[].method',
@@ -352,6 +407,7 @@ function sentinelBlob() {
     t.tabAwayEvents = [{ start: 3, duration_ms: 4000, type: 'windowBlur', timestamp: STAMP }];
     t.syntheticInsertions = [{ type: 'synthetic_insertion', t: 4, dataLength: 3, data: 'typed' }];
     t.foreignInputEvents = [{ t: 5, targetTag: 'TEXTAREA', targetId: 'mirror-of-the-answer', targetClass: 'mirror', inputType: 'insertText', data: 'typed' }];
+    t.typingRhythm = [{ field: { tag: 'textarea', id: 'mirror-of-the-answer' }, gaps: 23, medianMs: 57.9, under60Share: 0.696, cv: 0.067 }];
     t.decoy = { level: 1, injectedText: 'page text', survivedTrial: true };
     t.responseText = 'typed';
     const d = r.integritySegment.deltas;

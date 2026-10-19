@@ -11,7 +11,8 @@
 // finite, and a string with its control characters removed, cut to LABEL_MAX
 // UTF-16 code units (an error note: NOTE_MAX). So the payload never holds
 // typed, pasted or dropped text, the honeypot's self-report text (only its
-// length), mouse or element traces, keystroke timings or window positions,
+// length), mouse or element traces, keystroke timings (a text field's typing
+// rhythm is kept as four summary numbers and its tag) or window positions,
 // and a field ch.js does not know never reaches Qualtrics. A session array or
 // trial-report field the monitor gains later has to be added here on purpose
 // (a test pins these lists against the monitor's own fields), whereas
@@ -151,6 +152,14 @@ var FOREIGN = /* @__PURE__ */ listOf({ t: num, targetTag: label, inputType: labe
 var EVENTS = { pasteEvents: PASTE, copyEvents: COPY, dropEvents: DROP, tabAwayEvents: TAB_AWAY,
   idleGaps: IDLE, syntheticInsertions: INSERTION, foreignInputEvents: FOREIGN };
 
+// A text field's typing rhythm (src/shared/typing-metrics.js): four numbers
+// and the field's tag, which the page's markup sets (input, textarea, or a
+// contenteditable element's own tag). Never its id: a page widget can set
+// an id from what was typed, as with a foreign-input event's targetId. Not
+// one of EVENTS: level 2 keeps every page's summaries (about 90 bytes a
+// field); level 3 drops them with the older rows, and level 4 keeps none.
+var RHYTHM = /* @__PURE__ */ listOf({ field: /* @__PURE__ */ fields({ tag: label }), gaps: num, medianMs: num, under60Share: num, cv: num });
+
 var HARD_SIGNAL = /* @__PURE__ */ fields({ trialHits: num, sessionTotal: num, countThreshold: num });
 var SOFT_SIGNAL = /* @__PURE__ */ fields({ hits: num, capped: num, score: num });
 // A trial report (monitor.js endTrial) without mouseTrack, elementTrace,
@@ -158,7 +167,7 @@ var SOFT_SIGNAL = /* @__PURE__ */ fields({ hits: num, capped: num, score: num })
 // text).
 var TRIAL = /* @__PURE__ */ Object.assign({
   trialId: label, phase: label, startTime: num, duration_ms: num, libraryVersion: label, participantId: label,
-  timestamp: label, charsPerSec: num, typingEdits: num, trialSoftScore: num,
+  timestamp: label, charsPerSec: num, typingEdits: num, typingRhythm: RHYTHM, trialSoftScore: num,
   mouseMetrics: /* @__PURE__ */ fields({ pathEfficiency: num, directionChanges: num, speedVariance: num, moveCount: num }),
   trialSignals: /* @__PURE__ */ fields({
     hard: /* @__PURE__ */ fields({ paste: HARD_SIGNAL, copy: HARD_SIGNAL, drop: HARD_SIGNAL }),
