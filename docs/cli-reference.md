@@ -177,7 +177,7 @@ One row per participant:
 | `totalCopyEvents` | Total copy events across all trials |
 | `totalTabAways` | Total tab-away events |
 | `meanTypingSpeed` | Mean of the saved chars/sec across trials, 0 for a trial with none (for data before 0.17, the old formula's numbers; the Typing dynamics section and `trialsWithFastTyping` use the corrected rate where they can) |
-| `trialsWithFastTyping` | Trials typed faster than the participant's cps threshold. From 0.17, trials of 20 or more edits; for older data, by the rate recomputed from the trial's saved edit times or the session recording, else by the saved rate (`typingRateSource` says which) |
+| `trialsWithFastTyping` | Trials typed faster than the participant's cps threshold. From 0.17, trials of 20 or more edits; for older data, by the rate recomputed from the trial's saved edit times or from a session recording that keeps the page (`dom` tier), else by the saved rate (`typingRateSource` says which) |
 | `meanMouseEvents` | Mean mouse events per trial |
 | `totalSoftScore` | Accumulated soft score |
 | `sidebar_event_count` | Sidebar-gap detections (session-level) |
@@ -213,10 +213,10 @@ One row per participant:
 | `deviceMasking` | The device-masking rules that fired, space-separated: `R1` (a pixel ratio no browser produces), `R2` (a pixel ratio that stays fixed through a page zoom; not applied to Safari), `R3a` (a window larger than the screen it reports by more than 3% + 20 px; not applied to Firefox when the browser is known, nor with a second monitor in the log). Empty when none fired or the session has no window log. Read from `session.windowPositions` and the recording's browser line; nothing new is collected. Not evidence of AI use ([interpreting-signals.md](interpreting-signals.md#signals-that-never-score)) |
 | `typingVerdict` | The typing verdict: `clean`, `suspicious`, `highly suspicious` or `not assessed` |
 | `typingTells` | The tells behind a suspicious or highly suspicious verdict, `; `-separated: `median gap <n> ms` (keys faster than a person types), `gap variation <v>` (keys too even); empty otherwise |
-| `typingFieldsJudged` | Text fields with 20 or more key gaps that were judged. Empty when the session's typing rhythm was not recorded: no rhythm summaries (library before 0.17, or `signals.typingRhythm` off) and no usable recording (none, one that matches no trial, or a `trace`-tier one, which does not say which field each key went to). `0` when it was recorded but no field reached 20 key gaps |
+| `typingFieldsJudged` | Text fields with 20 or more key gaps that were judged. Empty when the session's typing rhythm was not recorded: no rhythm summaries (library before 0.17, or `signals.typingRhythm` off), and either no recording that matches a judged trial or a `trace`-tier recording whose judged trials hold typed keys (it does not say which field each key went to). `0` when the rhythm was recorded but no field reached 20 key gaps; a `trace`-tier recording whose judged trials hold no typed keys also gives `0` |
 | `typingFastestMedianMs` | The smallest median gap among the judged fields, in ms (one decimal); empty when none was judged |
 | `typingLowestCv` | The smallest gap variation among the judged fields (three decimals); empty when none was judged |
-| `typingRateSource` | Where the typing rates behind `trialsWithFastTyping` came from: `library` (0.17 on: (edits − 1) per second, from 20 edits), `edit times` (older data saved with keystroke dynamics on: recomputed the same way from the trial's saved edit times), `recording` (older data: recomputed the same way from the session recording), `old formula` (older data with neither saved edit times nor a recording of the trial: the saved rate, edits over the time, from 2 edits). With several, the weakest any judged trial used (`old formula` < `recording` < `edit times` < `library`); with no judged trial, the strongest available. It is the rate's source, not the rhythm's: a session can read `recording` here while its typing rhythm is not recorded |
+| `typingRateSource` | Where the typing rates behind `trialsWithFastTyping` came from: `library` (0.17 on: (edits − 1) per second, from 20 edits), `edit times` (older data saved with keystroke dynamics on: recomputed the same way from the trial's saved edit times), `recording` (older data: recomputed the same way from the trial's edits in a session recording that keeps the page, `dom` tier), `old formula` (older data with neither saved edit times nor recorded edits, which includes every trial of a `trace`-tier recording: the saved rate, edits over the time, from 2 edits). With several, the weakest any judged trial used (`old formula` < `recording` < `edit times` < `library`); with no judged trial, the strongest available. It is the rate's source, not the rhythm's: data recorded with 0.17 and `signals.typingRhythm` off reads `library` here while its typing rhythm is not recorded |
 | ... | (See the actual file for the full column set; the schema may grow.) |
 
 > Note: the early per-participant columns are camelCase (`totalPasteEvents`, …)
@@ -233,7 +233,8 @@ the counts, `trialCount` and `totalSoftScore` cover the whole session, while `me
 `meanMouseEvents` and `meanPathEfficiency` average only the pages the payload kept; the CLI's
 note for that response says so. `trialsWithFastTyping` stays the whole session's count the
 payload carries, even where the report recomputes older pages' rates from a recording; under a
-`phaseScope`, the kept pages are counted instead.
+`phaseScope`, the kept pages are counted instead. The typing verdict is judged from the kept
+pages only.
 
 ### `triage.md`
 
@@ -360,10 +361,12 @@ inside the `phaseScope` are judged: typing between trials, or in a segment
 no trial matches, is not. The rhythm needs a recording that keeps the page
 (the recorder's `dom` tier). On the default `trace` tier the key presses
 carry no field, so the rhythm is not recorded, with the reason
-"the session recording does not say which field each key went to (recorded without the page)";
-the rate is still rebuilt from the recording's edits on either tier. The
-recorder writes at most one value change per field per frame, so a rebuilt
-rate is a lower bound.
+"the session recording does not say which field each key went to (recorded without the page)".
+The `trace` tier records no edits either, so it recomputes no rate: those
+trials keep their saved rate, marked "old formula". Only a recording that
+keeps the page recomputes the rate and gives a rhythm verdict. The recorder
+writes at most one value change per field per frame, so a rate rebuilt from
+it is a lower bound.
 
 ### `event-log.csv`
 

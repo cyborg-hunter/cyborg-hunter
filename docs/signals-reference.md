@@ -152,8 +152,9 @@ press with its time. Turn it on (or set
 for keystroke-dynamics analysis.
 
 **`typingRhythm`** keeps, for each text field with 20 or more gaps between typed
-characters, four numbers that summarize the gaps (see the table above); the gaps
-themselves stay in the browser whatever `keystrokeDynamics` says. With it off, the
+characters, four numbers that summarize the gaps (see the table above); the rhythm
+saves no keystroke times and no gaps (`keystrokeDynamics` alone decides whether the
+edit times are saved). With it off, the
 report reads the rhythm from the session recording's key presses when the recording
 keeps the page (the `dom` tier).
 

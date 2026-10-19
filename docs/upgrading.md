@@ -62,14 +62,18 @@ dynamics section with six more `summary.csv` columns.
 - A Typing dynamics section above Cursor dynamics, with a typing verdict
   per session. Data recorded before 0.17 is judged from the session
   recording when the recording keeps the page (the recorder's `dom` tier).
-  A `trace`-tier recording does not say which field each key went to: such
-  data gets the corrected rate but no rhythm verdict
+  Only such a recording recomputes the rate and gives a rhythm verdict. A
+  `trace`-tier recording holds no edits and does not say which field each
+  key went to: such data keeps its saved rate (old formula) and gets no
+  rhythm verdict
   ([interpreting-signals.md](interpreting-signals.md#typing-dynamics)).
-- `trialsWithFastTyping`, for older data with saved edit times or a
-  recording, counts each trial by its recomputed rate (from 20 edits) where
-  it has one, and by the saved rate where it does not: the bundled agent's
-  paste trial (2 edits, 157.5 cps by the old formula) no longer counts. A reduced Qualtrics payload keeps the
-  whole-session count it carries, unless the report is phase-scoped.
+- `trialsWithFastTyping`, for older data with saved edit times or a `dom`-tier
+  recording, judges each trial whose edits were saved or recorded by its
+  recomputed rate, from 20 edits, and every other trial by its saved rate.
+  The bundled agent's paste trial (2 recorded edits, 157.5 cps by the old
+  formula) is too short to judge and no longer counts. A reduced Qualtrics
+  payload keeps the whole-session count it carries, unless the report is
+  phase-scoped.
 - `summary.csv` gains six columns at the end: `typingVerdict`,
   `typingTells`, `typingFieldsJudged`, `typingFastestMedianMs`,
   `typingLowestCv`, `typingRateSource`. No existing column moves.

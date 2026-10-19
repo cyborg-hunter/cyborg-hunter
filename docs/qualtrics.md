@@ -239,28 +239,31 @@ ladder that fits. The levels are cumulative:
 | 5 | everything but the participant ID: only when the session could not be read |
 
 At levels 1 to 4 the payload also carries the whole session's counts, a
-fixed set of numbers, so the report's tier, triage score and reason, and
-every count it shows stay those of the whole session: the number of pages
-(the trial count) and the sum of their soft scores, pastes, copies and drops,
-tab-aways (how many, how long, and the length bins), sidebar openings,
-keyboard shortcuts, viewport and zoom changes, injected extension elements,
-AI extensions found, idle gaps, synthetic and foreign input, pages with fast
-typing and pages with a tab-away. The hard triggers and the soft score come
-from the monitor's own counters, which the newest row carries. What covers
-only the pages and entries the payload kept: the page rows and the means
-taken over them (typing speed, mouse metrics), the event lists, timelines
-and event log, the honeypot's list of violations (their count stays), the
-names of AI extensions found on dropped pages, and at level 4 the preset
-name. The payload's `cyborgHunterOneLiner.truncated` is `false` at level 0;
-otherwise it names the level, what was dropped and (`totals`) the whole
-session's counts. The browser console shows "The Qualtrics payload was
+fixed set of numbers, so the report's tier, its triage score and reason (but
+for the typing verdict, below), and every count it shows stay those of the
+whole session: the number of pages (the trial count) and the sum of their
+soft scores, pastes, copies and drops, tab-aways (how many, how long, and
+the length bins), sidebar openings, keyboard shortcuts, viewport and zoom
+changes, injected extension elements, AI extensions found, idle gaps,
+synthetic and foreign input, pages with fast typing and pages with a
+tab-away. The hard triggers and the soft score come from the monitor's own
+counters, which the newest row carries. What covers only the pages and
+entries the payload kept: the page rows and the means taken over them
+(typing speed, mouse metrics), the event lists, timelines and event log, the
+honeypot's list of violations (their count stays), the names of AI
+extensions found on dropped pages, the typing verdict (judged from the kept
+pages' typing rhythm, which level 4 drops; with it the triage reason's
+typing clause and any `scoreWeights.typingRhythm` term), and at level 4 the
+preset name. The payload's `cyborgHunterOneLiner.truncated` is `false` at
+level 0; otherwise it names the level, what was dropped and (`totals`) the
+whole session's counts. The browser console shows "The Qualtrics payload was
 reduced" (once per page), and the CLI notes it for that participant:
 "Qualtrics payload was reduced to fit the embedded-data cap".
 
 A page without events adds about 1.3 KB, so at the default cap a quiet survey
 of more than about eight pages (fewer with many events) is written at level
-3: counts and scores stay those of the whole session, and per-page detail is
-kept for the newest five pages.
+3: counts and scores stay those of the whole session, and per-page detail,
+the typing verdict's included, is kept for the newest five pages.
 
 If the session cannot be read, the payload is level 5 with
 `cyborgHunterError: "the Qualtrics payload could not be built"`, and the

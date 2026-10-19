@@ -41,8 +41,8 @@ section and six more `summary.csv` columns.
 - Typing rhythm: for each text field with 20 or more gaps between typed
   characters, the library saves the gaps' count, median, share under 60 ms
   and variation, with the field's tag and never its id (`typingRhythm`,
-  `signals.typingRhythm`, on by default); the keystroke times stay in the
-  browser. Trial reports also carry `typingEdits`, a count. The Qualtrics
+  `signals.typingRhythm`, on by default); the rhythm saves no keystroke
+  times. Trial reports also carry `typingEdits`, a count. The Qualtrics
   payload carries both.
 - The report's Typing dynamics section: a typing verdict per session
   (suspicious from one kind of rule, highly suspicious from fast and even
@@ -60,8 +60,9 @@ section and six more `summary.csv` columns.
   and its last, and needs 20 edits (`thresholds.typingMinEdits`). This
   changes the library's live soft score: short fields no longer fire
   `typingSpeed`. The report recomputes older data's rates from saved edit
-  times or the session recording when there is one, and marks the rest
-  "old formula".
+  times or from a session recording that keeps the page (`dom` tier), and
+  marks the rest "old formula"; a `trace`-tier recording holds no edits and
+  recomputes nothing.
 
 ## [0.16.0] — 2026-10-15
 
