@@ -81,6 +81,10 @@ const COLUMNS = [
   ['cursorCenteredClicks', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.centeredClicks; return !r ? '' : r.state === 'touch' ? 'touch' : `${r.count}/${r.of}`; }],
   ['cursorCenteredNear', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.centeredClicks; return !r ? '' : r.state === 'touch' ? 'touch' : r.near ? `${r.near.count}/${r.near.of}` : ''; }],
   ['cursorSoftwareRenderer', (s) => { const c = s.cursorAnalysis?.checks?.softwareRenderer; return c && typeof c === 'object' ? (c.fired ? `YES (${c.family})` : c.noWebgl ? 'no WebGL' : 'no') : ''; }],
+  // Device masking (analyzers/device-masking.js): the rules that fired,
+  // space-separated (R1, R2, R3a); empty when none fired or the session has
+  // no window log. After the cursor block, so its columns keep their places.
+  ['deviceMasking', (s) => (s.deviceMasking && Array.isArray(s.deviceMasking.rules) ? s.deviceMasking.rules.join(' ') : '')],
 ];
 
 export function buildSummaryCsv(summaries, triage) {

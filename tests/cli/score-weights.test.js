@@ -28,7 +28,7 @@ describe('score-weights: defaults', () => {
     assert.deepEqual(SCORE_SIGNALS.map(s => s.key), [
       'paste', 'copy', 'sidebar', 'tabaway', 'tabawayLong', 'tabawayMedium', 'flicker',
       'drop', 'fastTyping', 'synthetic', 'foreignInput', 'aiExtensions', 'kbShortcuts',
-      'viewportShifts', 'zoom', 'edgeExits', 'cursor', 'softwareRenderer',
+      'viewportShifts', 'zoom', 'edgeExits', 'cursor', 'softwareRenderer', 'deviceMasking',
     ]);
   });
 });
@@ -234,6 +234,14 @@ describe('score-weights: the device facts', () => {
     assert.equal(at({ fired: false, family: null, noWebgl: true }), 0);
     assert.equal(at({ fired: false, family: null, noWebgl: false }), 0);
     assert.equal(at('not recorded'), 0);
+    assert.equal(s.count({}), 0);
+  });
+  it('deviceMasking counts 1 when any rule fired and 0 otherwise, at weight 0', () => {
+    const s = sig('deviceMasking');
+    assert.deepEqual([s.weight, s.label], [0, 'device masking']);
+    assert.equal(s.count({ deviceMasking: { state: 'ok', rules: ['R1', 'R2'] } }), 1);
+    assert.equal(s.count({ deviceMasking: { state: 'ok', rules: [] } }), 0);
+    assert.equal(s.count({ deviceMasking: { state: 'not recorded', rules: [] } }), 0);
     assert.equal(s.count({}), 0);
   });
 });

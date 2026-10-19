@@ -6,6 +6,7 @@ import { generateTriageReason, rankTriage } from '../../src/cli/analyzers/triage
 import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
 import { analyzeCursor, CURSOR_LIMITS } from '../../src/cli/analyzers/cursor.js';
+import { analyzeDeviceMasking } from '../../src/cli/analyzers/device-masking.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
 import { buildCursorLimitsJson } from '../../src/cli/renderers/cursor-limits-core.js';
@@ -53,17 +54,10 @@ const withRecording = (p, id, events) => ({ ...p, participantId: id, replay: { r
 function analyze(participants, cfg = config) {
   const summaries = computeSummary(participants, cfg);
   const cursors = analyzeCursor(participants);
-  summaries.forEach((s, i) => { s.cursorAnalysis = cursors[i]; });
+  summaries.forEach((s, i) => { s.cursorAnalysis = cursors[i]; s.deviceMasking = analyzeDeviceMasking(participants[i]); });
   const edgeExits = detectEdgeExits(participants, cfg);
   const triage = rankTriage(summaries, edgeExits, cfg);
   return { summaries, cursors, edgeExits, triage };
-}
-
-// One session's summary.csv row, keyed by header.
-function csvRowFor(participant) {
-  const { summaries, triage } = analyze([participant]);
-  const [header, row] = buildSummaryCsv(summaries, triage).trim().split('\n').map(l => l.split(','));
-  return Object.fromEntries(header.map((h, i) => [h, row[i]]));
 }
 
 describe('the cursor weight', () => {
@@ -104,14 +98,29 @@ describe('the triage reason', () => {
 
 describe('summary.csv', () => {
   const COLS = ['cursorReason', 'cursorVerdict', 'cursorTells', 'cursorChecksRecorded', 'cursorFactCount', 'cursorWebdriver', 'cursorUntrustedClicks', 'cursorZeroMoveTrials', 'cursorJumpClicks', 'cursorNoPathClicks', 'cursorCoordinates', 'cursorStream', 'cursorSampleIntervalMs', 'cursorClicks', 'cursorMovements', 'cursorMovesPerTrialMedian', 'cursorEfficiencyMedian', 'cursorMaxDeviationPxMedian', 'cursorCenteredClicks', 'cursorCenteredNear', 'cursorSoftwareRenderer'];
-  it('keeps every existing header and appends the twenty-one cursor columns in order', () => {
-    const { summaries, triage } = analyze([human, driver, scripted, old]);
-    const [header, ...rows] = buildSummaryCsv(summaries, triage).trim().split('\n');
+  // The cursor block is found by its first column's name, not counted from
+  // the end of the row: columns added after it (deviceMasking, later ones)
+  // leave these positions alone.
+  const block = (csv) => {
+    const [header, ...rows] = csv.trim().split('\n');
     const cols = header.split(',');
-    assert.equal(cols.indexOf('meanPathEfficiency') > 0, true);
-    assert.deepEqual(cols.slice(-21), COLS);
-    const byId = Object.fromEntries(rows.map(r => [r.split(',')[0], r.split(',')]));
-    const tail = (id) => byId[id].slice(-21);
+    const at = cols.indexOf('cursorReason');
+    return { cols, rows: rows.map((r) => r.split(',')), slice: (cells) => cells.slice(at, at + COLS.length) };
+  };
+  // One session's cursor block, in COLS order: [1] cursorVerdict,
+  // [18] cursorCenteredClicks, [19] cursorCenteredNear, [20] cursorSoftwareRenderer.
+  const cellsFor = (participant) => {
+    const { summaries, triage } = analyze([participant]);
+    const b = block(buildSummaryCsv(summaries, triage));
+    return b.slice(b.rows[0]);
+  };
+  it('keeps every existing header and holds the twenty-one cursor columns in order', () => {
+    const { summaries, triage } = analyze([human, driver, scripted, old]);
+    const b = block(buildSummaryCsv(summaries, triage));
+    assert.equal(b.cols.indexOf('meanPathEfficiency') > 0, true);
+    assert.deepEqual(b.slice(b.cols), COLS);
+    const byId = Object.fromEntries(b.rows.map((r) => [r[0], r]));
+    const tail = (id) => b.slice(byId[id]);
     assert.deepEqual(tail('DRIVER').slice(0, 10), ['', 'highly suspicious', 'automation flag', '3', '2', 'YES', '0', '1/2', '1/1', '1/1']);
     assert.deepEqual(tail('SCRIPTED').slice(0, 10), ['', 'highly suspicious', 'clicks without a path 4/4', '3', '0', 'no', '0', '0/5', '4/4', '4/4']);
     assert.deepEqual(tail('HUMAN').slice(0, 3), ['only 1 of 2 first pointer clicks had a known position before them (the no-path rule needs 4)', 'not assessed', '']);
@@ -121,26 +130,27 @@ describe('summary.csv', () => {
   });
   it('a null session has its reason and empty values', () => {
     const { summaries, triage } = analyze([touch]);
-    const row = buildSummaryCsv(summaries, triage).trim().split('\n')[1].split(',');
-    assert.deepEqual(row.slice(-21).slice(0, 3), ['no cursor stream (touch device)', 'not assessed', '']);
-    assert.equal(row.slice(-21)[13], '');
+    const b = block(buildSummaryCsv(summaries, triage));
+    const row = b.slice(b.rows[0]);
+    assert.deepEqual(row.slice(0, 3), ['no cursor stream (touch device)', 'not assessed', '']);
+    assert.equal(row[13], '');
     // Only the automation flag is recorded; the other checks and the rules have no value.
-    assert.deepEqual(row.slice(-21).slice(3, 10), ['1', '0', 'no', '', '', '', '']);
+    assert.deepEqual(row.slice(3, 10), ['1', '0', 'no', '', '', '', '']);
   });
   it('cursorCenteredClicks and cursorCenteredNear give count/of from the recording rule', () => {
     // Nine clicks at the centre, three 3 px off it on both axes (4.2 px away:
     // near, not exact) and two 30 px off (neither).
-    const row = csvRowFor(withRecording(human, 'CENTRED', [...clicksAt(9, 150, 120), ...clicksAt(3, 153, 123, 30000), ...clicksAt(2, 120, 110, 40000)]));
-    assert.equal(row.cursorCenteredClicks, '9/14');
-    assert.equal(row.cursorCenteredNear, '12/14');
+    const row = cellsFor(withRecording(human, 'CENTRED', [...clicksAt(9, 150, 120), ...clicksAt(3, 153, 123, 30000), ...clicksAt(2, 120, 110, 40000)]));
+    assert.equal(row[18], '9/14');
+    assert.equal(row[19], '12/14');
   });
   it('a touch recording reads touch in both centered columns', () => {
-    const row = csvRowFor(withRecording(human, 'TAPS', [{ type: 'touch.start', t: 10 }, ...clicksAt(9, 150, 120)]));
-    assert.equal(row.cursorCenteredClicks, 'touch');
-    assert.equal(row.cursorCenteredNear, 'touch');
+    const row = cellsFor(withRecording(human, 'TAPS', [{ type: 'touch.start', t: 10 }, ...clicksAt(9, 150, 120)]));
+    assert.equal(row[18], 'touch');
+    assert.equal(row[19], 'touch');
   });
   it('cursorSoftwareRenderer: YES (family), no, no WebGL, or empty when not recorded', () => {
-    const cell = (device) => csvRowFor(base('SR', [path(0), path(0)], device)).cursorSoftwareRenderer;
+    const cell = (device) => cellsFor(base('SR', [path(0), path(0)], device))[20];
     assert.equal(cell({ ...desktop, softwareRenderer: 'swiftshader' }), 'YES (swiftshader)');
     assert.equal(cell({ ...desktop, softwareRenderer: false }), 'no');
     assert.equal(cell({ ...desktop, softwareRenderer: 'none' }), 'no WebGL');
@@ -152,9 +162,20 @@ describe('summary.csv', () => {
   });
   it('cursorSoftwareRenderer is filled for a session with no cursor stream too', () => {
     const touchSr = base('TOUCHSR', [[mv(5, 5, 0), ck(5, 5, 10)]], { maxTouchPoints: 5, coarsePointer: true, webdriver: false, softwareRenderer: 'llvmpipe' });
-    const row = csvRowFor(touchSr);
-    assert.equal(row.cursorVerdict, 'not assessed');
-    assert.equal(row.cursorSoftwareRenderer, 'YES (llvmpipe)');
+    const row = cellsFor(touchSr);
+    assert.equal(row[1], 'not assessed');
+    assert.equal(row[20], 'YES (llvmpipe)');
+  });
+  it('deviceMasking follows the cursor block: the rules joined by a space, or empty', () => {
+    const { summaries, triage } = analyze([human, driver, old]);
+    summaries[0].deviceMasking = { state: 'ok', rules: ['R1', 'R2'], corroborated: false, browser: 'chrome', detail: 'x' };
+    summaries[1].deviceMasking = { state: 'ok', rules: [], corroborated: false, browser: 'chrome', detail: '' };
+    summaries[2].deviceMasking = { state: 'not recorded', rules: [], corroborated: false, browser: null, detail: 'window log not recorded' };
+    const b = block(buildSummaryCsv(summaries, triage));
+    const at = b.cols.indexOf('deviceMasking');
+    assert.ok(at > b.cols.indexOf('cursorSoftwareRenderer'));
+    const byId = Object.fromEntries(b.rows.map((r) => [r[0], r[at]]));
+    assert.deepEqual([byId.HUMAN, byId.DRIVER, byId.OLD], ['R1 R2', '', '']);
   });
 });
 

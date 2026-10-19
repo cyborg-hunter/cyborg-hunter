@@ -48,6 +48,10 @@ export const SCORE_SIGNALS = [
   { key: 'softwareRenderer', weight: 0,
     count: s => { const c = s.cursorAnalysis && s.cursorAnalysis.checks && s.cursorAnalysis.checks.softwareRenderer; return c && typeof c === 'object' && c.fired ? 1 : 0; },
     label: 'software renderer', hint: 'ranking weight × 1 when the browser drew without a graphics card; the tier and the pointer verdict are unchanged.' },
+  // Device masking (analyzers/device-masking.js): 1 when any rule fired.
+  // Masking hides a device and is not evidence of AI use; weight 0.
+  { key: 'deviceMasking', weight: 0, count: s => s.deviceMasking && s.deviceMasking.rules.length ? 1 : 0,
+    label: 'device masking', hint: 'ranking weight × 1 when the window log contradicts the screen the browser reports (a masking tool, not evidence of AI use); the tier is unchanged.' },
 ];
 
 const KEYS = SCORE_SIGNALS.map(s => s.key);

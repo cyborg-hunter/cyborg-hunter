@@ -26,6 +26,7 @@
 import { computeSummary } from './analyzers/summary.js';
 import { detectEdgeExits } from './analyzers/edge-exit.js';
 import { analyzeCursor } from './analyzers/cursor.js';
+import { analyzeDeviceMasking } from './analyzers/device-masking.js';
 import { rankTriage } from './analyzers/triage.js';
 import { resolveScoreWeights, formulaText } from './analyzers/score-weights.js';
 import { applyPhaseScope, describePhaseScope, findUnmatchedPhaseScopePhases } from './analyzers/phase-scope.js';
@@ -117,6 +118,11 @@ export async function buildReport(participants, config, deps) {
   // them.
   const cursors = analyzeCursor(scoredParticipants);
   summaries.forEach((s, i) => { s.cursorAnalysis = cursors[i]; });
+  // Device masking (analyzers/device-masking.js) rides on each summary the
+  // same way, for the device line, summary.csv and the score term. It reads
+  // the session's window log and the recording's browser line, which phase
+  // scoping leaves whole.
+  summaries.forEach((s, i) => { s.deviceMasking = analyzeDeviceMasking(scoredParticipants[i]); });
   const edgeExits = detectEdgeExits(scoredParticipants, config);
   const triage = rankTriage(summaries, edgeExits, config);
 

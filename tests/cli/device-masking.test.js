@@ -6,6 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeDeviceMasking, isPerturbedDpr, browserFamily } from '../../src/cli/analyzers/device-masking.js';
+import { buildReport } from '../../src/cli/report-core.js';
 
 // One window-log row: a 1600 × 1000 window at (0, 0) on a 1920 × 1080 screen,
 // the page at 100 % (inner 1600 × 900: 100 px of browser chrome), pixel
@@ -119,5 +120,30 @@ describe('browserFamily', () => {
     assert.equal(browserFamily('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/140.0 Mobile/15E148 Safari/605.1.15'), 'safari');
     assert.equal(browserFamily('curl/8.0'), 'other');
     for (const v of ['', undefined, null, 42]) assert.equal(browserFamily(v), null);
+  });
+});
+
+describe('device masking in the report', () => {
+  const config = { outputDir: '.', participantIdField: 'participantId' };
+  const build = async (cfg) => {
+    const files = {};
+    const masked = { ...part([row({ dpr: 1.00000001 })], CHROME), participantId: 'M' };
+    const plain = { ...part([row()], CHROME), participantId: 'N' };
+    const built = await buildReport([masked, plain], cfg, { sink: (p, d) => { files[p] = d; } });
+    return { built, files };
+  };
+  it('report-core attaches summary.deviceMasking, and summary.csv carries the rules after the cursor block', async () => {
+    const { built, files } = await build(config);
+    const byId = Object.fromEntries(built.summaries.map((s) => [s.participantId, s.deviceMasking]));
+    assert.deepEqual([byId.M.rules, byId.N.rules], [['R1'], []]);
+    const [h, ...rows] = files['summary.csv'].trim().split('\n');
+    const H = h.split(',');
+    const at = H.indexOf('deviceMasking');
+    assert.ok(at > H.indexOf('cursorSoftwareRenderer'));
+    assert.deepEqual(Object.fromEntries(rows.map((r) => [r.split(',')[0], r.split(',')[at]])), { M: 'R1', N: '' });
+  });
+  it('phase scoping leaves it whole: it reads the session, not the trials', async () => {
+    const { built } = await build({ ...config, phaseScope: { exclude: ['debrief'] } });
+    assert.deepEqual(built.summaries.find((s) => s.participantId === 'M').deviceMasking.rules, ['R1']);
   });
 });
