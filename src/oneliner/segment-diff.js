@@ -82,9 +82,9 @@ export function createSegmentDiffer(monitor) {
       // first segment carries them as they stand when cut, as it carries config:
       // cut before that read, it has softwareRenderer null (shown as not checked).
       if (meta.segmentIndex === 0 && report.device) seg.device = report.device;
-      // windowPositionsCapped is not an array either, but unlike the device
-      // facts it can turn true mid-session (the window log reaching its cap,
-      // signals/browser.js), so every segment carries its current value.
+      // windowPositionsCapped is a flag, not an array, and it can turn true
+      // mid-session (the window log reaching its cap, signals/browser.js), so
+      // every segment carries its current value.
       if (typeof report.windowPositionsCapped === 'boolean') seg.windowPositionsCapped = report.windowPositionsCapped;
       return seg;
     }
