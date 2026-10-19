@@ -17,7 +17,7 @@ import { computeTrialScores, shouldScreenout as _shouldScreenout } from './scori
 import { attachClipboardSignals } from './signals/clipboard.js';
 import { attachFocusSignals, attachIdleGapSignals } from './signals/focus.js';
 import { attachMouseSignals, computeMouseMetrics } from './signals/mouse.js';
-import { attachTypingSignals, attachForeignInputSignals, computeTypingSpeed } from './signals/typing.js';
+import { attachTypingSignals, attachForeignInputSignals, computeTypingSpeed, createTypingRhythm, summarizeTypingRhythm } from './signals/typing.js';
 import { attachBrowserSignals, attachElementTrace } from './signals/browser.js';
 import { injectDecoy, removeDecoyElement, resetDecoyState } from './signals/dom-protection.js';
 
@@ -269,6 +269,11 @@ export function init(userConfig) {
   // trial's listeners: a decoy must never land after its trial ended or the
   // monitor was destroyed.
   var decoyTimer = null;
+  // The trial's typing-rhythm accumulator (signals/typing.js), or null. Kept
+  // out of trialData on purpose: endTrial and getTrialSnapshot deep-copy
+  // trialData, and the accumulator holds per-keystroke gaps and element
+  // references that must never be copied out.
+  var typingRhythm = null;
   // Cancels the pending renderer read (scheduleRendererRead); null when none
   // is pending.
   var cancelRendererRead = null;
@@ -357,7 +362,7 @@ export function init(userConfig) {
 
   function buildTrialCtx() {
     return {
-      config, sessionData, trialData, listeners,
+      config, sessionData, trialData, listeners, typingRhythm,
       addTrialListener, addInterval, addTrialInterval, fireSignal, isKnownInput,
       getTrialData: function () { return trialData; }
     };
@@ -440,6 +445,7 @@ export function init(userConfig) {
         }
       }
 
+      typingRhythm = config.signals.typingRhythm ? createTypingRhythm() : null;
       // Attach trial-scoped signal listeners
       var ctx = buildTrialCtx();
       attachClipboardSignals(ctx);
@@ -489,6 +495,13 @@ export function init(userConfig) {
         report.charsPerSec = cps;
         sessionData.charsPerSec.push(cps);
       }
+
+      // Typing rhythm: the per-field summaries only; the gaps go with the
+      // accumulator. Written whenever the switch is on (an empty list when
+      // no field reached 20 gaps), so the report can tell "nothing long
+      // enough" from "not recorded".
+      if (typingRhythm) report.typingRhythm = summarizeTypingRhythm(typingRhythm);
+      typingRhythm = null;
 
       // Privacy gate: the raw per-edit timestamps are keystroke-timing data.
       // Persist them ONLY when keystroke dynamics are explicitly enabled
@@ -612,6 +625,7 @@ export function init(userConfig) {
       });
       listeners = [];
       removeTrialListeners();
+      typingRhythm = null;
       intervals.forEach(function (id) { clearInterval(id); });
       intervals = [];
       if (cancelRendererRead) { cancelRendererRead(); cancelRendererRead = null; }

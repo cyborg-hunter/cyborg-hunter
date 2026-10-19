@@ -46,6 +46,7 @@ export const PRESETS = {
       devTools: true, aiExtensions: true, sidebarGap: true,
       keyboardShortcuts: true, mouseTracking: true, idleGaps: true,
       windowPosition: true, clipboardManager: true, softwareRenderer: true,
+      typingRhythm: true,
       keystrokeDynamics: false  // GDPR: off by default
     },
     thresholds: {
@@ -75,6 +76,7 @@ export const PRESETS = {
       devTools: true, aiExtensions: true, sidebarGap: true,
       keyboardShortcuts: true, mouseTracking: true, idleGaps: true,
       windowPosition: true, clipboardManager: true, softwareRenderer: true,
+      typingRhythm: true,
       keystrokeDynamics: false  // GDPR: off by default
     },
     thresholds: {},  // uses DEFAULT_THRESHOLDS as-is
@@ -102,6 +104,7 @@ export const PRESETS = {
       devTools: true, aiExtensions: true, sidebarGap: true,
       keyboardShortcuts: true, mouseTracking: true, idleGaps: true,
       windowPosition: true, clipboardManager: true, softwareRenderer: true,
+      typingRhythm: true,
       keystrokeDynamics: true
     },
     thresholds: {

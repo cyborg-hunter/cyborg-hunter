@@ -19,3 +19,30 @@ export function typingRate(times, minEdits) {
   if (!(spanSec > 0)) return null;
   return round((times.length - 1) / spanSec, 10);
 }
+
+// A field's rhythm is summarized from this many gaps; a field with fewer
+// leaves nothing (the library saves nothing for it, the report does not
+// judge it).
+export var RHYTHM_MIN_GAPS = 20;
+// The share of gaps under this many milliseconds is saved (under60Share).
+// Calibrated on recorded human sessions: no text field of 20 gaps or more
+// had a median gap under 75 ms.
+export var RHYTHM_FAST_GAP_MS = 60;
+
+// { gaps, medianMs, under60Share, cv } for one or more gaps (ms): the
+// count, the median (0.1 ms), the share under RHYTHM_FAST_GAP_MS (three
+// decimals) and the coefficient of variation, standard deviation over mean
+// (three decimals; the sample standard deviation, n − 1, as the calibration
+// computed it; 0 when the mean is 0).
+export function summarizeGaps(gaps) {
+  var n = gaps.length;
+  var sorted = gaps.slice().sort(function (a, b) { return a - b; });
+  var mid = n >> 1;
+  var median = n % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  var sum = 0, under = 0, i;
+  for (i = 0; i < n; i++) { sum += gaps[i]; if (gaps[i] < RHYTHM_FAST_GAP_MS) under++; }
+  var mean = sum / n, ss = 0;
+  for (i = 0; i < n; i++) ss += (gaps[i] - mean) * (gaps[i] - mean);
+  var sd = n > 1 ? Math.sqrt(ss / (n - 1)) : 0;
+  return { gaps: n, medianMs: round(median, 10), under60Share: round(under / n, 1000), cv: mean > 0 ? round(sd / mean, 1000) : 0 };
+}

@@ -17,6 +17,7 @@ export const TRIAL_REPORT_FIELDS = {
   editTimestamps: { type: 'array', required: false },
   charsPerSec: { type: 'number', required: false },
   typingEdits: { type: 'number', required: false },
+  typingRhythm: { type: 'array', required: false },
   tabAwayEvents: { type: 'array', required: true },
   idleGaps: { type: 'array', required: false },
   mouseEvents: { type: 'array', required: false },
