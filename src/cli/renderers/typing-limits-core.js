@@ -16,7 +16,8 @@ import { VERSION } from '../../shared/constants.js';
 // rhythm is not recorded counts there, even when its recording was read
 // (one made without the page, trace tier, holds key presses but not the
 // field each went to). rateSource counts the participant's rate source (the
-// weakest any judged trial used).
+// weakest any judged trial used), strongest first: each of the four
+// analyzeTyping names has its key, so the counts add up to the total.
 export function buildTypingLimitsJson(recordedWith, results) {
   const count = (test) => results.filter(test).length;
   const notRecorded = (r) => r.state === 'not recorded';
@@ -35,6 +36,7 @@ export function buildTypingLimitsJson(recordedWith, results) {
       },
       rateSource: {
         library: count((r) => r.rate.source === 'library'),
+        editTimes: count((r) => r.rate.source === 'edit times'),
         recording: count((r) => r.rate.source === 'recording'),
         oldFormula: count((r) => r.rate.source === 'old formula')
       },

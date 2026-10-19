@@ -46,8 +46,9 @@ describe('typingAnalysis on each summary', () => {
     assert.equal(byId.OLD.typingAnalysis.rate.source, 'old formula');
   });
   it('fast typing is recounted where the rate came from saved edit times', async () => {
-    const { byId } = await report([TIMES()]);
+    const { byId, files } = await report([TIMES()]);
     assert.deepEqual([byId.TIMES.typingAnalysis.rate.source, byId.TIMES.trialsWithFastTyping], ['edit times', 0]);
+    assert.deepEqual(JSON.parse(files['typing-limits.json']).sessions.rateSource, { library: 0, editTimes: 1, recording: 0, oldFormula: 0 });
   });
   it('a reduced payload keeps its carried count, even where the recording gives a kept trial its rate', async () => {
     const p = BOT();
@@ -55,6 +56,25 @@ describe('typingAnalysis on each summary', () => {
     const { byId } = await report([p]);
     assert.deepEqual(byId.BOT.typingAnalysis.rate.trials.map((r) => [r.source, r.fast]), [['recording', true]]);
     assert.equal(byId.BOT.trialsWithFastTyping, 8);
+  });
+  // A reduced payload whose two kept trials the recording does not judge
+  // (2 edits each); the first one's old formula saved 11.8 cps.
+  const REDUCED = (totals) => {
+    const p = participantFromRecording('R', keyRecording([['a', 10, [170]], ['b', 60010, [200]]]));
+    p.trials[0].charsPerSec = 11.8;
+    for (const t of p.trials) t.phase = 'main';
+    p.reducedPayload = { level: 3, totals };
+    return p;
+  };
+  it('a reduced payload under a phase scope is recounted: its summary counted the kept rows, not the carried count', async () => {
+    const { byId } = await report([REDUCED({ fastTypingTrials: 8 })], { ...config, phaseScope: { include: ['main'] } });
+    assert.equal(byId.R.trialsWithFastTyping, 0);
+  });
+  it('a reduced payload that carries no usable count is recounted', async () => {
+    for (const totals of [null, {}, { fastTypingTrials: -1 }]) {
+      const { byId } = await report([REDUCED(totals)]);
+      assert.equal(byId.R.trialsWithFastTyping, 0, JSON.stringify(totals));
+    }
   });
   it('writes typing-limits.json right after cursor-limits.json: the constants, the sources and the verdicts', async () => {
     assert.equal(REPORT_FILES.indexOf('typing-limits.json'), REPORT_FILES.indexOf('cursor-limits.json') + 1);
@@ -65,7 +85,7 @@ describe('typingAnalysis on each summary', () => {
     assert.deepEqual(j.limits, TYPING_LIMITS);
     assert.deepEqual(j.sessions, { total: 3,
       rhythmSource: { library: 0, recording: 2, notRecorded: 1 },
-      rateSource: { library: 0, recording: 2, oldFormula: 1 },
+      rateSource: { library: 0, editTimes: 0, recording: 2, oldFormula: 1 },
       verdicts: { highlySuspicious: 1, suspicious: 0, clean: 1, notAssessed: 1 } });
   });
   it('typing-limits.json: a recording without the page counts as rhythm not recorded, its rate as from the recording', async () => {
@@ -73,7 +93,7 @@ describe('typingAnalysis on each summary', () => {
     assert.deepEqual([byId.TRACE.typingAnalysis.state, byId.TRACE.typingAnalysis.source], ['not recorded', 'recording']);
     assert.deepEqual(JSON.parse(files['typing-limits.json']).sessions, { total: 1,
       rhythmSource: { library: 0, recording: 0, notRecorded: 1 },
-      rateSource: { library: 0, recording: 1, oldFormula: 0 },
+      rateSource: { library: 0, editTimes: 0, recording: 1, oldFormula: 0 },
       verdicts: { highlySuspicious: 0, suspicious: 0, clean: 0, notAssessed: 1 } });
   });
 });
@@ -98,6 +118,7 @@ describe('a phase-scoped report judges typing inside the scope only', () => {
     const { built, byId } = await report([TUTORED()], weighted);
     assert.deepEqual([byId.TUT.typingAnalysis.verdict, byId.TUT.typingAnalysis.level], ['highly suspicious', 2]);
     assert.deepEqual(typingTerm(built.triage[0]), ['typingRhythm', 2]);
+    assert.equal(byId.TUT.trialsWithFastTyping, 1);
   });
   it('a warm-up trial keeps its own segment: the main trial of the same id is not judged from it', async () => {
     // Two trials called "q", a warm-up and the main one, and a recording

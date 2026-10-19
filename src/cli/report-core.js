@@ -83,6 +83,18 @@ export async function runIdOf(participants, sha256) {
   return String(await sha256(JSON.stringify(rows))).slice(0, 16);
 }
 
+// Whether summary.js took this participant's fast-typing count from the
+// count a reduced Qualtrics payload carries, by summary.js's own test
+// (computeParticipantSummary: `reduced`, then the carried totals): not
+// phase-scoped, the payload reduced, and its totals holding fastTypingTrials
+// as a finite number >= 0. p: the participant as scored (after scoping).
+function usesCarriedFastTyping(p) {
+  const reduced = p.phaseScoped !== true && !!p.reducedPayload;
+  const totals = reduced ? p.reducedPayload.totals : null;
+  const v = totals ? totals.fastTypingTrials : undefined;
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
+
 export async function buildReport(participants, config, deps) {
   const sink = deps.sink;
   const log = deps.log || (() => {});
@@ -131,14 +143,16 @@ export async function buildReport(participants, config, deps) {
   // the scoped ones. Where it recomputed a trial's rate (from the saved edit
   // times or the recording), the fast-typing count follows the recomputed
   // rates; elsewhere the summary's own count stands (the library's corrected
-  // rate, the old formula's saved rate). A reduced Qualtrics payload's count
-  // is not recounted: summary.js gives it the whole session's count the
-  // payload carries, which the kept rows cannot recount.
+  // rate, the old formula's saved rate). Where the summary took the
+  // whole-session count a reduced Qualtrics payload carries, that count
+  // stands too: the kept rows cannot recount it. A reduced payload under a
+  // phase scope, or one without a usable carried count, was counted from its
+  // kept rows, and those are recounted.
   const typings = scoredParticipants.map((p, i) => analyzeTyping(p, config, { allTrials: participants[i].trials }));
   summaries.forEach((s, i) => {
     s.typingAnalysis = typings[i];
     const recomputed = typings[i].rate.trials.some((r) => r.source === 'edit times' || r.source === 'recording');
-    if (recomputed && !participants[i].reducedPayload) s.trialsWithFastTyping = fastTypingTrials(typings[i]);
+    if (recomputed && !usesCarriedFastTyping(scoredParticipants[i])) s.trialsWithFastTyping = fastTypingTrials(typings[i]);
   });
   const edgeExits = detectEdgeExits(scoredParticipants, config);
   const triage = rankTriage(summaries, edgeExits, config);
