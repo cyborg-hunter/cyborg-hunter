@@ -284,6 +284,9 @@
     .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
     /* Closed, the summary is the block's only line: no bottom margin, so the frame sits evenly around it. */
     .cursor-details:not([open]) > summary { margin-bottom: 0; }
+    /* The click picture under the verdict (renderClickPicture): an inline SVG that shrinks with a narrow pane. */
+    .click-picture { margin: 6px 0 10px; display: inline-block; vertical-align: top; }
+    .click-picture svg { max-width: 100%; height: auto; }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are

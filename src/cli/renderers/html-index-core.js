@@ -413,6 +413,9 @@ ${fontFaceCss}    :root {
     .cursor-details > summary { font-family: var(--ff-recursive); font-size: 12px; padding: 2px 0; margin: 0 0 8px; cursor: pointer; color: var(--dim); }
     /* Closed, the summary is the block's only line: no bottom margin, so the frame sits evenly around it. */
     .cursor-details:not([open]) > summary { margin-bottom: 0; }
+    /* The click picture under the verdict (renderClickPicture): an inline SVG that shrinks with a narrow pane. */
+    .click-picture { margin: 6px 0 10px; display: inline-block; vertical-align: top; }
+    .click-picture svg { max-width: 100%; height: auto; }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -1341,6 +1344,40 @@ function renderReplaySection(participant, sanitized, replayShownExternally = fal
     </div>`;
 }
 
+// The click picture under the pointer verdict: where each qualifying click of
+// the centered-clicks rule (rules.centeredClicks.points) landed on its
+// control. Every control is scaled to one box and each click drawn at its
+// offset from the centre in half-widths and half-heights; the exact-centre
+// clicks are one red dot sized by their count, the others grey dots. Inline
+// SVG, no external asset. Only numbers and fixed words reach it, escaped all
+// the same; a point whose u or v is not a finite number is skipped.
+export function renderClickPicture(cc, limits) {
+  if (!cc || cc.state !== 'ok' || !(cc.of >= 1) || !Array.isArray(cc.points)) return '';
+  const BW = 150, BH = 60, PAD = 14, W = 520, H = BH + 2 * PAD + 22;
+  const cx = PAD + BW / 2, cy = PAD + BH / 2, tx = PAD + BW + 16;
+  const n = (v) => esc(String(v));
+  const unit = (v) => Math.max(-1, Math.min(1, v));
+  const dots = cc.points
+    .filter((p) => p && p.exact !== true && Number.isFinite(p.u) && Number.isFinite(p.v))
+    .map((p) => `<circle cx="${(cx + unit(p.u) * BW / 2).toFixed(1)}" cy="${(cy + unit(p.v) * BH / 2).toFixed(1)}" r="3.2" fill="#455a64" fill-opacity="0.75"/>`)
+    .join('');
+  const exact = Number.isFinite(cc.count) ? cc.count : 0;
+  const centre = exact > 0 ? `<circle cx="${cx}" cy="${cy}" r="${4 + Math.min(6, exact)}" fill="#d32f2f" fill-opacity="0.85"/>` : '';
+  const drawn = cc.points.length < cc.of ? `; the first ${n(cc.points.length)} drawn` : '';
+  const caption = `${n(cc.of)} qualifying clicks, each control scaled to this box${drawn}`;
+  return `<figure class="click-picture">
+  <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${caption}">
+    <rect x="${PAD}" y="${PAD}" width="${BW}" height="${BH}" rx="6" fill="#fff" stroke="#90a4ae"/>
+    <line x1="${cx}" y1="${PAD}" x2="${cx}" y2="${PAD + BH}" stroke="#cfd8dc" stroke-dasharray="3 3"/>
+    <line x1="${PAD}" y1="${cy}" x2="${PAD + BW}" y2="${cy}" stroke="#cfd8dc" stroke-dasharray="3 3"/>
+    ${dots}${centre}
+    <text x="${tx}" y="${PAD + 14}" font-size="11" fill="#333">where each click landed on its control</text>
+    <text x="${tx}" y="${PAD + 30}" font-size="10" fill="#666">${caption}</text>
+    <circle cx="${tx + 5}" cy="${PAD + 44}" r="5" fill="#d32f2f" fill-opacity="0.85"/><text x="${tx + 15}" y="${PAD + 48}" font-size="10" fill="#b71c1c">${n(exact)} at the exact centre (within ${n(limits.centerExactPx)} px)</text>
+    <circle cx="${tx + 5}" cy="${PAD + 60}" r="3.2" fill="#455a64" fill-opacity="0.75"/><text x="${tx + 15}" y="${PAD + 64}" font-size="10" fill="#666">${n(cc.of - exact)} elsewhere</text>
+  </svg></figure>`;
+}
+
 // The session's cursor dynamics: the pointer verdict first — the word, then
 // the tells that decided it (a tell at the highly-suspicious level in
 // bold), or why the session is not assessed, or what a clean session was
@@ -1408,13 +1445,16 @@ function renderCursorSection(s, participant, replayShownExternally) {
     </table>
     </details>`;
   }
+  // The click picture (renderClickPicture) needs the cursor's rules, which
+  // exist only in the ok state.
+  const picture = ca.state === 'ok' ? renderClickPicture(ca.cursor.rules.centeredClicks, ca.limits) : '';
   // Only a session with a recording gets a link to its replay, and only in
   // the CLI report: the analyze page shows the replay in its card beside the
   // report (replayShownExternally), and the section says nothing of it.
   const hasRecording = !!(participant && participant.replay && participant.replay.recording);
   const replayLink = !hasRecording || replayShownExternally ? ''
     : `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>`;
-  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${verdict}${details}${replayLink}</div>`;
+  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${verdict}${picture}${details}${replayLink}</div>`;
 }
 
 // Renders the participant's screenout reason as a left-bordered pull-quote.
