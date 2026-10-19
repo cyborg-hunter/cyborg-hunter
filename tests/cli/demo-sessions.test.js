@@ -2,7 +2,7 @@
 // say (tiers, scores, the pointer verdict line), and the files carry nothing
 // personal: the only free text is the tour's own copy, and the one paste
 // whose text was removed stays empty.
-import { test, describe, before, after } from 'node:test';
+import { it as test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
