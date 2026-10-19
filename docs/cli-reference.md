@@ -189,8 +189,8 @@ One row per participant:
 | `cursorReason` | Why the session's pointer verdict is `not assessed`: `not collected` (with `(recorded with <version>)` when the data names one), `no cursor stream (touch device)`, `no cursor stream (no pointer events)`, `device facts and click provenance not recorded (library before 0.14)`, or `only K of N first pointer clicks had a known position before them (the no-path rule needs 4)` (`click` when N is 1); empty when the session is assessed, including a session with no cursor stream that its automation flag makes highly suspicious (since 0.14, like every `cursor…` column) |
 | `cursorVerdict` | The pointer verdict: `clean`, `suspicious`, `highly suspicious` or `not assessed` |
 | `cursorTells` | The tells that decided a suspicious or highly suspicious verdict, `; `-separated: `automation flag`, `untrusted clicks n/N`, `clicks without a path n/N`, `trials clicked without movement n/N`, `centered clicks n/N`; empty otherwise |
-| `cursorChecksRecorded` | How many of the three browser-reported checks the data supports: 3 (a cursor stream and the session's device facts), 1 (device facts and no cursor stream: the automation flag only), 0 (no device facts: recorded before 0.14) |
-| `cursorFactCount` | Browser-reported checks that fired, 0–3 (one per check, not per event); empty without device facts |
+| `cursorChecksRecorded` | How many of the four browser-reported checks the data supports: 4 or 3 (a cursor stream and the session's device facts, with or without the software-renderer fact, recorded since 0.17), 2 or 1 (device facts and no cursor stream: the automation flag, and the software renderer when recorded), 0 (no device facts: recorded before 0.14) |
+| `cursorFactCount` | Browser-reported checks that fired, 0–3 (one per check, not per event): the automation flag, clicks the page's own scripts dispatched, trials clicked without pointer movement. The software renderer is shown, not counted. Empty without device facts |
 | `cursorWebdriver` | `YES` / `no`: the automation flag set by the browser; empty without device facts |
 | `cursorUntrustedClicks` | Clicks the page's own scripts dispatched; empty unless the session has a cursor stream and device facts |
 | `cursorZeroMoveTrials` | Trials clicked without pointer movement, as `count/trials`; empty unless the session has a cursor stream and device facts |
@@ -204,8 +204,10 @@ One row per participant:
 | `cursorMovesPerTrialMedian` | Median number of move samples per trial (depends on the sampling interval) |
 | `cursorEfficiencyMedian` | Median efficiency per movement (displacement over path length, 1 for a straight line), three decimals |
 | `cursorMaxDeviationPxMedian` | Median of each movement's largest distance from the straight line between its ends, in px, one decimal |
-| `cursorCenteredClicks` | Clicks at the exact centre of the control, as `count/qualifying clicks`, read from the session recording (see [`cursor-limits.json`](#cursor-limitsjson)); `touch` for a touch recording, which is not judged; empty without a recording |
-| `cursorCenteredNear` | Qualifying clicks within 5 px of the control's centre, as `count/qualifying clicks`; reported, not judged; `touch` for a touch recording; empty without a recording |
+| `cursorCenteredClicks` | Clicks at the exact centre of the control, as `count/qualifying clicks`, read from the session recording (see [`cursor-limits.json`](#cursor-limitsjson)); `touch` for a touch recording, which is not judged; empty without a recording, and for a session without a cursor stream even with one |
+| `cursorCenteredNear` | Qualifying clicks within 5 px of the control's centre, as `count/qualifying clicks`; reported, not judged; `touch` for a touch recording; empty without a recording, and for a session without a cursor stream even with one |
+| `cursorSoftwareRenderer` | `YES (<family>)` when the browser drew without a graphics card (`swiftshader`, `llvmpipe`, `softpipe`, `microsoft-basic-render`, `mesa-offscreen`), `no`, `no WebGL`, or empty (not recorded: data before 0.17, the switch off, or no answer). A device fact: not a tell, not in `cursorFactCount` |
+| `deviceMasking` | The device-masking rules that fired, space-separated: `R1` (a pixel ratio no browser produces), `R2` (a pixel ratio that stays fixed through a page zoom; not applied to Safari), `R3a` (a window larger than the screen it reports by more than 3% + 20 px; not applied to Firefox, or with a second monitor in the log). Empty when none fired or the session has no window log. Read from `session.windowPositions` and the recording's browser line; nothing new is collected. Not evidence of AI use ([interpreting-signals.md](interpreting-signals.md#signals-that-never-score)) |
 | ... | (See the actual file for the full column set; the schema may grow.) |
 
 > Note: the early per-participant columns are camelCase (`totalPasteEvents`, …)
@@ -268,18 +270,23 @@ order and joined by ", " (`"0.6.1, 0.14.0"`; null when the data names none),
 so a report rebuilt by a later CLI shows which constants decided it. Each
 constant comes with a sentence saying what it does (for example,
 `movementGapMs`, 400: two move samples further apart belong to different
-movements). The cursor section prints neither the constants nor each
-session's sample interval and coordinates (viewport or page), which are in
-`summary.csv` (`cursorSampleIntervalMs`, `cursorCoordinates`).
-Three constants set the verdict's thresholds: `minClicksForVerdict`, 4 first
+movements). The cursor section prints a few of them where a sentence needs
+one (the 20% in a clean session's sentence, the 4 in a too-few-clicks
+reason, the 1.5 px and 5 px of the exact- and near-centre counts), and neither each
+session's sample interval nor its coordinates (viewport or page), which are
+in `summary.csv` (`cursorSampleIntervalMs`, `cursorCoordinates`).
+Five constants set the verdict's thresholds: `minClicksForVerdict`, 4 first
 clicks with a known position before the no-path tell is judged, and 4 first
 clicks of any kind before trials clicked without pointer movement is;
-`shareSuspicious`, 0.2, the share of first pointer clicks with a known
-position or of trials at or above which a pattern tell makes the session
-suspicious; and `shareHighlySuspicious`, 0.5, the share
-at or above which a pattern tell, or clicks the page's own scripts dispatched,
-make it highly suspicious. All three are provisional, set from a small number
-of sessions.
+`minClicksForCentered`, 8 qualifying clicks before the centered-clicks tell
+is judged; `shareSuspicious`, 0.2, the share at or above which clicks
+without a path, trials clicked without pointer movement or clicks at the
+exact centre make the session suspicious; `shareHighlySuspicious`, 0.5, the
+share at or above which clicks without a path, trials clicked without
+pointer movement or clicks the page's own scripts dispatched make it highly
+suspicious; and `shareCenteredHighlySuspicious`, 0.9, the share of clicks
+at the exact centre that makes it highly suspicious. All five are
+provisional.
 `sampleIntervalMs` is the median of the sessions' own median intervals between
 move samples, over the `n` sessions that have one, and `withDeviceFacts`
 counts the sessions with device facts. The run prints "Pointer verdicts: H
@@ -288,20 +295,30 @@ recorded without device facts)", and the file's `sessions.verdicts` holds the
 same four counts; T is `total` and K is `total` minus `withDeviceFacts`.
 
 The centered-clicks rule reads the session recording, so it needs session
-replay on and the recording's file found; the report shows it for a session
-with a cursor stream. It counts qualifying clicks: pointer clicks (a mouse
-press at most 1 s before, `pressWindowMs`) on a button, link, input, select,
-textarea or label, inside the control's box. The control must be at least
-16 px on its shorter side and at most 800 px on its longer side
-(`minTargetPx`, `maxTargetPx`), and the page not pinch-zoomed. A second click
-at the same point within 500 ms (`repeatWindowMs`) counts once. A click
-within 1.5 px of the control's centre on both axes (`centerExactPx`) is an
-exact-centre click: browser automation clicks there. From 8 qualifying clicks
+replay on and the recording's file found. It reads the whole recording:
+`phaseScope` does not apply to it. The report shows its result only for a
+session with a cursor stream (the monitor's mouse track, which
+`collectForPostHoc.rawMouseTrack: false` turns off), even when the session
+has a recording. A session recorded before 0.14 shows the count but is not
+assessed. The rule counts qualifying clicks: pointer clicks (a mouse press
+or release at most 1 s before, `pressWindowMs`) on a button, link, input,
+select, textarea or label, inside the control's box. The control is the
+element the click landed on, read by its tag, so a click on the text or
+icon inside a button is not counted. The control must be at least 16 px on
+its shorter side and at most 800 px on its longer side (`minTargetPx`,
+`maxTargetPx`). A click made with the page pinch-zoomed is left out, and so
+is a click whose zoom record (`camera`) is present but unreadable; a click
+without one reads as unzoomed. A second click at the same point within
+500 ms (`repeatWindowMs`) counts once. A click within 1.5 px of the
+control's centre on both axes (`centerExactPx`) is an exact-centre click:
+browser automation clicks there. From 8 qualifying clicks
 (`minClicksForCentered`), an exact-centre share of 0.2 or more
 (`shareSuspicious`) makes the session suspicious, and 0.9 or more
 (`shareCenteredHighlySuspicious`) highly suspicious. A click within 5 px of
-the centre (`centerNearPx`) counts in the second tier, near the centre. That
-tier is reported, not judged. A recording with touch events is not judged.
+the centre (`centerNearPx`, straight-line distance) counts in a second
+tier, near the centre. That tier is reported, not judged. A recording with
+touch events is not judged. Voice-control and screen-reader tools can also
+click the centre of a control, so watch the replay before excluding anyone.
 
 ### `event-log.csv`
 
@@ -343,7 +360,7 @@ signals:
 
 Under the default weights no other signal affects the score; each of them,
 `cursor` (the pointer verdict's level, since 0.14) among them, can be given a weight
-(below). Hard-trigger status, AI-extension detections, keyboard shortcuts,
+(below), as can the two device facts `softwareRenderer` and `deviceMasking` (since 0.17). Hard-trigger status, AI-extension detections, keyboard shortcuts,
 layout shifts, zoom changes, edge-exit patterns, synthetic insertions, foreign
 inputs, and the pointer verdict are all still surfaced — in the per-participant detail panes and the one-line triage
 reason — but they do not change the number. (Earlier versions added a `+100`

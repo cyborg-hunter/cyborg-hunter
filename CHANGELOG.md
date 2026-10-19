@@ -3,6 +3,43 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+Pointer and device checks. Collected data changes (one device fact, read
+just after the session starts) and reports change (one new pointer tell, a
+device line, a click picture, three new `summary.csv` columns): read
+[docs/upgrading.md](docs/upgrading.md).
+
+### Added
+- The centered-clicks rule in the pointer verdict, read from the session
+  recording: the share of pointer clicks on a control that land within
+  1.5 px of its centre (browser automation clicks the centre). Suspicious
+  from 0.2, highly suspicious from 0.9, judged from 8 qualifying clicks;
+  touch recordings are not judged. A near tier (within 5 px) is reported,
+  not judged. `cursorCenteredClicks` is now filled; `cursorCenteredNear` is
+  new.
+- The software-renderer device fact: whether the browser draws without a
+  graphics card (only the software family's name, such as `swiftshader`, or
+  `none` without WebGL; never the graphics hardware's name), read once when
+  the browser is next idle, within about 1 s of the session start.
+  `signals.softwareRenderer` (default on) turns it off. Shown in the cursor
+  section and in `cursorSoftwareRenderer`; it does not change the pointer
+  verdict.
+- Device masking in the report, from the window log the monitor already
+  keeps: a pixel ratio no browser produces (R1), a pixel ratio that stays
+  fixed through a page zoom (R2, not applied to Safari), a window larger
+  than the screen it reports (R3a, not applied to Firefox). The browser is
+  read from the session recording when there is one. Column
+  `deviceMasking`. Not evidence of AI use.
+- A device line at the top of the cursor section (graphics, screen facts,
+  automation flag, kind of pointer) and, under the verdict, a picture of
+  where each qualifying click landed on its control.
+- `scoreWeights` keys `softwareRenderer` and `deviceMasking` (default 0).
+
+### Changed
+- `cursorChecksRecorded` counts the software-renderer fact: 3–4 with a
+  cursor stream, 1–2 without one.
+
 ## [0.16.0] — 2026-10-15
 
 Hardening before an institutional review: what is collected, kept and sent is

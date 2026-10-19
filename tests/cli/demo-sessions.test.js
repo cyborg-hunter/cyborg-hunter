@@ -150,4 +150,22 @@ describe('examples/demo-sessions', () => {
     assert.equal(paste.text, '');
     assert.equal(paste.pastedLength, 49);
   });
+
+  test('device facts: no masking and no renderer recorded; the device lines and the click pictures', () => {
+    const [h, ...r] = readFileSync(join(out, 'summary.csv'), 'utf8').trim().split('\n');
+    const H = h.split(',');
+    const col = (line, name) => line.split(',')[H.indexOf(name)];
+    const byId = Object.fromEntries(r.map((l) => [col(l, 'participantId'), l]));
+    assert.deepEqual(ORDER.map((id) => col(byId[id], 'deviceMasking')), ['', '', '', '']);
+    assert.deepEqual(ORDER.map((id) => col(byId[id], 'cursorSoftwareRenderer')), ['', '', '', '']);
+    const html = readFileSync(join(out, 'index.html'), 'utf8');
+    const count = (s) => html.split(s).length - 1;
+    const line = (rest) => `<p class="muted note device-line">device: graphics card not recorded (library before 0.17) · screen facts agree · ${rest}</p>`;
+    assert.equal(count(line('automation flag off · mouse or trackpad')), 2);   // DEMO-bsq6, DEMO-681w: device facts since 0.14
+    assert.equal(count(line('automation flag not recorded')), 2);              // DEMO-9mop, DEMO-a3f3: recorded before 0.14
+    assert.equal(count('<b class="device-flag">'), 0);
+    assert.equal(count('<figure class="click-picture">'), 3);                  // the three sessions with a recording
+    assert.match(html, />8 at the exact centre \(within 1\.5 px\)</);           // DEMO-bsq6
+    assert.ok(html.includes('<figcaption><b>Where each click landed on its control.</b> 11 qualifying clicks, each control scaled to this box.</figcaption>'));
+  });
 });

@@ -159,8 +159,16 @@ names the switch that turns it down.
   (`collectForPostHoc.windowPositionLog`, default `true`). With the
   browser and OS version the recorder stores, this comes close to singling
   out a device; treat it as device information when you share data.
-- **Device facts**: touch points, coarse pointer and the browser's
-  automation flag (`navigator.webdriver`), once per session. No switch.
+- **Device facts**, once per session: touch points, coarse pointer, the
+  browser's automation flag (`navigator.webdriver`), and, since 0.17,
+  whether the browser draws without a graphics card
+  (`session.device.softwareRenderer`). For that last fact only the family
+  name of a software renderer is kept (such as `swiftshader`), never the
+  name of the graphics hardware: the value is `false` (a graphics card),
+  `'none'` (no WebGL), the family name, or `null` (the switch off, or the
+  browser did not answer). It is read when the browser is next idle,
+  within about 1 s of the session start. `signals.softwareRenderer`
+  (default on) turns it off; the other facts have no switch.
 - **Browser extensions**: the names of known AI extensions found on the
   page, and the tag names of custom elements any extension adds to
   `<body>`, which can reveal installed extensions.

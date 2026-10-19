@@ -24,6 +24,7 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 | Zoom changes | Browser | Inferred from `devicePixelRatio` change | Diagnostic |
 | DOM mutations | Browser | `MutationObserver` for injected custom elements | Skips known-benign extension tags |
 | DevTools open | Browser | Inferred from the DevTools hotkeys above (no separate window-size heuristic) | Recorded under `keyboardShortcuts`; the `devToolsEvents` array is reserved and currently unpopulated |
+| Software renderer | Browser | The WebGL renderer's name, read once when the browser is next idle after `startSession` (within about 1 s). Only a software renderer's family name is kept (`swiftshader`, `llvmpipe`, `softpipe`, `microsoft-basic-render`, `mesa-offscreen`), never the graphics hardware's name | Stored as `session.device.softwareRenderer` since 0.17. Software rendering is typical of cloud machines that run browser agents and of headless browsers; a computer whose graphics driver the browser blocks reads the same. A device fact: never scored, never a tell |
 
 ## Pointer verdict
 
@@ -35,8 +36,11 @@ One verdict per session (`clean`, `suspicious`, `highly suspicious` or `not asse
 | Clicks the page's own scripts dispatched | On every recorded `click`, `down` and `up` sample: `trusted` (the event's `isTrusted`) and `detail` (0 for keyboard and assistive activation), and `pointerType` when the browser gives one. The report counts the clicks whose `trusted` is false, whatever their `detail` | 0.14 |
 | Trials clicked without pointer movement | Nothing beyond the mouse track. The report sorts each click by what the browser recorded, in this order: `trusted` false is a click the page's own scripts dispatched; else `detail` 0 is keyboard activation; else `pointerType` `touch` is a touch tap, counted apart and never a pointer click; any other click is a pointer click. A trial counts when it has no `move` sample and at least one pointer click lands 20 px (`samePositionPx`) or more from the pointer's last known position, or when no position is known. The session's `device` leaves touch devices out | 0.14 |
 | Clicks that arrived without a path | Nothing beyond the mouse track: a first pointer click (`detail` 1, or none recorded) whose movement has at most one move sample and starts 20 px or more from the last known position, judged only when the click has a known position before it | 0.14 |
+| Clicks at the exact centre of the control | Nothing new: the session recording's clicks, each with the on-screen rectangle of the element it landed on. The report counts qualifying clicks (pointer clicks on a button, link, input, select, textarea or label, inside its box) and those within 1.5 px of the box's centre on both axes. From 8 qualifying clicks, a share of 0.2 or more makes the session suspicious and 0.9 or more highly suspicious; touch recordings are not judged. Clicks within 5 px of the centre are counted as a near tier, reported but not judged: agents that aim from screenshots land there, but too few human sessions have been measured to set a threshold for it. Definition: [cli-reference.md](cli-reference.md#cursor-limitsjson) | 0.17 |
 
-Sessions recorded before 0.14 carry no `device` object and no click provenance, so the report shows the three browser-reported checks as "not recorded" and the session as not assessed.
+Sessions recorded before 0.14 carry no `device` object and no click provenance, so the report shows the browser-reported checks as "not recorded" and the session as not assessed, even when its recording gives a count of exact-centre clicks.
+
+**Device facts.** Two facts are shown in the cursor section's device line and never change the verdict. *Software renderer*: the WebGL renderer's family name, read once when the browser is next idle, within about 1 s of the session start (`session.device.softwareRenderer`, `signals.softwareRenderer`, since 0.17); software rendering is typical of cloud machines that run browser agents and of headless browsers, and a computer whose graphics driver the browser blocks reads the same. *Device masking*: contradictions in the window log (`session.windowPositions`) that fingerprint-masking tools leave (R1, R2, R3a; R3b as corroboration), read by the report with nothing new collected (since 0.17). Both have a `scoreWeights` key at weight 0 ([interpreting-signals.md](interpreting-signals.md#signals-that-never-score)).
 
 ## Two-tier scoring
 
@@ -142,7 +146,7 @@ DevTools detector.
 
 The full set of toggles (matching `PRESETS.standard.signals` in `constants.js`):
 
-`paste`, `copy`, `drop`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `keystrokeDynamics`.
+`paste`, `copy`, `drop`, `tabAway`, `typingSpeed`, `devTools`, `aiExtensions`, `sidebarGap`, `keyboardShortcuts`, `mouseTracking`, `idleGaps`, `windowPosition`, `clipboardManager`, `softwareRenderer`, `keystrokeDynamics`.
 
 What is stored, beside which signals run, is set by `collectForPostHoc`: `pasteDropContent` (pasted and dropped text, default on), `foreignInputContent` (characters typed outside the experiment container, default on), `rawMouseTrack` (default on), `windowPositionLog` (default on), `fullKeystrokeTimestamps` and `elementTrace` (default off). Each takes `true` or `false`; any other value turns it off, with a warning. A misspelt key in `collectForPostHoc`, `signals` or `thresholds` is reported with a console warning.
 

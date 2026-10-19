@@ -33,6 +33,8 @@ test('the sample shows the pointer verdict, its tells, the details, the tile, th
   const section = frame.locator('#p-DEMO-bsq6 .cursor-section');
   await expect(section.locator('.verdict-badge')).toHaveText('highly suspicious');
   await expect(section.locator('.cursor-tells li')).toHaveText(['clicks that arrived without a path: 12 of 12 first clicks with a known position (100%) (paste, tabaway, autotype, guard-entry, guard)', 'clicks at the exact centre of the control: 8 of 11 (72%) (baseline, paste, tabaway, autotype, guard-entry, guard)']);
+  await expect(section.locator('.device-line')).toHaveText('device: graphics card not recorded (library before 0.17) · screen facts agree · automation flag off · mouse or trackpad');
+  await expect(section.locator('figure.click-picture')).toContainText('8 at the exact centre (within 1.5 px)');
   const details = section.locator('details.cursor-details');
   await expect(details).not.toHaveAttribute('open', '');
   await details.locator('summary').click();

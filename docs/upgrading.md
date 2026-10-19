@@ -5,6 +5,43 @@ What each release changes in **collected data**, **configuration** and
 the CLI on data collected with an older version. The complete change list is
 in [CHANGELOG.md](../CHANGELOG.md).
 
+## Unreleased — from 0.16
+
+This release changes collected data (one device fact, read just after the
+session starts) and reports (one new pointer tell, a device line, three new
+`summary.csv` columns). Read [Privacy model](using-cyborg-hunter.md#privacy-model)
+before launching a study with it; `signals.softwareRenderer: false` turns
+the new fact off.
+
+### What changes for newly collected data
+
+- `session.device.softwareRenderer`: `false` (a graphics card), `'none'`
+  (no WebGL), a software renderer's family name (`swiftshader`,
+  `llvmpipe`, `softpipe`, `microsoft-basic-render`, `mesa-offscreen`), or
+  `null` (the switch off, or the browser did not answer). Read once, when
+  the browser is next idle, within about 1 s of the session start.
+- Under the one-line setup, the device facts travel with the first segment
+  saved. When the first trial or page ends before the renderer is read,
+  the renderer is recorded as not checked (`null`).
+
+### What changes in reports
+
+- A new pointer tell, centered clicks, read from the session recording: it
+  can move a session's pointer verdict, and its score only if
+  `scoreWeights.cursor` is set.
+- The cursor section opens with a device line (graphics, screen facts,
+  automation flag, kind of pointer) and shows where each qualifying click
+  landed on its control. The software renderer and device masking are
+  device facts: at the default weights they change neither the pointer
+  verdict nor the score (`scoreWeights.softwareRenderer`,
+  `scoreWeights.deviceMasking`, both 0).
+- `summary.csv` gains `cursorCenteredNear`, `cursorSoftwareRenderer` and
+  `deviceMasking` after the existing columns; `cursorCenteredClicks` is now
+  filled.
+- Data recorded before 0.17 shows the software renderer as not recorded.
+  Device masking reads the window log (`collectForPostHoc.windowPositionLog`,
+  on by default); a session without one shows "screen facts not recorded".
+
 ## 0.16.0 — from 0.15
 
 This release changes all three: collected data (replay is on by default),

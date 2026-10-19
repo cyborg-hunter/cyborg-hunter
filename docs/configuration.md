@@ -127,6 +127,8 @@ and `scoring.softScoreThreshold`).
 | `zoom` | browser zoom changes | 0 |
 | `edgeExits` | mouse edge-exit patterns | 0 |
 | `cursor` | the pointer verdict's level: suspicious 1, highly suspicious 2 (clean and not assessed 0). Ranking within a tier only; the tier is unchanged. Since 0.14 ([interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers)) | 0 |
+| `softwareRenderer` | 1 when the browser drew without a graphics card (a device fact, not a tell). Ranking within a tier only; the tier and the pointer verdict are unchanged. Since 0.17 | 0 |
+| `deviceMasking` | 1 when the window log shows device masking (R1, R2 or R3a); not evidence of AI use. Ranking within a tier only. Since 0.17 | 0 |
 
 Notes:
 
