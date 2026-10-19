@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
+import { analyzeCursor } from '../../src/cli/analyzers/cursor.js';
 
 describe('renderIndexHtml (pure core)', () => {
   it('returns an HTML string with the injected replay client', async () => {
@@ -53,5 +54,51 @@ describe('renderIndexHtml (pure core)', () => {
   it('module source has no fs/path imports', () => {
     const src = readFileSync(new URL('../../src/cli/renderers/html-index-core.js', import.meta.url), 'utf8');
     assert.doesNotMatch(src, /from ['"](node:)?(fs|path)['"]/);
+  });
+});
+
+// The cursor section's centered-clicks rows, from a real analysis of a
+// desktop session of one trial (a short path, then a click), with or without
+// a session recording.
+describe('the cursor section: clicks at the exact centre of the control', () => {
+  const mv = (x, y, t) => ({ x, y, cx: x, cy: y, t, type: 'move' });
+  const session = (recording) => ({
+    participantId: 'p1',
+    trials: [{
+      trialId: 'q1', startTime: 1000, duration_ms: 5000, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], libraryVersion: '0.16.0',
+      mouseEvents: [mv(100, 100, 0), mv(150, 130, 50), mv(210, 150, 105), { ...mv(210, 150, 150), type: 'click', trusted: true, detail: 1, pointerType: 'mouse' }]
+    }],
+    session: { device: { maxTouchPoints: 0, coarsePointer: false, webdriver: false } },
+    ...(recording ? { replay: { recording } } : {})
+  });
+  // Nine pointer clicks at the centre (150, 120) of a 100 × 40 button, each
+  // pressed 80 ms before, in a v2 recording of one segment.
+  const button = { x: 100, y: 100, w: 100, h: 40 };
+  const centreClicks = Array.from({ length: 9 }, (_, i) => [
+    { type: 'mouse.down', t: 920 + i * 2000, x: 150, y: 120 },
+    { type: 'mouse.click', t: 1000 + i * 2000, x: 150, y: 120, anchor: { tag: 'button', rect: button } }
+  ]).flat();
+  const rec = (events) => ({ schema_version: 2, segments: [{ label: 'q1', events }] });
+  // The rules table of the session's cursor section.
+  const rulesOf = async (participant) => {
+    const triage = [{ participantId: 'p1', hardTriggered: false, softFlagged: false, score: 0, summary: { cursorAnalysis: analyzeCursor([participant])[0] } }];
+    const html = await renderIndexHtml([], triage, [participant],
+      { outputDir: '/unused', participantIdField: 'participantId' }, false, { replayClientSrc: '' });
+    return html.match(/<caption>rules and movement shape<\/caption>([\s\S]*?)<\/table>/)[1];
+  };
+
+  it('a recording gives the exact-centre row, then the near row, reported, not judged', async () => {
+    const rules = await rulesOf(session(rec(centreClicks)));
+    assert.match(rules, /clicks after a pointer jump<\/th>[\s\S]*<tr><th>clicks at the exact centre of the control<\/th><td>9 of 9 qualifying clicks \(q1\)<\/td><\/tr>\s*<tr><th>clicks within 5 px of the centre<\/th><td>9 of 9 <span class="muted">\(reported, not judged\)<\/span><\/td><\/tr>/);
+  });
+  it('a touch recording is not judged and has no near row', async () => {
+    const rules = await rulesOf(session(rec([{ type: 'touch.start', t: 10 }, ...centreClicks])));
+    assert.match(rules, /<tr><th>clicks at the exact centre of the control<\/th><td>not judged \(touch recording\)<\/td><\/tr>/);
+    assert.doesNotMatch(rules, /clicks within 5 px/);
+  });
+  it('without a recording, the row says why and there is no near row', async () => {
+    const rules = await rulesOf(session(null));
+    assert.match(rules, /<tr><th>clicks at the exact centre of the control<\/th><td>no recording \(session replay off, or its file not found: see the replay section\)<\/td><\/tr>/);
+    assert.doesNotMatch(rules, /clicks within 5 px/);
   });
 });

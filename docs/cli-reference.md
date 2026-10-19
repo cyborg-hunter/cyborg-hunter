@@ -188,7 +188,7 @@ One row per participant:
 | `honeypot_ai_report` | Free-text the participant typed into the honeypot's "what did you use?" box (empty if none) |
 | `cursorReason` | Why the session's pointer verdict is `not assessed`: `not collected` (with `(recorded with <version>)` when the data names one), `no cursor stream (touch device)`, `no cursor stream (no pointer events)`, `device facts and click provenance not recorded (library before 0.14)`, or `only K of N first pointer clicks had a known position before them (the no-path rule needs 4)` (`click` when N is 1); empty when the session is assessed, including a session with no cursor stream that its automation flag makes highly suspicious (since 0.14, like every `cursor…` column) |
 | `cursorVerdict` | The pointer verdict: `clean`, `suspicious`, `highly suspicious` or `not assessed` |
-| `cursorTells` | The tells that decided a suspicious or highly suspicious verdict, `; `-separated: `automation flag`, `untrusted clicks n/N`, `clicks without a path n/N`, `trials clicked without movement n/N`; empty otherwise |
+| `cursorTells` | The tells that decided a suspicious or highly suspicious verdict, `; `-separated: `automation flag`, `untrusted clicks n/N`, `clicks without a path n/N`, `trials clicked without movement n/N`, `centered clicks n/N`; empty otherwise |
 | `cursorChecksRecorded` | How many of the three browser-reported checks the data supports: 3 (a cursor stream and the session's device facts), 1 (device facts and no cursor stream: the automation flag only), 0 (no device facts: recorded before 0.14) |
 | `cursorFactCount` | Browser-reported checks that fired, 0–3 (one per check, not per event); empty without device facts |
 | `cursorWebdriver` | `YES` / `no`: the automation flag set by the browser; empty without device facts |
@@ -204,7 +204,8 @@ One row per participant:
 | `cursorMovesPerTrialMedian` | Median number of move samples per trial (depends on the sampling interval) |
 | `cursorEfficiencyMedian` | Median efficiency per movement (displacement over path length, 1 for a straight line), three decimals |
 | `cursorMaxDeviationPxMedian` | Median of each movement's largest distance from the straight line between its ends, in px, one decimal |
-| `cursorCenteredClicks` | Reserved for clicks at the centre of their target, read from a replay recording by a later release; empty |
+| `cursorCenteredClicks` | Clicks at the exact centre of the control, as `count/qualifying clicks`, read from the session recording (see [`cursor-limits.json`](#cursor-limitsjson)); `touch` for a touch recording, which is not judged; empty without a recording |
+| `cursorCenteredNear` | Qualifying clicks within 5 px of the control's centre, as `count/qualifying clicks`; reported, not judged; `touch` for a touch recording; empty without a recording |
 | ... | (See the actual file for the full column set; the schema may grow.) |
 
 > Note: the early per-participant columns are camelCase (`totalPasteEvents`, …)
@@ -285,6 +286,22 @@ counts the sessions with device facts. The run prints "Pointer verdicts: H
 highly suspicious, S suspicious, C clean, U not assessed (T sessions; K
 recorded without device facts)", and the file's `sessions.verdicts` holds the
 same four counts; T is `total` and K is `total` minus `withDeviceFacts`.
+
+The centered-clicks rule reads the session recording, so it needs session
+replay on and the recording's file found; the report shows it for a session
+with a cursor stream. It counts qualifying clicks: pointer clicks (a mouse
+press at most 1 s before, `pressWindowMs`) on a button, link, input, select,
+textarea or label, inside the control's box. The control must be at least
+16 px on its shorter side and at most 800 px on its longer side
+(`minTargetPx`, `maxTargetPx`), and the page not pinch-zoomed. A second click
+at the same point within 500 ms (`repeatWindowMs`) counts once. A click
+within 1.5 px of the control's centre on both axes (`centerExactPx`) is an
+exact-centre click: browser automation clicks there. From 8 qualifying clicks
+(`minClicksForCentered`), an exact-centre share of 0.2 or more
+(`shareSuspicious`) makes the session suspicious, and 0.9 or more
+(`shareCenteredHighlySuspicious`) highly suspicious. A click within 5 px of
+the centre (`centerNearPx`) counts in the second tier, near the centre. That
+tier is reported, not judged. A recording with touch events is not judged.
 
 ### `event-log.csv`
 

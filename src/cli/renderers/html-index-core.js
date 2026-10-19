@@ -1362,8 +1362,10 @@ function renderCursorSection(s, participant, replayShownExternally) {
   if (ca.level === -1) {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">${esc(ca.verdictReason)}.</span></p>`;
   } else if (ca.level === 0) {
-    const n = ca.cursor.rules.noPathClicks, z = ca.checks.zeroMoveTrials;
-    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.count} of ${n.of} first clicks with a known position arrived without a path and ${z.count} of ${z.of} trials were clicked without pointer movement, both under ${Math.round(100 * ca.limits.shareSuspicious)}%; no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
+    const n = ca.cursor.rules.noPathClicks, z = ca.checks.zeroMoveTrials, cc = ca.cursor.rules.centeredClicks;
+    // The exact-centre share, when the session has a recording that is not a touch one.
+    const centeredShare = cc && cc.state === 'ok' ? `${esc(String(cc.count))} of ${esc(String(cc.of))} clicks at the exact centre of the control; ` : '';
+    verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.count} of ${n.of} first clicks with a known position arrived without a path and ${z.count} of ${z.of} trials were clicked without pointer movement, both under ${Math.round(100 * ca.limits.shareSuspicious)}%; ${centeredShare}no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
   } else {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">because of:</span></p>
     <ul class="cursor-tells">${ca.tells.map(t => `<li class="tell-${t.level}">${esc(t.text)}${t.trialIds.length ? ` <span class="muted">${ids(t).trim()}</span>` : ''}</li>`).join('')}</ul>`;
@@ -1373,6 +1375,14 @@ function renderCursorSection(s, participant, replayShownExternally) {
     if (ca.level !== -1) details = `<p class="muted note">${esc(ca.cursorReason)}: the other checks could not run.</p>`;
   } else {
     const c = ca.cursor;
+    // Clicks at the exact centre of the control, read from the recording
+    // (null without one): the share is judged, the near tier only reported.
+    const cc = c.rules.centeredClicks;
+    const centeredRow = (body) => `<tr><th>clicks at the exact centre of the control</th><td>${body}</td></tr>`;
+    const centeredRows = !cc ? centeredRow('no recording (session replay off, or its file not found: see the replay section)')
+      : cc.state === 'touch' ? centeredRow('not judged (touch recording)')
+      : `${centeredRow(ofN(cc, ' qualifying clicks'))}
+      <tr><th>clicks within ${esc(String(ca.limits.centerNearPx))} px of the centre</th><td>${esc(String(cc.near.count))} of ${esc(String(cc.near.of))} <span class="muted">(reported, not judged)</span></td></tr>`;
     details = `<details class="cursor-details"><summary>every check, the rules and the movement shape</summary>
     <table class="cursor-table"><caption>browser-reported checks</caption>
       ${check('automation flag set by the browser', ca.checks.webdriver, (w) => w.fired ? 'yes' : 'no')}
@@ -1382,6 +1392,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
     <table class="cursor-table"><caption>rules and movement shape</caption>
       <tr><th>clicks that arrived without a path</th><td>${ofN(c.rules.noPathClicks, ' first clicks with a known position')}</td></tr>
       <tr><th>clicks after a pointer jump</th><td>${ofN(c.rules.jumpClicks, ' first clicks with a known position')}</td></tr>
+      ${centeredRows}
       ${feat('movement duration', c.features.durationMs, ' ms', 0)}
       ${feat('path length', c.features.pathPx, ' px', 0)}
       ${feat('displacement', c.features.displacementPx, ' px', 0)}

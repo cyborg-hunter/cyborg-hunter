@@ -40,6 +40,15 @@ const config = { outputDir: '.', participantIdField: 'participantId' };
 // its automation flag.
 const touch = base('TOUCH', [[mv(5, 5, 0), ck(5, 5, 10)]], { maxTouchPoints: 5, coarsePointer: true, webdriver: false });
 const touchFlag = base('TOUCHFLAG', [[mv(5, 5, 0), ck(5, 5, 10)]], { maxTouchPoints: 5, coarsePointer: true, webdriver: true });
+// Session recordings (v2, minimal): one segment of n pointer clicks at
+// (x, y) on a 100 × 40 button whose centre is (150, 120), each pressed 80 ms
+// before, 2 s apart from time t0.
+const button = { x: 100, y: 100, w: 100, h: 40 };
+const clicksAt = (n, x, y, t0 = 1000) => Array.from({ length: n }, (_, i) => [
+  { type: 'mouse.down', t: t0 + i * 2000 - 80, x, y },
+  { type: 'mouse.click', t: t0 + i * 2000, x, y, anchor: { tag: 'button', rect: button } }
+]).flat();
+const withRecording = (p, id, events) => ({ ...p, participantId: id, replay: { recording: { schema_version: 2, segments: [{ label: 'q1', events }] } } });
 
 function analyze(participants, cfg = config) {
   const summaries = computeSummary(participants, cfg);
@@ -48,6 +57,13 @@ function analyze(participants, cfg = config) {
   const edgeExits = detectEdgeExits(participants, cfg);
   const triage = rankTriage(summaries, edgeExits, cfg);
   return { summaries, cursors, edgeExits, triage };
+}
+
+// One session's summary.csv row, keyed by header.
+function csvRowFor(participant) {
+  const { summaries, triage } = analyze([participant]);
+  const [header, row] = buildSummaryCsv(summaries, triage).trim().split('\n').map(l => l.split(','));
+  return Object.fromEntries(header.map((h, i) => [h, row[i]]));
 }
 
 describe('the cursor weight', () => {
@@ -87,28 +103,41 @@ describe('the triage reason', () => {
 });
 
 describe('summary.csv', () => {
-  const COLS = ['cursorReason', 'cursorVerdict', 'cursorTells', 'cursorChecksRecorded', 'cursorFactCount', 'cursorWebdriver', 'cursorUntrustedClicks', 'cursorZeroMoveTrials', 'cursorJumpClicks', 'cursorNoPathClicks', 'cursorCoordinates', 'cursorStream', 'cursorSampleIntervalMs', 'cursorClicks', 'cursorMovements', 'cursorMovesPerTrialMedian', 'cursorEfficiencyMedian', 'cursorMaxDeviationPxMedian', 'cursorCenteredClicks'];
-  it('keeps every existing header and appends the nineteen cursor columns in order', () => {
+  const COLS = ['cursorReason', 'cursorVerdict', 'cursorTells', 'cursorChecksRecorded', 'cursorFactCount', 'cursorWebdriver', 'cursorUntrustedClicks', 'cursorZeroMoveTrials', 'cursorJumpClicks', 'cursorNoPathClicks', 'cursorCoordinates', 'cursorStream', 'cursorSampleIntervalMs', 'cursorClicks', 'cursorMovements', 'cursorMovesPerTrialMedian', 'cursorEfficiencyMedian', 'cursorMaxDeviationPxMedian', 'cursorCenteredClicks', 'cursorCenteredNear'];
+  it('keeps every existing header and appends the twenty cursor columns in order', () => {
     const { summaries, triage } = analyze([human, driver, scripted, old]);
     const [header, ...rows] = buildSummaryCsv(summaries, triage).trim().split('\n');
     const cols = header.split(',');
     assert.equal(cols.indexOf('meanPathEfficiency') > 0, true);
-    assert.deepEqual(cols.slice(-19), COLS);
+    assert.deepEqual(cols.slice(-20), COLS);
     const byId = Object.fromEntries(rows.map(r => [r.split(',')[0], r.split(',')]));
-    const tail = (id) => byId[id].slice(-19);
+    const tail = (id) => byId[id].slice(-20);
     assert.deepEqual(tail('DRIVER').slice(0, 10), ['', 'highly suspicious', 'automation flag', '3', '2', 'YES', '0', '1/2', '1/1', '1/1']);
     assert.deepEqual(tail('SCRIPTED').slice(0, 10), ['', 'highly suspicious', 'clicks without a path 4/4', '3', '0', 'no', '0', '0/5', '4/4', '4/4']);
     assert.deepEqual(tail('HUMAN').slice(0, 3), ['only 1 of 2 first pointer clicks had a known position before them (the no-path rule needs 4)', 'not assessed', '']);
     assert.deepEqual(tail('OLD').slice(0, 10), ['device facts and click provenance not recorded (library before 0.14)', 'not assessed', '', '0', '', '', '', '', '0/0', '0/0']);
-    assert.equal(tail('HUMAN')[18], '');
+    // No recording: both centered columns are empty.
+    assert.deepEqual(tail('HUMAN').slice(18), ['', '']);
   });
   it('a null session has its reason and empty values', () => {
     const { summaries, triage } = analyze([touch]);
     const row = buildSummaryCsv(summaries, triage).trim().split('\n')[1].split(',');
-    assert.deepEqual(row.slice(-19).slice(0, 3), ['no cursor stream (touch device)', 'not assessed', '']);
-    assert.equal(row.slice(-19)[13], '');
+    assert.deepEqual(row.slice(-20).slice(0, 3), ['no cursor stream (touch device)', 'not assessed', '']);
+    assert.equal(row.slice(-20)[13], '');
     // Only the automation flag is recorded; the other checks and the rules have no value.
-    assert.deepEqual(row.slice(-19).slice(3, 10), ['1', '0', 'no', '', '', '', '']);
+    assert.deepEqual(row.slice(-20).slice(3, 10), ['1', '0', 'no', '', '', '', '']);
+  });
+  it('cursorCenteredClicks and cursorCenteredNear give count/of from the recording rule', () => {
+    // Nine clicks at the centre, three 3 px off it on both axes (4.2 px away:
+    // near, not exact) and two 30 px off (neither).
+    const row = csvRowFor(withRecording(human, 'CENTRED', [...clicksAt(9, 150, 120), ...clicksAt(3, 153, 123, 30000), ...clicksAt(2, 120, 110, 40000)]));
+    assert.equal(row.cursorCenteredClicks, '9/14');
+    assert.equal(row.cursorCenteredNear, '12/14');
+  });
+  it('a touch recording reads touch in both centered columns', () => {
+    const row = csvRowFor(withRecording(human, 'TAPS', [{ type: 'touch.start', t: 10 }, ...clicksAt(9, 150, 120)]));
+    assert.equal(row.cursorCenteredClicks, 'touch');
+    assert.equal(row.cursorCenteredNear, 'touch');
   });
 });
 
@@ -186,6 +215,15 @@ describe('the HTML report', () => {
     assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">0 of 4 first clicks with a known position arrived without a path and 0 of 5 trials were clicked without pointer movement, both under 20%; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/);
     assert.match(html, /<span class="cursor-cell" data-level="0">pointer: clean<\/span>/);
     assert.match(html, /<div class="signal-tile tone-zero"[^>]*>\s*<span class="signal-value">0<\/span>\s*<span class="signal-label">Pointer verdict/);
+  });
+  it('a clean session with a recording adds its exact-centre clicks to what it was judged on', async () => {
+    // As above, with eight clicks 30 px off the button's centre in the recording.
+    const clean = base('CLEAN', [path(0), path(0), path(0), path(0), path(0)], desktop);
+    clean.trials.forEach((t, i) => { t.startTime = 1000 + i * 5100; });
+    const recorded = withRecording(clean, 'CLEANREC', clicksAt(8, 120, 110));
+    const { summaries, triage } = analyze([recorded]);
+    const html = await renderIndexHtml(summaries, triage, [recorded], config, false);
+    assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">0 of 4 first clicks with a known position arrived without a path and 0 of 5 trials were clicked without pointer movement, both under 20%; 0 of 8 clicks at the exact centre of the control; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/);
   });
   it('a clean session with counts under the threshold states them', async () => {
     // Ten trials, 100 ms apart; the fifth is a lone click far from where q4's

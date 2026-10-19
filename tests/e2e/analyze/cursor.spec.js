@@ -23,7 +23,7 @@ test('the sample shows the pointer verdict, its tells, the details, the tile, th
   await expect(frame.locator('option[value="cursor"]')).toHaveText(/Pointer verdict/);
   await expect(frame.locator('.cohort-row[data-pid="DEMO-bsq6"] .cursor-cell')).toHaveText('pointer: highly suspicious');
   await expect(frame.locator('.cohort-row[data-pid="DEMO-681w"] .cursor-cell')).toHaveText('pointer: clean');
-  await expect(frame.locator('#p-DEMO-681w .cursor-verdict .muted')).toHaveText('0 of 22 first clicks with a known position arrived without a path and 0 of 17 trials were clicked without pointer movement, both under 20%; no click the page’s own scripts dispatched; automation flag not set.');
+  await expect(frame.locator('#p-DEMO-681w .cursor-verdict .muted')).toHaveText('0 of 22 first clicks with a known position arrived without a path and 0 of 17 trials were clicked without pointer movement, both under 20%; 0 of 8 clicks at the exact centre of the control; no click the page’s own scripts dispatched; automation flag not set.');
   for (const pid of ['DEMO-9mop', 'DEMO-a3f3']) {
     await expect(frame.locator('.cohort-row[data-pid="' + pid + '"] .cursor-cell')).toHaveText('pointer: not assessed');
     await expect(frame.locator('#p-' + pid + ' .cursor-verdict .muted')).toHaveText('device facts and click provenance not recorded (library before 0.14).');
