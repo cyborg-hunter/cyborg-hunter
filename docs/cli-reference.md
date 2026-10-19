@@ -216,7 +216,7 @@ One row per participant:
 | `typingFieldsJudged` | Text fields with 20 or more key gaps that were judged. Empty when the session's typing rhythm was not recorded: no rhythm summaries (library before 0.17, or `signals.typingRhythm` off), and either no recording that matches a judged trial or a `trace`-tier recording whose judged trials hold typed keys (it does not say which field each key went to). `0` when the rhythm was recorded but no field reached 20 key gaps; a `trace`-tier recording whose judged trials hold no typed keys also gives `0` |
 | `typingFastestMedianMs` | The smallest median gap among the judged fields, in ms (one decimal); empty when none was judged |
 | `typingLowestCv` | The smallest gap variation among the judged fields (three decimals); empty when none was judged |
-| `typingRateSource` | Where the typing rates behind `trialsWithFastTyping` came from: `library` (0.17 on: (edits − 1) per second, from 20 edits), `edit times` (older data saved with keystroke dynamics on: recomputed the same way from the trial's saved edit times), `recording` (older data: recomputed the same way from the trial's edits in a session recording that keeps the page, `dom` tier), `old formula` (older data with neither saved edit times nor recorded edits, which includes every trial of a `trace`-tier recording: the saved rate, edits over the time, from 2 edits). With several, the weakest any judged trial used (`old formula` < `recording` < `edit times` < `library`); with no judged trial, the strongest available. It is the rate's source, not the rhythm's: data recorded with 0.17 and `signals.typingRhythm` off reads `library` here while its typing rhythm is not recorded |
+| `typingRateSource` | Where the typing rates behind `trialsWithFastTyping` came from: `library` (0.17 on: (edits − 1) per second, from 20 edits), `edit times` (older data saved with keystroke dynamics on: recomputed the same way from the trial's saved edit times), `recording` (older data: recomputed the same way from the trial's edits in a session recording that keeps the page, `dom` tier), `old formula` (older data with neither saved edit times nor recorded edits, which includes every trial of a `trace`-tier recording whose edit times were not saved: the saved rate, edits over the time, from 2 edits). With several, the weakest any judged trial used (`old formula` < `recording` < `edit times` < `library`); with no judged trial, the strongest available. It is the rate's source, not the rhythm's: data recorded with 0.17 and `signals.typingRhythm` off can read `library` here while its typing rhythm is not recorded |
 | ... | (See the actual file for the full column set; the schema may grow.) |
 
 > Note: the early per-participant columns are camelCase (`totalPasteEvents`, …)
@@ -363,7 +363,8 @@ no trial matches, is not. The rhythm needs a recording that keeps the page
 carry no field, so the rhythm is not recorded, with the reason
 "the session recording does not say which field each key went to (recorded without the page)".
 The `trace` tier records no edits either, so it recomputes no rate: those
-trials keep their saved rate, marked "old formula". Only a recording that
+trials keep their saved rate, marked "old formula", unless their edit times
+were saved (keystroke dynamics on), which come first. Only a recording that
 keeps the page recomputes the rate and gives a rhythm verdict. The recorder
 writes at most one value change per field per frame, so a rate rebuilt from
 it is a lower bound.

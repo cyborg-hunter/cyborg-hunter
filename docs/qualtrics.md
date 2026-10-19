@@ -262,7 +262,8 @@ reduced" (once per page), and the CLI notes it for that participant:
 
 A page without events adds about 1.3 KB, so at the default cap a quiet survey
 of more than about eight pages (fewer with many events) is written at level
-3: counts and scores stay those of the whole session, and per-page detail,
+3: counts and scores stay those of the whole session, except that a nonzero
+`scoreWeights.typingRhythm` term follows the kept pages, and per-page detail,
 the typing verdict's included, is kept for the newest five pages.
 
 If the session cannot be read, the payload is level 5 with

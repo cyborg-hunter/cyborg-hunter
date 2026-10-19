@@ -64,8 +64,8 @@ dynamics section with six more `summary.csv` columns.
   recording when the recording keeps the page (the recorder's `dom` tier).
   Only such a recording recomputes the rate and gives a rhythm verdict. A
   `trace`-tier recording holds no edits and does not say which field each
-  key went to: such data keeps its saved rate (old formula) and gets no
-  rhythm verdict
+  key went to: such data gets no rhythm verdict, and keeps its saved rate
+  (old formula) unless its edit times were saved
   ([interpreting-signals.md](interpreting-signals.md#typing-dynamics)).
 - `trialsWithFastTyping`, for older data with saved edit times or a `dom`-tier
   recording, judges each trial whose edits were saved or recorded by its
