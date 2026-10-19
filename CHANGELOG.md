@@ -28,9 +28,9 @@ device line, a click picture, three new `summary.csv` columns): read
 - Device masking in the report, from the window log the monitor already
   keeps: a pixel ratio no browser produces (R1), a pixel ratio that stays
   fixed through a page zoom (R2, not applied to Safari), a window larger
-  than the screen it reports (R3a, not applied to Firefox). The browser is
-  read from the session recording when there is one. Column
-  `deviceMasking`. Not evidence of AI use.
+  than the screen it reports (R3a, not applied to Firefox when the browser
+  is known). The browser is read from the session recording when there is
+  one. Column `deviceMasking`. Not evidence of AI use.
 - A device line at the top of the cursor section (graphics, screen facts,
   automation flag, kind of pointer) and, under the verdict, a picture of
   where each qualifying click landed on its control.

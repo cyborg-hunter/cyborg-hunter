@@ -8,10 +8,10 @@ in [CHANGELOG.md](../CHANGELOG.md).
 ## Unreleased — from 0.16
 
 This release changes collected data (one device fact, read just after the
-session starts) and reports (one new pointer tell, a device line, three new
-`summary.csv` columns). Read [Privacy model](using-cyborg-hunter.md#privacy-model)
-before launching a study with it; `signals.softwareRenderer: false` turns
-the new fact off.
+session starts) and reports (one new pointer tell, a device line, a click
+picture, three new `summary.csv` columns). Read
+[Privacy model](using-cyborg-hunter.md#privacy-model) before launching a
+study with it; `signals.softwareRenderer: false` turns the new fact off.
 
 ### What changes for newly collected data
 
