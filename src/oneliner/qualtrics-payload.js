@@ -89,6 +89,11 @@ function utf8Length(s) {
 // undefined to leave the field out.
 function num(v) { return typeof v === 'number' && isFinite(v) ? v : undefined; }
 function bool(v) { return v === true || v === false || v === null ? v : undefined; }   // null: isKnownInput without a container
+// The device's softwareRenderer (monitor.js readSoftwareRenderer): a family
+// name or 'none', never the renderer string, which names the hardware.
+function rendererFamily(v) {
+  return v === null || v === false || (typeof v === 'string' && /^[a-z-]{1,32}$/.test(v)) ? v : undefined;
+}
 function text(v, max) {
   if (typeof v !== 'string') return undefined;
   if (v.length <= max && !/[\u0000-\u001f\u007f-\u009f\ud800-\udfff]/.test(v)) return v;
@@ -186,8 +191,8 @@ var SEGMENT = /* @__PURE__ */ fields({
   config: /* @__PURE__ */ fields({ preset: label, participantId: label, thresholds: /* @__PURE__ */ fields({ tabAwayDurationMs: num, typingSpeedCps: num }) }),
   libraryVersion: label,
   // What the browser said about the device (monitor.js readDeviceFacts),
-  // first segment only: three scalars, under a hundred bytes.
-  device: /* @__PURE__ */ fields({ maxTouchPoints: num, coarsePointer: bool, webdriver: bool })
+  // first segment only: four facts, about a hundred bytes.
+  device: /* @__PURE__ */ fields({ maxTouchPoints: num, coarsePointer: bool, webdriver: bool, softwareRenderer: rendererFamily })
 });
 var ROW = /* @__PURE__ */ fields({
   trialId: label, integrity: /* @__PURE__ */ fields(TRIAL), integritySegment: SEGMENT,

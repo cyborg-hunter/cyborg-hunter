@@ -266,6 +266,27 @@ describe('the payload is built from allowlists', () => {
     assert.deepStrictEqual(three.payload.trials[0].integritySegment.device, device);
     assert.deepStrictEqual(extractIntegrityData(JSON.parse(three.json), {}).session.device, device);
   });
+
+  it('the software-renderer fact comes through as a family name, \'none\', false or null, and nothing else does', () => {
+    const withRenderer = (softwareRenderer) => {
+      const b = blob({ pages: 1 });
+      b.trials[0].integritySegment.device = { maxTouchPoints: 0, coarsePointer: false, webdriver: false, softwareRenderer };
+      return build(b, MAX_CHARS);
+    };
+    for (const v of ['swiftshader', 'microsoft-basic-render', 'none', false, null]) {
+      const out = withRenderer(v);
+      const device = { maxTouchPoints: 0, coarsePointer: false, webdriver: false, softwareRenderer: v };
+      assert.deepStrictEqual(out.payload.trials[0].integritySegment.device, device, String(v));
+      assert.deepStrictEqual(extractIntegrityData(JSON.parse(out.json), {}).session.device, device);
+    }
+    // The renderer string itself, or any value the monitor does not write, is left out.
+    for (const v of ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)',
+      'SwiftShader', 'x'.repeat(33), '', true, 0, {}]) {
+      const kept = withRenderer(v).payload.trials[0].integritySegment.device;
+      assert.ok(!('softwareRenderer' in kept), JSON.stringify(v));
+      assert.strictEqual(kept.webdriver, false);
+    }
+  });
 });
 
 // Every string the payload can carry, by path ('[]' marks an array entry).
@@ -273,7 +294,9 @@ describe('the payload is built from allowlists', () => {
 // so this list pins the allowlists: a string field added to the builder has
 // to be added here on purpose, after checking that no page can put a
 // participant's text in it. Left out on purpose: a foreign-input event's
-// targetId and targetClass (a widget can mirror its value into them).
+// targetId and targetClass (a widget can mirror its value into them). Not
+// listed: the device's softwareRenderer, whose kind keeps only a short
+// lowercase name (no sentinel passes it); its own test is above.
 const STRING_PATHS = [
   'participantId', 'libraryVersion', 'cyborgHunterOneLiner.version', 'cyborgHunterError',
   'guard_assistance_violations_session[].reason',

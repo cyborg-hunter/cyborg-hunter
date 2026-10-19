@@ -21,15 +21,49 @@ import { attachTypingSignals, attachForeignInputSignals, computeTypingSpeed } fr
 import { attachBrowserSignals, attachElementTrace } from './signals/browser.js';
 import { injectDecoy, removeDecoyElement, resetDecoyState } from './signals/dom-protection.js';
 
+// Software rendering: the renderer name a browser reports when it draws
+// without a graphics card. Typical of cloud machines that run browser
+// agents and of headless browsers; also of the rare computer whose GPU the
+// browser has blocked. Only the family name is kept: the renderer string
+// names the participant's graphics hardware, a device fingerprint. The
+// family name is the matched words, lowercased, spaces as hyphens:
+// swiftshader, llvmpipe, softpipe, microsoft-basic-render, mesa-offscreen.
+var SOFTWARE_RENDERER = /swiftshader|llvmpipe|softpipe|microsoft basic render|mesa offscreen/i;
+
+// The software family's name, false (a graphics card), "none" (the browser
+// gives no WebGL context) or null (an exception, or a name that cannot be
+// read). RENDERER is read first: some browsers (Firefox) name the renderer
+// there and log a deprecation warning when the debug extension is asked
+// for; others (Chrome, Safari) report "WebKit WebGL" there and give the name
+// only through WEBGL_debug_renderer_info. The context is released at once.
+export function readSoftwareRenderer(doc) {
+  try {
+    var gl = doc.createElement("canvas").getContext("webgl");
+    if (!gl) return "none";
+    var name = gl.getParameter(gl.RENDERER);
+    if (name === "WebKit WebGL") {
+      var ext = gl.getExtension("WEBGL_debug_renderer_info");
+      name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null;
+    }
+    var lose = gl.getExtension("WEBGL_lose_context");
+    if (lose) lose.loseContext();
+    if (typeof name !== "string") return null;
+    var family = SOFTWARE_RENDERER.exec(name);
+    return family ? family[0].toLowerCase().replace(/ /g, "-") : false;
+  } catch (e) { return null; }
+}
+
 // What the browser states about the device and the session, read once at
 // startSession and carried on the session report: the report's cursor
 // section uses them to tell a touch device from a desktop (taps produce one
-// synthetic mouse move per click) and to show the automation flag a
-// WebDriver-controlled browser sets. Each fact is null when the browser
-// cannot answer, never a guess.
+// synthetic mouse move per click), to show the automation flag a
+// WebDriver-controlled browser sets, and whether the browser draws without a
+// graphics card. Each fact is null when the browser cannot answer, never a
+// guess. softwareRenderer starts null here: startSession reads it later,
+// when the browser is idle (signals.softwareRenderer).
 export function readDeviceFacts() {
   var nav = typeof navigator !== "undefined" ? navigator : null;
-  var facts = { maxTouchPoints: null, coarsePointer: null, webdriver: null };
+  var facts = { maxTouchPoints: null, coarsePointer: null, webdriver: null, softwareRenderer: null };
   if (!nav) return facts;
   facts.maxTouchPoints = typeof nav.maxTouchPoints === "number" ? nav.maxTouchPoints : 0;
   facts.webdriver = nav.webdriver === true;
@@ -223,6 +257,9 @@ export function init(userConfig) {
   // trial's listeners: a decoy must never land after its trial ended or the
   // monitor was destroyed.
   var decoyTimer = null;
+  // Cancels the pending renderer read (scheduleRendererRead); null when none
+  // is pending.
+  var cancelRendererRead = null;
 
   // Module-level decoy state (cal-{N} numbering) must restart per instance.
   resetDecoyState();
@@ -271,6 +308,29 @@ export function init(userConfig) {
     removeDecoyElement();
   }
 
+  // The renderer is read once, when the browser is idle (within a second),
+  // not at startSession itself: creating a WebGL context can hold up the
+  // page, and startSession usually runs while the experiment's first screen
+  // is being drawn. A 1 s timer stands in where requestIdleCallback is
+  // missing. The fact stays null until the read has run.
+  function scheduleRendererRead() {
+    var read = function () {
+      cancelRendererRead = null;
+      // destroy() cancels the read; this also covers a page's scheduler
+      // that runs a cancelled callback anyway.
+      if (sm.current === "destroyed") return;
+      if (typeof document === "undefined") return;
+      sessionData.device.softwareRenderer = readSoftwareRenderer(document);
+    };
+    if (typeof requestIdleCallback === "function" && typeof cancelIdleCallback === "function") {
+      var idleId = requestIdleCallback(read, { timeout: 1000 });
+      cancelRendererRead = function () { cancelIdleCallback(idleId); };
+    } else {
+      var timerId = setTimeout(read, 1000);
+      cancelRendererRead = function () { clearTimeout(timerId); };
+    }
+  }
+
   // ── Shared context for signal modules ──
   // Signal modules receive this context object. They use it to access
   // config, session/trial data, and register listeners. This avoids
@@ -296,6 +356,7 @@ export function init(userConfig) {
     startSession: function () {
       transition("session");
       sessionData.device = readDeviceFacts();
+      if (config.signals.softwareRenderer === true) scheduleRendererRead();
       var ctx = buildSessionCtx();
       attachBrowserSignals(ctx);
       attachFocusSignals(ctx);
@@ -536,6 +597,7 @@ export function init(userConfig) {
       removeTrialListeners();
       intervals.forEach(function (id) { clearInterval(id); });
       intervals = [];
+      if (cancelRendererRead) { cancelRendererRead(); cancelRendererRead = null; }
       _activeInstance = null;
     }
   };
