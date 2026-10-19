@@ -15,6 +15,7 @@ import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
 import { rankTriage } from '../../src/cli/analyzers/triage.js';
 import { analyzeCursor } from '../../src/cli/analyzers/cursor.js';
+import { analyzeDeviceMasking } from '../../src/cli/analyzers/device-masking.js';
 import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -25,8 +26,9 @@ function build() {
   const config = { outputDir: '.', participantIdField: 'participantId' };
   const p = extractIntegrityData(raw, config);
   const summaries = computeSummary([p], config);
-  // As report-core.js does: the cursor section rides on the summary.
+  // As report-core.js does: the cursor section and device masking ride on the summary.
   summaries[0].cursorAnalysis = analyzeCursor([p])[0];
+  summaries[0].deviceMasking = analyzeDeviceMasking(p);
   const edgeExits = detectEdgeExits([p], config);
   const triage = rankTriage(summaries, edgeExits, config);
   return { summaries, triage, participants: [p], config };

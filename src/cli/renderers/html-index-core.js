@@ -418,6 +418,9 @@ ${fontFaceCss}    :root {
     .click-picture svg { max-width: 100%; height: auto; }
     /* Its caption: small and muted like the details' summary, wrapping at the SVG's width (renderClickPicture's W). */
     .click-picture figcaption { max-width: 420px; font-size: 12px; color: var(--dim); }
+    /* The device line, first in the cursor section (renderDeviceLine); red marks a fact worth a look. */
+    .device-line { margin: 2px 0 8px; }
+    .device-line .device-flag { color: #c62828; }
 
     /* Score breakdown — horizontal flex of weighted contributions to t.score,
        ending in "Total: N". Only non-zero terms render; the bar widths are
@@ -1384,6 +1387,36 @@ export function renderClickPicture(cc, limits) {
   <figcaption><b>Where each click landed on its control.</b> ${caption}.</figcaption></figure>`;
 }
 
+// The session's device facts in one line, first in the cursor section:
+// graphics (checks.softwareRenderer), the screen facts (summary.deviceMasking),
+// the automation flag (checks.webdriver) and the kind of pointer
+// (session.device.coarsePointer; left out when unknown). Red marks a fact
+// worth a look in the replay: a software renderer, or screen facts that
+// contradict each other. Neither changes the pointer verdict or the score.
+export function renderDeviceLine(s, participant) {
+  const ca = s && s.cursorAnalysis;
+  const checks = ca && ca.checks ? ca.checks : {};
+  const session = participant && participant.session && typeof participant.session === 'object' ? participant.session : null;
+  const device = session && session.device && typeof session.device === 'object' ? session.device : null;
+  const red = (html) => `<b class="device-flag">${html}</b>`;
+  // The analyzer says 'not recorded' both for data before 0.17 (no key) and
+  // for null (the switch off, or no answer); the device object tells them apart.
+  const sr = checks.softwareRenderer;
+  const graphics = sr && typeof sr === 'object'
+    ? (sr.fired ? red(`software renderer (${esc(sr.family)}), as on cloud machines that run browser agents`) : sr.noWebgl ? 'no WebGL' : 'graphics card')
+    : device && device.softwareRenderer !== undefined ? 'graphics card not checked (switch off, or the browser did not answer)'
+      : 'graphics card not recorded (library before 0.17)';
+  const dm = s && s.deviceMasking;
+  const screen = !dm || dm.state !== 'ok' ? 'screen facts not recorded'
+    : Array.isArray(dm.rules) && dm.rules.length ? red(`screen facts contradict: ${esc(dm.detail)} (a fingerprint-masking tool; not evidence of AI use)`)
+      : 'screen facts agree';
+  const wd = checks.webdriver;
+  const flag = wd && typeof wd === 'object' ? `automation flag ${wd.fired ? 'on' : 'off'}` : 'automation flag not recorded';
+  const pointer = device && device.coarsePointer === true ? 'touch screen'
+    : device && device.coarsePointer === false ? 'mouse or trackpad' : null;
+  return `<p class="muted note device-line">device: ${[graphics, screen, flag, pointer].filter(Boolean).join(' · ')}</p>`;
+}
+
 // The session's cursor dynamics: the pointer verdict first — the word, then
 // the tells that decided it (a tell at the highly-suspicious level in
 // bold), or why the session is not assessed, or what a clean session was
@@ -1469,7 +1502,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
   const hasRecording = !!(participant && participant.replay && participant.replay.recording);
   const replayLink = !hasRecording || replayShownExternally ? ''
     : `<p class="muted note"><a href="#replay-${esc(sanitize(participant.participantId))}">open the replay</a> to check a trial.</p>`;
-  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${verdict}${picture}${details}${replayLink}</div>`;
+  return `<div class="cursor-section"><h4 class="section-heading">Cursor dynamics</h4>${renderDeviceLine(s, participant)}${verdict}${picture}${details}${replayLink}</div>`;
 }
 
 // Renders the participant's screenout reason as a left-bordered pull-quote.
