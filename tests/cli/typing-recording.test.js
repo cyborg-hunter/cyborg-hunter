@@ -44,6 +44,37 @@ describe('matchTrialSegments', () => {
     const a = seg('q', 0), b = seg('q', 500);
     assert.deepEqual(matchTrialSegments([trial('q', 1000), trial('q', 1500)], rec([a, b])), [a, b]);
   });
+  // Closest pair first across all the trials, not trial by trial: a trial
+  // whose nearest segment went to a closer trial takes its next nearest only
+  // when no closer pair is left. Segment starts in these names are absolute
+  // (the recording starts at 1000).
+  it('closest pair first: a trial that lost its nearest waits for its turn by distance', () => {
+    const s1000 = seg('q', 0), s1300 = seg('q', 300);
+    assert.deepEqual(matchTrialSegments([trial('q', 1000), trial('q', 1100), trial('q', 1550)], rec([s1000, s1300])), [s1000, s1300, null]);
+  });
+  it('closest pair first: an earlier trial does not take a segment a later one is closer to', () => {
+    const s1500 = seg('q', 500), s1900 = seg('q', 900);
+    assert.deepEqual(matchTrialSegments([trial('q', 1000), trial('q', 1450), trial('q', 1500)], rec([s1500, s1900])), [null, s1900, s1500]);
+  });
+  it('closest pair first: short trials 300 ms apart, segments starting 200 ms late, the recording begun after the first', () => {
+    const s1500 = seg('q', 500), s1800 = seg('q', 800);
+    assert.deepEqual(matchTrialSegments([trial('q', 1000), trial('q', 1300), trial('q', 1600)], rec([s1500, s1800])), [null, s1800, s1500]);
+  });
+  it('thousands of trials with one start and one label stay quick: each takes the nearest segment left', () => {
+    // Every trial is nearest to the same segment; once it is taken, every
+    // trial's nearest moves on to the next. Redoing each trial's nearest
+    // pick at each step makes this cubic.
+    const N = 5000;
+    const segments = [];
+    for (let i = 0; i < N; i++) segments.push(seg('q', (i + 1) * 0.125));
+    const trials = [];
+    for (let i = 0; i < N; i++) trials.push(trial('q', 1000));
+    const t0 = Date.now();
+    const out = matchTrialSegments(trials, rec(segments));
+    const ms = Date.now() - t0;
+    for (let j = 0; j < N; j++) assert.equal(out[j], segments[j], `trial ${j}`);
+    assert.ok(ms < 2000, `took ${ms} ms`);
+  });
   it('thousands of trials and segments with one label, all on one clock, match one to one and quickly', () => {
     // A file a participant could write: 5,000 'q' segments 0.125 ms apart,
     // every one within the tolerance of every trial, and the trials listed

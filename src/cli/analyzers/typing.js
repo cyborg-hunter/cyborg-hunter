@@ -46,6 +46,119 @@ function originOf(seg) {
   return first ? first.t : null;
 }
 
+// A min-heap of candidate pairs { d, i, c }: the nearer first, then the
+// earlier trial, then the segment earlier in the recording.
+const before = (a, b) => a.d < b.d || (a.d === b.d && (a.i < b.i || (a.i === b.i && a.c.k < b.c.k)));
+function heapPush(h, x) {
+  h.push(x);
+  for (let k = h.length - 1; k > 0;) {
+    const p = (k - 1) >> 1;
+    if (!before(h[k], h[p])) break;
+    [h[k], h[p]] = [h[p], h[k]];
+    k = p;
+  }
+}
+function heapPop(h) {
+  const top = h[0];
+  const last = h.pop();
+  if (h.length) {
+    h[0] = last;
+    for (let k = 0; ;) {
+      const l = 2 * k + 1, r = l + 1;
+      let m = k;
+      if (l < h.length && before(h[l], h[m])) m = l;
+      if (r < h.length && before(h[r], h[m])) m = r;
+      if (m === k) break;
+      [h[k], h[m]] = [h[m], h[k]];
+      k = m;
+    }
+  }
+  return top;
+}
+
+// The clock rule for one label: of every (trial, segment) pair whose starts
+// lie within CLOCK_TOLERANCE_MS, the nearest is taken first (a tie: the
+// earlier trial, then the segment earlier in the recording), then the
+// nearest of what is left, and so on. Of two short trials with one id, the
+// first does not take the second's segment when the recording began
+// between them.
+//
+// Done on one time line, so that a file holding thousands of one label
+// costs neither memory for every pair nor time for redoing each trial's
+// nearest pick after every take: the nearest pair left never has a trial or
+// segment strictly between its two starts (that one would be nearer), so
+// only neighbours on the line are candidates. Trials and segments at one
+// exact time form a group, taken in trial order and recording order. A take
+// moves on in at most two groups and renews only the candidates that touch
+// them (a group left empty joins its two neighbours), so the heap holds a
+// few entries per trial and segment; an entry is stale once its group's
+// version has moved on.
+// idx: the trials' indices (on the clock, this label); segs: the label's segments.
+function matchOnClock(idx, segs, trials, base, take) {
+  const items = [];
+  for (const i of idx) items.push({ p: trials[i].startTime, i });
+  for (const c of segs) if (c.o !== null && isNum(base + c.o)) items.push({ p: base + c.o, c });
+  items.sort((a, b) => a.p - b.p);   // stable: trial order, then recording order, at one time
+  let last = null;
+  const groups = [];
+  for (const it of items) {
+    if (!last || last.p !== it.p) {
+      last = { p: it.p, trials: [], segs: [], th: 0, sh: 0, prev: last, next: null, alive: true, wv: 0, pv: 0 };
+      if (last.prev) last.prev.next = last;
+      groups.push(last);
+    }
+    if (it.c) last.segs.push(it.c); else last.trials.push(it.i);
+  }
+  const headTrial = (g) => (g.th < g.trials.length ? g.trials[g.th] : null);
+  const headSeg = (g) => (g.sh < g.segs.length ? g.segs[g.sh] : null);
+  const pair = (d, gt, gs) => {
+    const i = headTrial(gt), c = headSeg(gs);
+    return i !== null && c ? { d, i, c, gt, gs } : null;
+  };
+  // The best pair inside a group (0 ms apart), or between it and the next.
+  const candidate = (g, inside) => {
+    if (inside) return pair(0, g, g);
+    if (!g.next) return null;
+    // As |(base + o) - startTime|: the same number in either direction.
+    const d = g.next.p - g.p;
+    if (!(d <= CLOCK_TOLERANCE_MS)) return null;
+    const x = pair(d, g, g.next), y = pair(d, g.next, g);
+    return x && y ? (before(x, y) ? x : y) : x || y;
+  };
+  const heap = [];
+  const refresh = (g, inside) => {
+    if (!g || !g.alive) return;
+    const v = inside ? ++g.wv : ++g.pv;
+    const x = candidate(g, inside);
+    if (x) heapPush(heap, { ...x, g, inside, v });
+  };
+  for (const g of groups) { refresh(g, true); refresh(g, false); }
+  while (heap.length) {
+    const e = heapPop(heap);
+    if (!e.g.alive || e.v !== (e.inside ? e.g.wv : e.g.pv)) continue;
+    take(e.i, e.c);
+    e.gt.th++;
+    e.gs.sh++;
+    // Unlink a group left empty, then renew every candidate that changed:
+    // inside a touched group, and between each touched group and its
+    // neighbours (a pair of neighbours is kept under the left one).
+    const lefts = new Set();
+    for (const g of e.gt === e.gs ? [e.gt] : [e.gt, e.gs]) {
+      if (g.th === g.trials.length && g.sh === g.segs.length) {
+        g.alive = false;
+        if (g.prev) g.prev.next = g.next;
+        if (g.next) g.next.prev = g.prev;
+        lefts.add(g.prev);
+      } else {
+        refresh(g, true);
+        lefts.add(g);
+        lefts.add(g.prev);
+      }
+    }
+    for (const g of lefts) refresh(g, false);
+  }
+}
+
 /**
  * For each trial, the recording segment that holds it, or null: an array of
  * the same length as `trials`, by position (a caller finds a trial's segment
@@ -54,8 +167,9 @@ function originOf(seg) {
  * A segment matches a trial whose id is its label (the recorder labels a
  * segment with its trial's id, src/replay/serializer.js; §3 `label`). When the
  * recording's start time and the trial's start are both numbers (one page,
- * one clock), the segment must start within CLOCK_TOLERANCE_MS of the trial;
- * otherwise, and when no segment does (pages joined onto another clock),
+ * one clock), the segment must start within CLOCK_TOLERANCE_MS of the
+ * trial, the nearest pairs taken first (matchOnClock); otherwise, and when
+ * no segment does (pages joined onto another clock),
  * only an id that is unique among the trials and among the segments
  * matches. A label shared by several trials, with no clock to tell them
  * apart, matches nothing; so does a trial without an id, and the
@@ -65,52 +179,30 @@ export function matchTrialSegments(trials, recording) {
   if (!Array.isArray(trials)) return [];
   const out = trials.map(() => null);
   if (!isObj(recording) || recording.schema_version !== 2 || !Array.isArray(recording.segments)) return out;
-  // Per label, its segments as { s, o, used }: the segment, its origin, and
-  // whether a trial has it (kept here, never written onto the segment).
+  // Per label, its segments as { s, o, k, used }: the segment, its origin,
+  // its place in the recording, and whether a trial has it (kept here, never
+  // written onto the segment).
   const byLabel = new Map();
-  for (const s of recording.segments) {
-    if (!isObj(s) || typeof s.label !== 'string' || s.label === SESSION_LABEL) continue;
+  recording.segments.forEach((s, k) => {
+    if (!isObj(s) || typeof s.label !== 'string' || s.label === SESSION_LABEL) return;
     if (!byLabel.has(s.label)) byLabel.set(s.label, []);
-    byLabel.get(s.label).push({ s, o: originOf(s), used: false });
-  }
+    byLabel.get(s.label).push({ s, o: originOf(s), k, used: false });
+  });
   const ids = trials.map(ownIdOf);
   const idCount = new Map();
   for (const id of ids) if (id !== null) idCount.set(id, (idCount.get(id) || 0) + 1);
   const take = (i, c) => { out[i] = c.s; c.used = true; };
 
-  // By the clock, closest first: of two short trials with one id, the first
-  // must not take the second's segment when the recording began between
-  // them. Memory stays linear in the trials and the segments (a file can
-  // hold thousands of one label, all within the tolerance of each other):
-  // each trial names only its nearest free segment, the closest of those
-  // are taken first (ties keep trial order: the sort is stable), and a trial
-  // whose nearest went to a closer trial then takes its nearest free one,
-  // trial by trial.
+  // By the clock, label by label (a trial only ever matches its own label).
   const base = isNum(recording.recording_started_at_perf) ? recording.recording_started_at_perf : null;
   if (base !== null) {
-    const nearest = (i) => {
-      let best = null;
-      let bestD = Infinity;
-      for (const c of byLabel.get(ids[i]) || []) {
-        if (c.used || c.o === null) continue;
-        const d = Math.abs(base + c.o - trials[i].startTime);
-        if (d <= CLOCK_TOLERANCE_MS && d < bestD) { best = c; bestD = d; }
-        if (d === 0) break;   // none is nearer, and a tie keeps the first
-      }
-      return best ? { i, c: best, d: bestD } : null;
-    };
-    const onClock = trials.map((t, i) => ids[i] !== null && isNum(t.startTime));
-    const firsts = [];
+    const onClock = new Map();
     trials.forEach((t, i) => {
-      const n = onClock[i] ? nearest(i) : null;
-      if (n) firsts.push(n);
+      if (ids[i] === null || !isNum(t.startTime) || !byLabel.has(ids[i])) return;
+      if (!onClock.has(ids[i])) onClock.set(ids[i], []);
+      onClock.get(ids[i]).push(i);
     });
-    firsts.sort((a, b) => a.d - b.d);
-    for (const { i, c } of firsts) if (!c.used) take(i, c);
-    trials.forEach((t, i) => {
-      const n = onClock[i] && out[i] === null ? nearest(i) : null;
-      if (n) take(i, n.c);
-    });
+    for (const [label, idx] of onClock) matchOnClock(idx, byLabel.get(label), trials, base, take);
   }
 
   // By the id alone, for a trial the clock did not place: only when its id
