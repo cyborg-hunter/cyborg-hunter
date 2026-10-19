@@ -10,8 +10,10 @@
 // (printable, not repeated, no Ctrl or Meta, gaps between two presses of
 // the same key left out), else nothing ("not recorded"). The rate: the
 // library's corrected charsPerSec (trials carrying typingEdits, 0.17 on),
-// else recomputed from the recording's input events, else the saved
-// charsPerSec under the old formula (N edits over the span, from 2 edits).
+// else recomputed from the trial's saved edit times (editTimestamps, kept
+// when keystroke dynamics are on), else from the recording's input events,
+// else the saved charsPerSec under the old formula (N edits over the span,
+// from 2 edits).
 // A field is named by its tag alone, from either source: an element's id is
 // never read (a page can mirror what is typed into an id).
 //
@@ -20,6 +22,31 @@
 // sessions: across 1,580 text fields of 20 gaps or more, no field had a
 // median gap under 75 ms, more than 0.39 of its gaps under 60 ms, or a gap
 // variation under 0.3, and no trial of 20 or more edits passed 9.5 cps.
+//
+// Sections, in order: the rules; shared checks; matching trials to
+// recording segments; reading a segment (key gaps, edit times); the
+// analysis (analyzeTyping, fastTypingTrials).
+
+import { RHYTHM_MIN_GAPS, RHYTHM_FAST_GAP_MS, summarizeGaps, typingRate } from '../../shared/typing-metrics.js';
+import { verdictWord } from './cursor.js';
+
+// ── The rules ───────────────────────────────────────────────────────────────
+
+export const TYPING_LIMITS = {
+  minGaps:   { value: RHYTHM_MIN_GAPS,    meaning: 'A text field is judged when it has at least this many gaps between one-character keystrokes (a gap between two presses of the same character is left out). Fewer: too short to judge. The library saves nothing for a shorter field.' },
+  fastGapMs: { value: RHYTHM_FAST_GAP_MS, meaning: 'The speed rule: a field whose median gap is under this many milliseconds, or more than fastShare of whose gaps are, was typed faster than a person types. Fixed at 60: the library saves the share of gaps under 60 ms.' },
+  fastShare: { value: 0.5,  meaning: 'The share of a field\'s gaps under fastGapMs above which the speed rule fires.' },
+  evenCv:    { value: 0.2,  meaning: 'The evenness rule: a field whose gap variation (standard deviation over mean of its gaps) is under this was typed too evenly for a person.' },
+  minEdits:  { value: 20,   meaning: 'The typing rate (edits − 1 per second between the first edit and the last) is judged on trials with at least this many edits; it counts as fast above the participant\'s own typingSpeedCps (10 by default). Data from libraries before 0.17 was judged from 2 edits, and the saved rate stays as it was when neither saved edit times nor a recording can recompute it.' }
+};
+
+function valuesOf(limits) {
+  const out = {};
+  for (const k of Object.keys(limits)) out[k] = limits[k].value;
+  return out;
+}
+
+// ── Shared checks ───────────────────────────────────────────────────────────
 
 // At most this many trial ids are listed for a tell (as the cursor section's).
 const MAX_IDS = 10;
@@ -35,6 +62,8 @@ const eventsOf = (seg) => (isObj(seg) && Array.isArray(seg.events) ? seg.events.
 const ownIdOf = (t) => (isObj(t) && (typeof t.trialId === 'string' || isNum(t.trialId)) ? String(t.trialId) : null);
 // A trial's id as text; a trial without a usable id is named by its place.
 const trialIdOf = (t, i) => ownIdOf(t) ?? `trial ${i + 1}`;
+
+// ── Matching trials to recording segments ───────────────────────────────────
 
 // A segment's time origin, as the recording format defines it
 // (docs/session-recording-v2.md §3, "Segment time origin"): the first of
@@ -199,6 +228,8 @@ export function matchTrialSegments(trials, recording) {
   return out;
 }
 
+// ── Reading a segment ───────────────────────────────────────────────────────
+
 /**
  * The text fields typed into in a segment, from its key presses (§5.2
  * key.down; the field's tag from the event's anchor, §6): one entry per
@@ -245,3 +276,180 @@ export function recordingEditTimes(seg) {
   return eventsOf(seg).filter((e) => (e.type === 'input.value' || e.type === 'input.checked') && isNum(e.t))
     .map((e) => e.t).sort((a, b) => a - b);
 }
+
+// ── The analysis ────────────────────────────────────────────────────────────
+
+// A library summary as the analyzer reads it, or null when it is unusable: a
+// whole count of gaps and three measures in their ranges. The field keeps
+// its tag alone (lower case, at most 32 characters, whatever element it
+// names); an id in the data is not read.
+function libraryField(e) {
+  if (!isObj(e) || !isObj(e.field) || !Number.isInteger(e.gaps) || !isNum(e.medianMs) || !isNum(e.under60Share) || !isNum(e.cv)) return null;
+  if (e.medianMs < 0 || e.under60Share < 0 || e.under60Share > 1 || e.cv < 0) return null;
+  const tag = typeof e.field.tag === 'string' ? e.field.tag.toLowerCase().slice(0, 32) : '';
+  return { field: { tag }, gaps: e.gaps, medianMs: e.medianMs, under60Share: e.under60Share, cv: e.cv };
+}
+
+// A trial's saved edit times (ms, one per edit; the library keeps them when
+// keystroke dynamics are on), the numbers among them in time order, or null
+// when there is none: with keystroke dynamics off the library writes an
+// empty list, and a list without a number is treated as no list. A copy:
+// the participant's own list is never sorted in place.
+function editTimesOf(t) {
+  if (!Array.isArray(t.editTimestamps)) return null;
+  const times = t.editTimestamps.filter(isNum).sort((a, b) => a - b);
+  return times.length ? times : null;
+}
+
+// The typing-speed cutoff the library screened this participant with (saved
+// in the session report), else the CLI's, else 10: summary.js's order.
+function cutoffOf(p, config) {
+  const session = isObj(p.session) ? p.session : {};
+  const saved = isObj(session.config) ? session.config.thresholds : null;
+  if (isObj(saved) && isNum(saved.typingSpeedCps)) return saved.typingSpeedCps;
+  return isObj(config) && isNum(config.typingSpeedThreshold_cps) ? config.typingSpeedThreshold_cps : 10;
+}
+
+// The smallest and the largest of one measure over fields (a loop, not
+// Math.min(...): a spread of some 200,000 fields overflows the stack).
+const least = (fs, k) => fs.reduce((m, f) => Math.min(m, f[k]), Infinity);
+const most = (fs, k) => fs.reduce((m, f) => Math.max(m, f[k]), -Infinity);
+
+// The participant's rate source: the weakest any judged trial used; with
+// none judged, the strongest there is.
+const RATE_SOURCES = ['old formula', 'recording', 'edit times', 'library'];
+
+/**
+ * One participant's typing analysis (the shape report-core attaches as
+ * summary.typingAnalysis; the module header names the sources).
+ *
+ * The analysed trials are participant.trials (the objects among them, in
+ * order); after phase scoping, the scoped ones. options.allTrials, when it is
+ * a list, holds the participant's trials before scoping: segments are then
+ * matched over all of them (so an id's count is the session's, and a
+ * warm-up trial's segment never passes to a main trial of the same id), and
+ * each analysed trial takes the segment matched to the same trial object
+ * (applyPhaseScope keeps the objects). Only analysed trials are judged.
+ *
+ * byIndex is aligned with the analysed trials (one entry per trial, in
+ * order): the typing chart draws from it, so trials that share an id stay
+ * apart. byTrial is keyed by trial id for readers that only have an id:
+ * trials that share an id share an entry (judged if any of them was, with
+ * the largest judged rate). fields[].trialIndex is the field's trial's
+ * place among the analysed trials.
+ */
+export function analyzeTyping(participant, config = {}, options = {}) {
+  const L = valuesOf(TYPING_LIMITS);
+  const p = isObj(participant) ? participant : {};
+  const trials = Array.isArray(p.trials) ? p.trials.filter(isObj) : [];
+  const recording = isObj(p.replay) && isObj(p.replay.recording) ? p.replay.recording : null;
+  const cutoff = cutoffOf(p, config);
+
+  // Each analysed trial's recording segment, or null.
+  const all = isObj(options) && Array.isArray(options.allTrials) ? options.allTrials : trials;
+  const matched = matchTrialSegments(all, recording);
+  const segOf = new Map(all.map((t, i) => [t, matched[i]]));
+  const segs = trials.map((t) => segOf.get(t) || null);
+
+  // The rhythm, field by field.
+  const source = trials.some((t) => Array.isArray(t.typingRhythm)) ? 'library' : segs.some(Boolean) ? 'recording' : null;
+  const fields = [];
+  let shortFields = source === 'recording' ? 0 : null;
+  trials.forEach((t, i) => {
+    const trialId = trialIdOf(t, i);
+    const judge = (f) => fields.push({ trialId, trialIndex: i, ...f,
+      speed: f.medianMs < L.fastGapMs || f.under60Share > L.fastShare, evenness: f.cv < L.evenCv });
+    if (source === 'library') {
+      for (const e of Array.isArray(t.typingRhythm) ? t.typingRhythm : []) {
+        const f = libraryField(e);
+        if (f && f.gaps >= L.minGaps) judge(f);
+      }
+    } else if (source === 'recording' && segs[i]) {
+      // recordingKeyGaps can give a field no gap (one key press): too short.
+      for (const k of recordingKeyGaps(segs[i])) {
+        if (k.gaps.length >= L.minGaps) judge({ field: { tag: k.field.tag }, ...summarizeGaps(k.gaps) });
+        else shortFields++;
+      }
+    }
+  });
+
+  // The verdict: one kind of rule (speed or evenness) makes the session
+  // suspicious; both kinds in one field, highly suspicious.
+  const speedFields = fields.filter((f) => f.speed), evenFields = fields.filter((f) => f.evenness);
+  const both = fields.some((f) => f.speed && f.evenness);
+  let state = 'ok', level, verdictReason = null;
+  if (source === null) {
+    state = 'not recorded'; level = -1;
+    verdictReason = !recording ? 'typing rhythm not recorded (library before 0.17 or signals.typingRhythm off) and no session recording'
+      // Matched, but only to trials outside the phase scope.
+      : matched.some(Boolean) ? 'typing rhythm not recorded and the session recording matches no trial in the phase scope'
+      : 'typing rhythm not recorded and the session recording matches no trial';
+  } else if (!fields.length) {
+    state = 'not assessed'; level = -1;
+    // No field at all: no character was typed into an input or a textarea
+    // (shortcuts such as Cmd+V are not counted), or the recording cannot
+    // tell: one without the page's DOM gives its key presses no target, and
+    // an editable area (contenteditable) is not read.
+    verdictReason = source === 'recording' && shortFields === 0 ? 'the session recording holds no character key presses in an input or a textarea'
+      : `no text field reached ${L.minGaps} key gaps`;
+  } else {
+    level = both ? 2 : speedFields.length || evenFields.length ? 1 : 0;
+  }
+  const idsOf = (fs) => [...new Set(fs.map((f) => f.trialId))];
+  const tells = [];
+  const tellLevel = both ? 'high' : 'low';
+  if (speedFields.length) {
+    const ms = Math.round(least(speedFields, 'medianMs'));
+    const share = Math.round(100 * most(speedFields, 'under60Share'));
+    const ids = idsOf(speedFields);
+    tells.push({ id: 'typingSpeed', level: tellLevel, text: `keys pressed faster than a person types: median gap ${ms} ms, ${share}% of gaps under ${L.fastGapMs} ms`,
+      short: `median gap ${ms} ms`, trialIds: ids.slice(0, MAX_IDS), trials: ids.length });
+  }
+  if (evenFields.length) {
+    // "0.3 or more": the lowest variation of a recorded human field was 0.31.
+    const cv = least(evenFields, 'cv').toFixed(2);
+    const ids = idsOf(evenFields);
+    tells.push({ id: 'typingEvenness', level: tellLevel, text: `keys pressed too evenly: gap variation ${cv}, where people vary by 0.3 or more`,
+      short: `gap variation ${cv}`, trialIds: ids.slice(0, MAX_IDS), trials: ids.length });
+  }
+
+  // The rate, trial by trial: the library's (0.17 on: typingEdits is
+  // there), else from the saved edit times, else from the recording, else
+  // the old formula's saved number. oldCps keeps that saved number wherever
+  // the rate was recomputed.
+  const rateTrials = trials.map((t, i) => {
+    const trialId = trialIdOf(t, i);
+    const saved = isNum(t.charsPerSec) ? t.charsPerSec : null;
+    const times = isNum(t.typingEdits) ? null : editTimesOf(t);
+    let r;
+    if (isNum(t.typingEdits)) r = { source: 'library', cps: saved, edits: t.typingEdits, oldCps: null };
+    else if (times) r = { source: 'edit times', cps: typingRate(times, L.minEdits), edits: times.length, oldCps: saved };
+    else if (segs[i]) {
+      const fromRecording = recordingEditTimes(segs[i]);
+      r = { source: 'recording', cps: typingRate(fromRecording, L.minEdits), edits: fromRecording.length, oldCps: saved };
+    } else r = { source: 'old formula', cps: saved, edits: null, oldCps: null };
+    const judged = r.cps !== null;
+    return { trialId, ...r, judged, fast: judged && r.cps > cutoff };
+  });
+  const rateSource = RATE_SOURCES.find((s) => rateTrials.some((r) => r.judged && r.source === s))
+    || RATE_SOURCES.slice().reverse().find((s) => rateTrials.some((r) => r.source === s)) || 'old formula';
+
+  // Per trial: its judged rate and whether a rhythm rule fired in it (the
+  // fired trials gathered once, so this stays linear in trials and fields).
+  const firedIds = new Set(), firedIndexes = new Set();
+  for (const f of fields) if (f.speed || f.evenness) { firedIds.add(f.trialId); firedIndexes.add(f.trialIndex); }
+  const byTrial = Object.create(null);
+  for (const r of rateTrials) {
+    const cps = r.judged ? r.cps : null;
+    const prev = byTrial[r.trialId] || { cps: null, judged: false };
+    byTrial[r.trialId] = { cps: prev.cps === null || (cps !== null && cps > prev.cps) ? cps : prev.cps,
+      judged: prev.judged || r.judged, rhythm: firedIds.has(r.trialId) };
+  }
+  const byIndex = rateTrials.map((r, i) => ({ cps: r.judged ? r.cps : null, judged: r.judged, rhythm: firedIndexes.has(i) }));
+
+  return { state, level, verdict: verdictWord(level), verdictReason, source, tells, fields, shortFields,
+    rate: { source: rateSource, cutoffCps: cutoff, trials: rateTrials }, byTrial, byIndex, limits: L };
+}
+
+// How many trials typed faster than the cutoff, by the rates above.
+export const fastTypingTrials = (analysis) => analysis.rate.trials.filter((r) => r.fast).length;
