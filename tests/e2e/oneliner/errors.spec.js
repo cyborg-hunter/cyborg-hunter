@@ -179,6 +179,29 @@ test('cyborg-hunter.min.js loaded twice: the neutral loaded-twice error, no load
   expect(await page.evaluate(() => typeof window.CyborgHunter.init)).toBe('function');
 });
 
+// The software-renderer fact in a real browser: a family name, false (a
+// graphics card) or 'none' (no WebGL), never the renderer string, which names
+// the participant's graphics hardware. The monitor reads it when the browser
+// is next idle (within about 1 s of startSession) and it is null until then,
+// so the test polls the session report. It uses the core bundle (the fixture
+// with one tag) because ch.js shows the fact only in the first segment, as it
+// stood when that segment was cut, so its data() cannot be polled for it.
+test('cyborg-hunter.min.js in a real browser: the session\'s softwareRenderer becomes a family name, false or none', async ({ page }) => {
+  const log = collectConsole(page);
+  await rewriteFixture(page, '**/core-loaded-twice.html', (html) => html.replace(
+    '<script src="/dist/cyborg-hunter.min.js"></script>\n  <script src="/dist/cyborg-hunter.min.js"></script>',
+    '<script src="/dist/cyborg-hunter.min.js"></script>'));
+  await page.goto(FIX + 'core-loaded-twice.html');
+  await page.evaluate(() => {
+    window.__monitor = window.CyborgHunter.init({ participantId: 'E2E-RENDERER-1' });
+    window.__monitor.startSession();
+  });
+  const read = () => page.evaluate(() => window.__monitor.getSessionReport().device.softwareRenderer);
+  await expect.poll(read, { timeout: 5000 }).not.toBeNull();
+  expect([false, 'none', 'swiftshader', 'llvmpipe', 'softpipe', 'microsoft-basic-render', 'mesa-offscreen']).toContain(await read());
+  expect(chErrors(log)).toEqual([]);
+});
+
 // Manual mode on a page that also loads cyborg-hunter.min.js after ch.js
 // (jspsych-manual.html with the min.js tag added in flight): min.js's footer
 // hands window.CyborgHunter back to ch.js, so the researcher's extension
