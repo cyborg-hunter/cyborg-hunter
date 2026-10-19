@@ -102,3 +102,51 @@ describe('the cursor section: clicks at the exact centre of the control', () => 
     assert.doesNotMatch(rules, /clicks within 5 px/);
   });
 });
+
+// The software renderer's row in the browser-reported checks table, from a
+// real analysis of a desktop session of one trial with the device object
+// varied: absent, without the key (before 0.17), or with each value.
+describe('the cursor section: browser draws without a graphics card', () => {
+  const mv = (x, y, t) => ({ x, y, cx: x, cy: y, t, type: 'move' });
+  const desktop = { maxTouchPoints: 0, coarsePointer: false, webdriver: false };
+  const session = (device) => ({
+    participantId: 'p1',
+    trials: [{
+      trialId: 'q1', startTime: 1000, duration_ms: 5000, pasteEvents: [], copyEvents: [], dropEvents: [], tabAwayEvents: [], libraryVersion: '0.17.0',
+      mouseEvents: [mv(100, 100, 0), mv(150, 130, 50), mv(210, 150, 105), { ...mv(210, 150, 150), type: 'click', trusted: true, detail: 1, pointerType: 'mouse' }]
+    }],
+    session: device === undefined ? {} : { device }
+  });
+  // The checks table of the session's cursor section.
+  const checksOf = async (participant) => {
+    const triage = [{ participantId: 'p1', hardTriggered: false, softFlagged: false, score: 0, summary: { cursorAnalysis: analyzeCursor([participant])[0] } }];
+    const html = await renderIndexHtml([], triage, [participant],
+      { outputDir: '/unused', participantIdField: 'participantId' }, false, { replayClientSrc: '' });
+    return html.match(/<caption>browser-reported checks<\/caption>([\s\S]*?)<\/table>/)[1];
+  };
+  const row = (cls, text) => new RegExp(`<tr class="${cls}"><th>browser draws without a graphics card</th><td>${text}</td></tr>`);
+
+  it('a software family reads yes with its name, right after the automation flag', async () => {
+    const checks = await checksOf(session({ ...desktop, softwareRenderer: 'swiftshader' }));
+    assert.match(checks, /automation flag set by the browser<\/th><td>no<\/td><\/tr>\s*<tr class="fired"><th>browser draws without a graphics card<\/th>/);
+    assert.match(checks, row('fired', 'yes \\(swiftshader\\)'));
+  });
+  it('a graphics card reads no; no WebGL reads no WebGL', async () => {
+    assert.match(await checksOf(session({ ...desktop, softwareRenderer: false })), row('', 'no'));
+    assert.match(await checksOf(session({ ...desktop, softwareRenderer: 'none' })), row('', 'no WebGL'));
+  });
+  it('a device object without the key, or no device object, is data from before 0.17', async () => {
+    assert.match(await checksOf(session(desktop)), row('', 'not recorded \\(library before 0\\.17\\)'));
+    assert.match(await checksOf(session(undefined)), row('', 'not recorded \\(library before 0\\.17\\)'));
+  });
+  it('null, or a value the analyzer does not record, says the switch was off or the browser did not answer', async () => {
+    for (const v of [null, 7]) {
+      assert.match(await checksOf(session({ ...desktop, softwareRenderer: v })), row('', 'not recorded \\(switch off, or the browser did not answer\\)'), String(v));
+    }
+  });
+  it('the family name is escaped', async () => {
+    const checks = await checksOf(session({ ...desktop, softwareRenderer: '<img src=x onerror="alert(1)">' }));
+    assert.match(checks, row('fired', 'yes \\(&lt;img src=x onerror=&quot;alert\\(1\\)&quot;&gt;\\)'));
+    assert.doesNotMatch(checks, /<img/);
+  });
+});

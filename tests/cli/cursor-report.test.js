@@ -103,29 +103,29 @@ describe('the triage reason', () => {
 });
 
 describe('summary.csv', () => {
-  const COLS = ['cursorReason', 'cursorVerdict', 'cursorTells', 'cursorChecksRecorded', 'cursorFactCount', 'cursorWebdriver', 'cursorUntrustedClicks', 'cursorZeroMoveTrials', 'cursorJumpClicks', 'cursorNoPathClicks', 'cursorCoordinates', 'cursorStream', 'cursorSampleIntervalMs', 'cursorClicks', 'cursorMovements', 'cursorMovesPerTrialMedian', 'cursorEfficiencyMedian', 'cursorMaxDeviationPxMedian', 'cursorCenteredClicks', 'cursorCenteredNear'];
-  it('keeps every existing header and appends the twenty cursor columns in order', () => {
+  const COLS = ['cursorReason', 'cursorVerdict', 'cursorTells', 'cursorChecksRecorded', 'cursorFactCount', 'cursorWebdriver', 'cursorUntrustedClicks', 'cursorZeroMoveTrials', 'cursorJumpClicks', 'cursorNoPathClicks', 'cursorCoordinates', 'cursorStream', 'cursorSampleIntervalMs', 'cursorClicks', 'cursorMovements', 'cursorMovesPerTrialMedian', 'cursorEfficiencyMedian', 'cursorMaxDeviationPxMedian', 'cursorCenteredClicks', 'cursorCenteredNear', 'cursorSoftwareRenderer'];
+  it('keeps every existing header and appends the twenty-one cursor columns in order', () => {
     const { summaries, triage } = analyze([human, driver, scripted, old]);
     const [header, ...rows] = buildSummaryCsv(summaries, triage).trim().split('\n');
     const cols = header.split(',');
     assert.equal(cols.indexOf('meanPathEfficiency') > 0, true);
-    assert.deepEqual(cols.slice(-20), COLS);
+    assert.deepEqual(cols.slice(-21), COLS);
     const byId = Object.fromEntries(rows.map(r => [r.split(',')[0], r.split(',')]));
-    const tail = (id) => byId[id].slice(-20);
+    const tail = (id) => byId[id].slice(-21);
     assert.deepEqual(tail('DRIVER').slice(0, 10), ['', 'highly suspicious', 'automation flag', '3', '2', 'YES', '0', '1/2', '1/1', '1/1']);
     assert.deepEqual(tail('SCRIPTED').slice(0, 10), ['', 'highly suspicious', 'clicks without a path 4/4', '3', '0', 'no', '0', '0/5', '4/4', '4/4']);
     assert.deepEqual(tail('HUMAN').slice(0, 3), ['only 1 of 2 first pointer clicks had a known position before them (the no-path rule needs 4)', 'not assessed', '']);
     assert.deepEqual(tail('OLD').slice(0, 10), ['device facts and click provenance not recorded (library before 0.14)', 'not assessed', '', '0', '', '', '', '', '0/0', '0/0']);
     // No recording: both centered columns are empty.
-    assert.deepEqual(tail('HUMAN').slice(18), ['', '']);
+    assert.deepEqual(tail('HUMAN').slice(18, 20), ['', '']);
   });
   it('a null session has its reason and empty values', () => {
     const { summaries, triage } = analyze([touch]);
     const row = buildSummaryCsv(summaries, triage).trim().split('\n')[1].split(',');
-    assert.deepEqual(row.slice(-20).slice(0, 3), ['no cursor stream (touch device)', 'not assessed', '']);
-    assert.equal(row.slice(-20)[13], '');
+    assert.deepEqual(row.slice(-21).slice(0, 3), ['no cursor stream (touch device)', 'not assessed', '']);
+    assert.equal(row.slice(-21)[13], '');
     // Only the automation flag is recorded; the other checks and the rules have no value.
-    assert.deepEqual(row.slice(-20).slice(3, 10), ['1', '0', 'no', '', '', '', '']);
+    assert.deepEqual(row.slice(-21).slice(3, 10), ['1', '0', 'no', '', '', '', '']);
   });
   it('cursorCenteredClicks and cursorCenteredNear give count/of from the recording rule', () => {
     // Nine clicks at the centre, three 3 px off it on both axes (4.2 px away:
@@ -138,6 +138,23 @@ describe('summary.csv', () => {
     const row = csvRowFor(withRecording(human, 'TAPS', [{ type: 'touch.start', t: 10 }, ...clicksAt(9, 150, 120)]));
     assert.equal(row.cursorCenteredClicks, 'touch');
     assert.equal(row.cursorCenteredNear, 'touch');
+  });
+  it('cursorSoftwareRenderer: YES (family), no, no WebGL, or empty when not recorded', () => {
+    const cell = (device) => csvRowFor(base('SR', [path(0), path(0)], device)).cursorSoftwareRenderer;
+    assert.equal(cell({ ...desktop, softwareRenderer: 'swiftshader' }), 'YES (swiftshader)');
+    assert.equal(cell({ ...desktop, softwareRenderer: false }), 'no');
+    assert.equal(cell({ ...desktop, softwareRenderer: 'none' }), 'no WebGL');
+    // A device object from before 0.17 (no key), null (switch off, or no
+    // answer), and no device object at all.
+    assert.equal(cell(desktop), '');
+    assert.equal(cell({ ...desktop, softwareRenderer: null }), '');
+    assert.equal(cell(undefined), '');
+  });
+  it('cursorSoftwareRenderer is filled for a session with no cursor stream too', () => {
+    const touchSr = base('TOUCHSR', [[mv(5, 5, 0), ck(5, 5, 10)]], { maxTouchPoints: 5, coarsePointer: true, webdriver: false, softwareRenderer: 'llvmpipe' });
+    const row = csvRowFor(touchSr);
+    assert.equal(row.cursorVerdict, 'not assessed');
+    assert.equal(row.cursorSoftwareRenderer, 'YES (llvmpipe)');
   });
 });
 

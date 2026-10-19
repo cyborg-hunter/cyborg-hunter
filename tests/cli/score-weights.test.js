@@ -28,7 +28,7 @@ describe('score-weights: defaults', () => {
     assert.deepEqual(SCORE_SIGNALS.map(s => s.key), [
       'paste', 'copy', 'sidebar', 'tabaway', 'tabawayLong', 'tabawayMedium', 'flicker',
       'drop', 'fastTyping', 'synthetic', 'foreignInput', 'aiExtensions', 'kbShortcuts',
-      'viewportShifts', 'zoom', 'edgeExits', 'cursor',
+      'viewportShifts', 'zoom', 'edgeExits', 'cursor', 'softwareRenderer',
     ]);
   });
 });
@@ -221,5 +221,19 @@ describe('formatScore', () => {
   it('passes non-numbers through', () => {
     assert.strictEqual(formatScore(undefined), undefined);
     assert.strictEqual(formatScore('?'), '?');
+  });
+});
+
+describe('score-weights: the device facts', () => {
+  const sig = (key) => SCORE_SIGNALS.find((s) => s.key === key);
+  it('softwareRenderer counts 1 for a fired check and 0 otherwise, at weight 0', () => {
+    const s = sig('softwareRenderer');
+    assert.deepEqual([s.weight, s.label], [0, 'software renderer']);
+    const at = (c) => s.count({ cursorAnalysis: { checks: { softwareRenderer: c } } });
+    assert.equal(at({ fired: true, family: 'swiftshader', noWebgl: false }), 1);
+    assert.equal(at({ fired: false, family: null, noWebgl: true }), 0);
+    assert.equal(at({ fired: false, family: null, noWebgl: false }), 0);
+    assert.equal(at('not recorded'), 0);
+    assert.equal(s.count({}), 0);
   });
 });

@@ -1397,7 +1397,7 @@ function renderCursorSection(s, participant, replayShownExternally) {
   if (!ca) return '';
   const ids = (x) => x.trialIds && x.trialIds.length ? ` (${esc(x.trialIds.join(', '))}${x.trials > x.trialIds.length ? `, +${x.trials - x.trialIds.length} more` : ''})` : '';
   const ofN = (x, unit = '') => `${x.count} of ${x.of}${unit}${ids(x)}`;
-  const check = (label, c, body) => `<tr class="${c && typeof c === 'object' && c.fired ? 'fired' : ''}"><th>${label}</th><td>${c === 'not recorded' ? 'not recorded' : body(c)}</td></tr>`;
+  const check = (label, c, body, notRecorded = 'not recorded') => `<tr class="${c && typeof c === 'object' && c.fired ? 'fired' : ''}"><th>${label}</th><td>${c === 'not recorded' ? notRecorded : body(c)}</td></tr>`;
   const num = (v, unit, digits) => v == null ? '—' : `${digits == null ? v : v.toFixed(digits)}${unit}`;
   const feat = (label, f, unit = '', digits) => `<tr><th>${label}</th><td>${num(f.median, unit, digits)} <span class="muted">(n = ${f.n})</span></td></tr>`;
   const badge = `<span class="verdict-badge" data-level="${ca.level}">${esc(ca.verdict)}</span>`;
@@ -1427,9 +1427,18 @@ function renderCursorSection(s, participant, replayShownExternally) {
       : cc.state === 'touch' ? centeredRow('not judged (touch recording)')
       : `${centeredRow(ofN(cc, ' qualifying clicks'))}
       <tr><th>clicks within ${esc(String(ca.limits.centerNearPx))} px of the centre</th><td>${esc(String(cc.near.count))} of ${esc(String(cc.near.of))} <span class="muted">(reported, not judged)</span></td></tr>`;
+    // The software renderer is recorded from 0.17, so why it is not
+    // recorded comes from the device object: without the key the data is
+    // older; with it (null, or a value the analyzer does not record) the
+    // switch was off or the browser did not answer. The family is the
+    // participant's data: escaped.
+    const device = participant && participant.session && participant.session.device;
+    const srKey = !!device && typeof device === 'object' && Object.prototype.hasOwnProperty.call(device, 'softwareRenderer');
+    const srNotRecorded = srKey ? 'not recorded (switch off, or the browser did not answer)' : 'not recorded (library before 0.17)';
     details = `<details class="cursor-details"><summary>every check, the rules and the movement shape</summary>
     <table class="cursor-table"><caption>browser-reported checks</caption>
       ${check('automation flag set by the browser', ca.checks.webdriver, (w) => w.fired ? 'yes' : 'no')}
+      ${check('browser draws without a graphics card', ca.checks.softwareRenderer, (w) => w.fired ? `yes (${esc(w.family)})` : w.noWebgl ? 'no WebGL' : 'no', srNotRecorded)}
       ${check('clicks the page’s own scripts dispatched', ca.checks.untrustedClicks, (x) => ofN(x))}
       ${check('trials clicked without pointer movement', ca.checks.zeroMoveTrials, (x) => ofN(x))}
     </table>

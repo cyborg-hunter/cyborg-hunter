@@ -42,6 +42,12 @@ export const SCORE_SIGNALS = [
   // suspicious. Ranks within a tier like every key here.
   { key: 'cursor',         weight: 0, count: s => (s.cursorAnalysis && s.cursorAnalysis.level > 0) ? s.cursorAnalysis.level : 0,
     label: 'pointer verdict', hint: 'ranking weight × verdict level: suspicious 1, highly suspicious 2; the tier is unchanged.' },
+  // The software-renderer device fact (analyzers/cursor.js
+  // checks.softwareRenderer): 1 when the browser drew without a graphics
+  // card. Not a tell; at weight 0 it ranks nothing until a study sets one.
+  { key: 'softwareRenderer', weight: 0,
+    count: s => { const c = s.cursorAnalysis && s.cursorAnalysis.checks && s.cursorAnalysis.checks.softwareRenderer; return c && typeof c === 'object' && c.fired ? 1 : 0; },
+    label: 'software renderer', hint: 'ranking weight × 1 when the browser drew without a graphics card; the tier and the pointer verdict are unchanged.' },
 ];
 
 const KEYS = SCORE_SIGNALS.map(s => s.key);

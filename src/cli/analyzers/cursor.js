@@ -8,16 +8,19 @@
 //
 // Checks (browser-reported): the automation flag the browser sets
 // (navigator.webdriver), clicks the page's own scripts dispatched (isTrusted
-// false), and trials clicked without pointer movement. Rules: clicks that
-// arrived without a path (a first click whose movement has at most one
-// sample, starting away from where the pointer was last seen: a scripted
-// cursor appears at its target) and clicks after a pointer jump, both judged
-// on clicks with a known position before them; and clicks at the exact
-// centre of the clicked control (centered-clicks.js), read from the session
-// recording when there is one (participant.replay.recording). Features:
-// the shape of each movement. The pointer verdict (assess) reads the checks
-// and the rules against the shares in CURSOR_LIMITS; every constant lives
-// there with its meaning, and the report writes them beside the results.
+// false), and trials clicked without pointer movement. A fourth row, whether
+// the browser draws without a graphics card (session.device.softwareRenderer),
+// is a device fact: recorded and shown, never a tell, not in factCount.
+// Rules: clicks that arrived without a path (a first click whose movement
+// has at most one sample, starting away from where the pointer was last
+// seen: a scripted cursor appears at its target) and clicks after a pointer
+// jump, both judged on clicks with a known position before them; and clicks
+// at the exact centre of the clicked control (centered-clicks.js), read
+// from the session recording when there is one (participant.replay.recording).
+// Features: the shape of each movement. The pointer verdict (assess) reads
+// the checks and the rules against the shares in CURSOR_LIMITS; every
+// constant lives there with its meaning, and the report writes them beside
+// the results.
 
 import { pathLength, displacement, maxDeviation } from '../../shared/cursor-geometry.js';
 import { centeredClicks } from './centered-clicks.js';
@@ -202,20 +205,37 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
   const device = participant.session && participant.session.device && typeof participant.session.device === 'object' ? participant.session.device : null;
   const recorded = !!device;
   const webdriver = recorded ? { fired: device.webdriver === true } : NOT_RECORDED;
-  // With a device object every check is an object, in every state; without
-  // one all three are not recorded. `trials` counts the trials involved
-  // before the ten-id cap (a count of clicks can exceed it).
+  // The software-renderer fact (0.17): false (a graphics card), 'none' (no
+  // WebGL) or the software family's name; anything else, a missing key (data
+  // before 0.17) or null (the switch off, or no answer) is not recorded. A
+  // device fact, not a tell: the checks table, summary.csv and the device
+  // line show it, and it changes neither the verdict nor factCount
+  // (calibrated on recorded human sessions: about 3 % of the people
+  // researchers kept drew without a graphics card).
+  const srv = recorded ? device.softwareRenderer : undefined;
+  const softwareRenderer = srv === false ? { fired: false, family: null, noWebgl: false }
+    : srv === 'none' ? { fired: false, family: null, noWebgl: true }
+    : typeof srv === 'string' ? { fired: true, family: srv, noWebgl: false }
+    : NOT_RECORDED;
+  // The automation flag is recorded with every device object; the software
+  // renderer only from 0.17.
+  const deviceChecks = softwareRenderer === NOT_RECORDED ? 1 : 2;
+  // With a device object the automation flag and the two click checks are
+  // objects in every state, and the software renderer when its value is
+  // recorded; without one all four are not recorded. `trials` counts the
+  // trials involved before the ten-id cap (a count of clicks can exceed it).
   const zeroCount = () => ({ count: 0, of: 0, trialIds: [], trials: 0, fired: false });
 
-  // checksRecorded: 3 when the stream is there and a device object exists;
-  // 1 in a state with no cursor stream (only the automation flag can run);
-  // 0 without a device object.
+  // checksRecorded: how many browser-reported checks the data supports. With
+  // a device object: the automation flag always and the software renderer
+  // from 0.17 (1–2 in a state with no cursor stream), plus the two click
+  // checks with a stream (3–4). 0 without a device object.
   const base = {
     participantId: participant.participantId,
-    checksRecorded: recorded ? 1 : 0,
+    checksRecorded: recorded ? deviceChecks : 0,
     checks: recorded
-      ? { webdriver, untrustedClicks: zeroCount(), zeroMoveTrials: zeroCount() }
-      : { webdriver, untrustedClicks: NOT_RECORDED, zeroMoveTrials: NOT_RECORDED },
+      ? { webdriver, softwareRenderer, untrustedClicks: zeroCount(), zeroMoveTrials: zeroCount() }
+      : { webdriver, softwareRenderer, untrustedClicks: NOT_RECORDED, zeroMoveTrials: NOT_RECORDED },
     factCount: recorded ? (device.webdriver === true ? 1 : 0) : null,
     cursor: null,
     cursorReason: null,
@@ -332,13 +352,14 @@ export function analyzeCursorForParticipant(participant, limits = CURSOR_LIMITS)
   const cap = (ids) => ids.slice(0, MAX_IDS);
   const checks = recorded ? {
     webdriver,
+    softwareRenderer,
     untrustedClicks: { count: untrusted.count, of: untrusted.of, trialIds: cap(untrusted.trialIds), trials: untrusted.trials, fired: untrusted.count > 0 },
     zeroMoveTrials: { count: zeroMove.count, of: zeroMove.of, trialIds: cap(zeroMove.trialIds), trials: zeroMove.trials, fired: zeroMove.count > 0 }
   } : base.checks;
   const factCount = recorded ? [checks.webdriver.fired, checks.untrustedClicks.fired, checks.zeroMoveTrials.fired].filter(Boolean).length : null;
 
   return finish({
-    ...base, state: 'ok', checksRecorded: recorded ? 3 : 0, checks, factCount,
+    ...base, state: 'ok', checksRecorded: recorded ? deviceChecks + 2 : 0, checks, factCount,
     cursor: {
       stream: 'core', sampleIntervalMs: median(gaps), coordinates: mode,
       rules: {

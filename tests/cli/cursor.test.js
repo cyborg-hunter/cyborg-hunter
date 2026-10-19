@@ -108,14 +108,14 @@ describe('the checks of a session with no cursor stream', () => {
       const r = analyzeCursorForParticipant(participant(trials));
       assert.equal(r.state, state);
       assert.equal(r.checksRecorded, 1);
-      assert.deepEqual(r.checks, { webdriver: { fired: false }, untrustedClicks: zero, zeroMoveTrials: zero });
+      assert.deepEqual(r.checks, { webdriver: { fired: false }, softwareRenderer: 'not recorded', untrustedClicks: zero, zeroMoveTrials: zero });
       assert.equal(r.factCount, 0);
     });
     it(`${state}, without a device object: every check is not recorded`, () => {
       const r = analyzeCursorForParticipant(participant(trials, null));
       assert.equal(r.state, state);
       assert.equal(r.checksRecorded, 0);
-      assert.deepEqual(r.checks, { webdriver: 'not recorded', untrustedClicks: 'not recorded', zeroMoveTrials: 'not recorded' });
+      assert.deepEqual(r.checks, { webdriver: 'not recorded', softwareRenderer: 'not recorded', untrustedClicks: 'not recorded', zeroMoveTrials: 'not recorded' });
       assert.equal(r.factCount, null);
     });
   }
@@ -124,7 +124,7 @@ describe('the checks of a session with no cursor stream', () => {
     const r = analyzeCursorForParticipant(participant([trial('q1', [mv(5, 5, 0), ck(5, 5, 10)])], { maxTouchPoints: 5, coarsePointer: true, webdriver: false }));
     assert.equal(r.state, 'no cursor stream (touch device)');
     assert.equal(r.checksRecorded, 1);
-    assert.deepEqual(r.checks, { webdriver: { fired: false }, untrustedClicks: zero, zeroMoveTrials: zero });
+    assert.deepEqual(r.checks, { webdriver: { fired: false }, softwareRenderer: 'not recorded', untrustedClicks: zero, zeroMoveTrials: zero });
     assert.equal(r.factCount, 0);
   });
 });
@@ -568,5 +568,52 @@ describe('centered clicks in the pointer verdict', () => {
     const r = analyzeCursorForParticipant(withRecording(cleanParticipant(), recording(10, 9)), old);
     assert.equal(r.verdict, 'highly suspicious');
     assert.deepEqual(added.map((k) => r.limits[k]), [1.5, 5, 16, 800, 8, 1000, 500, 0.9]);
+  });
+});
+
+describe('software renderer check', () => {
+  // A device fact (0.17): shown in the checks table, summary.csv and the
+  // device line; never a tell, never in factCount. The clean session is the
+  // module's cleanTrials, through cleanParticipantWith.
+  const dev = (sr) => ({ maxTouchPoints: 0, coarsePointer: false, webdriver: false, ...(sr === undefined ? {} : { softwareRenderer: sr }) });
+
+  it('a software family fires the check, adds no tell and leaves a clean session clean', () => {
+    const r = analyzeCursorForParticipant(cleanParticipantWith({ device: dev('swiftshader') }));
+    assert.deepEqual(r.checks.softwareRenderer, { fired: true, family: 'swiftshader', noWebgl: false });
+    assert.equal(r.checksRecorded, 4);
+    assert.equal(r.factCount, 0);
+    assert.ok(!r.tells.some((t) => t.id === 'softwareRenderer'));
+    assert.equal(r.verdict, 'clean');
+  });
+  it("'none' (no WebGL) is recorded and shown, never fired", () => {
+    const r = analyzeCursorForParticipant(cleanParticipantWith({ device: dev('none') }));
+    assert.deepEqual(r.checks.softwareRenderer, { fired: false, family: null, noWebgl: true });
+    assert.equal(r.checksRecorded, 4);
+    assert.equal(r.factCount, 0);
+    assert.equal(r.verdict, 'clean');
+  });
+  it('false records the check without firing; a missing key (before 0.17), null and junk are not recorded', () => {
+    assert.deepEqual(analyzeCursorForParticipant(cleanParticipantWith({ device: dev(false) })).checks.softwareRenderer, { fired: false, family: null, noWebgl: false });
+    const old = analyzeCursorForParticipant(cleanParticipantWith({ device: dev(undefined) }));
+    assert.equal(old.checks.softwareRenderer, 'not recorded');
+    assert.equal(old.checksRecorded, 3);
+    for (const v of [null, 7, { family: 'x' }]) {
+      assert.equal(analyzeCursorForParticipant(cleanParticipantWith({ device: dev(v) })).checks.softwareRenderer, 'not recorded', String(v));
+    }
+    assert.equal(analyzeCursorForParticipant(cleanParticipantWith({ device: null })).checks.softwareRenderer, 'not recorded');
+  });
+  it('without a pointer stream the check is still recorded, and the session stays not assessed', () => {
+    const r = analyzeCursorForParticipant({ participantId: 'X', trials: [], session: { device: dev('llvmpipe') } });
+    assert.equal(r.checksRecorded, 2);
+    assert.deepEqual(r.checks.softwareRenderer, { fired: true, family: 'llvmpipe', noWebgl: false });
+    assert.equal(r.factCount, 0);
+    assert.equal(r.verdict, 'not assessed');
+    assert.deepEqual(r.tells, []);
+  });
+  it('the automation flag alone still decides a session without a stream', () => {
+    const r = analyzeCursorForParticipant({ participantId: 'X', trials: [], session: { device: { ...dev('swiftshader'), webdriver: true } } });
+    assert.equal(r.verdict, 'highly suspicious');
+    assert.deepEqual(r.tells.map((t) => t.id), ['webdriver']);
+    assert.equal(r.factCount, 1);
   });
 });

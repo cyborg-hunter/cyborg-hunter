@@ -50,14 +50,16 @@ const COLUMNS = [
   ['honeypot_ai_use', (s, t) => s.honeypotAiUse == null ? '' : (s.honeypotAiUse ? 'YES' : 'no')],
   ['honeypot_ai_report', (s, t) => s.honeypotAiReport || ''],
   // The cursor section (analyzers/cursor.js). Headers are fixed here once;
-  // twenty columns: the reason a session has no verdict, the verdict and
+  // twenty-one columns: the reason a session has no verdict, the verdict and
   // its tells, then the checks, the rules and the shape (medians only, no n).
   // '' means "no value" (a null session, a check not recorded, a value with
   // no n). The two centered columns (exact centre, then near it) are filled
   // from the recording; '' without one, 'touch' for a touch recording (not
-  // judged).
-  // A session with no cursor stream records only the automation flag, so its
-  // other two checks are '' like the cursor block.
+  // judged). The last, the software-renderer device fact (0.17), reads
+  // 'YES (<family>)', 'no', 'no WebGL', or '' when not recorded.
+  // A session with no cursor stream records only the automation flag and,
+  // from 0.17, the software renderer, so its two click checks are '' like
+  // the cursor block.
   ['cursorReason', (s) => s.cursorAnalysis?.verdictReason ?? ''],
   ['cursorVerdict', (s) => s.cursorAnalysis?.verdict ?? ''],
   ['cursorTells', (s) => s.cursorAnalysis ? s.cursorAnalysis.tells.map(t => t.short).join('; ') : ''],
@@ -78,6 +80,7 @@ const COLUMNS = [
   ['cursorMaxDeviationPxMedian', (s) => { const m = s.cursorAnalysis?.cursor?.features?.maxDeviationPx?.median; return m == null ? '' : m.toFixed(1); }],
   ['cursorCenteredClicks', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.centeredClicks; return !r ? '' : r.state === 'touch' ? 'touch' : `${r.count}/${r.of}`; }],
   ['cursorCenteredNear', (s) => { const r = s.cursorAnalysis?.cursor?.rules?.centeredClicks; return !r ? '' : r.state === 'touch' ? 'touch' : r.near ? `${r.near.count}/${r.near.of}` : ''; }],
+  ['cursorSoftwareRenderer', (s) => { const c = s.cursorAnalysis?.checks?.softwareRenderer; return c && typeof c === 'object' ? (c.fired ? `YES (${c.family})` : c.noWebgl ? 'no WebGL' : 'no') : ''; }],
 ];
 
 export function buildSummaryCsv(summaries, triage) {
