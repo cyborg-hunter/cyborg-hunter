@@ -40,6 +40,26 @@ describe('matchTrialSegments', () => {
     const s = seg('guard', 900);
     assert.deepEqual(matchTrialSegments([trial('guard', 1000), trial('guard', 1900)], rec([s])), [null, s]);
   });
+  it('two trials with one id, each on its own segment\'s clock, get their own segments', () => {
+    const a = seg('q', 0), b = seg('q', 500);
+    assert.deepEqual(matchTrialSegments([trial('q', 1000), trial('q', 1500)], rec([a, b])), [a, b]);
+  });
+  it('thousands of trials and segments with one label, all on one clock, match one to one and quickly', () => {
+    // A file a participant could write: 5,000 'q' segments 0.125 ms apart,
+    // every one within the tolerance of every trial, and the trials listed
+    // latest first. Each trial gets the segment that starts on its clock,
+    // with memory that grows with the trials and segments, not their product
+    // (pairing every trial with every segment took gigabytes here).
+    const N = 5000;
+    const segments = [], trials = [];
+    for (let i = 0; i < N; i++) segments.push(seg('q', i * 0.125));
+    for (let i = N - 1; i >= 0; i--) trials.push(trial('q', 1000 + i * 0.125));
+    const t0 = Date.now();
+    const out = matchTrialSegments(trials, rec(segments));
+    const ms = Date.now() - t0;
+    for (let j = 0; j < N; j++) assert.equal(out[j], segments[N - 1 - j], `trial ${j}`);
+    assert.ok(ms < 2000, `took ${ms} ms`);
+  });
   it('a segment without t_load starts at t_dom_ready, then t_start, then its first event', () => {
     const a = { label: 'a', t_load: null, t_dom_ready: 20, t_start: 5, events: [] };
     const b = { label: 'b', t_load: null, t_dom_ready: null, t_start: 30, events: [] };

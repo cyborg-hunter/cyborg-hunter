@@ -65,39 +65,52 @@ export function matchTrialSegments(trials, recording) {
   if (!Array.isArray(trials)) return [];
   const out = trials.map(() => null);
   if (!isObj(recording) || recording.schema_version !== 2 || !Array.isArray(recording.segments)) return out;
+  // Per label, its segments as { s, o, used }: the segment, its origin, and
+  // whether a trial has it (kept here, never written onto the segment).
   const byLabel = new Map();
-  const origin = new Map();
   for (const s of recording.segments) {
     if (!isObj(s) || typeof s.label !== 'string' || s.label === SESSION_LABEL) continue;
     if (!byLabel.has(s.label)) byLabel.set(s.label, []);
-    byLabel.get(s.label).push(s);
-    origin.set(s, originOf(s));
+    byLabel.get(s.label).push({ s, o: originOf(s), used: false });
   }
   const ids = trials.map(ownIdOf);
   const idCount = new Map();
   for (const id of ids) if (id !== null) idCount.set(id, (idCount.get(id) || 0) + 1);
-  const used = new Set();
+  const take = (i, c) => { out[i] = c.s; c.used = true; };
 
-  // By the clock: every (trial, segment) pair with one id that starts within
-  // the tolerance, closest first. Closest first, not trial by trial: of two
-  // short trials with one id, the first must not take the second's segment
-  // when the recording began between them. Ties keep trial order (the sort
-  // is stable).
+  // By the clock, closest first: of two short trials with one id, the first
+  // must not take the second's segment when the recording began between
+  // them. Memory stays linear in the trials and the segments (a file can
+  // hold thousands of one label, all within the tolerance of each other):
+  // each trial names only its nearest free segment, the closest of those
+  // are taken first (ties keep trial order: the sort is stable), and a trial
+  // whose nearest went to a closer trial then takes its nearest free one,
+  // trial by trial.
   const base = isNum(recording.recording_started_at_perf) ? recording.recording_started_at_perf : null;
   if (base !== null) {
-    const pairs = [];
-    trials.forEach((t, i) => {
-      if (ids[i] === null || !isNum(t.startTime)) return;
-      for (const s of byLabel.get(ids[i]) || []) {
-        const o = origin.get(s);
-        const d = o === null ? Infinity : Math.abs(base + o - t.startTime);
-        if (d <= CLOCK_TOLERANCE_MS) pairs.push({ i, s, d });
+    const nearest = (i) => {
+      let best = null;
+      let bestD = Infinity;
+      for (const c of byLabel.get(ids[i]) || []) {
+        if (c.used || c.o === null) continue;
+        const d = Math.abs(base + c.o - trials[i].startTime);
+        if (d <= CLOCK_TOLERANCE_MS && d < bestD) { best = c; bestD = d; }
+        if (d === 0) break;   // none is nearer, and a tie keeps the first
       }
+      return best ? { i, c: best, d: bestD } : null;
+    };
+    const onClock = trials.map((t, i) => ids[i] !== null && isNum(t.startTime));
+    const firsts = [];
+    trials.forEach((t, i) => {
+      const n = onClock[i] ? nearest(i) : null;
+      if (n) firsts.push(n);
     });
-    pairs.sort((a, b) => a.d - b.d);
-    for (const { i, s } of pairs) {
-      if (out[i] === null && !used.has(s)) { out[i] = s; used.add(s); }
-    }
+    firsts.sort((a, b) => a.d - b.d);
+    for (const { i, c } of firsts) if (!c.used) take(i, c);
+    trials.forEach((t, i) => {
+      const n = onClock[i] && out[i] === null ? nearest(i) : null;
+      if (n) take(i, n.c);
+    });
   }
 
   // By the id alone, for a trial the clock did not place: only when its id
@@ -105,7 +118,7 @@ export function matchTrialSegments(trials, recording) {
   ids.forEach((id, i) => {
     if (out[i] !== null || id === null || idCount.get(id) !== 1) return;
     const all = byLabel.get(id) || [];
-    if (all.length === 1 && !used.has(all[0])) { out[i] = all[0]; used.add(all[0]); }
+    if (all.length === 1 && !all[0].used) take(i, all[0]);
   });
   return out;
 }
