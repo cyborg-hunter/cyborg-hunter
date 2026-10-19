@@ -118,7 +118,7 @@ and `scoring.softScoreThreshold`).
 | `tabawayMedium` | tab-aways between the threshold and 10 s | 0 |
 | `flicker` | tab-aways at or below the threshold | 0 |
 | `drop` | drag-and-drop events | 0 |
-| `fastTyping` | trials with 20 or more edits typed faster than the participant's cps threshold (older data with neither saved edit times nor a recording that keeps the page, `dom` tier: the saved rate, from 2 edits) | 0 |
+| `fastTyping` | trials with 20 or more edits (the participant's own `thresholds.typingMinEdits` when the session report saved one) typed faster than the participant's cps threshold (older data with neither saved edit times nor a recording that keeps the page, `dom` tier: the saved rate, from 2 edits) | 0 |
 | `synthetic` | synthetic insertions (text without preceding keystrokes) | 0 |
 | `foreignInput` | keystrokes outside the response field | 0 |
 | `aiExtensions` | AI extensions detected | 0 |
