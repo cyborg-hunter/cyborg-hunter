@@ -39,6 +39,8 @@ test('the sample shows the pointer verdict, its tells, the details, the tile, th
   await expect(details.locator('tr', { hasText: 'automation flag set by the browser' }).locator('td')).toHaveText('no');
   await expect(details.locator('tr', { hasText: 'trials clicked without pointer movement' })).toContainText('0 of 6');
   await expect(details.locator('tr', { hasText: 'clicks that arrived without a path' })).toContainText('12 of 12 first clicks with a known position');
+  // Read from the recording the page fetched on Load sample data.
+  await expect(details.locator('tr', { hasText: 'clicks at the exact centre of the control' }).locator('td')).toHaveText('8 of 11 qualifying clicks (baseline, paste, tabaway, autotype, guard-entry, guard)');
   await expect(details.locator('tr', { hasText: 'efficiency (per movement)' })).toContainText('0.967 (n = 1)');
   await expect(frame.locator('#p-DEMO-bsq6 .signal-tile', { hasText: 'Pointer verdict' }).locator('.signal-value')).toHaveText('2');
   await expect(section).not.toContainText('replay card');
