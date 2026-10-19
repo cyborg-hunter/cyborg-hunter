@@ -261,7 +261,9 @@ test('annotations made in the report frame are kept by the page through a re-ana
 
 // The pseudonym key the analyzer remembers: the CLI's key file, loaded in the
 // settings, gives the CLI's codes; the page keeps its secret through a
-// reload, and Forget key removes it.
+// reload, and Forget key removes it. The page gets the sample's recordings
+// too: the CLI attaches them from the sample folder, and the two summary.csv
+// files must be built from the same input.
 test('the CLI\'s pseudonym key file: the same codes as the CLI, remembered after a reload, gone after Forget key', async ({ page, baseURL }) => {
   const out = mkdtempSync(join(tmpdir(), 'ch-e2e-key-'));
   try {
@@ -273,7 +275,7 @@ test('the CLI\'s pseudonym key file: the same codes as the CLI, remembered after
     const seen = await guardNetwork(page, allow);
     await page.goto('/analyze/');
     await waitReady(page);
-    await page.setInputFiles('[data-role="file-input"]', sampleFiles());
+    await page.setInputFiles('[data-role="file-input"]', sampleFiles().concat(sampleRecordingFiles()));
     await expect(page.locator('[data-role="key-status"]')).toHaveText('No key yet: the first pseudonymized report makes one.');
     await page.setInputFiles('[data-role="key-input"]', keyPath);
     await expect(page.locator('[data-role="key-note"]')).toHaveText('Key loaded from keys.csv.');
