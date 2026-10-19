@@ -77,8 +77,10 @@ export function createSegmentDiffer(monitor) {
       var gaps = (meta.gapReports || []).map(nonEmptyGap).filter(Boolean);
       if (gaps.length) seg.gap = gaps;
       if (meta.segmentIndex === 0) { seg.config = report.config; seg.libraryVersion = report.libraryVersion; }
-      // The device facts are read once, at startSession, and are not an
-      // array, so the first segment carries them, as it carries config.
+      // The touch, pointer and automation facts are read at startSession, the
+      // software renderer when the browser is next idle (within about 1 s). The
+      // first segment carries them as they stand when cut, as it carries config:
+      // cut before that read, it has softwareRenderer null (shown as not checked).
       if (meta.segmentIndex === 0 && report.device) seg.device = report.device;
       // windowPositionsCapped is not an array either, but unlike the device
       // facts it can turn true mid-session (the window log reaching its cap,
