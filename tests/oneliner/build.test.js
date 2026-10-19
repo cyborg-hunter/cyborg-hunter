@@ -19,7 +19,9 @@ import { ONE_LINE_TARGETS, defineFor } from '../../build-targets.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const buildSrc = readFileSync(join(ROOT, 'build.js'), 'utf8');
-const CAP = 120 * 1024;   // bytes, for each one-line file without the recorder
+// Raised in 0.17 from 120 KiB: the core gained the renderer read and the
+// typing measures.
+const CAP = 124 * 1024;   // bytes, for each one-line file without the recorder
 // A file that bundles the session recorder (build-targets.js `replay`): the
 // recorder is about 45 KiB minified, and these files record by default.
 const CAP_REPLAY = 170 * 1024;
