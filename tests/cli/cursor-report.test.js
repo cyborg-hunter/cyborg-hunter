@@ -225,6 +225,26 @@ describe('the HTML report', () => {
     const html = await renderIndexHtml(summaries, triage, [recorded], config, false);
     assert.match(html, /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">0 of 4 first clicks with a known position arrived without a path and 0 of 5 trials were clicked without pointer movement, both under 20%; 0 of 8 clicks at the exact centre of the control; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/);
   });
+  // The centre rule is judged from 8 qualifying clicks: under that, the clean
+  // sentence names no centre clicks, and the details still give the count.
+  const cleanWithClicks = async (n) => {
+    const clean = base('CLEAN', [path(0), path(0), path(0), path(0), path(0)], desktop);
+    clean.trials.forEach((t, i) => { t.startTime = 1000 + i * 5100; });
+    const recorded = withRecording(clean, 'FEW' + n, clicksAt(n, 150, 120));
+    const { summaries, triage } = analyze([recorded]);
+    return renderIndexHtml(summaries, triage, [recorded], config, false);
+  };
+  const unjudgedSentence = /<span class="verdict-badge" data-level="0">clean<\/span> <span class="muted">0 of 4 first clicks with a known position arrived without a path and 0 of 5 trials were clicked without pointer movement, both under 20%; no click the page’s own scripts dispatched; automation flag not set\.<\/span>/;
+  it('a clean session whose recording has fewer than 8 qualifying clicks names no centre clicks in its sentence', async () => {
+    const html = await cleanWithClicks(7);    // 7 of 7 at the exact centre
+    assert.match(html, unjudgedSentence);
+    assert.match(html, /<tr><th>clicks at the exact centre of the control<\/th><td>7 of 7 qualifying clicks \(q1\)<\/td><\/tr>/);
+  });
+  it('a clean session whose recording has no qualifying click names no centre clicks in its sentence', async () => {
+    const html = await cleanWithClicks(0);
+    assert.match(html, unjudgedSentence);
+    assert.match(html, /<tr><th>clicks at the exact centre of the control<\/th><td>0 of 0 qualifying clicks<\/td><\/tr>/);
+  });
   it('a clean session with counts under the threshold states them', async () => {
     // Ten trials, 100 ms apart; the fifth is a lone click far from where q4's
     // path ended (260, 160): a trial clicked without pointer movement, 1 of 10

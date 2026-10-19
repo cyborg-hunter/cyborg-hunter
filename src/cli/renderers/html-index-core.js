@@ -1363,8 +1363,9 @@ function renderCursorSection(s, participant, replayShownExternally) {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">${esc(ca.verdictReason)}.</span></p>`;
   } else if (ca.level === 0) {
     const n = ca.cursor.rules.noPathClicks, z = ca.checks.zeroMoveTrials, cc = ca.cursor.rules.centeredClicks;
-    // The exact-centre share, when the session has a recording that is not a touch one.
-    const centeredShare = cc && cc.state === 'ok' ? `${esc(String(cc.count))} of ${esc(String(cc.of))} clicks at the exact centre of the control; ` : '';
+    // The exact-centre share, only when the verdict judged it: a recording
+    // that is not a touch one, with minClicksForCentered qualifying clicks.
+    const centeredShare = cc && cc.state === 'ok' && cc.of >= ca.limits.minClicksForCentered ? `${esc(String(cc.count))} of ${esc(String(cc.of))} clicks at the exact centre of the control; ` : '';
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">${n.count} of ${n.of} first clicks with a known position arrived without a path and ${z.count} of ${z.of} trials were clicked without pointer movement, both under ${Math.round(100 * ca.limits.shareSuspicious)}%; ${centeredShare}no click the page’s own scripts dispatched; automation flag not set.</span></p>`;
   } else {
     verdict = `<p class="cursor-verdict">${badge} <span class="muted">because of:</span></p>
