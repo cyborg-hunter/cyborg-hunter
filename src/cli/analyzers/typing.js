@@ -230,6 +230,17 @@ export function matchTrialSegments(trials, recording) {
 
 // ── Reading a segment ───────────────────────────────────────────────────────
 
+// A key press the rhythm counts: a printable one-character key (not a
+// repeat, no Ctrl or Meta) at a time, whose anchor (§6) is an input or a
+// textarea. → that tag, or null. Which field it went to is the event's target.
+function typedKeyTag(e) {
+  if (e.type !== 'key.down' || e.repeat === true || typeof e.key !== 'string' || e.key.length !== 1 || !isNum(e.t)) return null;
+  const mods = isObj(e.mods) ? e.mods : {};
+  if (mods.ctrl === true || mods.meta === true) return null;
+  const tag = isObj(e.anchor) && typeof e.anchor.tag === 'string' ? e.anchor.tag.toLowerCase() : '';
+  return tag === 'input' || tag === 'textarea' ? tag : null;
+}
+
 /**
  * The text fields typed into in a segment, from its key presses (§5.2
  * key.down; the field's tag from the event's anchor, §6): one entry per
@@ -243,25 +254,35 @@ export function matchTrialSegments(trials, recording) {
  * out (Backspace, Enter, a chord) does not break the run: the next gap
  * spans it, as the library's does. A redacted key press has no key and is
  * not counted. A recording without a DOM (trace tier) gives its key presses
- * no target, so it yields no field.
+ * no target, so it yields no field (hasUntargetedTyping tells that apart
+ * from no typing).
  */
 export function recordingKeyGaps(seg) {
   const byNode = new Map();
   for (const e of eventsOf(seg)) {
-    if (e.type !== 'key.down' || e.repeat === true || typeof e.key !== 'string' || e.key.length !== 1 || !isNum(e.t)) continue;
-    const mods = isObj(e.mods) ? e.mods : {};
-    if (mods.ctrl === true || mods.meta === true) continue;
-    const tag = isObj(e.anchor) && typeof e.anchor.tag === 'string' ? e.anchor.tag.toLowerCase() : '';
-    if ((tag !== 'input' && tag !== 'textarea') || !Number.isInteger(e.target)) continue;
+    const tag = typedKeyTag(e);
+    if (tag === null || !Number.isInteger(e.target)) continue;
     let f = byNode.get(e.target);
     if (!f) { f = { field: { tag }, gaps: [], lastT: null, lastCode: null }; byNode.set(e.target, f); }
     // The recorder writes code '' when the browser gives none; the key stands in.
     const code = typeof e.code === 'string' && e.code ? e.code : e.key;
-    if (f.lastT !== null && code !== f.lastCode && e.t >= f.lastT) f.gaps.push(e.t - f.lastT);
+    // A gap is kept when it is at most MAX_SAFE_INTEGER ms: finite (two
+    // finite times can be Infinity apart), and small enough that the sums
+    // and squares summarizeGaps takes stay finite.
+    const gap = e.t - f.lastT;
+    if (f.lastT !== null && code !== f.lastCode && gap >= 0 && gap <= Number.MAX_SAFE_INTEGER) f.gaps.push(gap);
     f.lastT = e.t;
     f.lastCode = code;
   }
   return [...byNode.values()].map((f) => ({ field: f.field, gaps: f.gaps }));
+}
+
+// Whether a segment holds a key press the rhythm would count that names no
+// field: a recording without the page's DOM (trace tier) keeps the anchor's
+// tag but gives the key press no target, so its keys cannot be told apart
+// by field.
+function hasUntargetedTyping(seg) {
+  return eventsOf(seg).some((e) => typedKeyTag(e) !== null && !Number.isInteger(e.target));
 }
 
 /**
@@ -385,13 +406,21 @@ export function analyzeTyping(participant, config = {}, options = {}) {
       : matched.some(Boolean) ? 'typing rhythm not recorded and the session recording matches no trial in the phase scope'
       : 'typing rhythm not recorded and the session recording matches no trial';
   } else if (!fields.length) {
-    state = 'not assessed'; level = -1;
-    // No field at all: no character was typed into an input or a textarea
-    // (shortcuts such as Cmd+V are not counted), or the recording cannot
-    // tell: one without the page's DOM gives its key presses no target, and
-    // an editable area (contenteditable) is not read.
-    verdictReason = source === 'recording' && shortFields === 0 ? 'the session recording holds no character key presses in an input or a textarea'
-      : `no text field reached ${L.minGaps} key gaps`;
+    level = -1;
+    // From the recording, over the judged trials' segments only (typing
+    // between trials, in an unmatched segment or outside the phase scope is
+    // not theirs): key presses that name no field (a recording without the
+    // page's DOM) leave the rhythm not recorded; else either no character
+    // was typed into a text field (shortcuts such as Cmd+V and an editable
+    // area's keys are not counted), or every field was too short.
+    if (source === 'recording' && segs.some((s) => s !== null && hasUntargetedTyping(s))) {
+      state = 'not recorded';
+      verdictReason = 'the session recording does not say which field each key went to (recorded without the page)';
+    } else {
+      state = 'not assessed';
+      verdictReason = source === 'recording' && shortFields === 0 ? 'the session recording holds no typed characters in a text field of the judged trials'
+        : `no text field reached ${L.minGaps} key gaps`;
+    }
   } else {
     level = both ? 2 : speedFields.length || evenFields.length ? 1 : 0;
   }

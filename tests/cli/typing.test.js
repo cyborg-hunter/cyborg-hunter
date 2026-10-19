@@ -21,6 +21,8 @@ const person = (n = 40) => Array.from({ length: n }, (_, i) => [140, 260, 180, 9
 const even = (n = 40) => Array.from({ length: n }, (_, i) => 150 + (i % 2 ? 4 : -4));                       // median 150, CV 0.03
 const fastUneven = () => [...Array(15).fill(40), ...Array(6).fill(400)];                                      // median 40, CV 1.17
 const bot = (n = 40) => Array.from({ length: n }, (_, i) => 40 + (i % 3));                                    // median 41, CV 0.02
+// The reason when the judged trials' segments hold no typed character in a text field.
+const NO_TYPING = 'the session recording holds no typed characters in a text field of the judged trials';
 // Edit times n of them, 100 ms apart.
 const editTimes = (n, start = 5000) => Array.from({ length: n }, (_, i) => start + 100 * i);
 
@@ -119,7 +121,7 @@ describe('from the session recording', () => {
   });
   it('a field under 20 gaps in the recording counts as too short', () => {
     const a = analyzeTyping(participantFromRecording('SHORT', keyRecording([['q1', 10, botGaps(5)]])));
-    assert.deepEqual([a.state, a.shortFields], ['not assessed', 1]);
+    assert.deepEqual([a.state, a.shortFields, a.verdictReason], ['not assessed', 1, 'no text field reached 20 key gaps']);
   });
   it('a recording that matches no trial: not recorded, and the reason says so', () => {
     const p = participantFromRecording('X', keyRecording([['q1', 10, botGaps(30)]]));
@@ -127,14 +129,60 @@ describe('from the session recording', () => {
     const a = analyzeTyping(p);
     assert.deepEqual([a.state, a.verdictReason], ['not recorded', 'typing rhythm not recorded and the session recording matches no trial']);
   });
-  it('key presses with no text field (a recording without the page, an editable area): not assessed, and the reason says so', () => {
-    const rec = keyRecording([['q1', 10, botGaps(30)], ['q2', 60010, botGaps(30)]]);
-    for (const e of rec.segments[0].events) if (e.type === 'key.down') { delete e.target; delete e.anchor; }
-    for (const e of rec.segments[1].events) if (e.type === 'key.down') e.anchor.tag = 'div';
-    const a = analyzeTyping(participantFromRecording('NODOM', rec));
-    assert.deepEqual([a.source, a.state, a.level, a.shortFields, a.fields],
-      ['recording', 'not assessed', -1, 0, []]);
-    assert.equal(a.verdictReason, 'the session recording holds no character key presses in an input or a textarea');
+  it('a trace-tier recording (key presses keep their field\'s tag but no target): not recorded, and the reason says so', () => {
+    const rec = keyRecording([['q1', 10, botGaps(30)]]);
+    for (const e of rec.segments[0].events) if (e.type === 'key.down') { e.target = null; e.anchor.node = null; }
+    const a = analyzeTyping(participantFromRecording('TRACE', rec));
+    assert.deepEqual([a.state, a.level, a.fields], ['not recorded', -1, []]);
+    assert.equal(a.verdictReason, 'the session recording does not say which field each key went to (recorded without the page)');
+  });
+  it('typing into an editable area alone: not assessed, no typed characters in a text field', () => {
+    const rec = keyRecording([['q1', 10, botGaps(30)]]);
+    for (const e of rec.segments[0].events) if (e.type === 'key.down') e.anchor.tag = 'div';
+    const a = analyzeTyping(participantFromRecording('EDITABLE', rec));
+    assert.deepEqual([a.source, a.state, a.level, a.shortFields, a.fields], ['recording', 'not assessed', -1, 0, []]);
+    assert.equal(a.verdictReason, NO_TYPING);
+  });
+  it('key times whose gaps overflow: those gaps are left out, and no measure is NaN', () => {
+    // Two keys at -1e308 and 1e308 in a row: a gap of Infinity.
+    const adjacent = keyRecording([['q1', 10, botGaps(30)]]);
+    const a1 = adjacent.segments[0].events.filter((e) => e.type === 'key.down');
+    a1[0].t = -1e308;
+    a1[1].t = 1e308;
+    for (const k of a1.slice(2)) k.t = 1e308;   // the rest after it, so no gap goes backwards
+    // The first and the last key that far apart: finite gaps whose sum overflows.
+    const spread = keyRecording([['q1', 10, botGaps(30)]]);
+    const a2 = spread.segments[0].events.filter((e) => e.type === 'key.down');
+    a2[0].t = -1e308;
+    a2[a2.length - 1].t = 1e308;
+    const a = analyzeTyping(participantFromRecording('INF', spread));
+    assert.deepEqual([a.fields[0].gaps, a.level], [28, 2]);
+    for (const p of [participantFromRecording('INF', adjacent), participantFromRecording('INF', spread)]) {
+      for (const f of analyzeTyping(p).fields) for (const k of ['gaps', 'medianMs', 'under60Share', 'cv']) assert.ok(Number.isFinite(f[k]), JSON.stringify(f));
+    }
+  });
+});
+
+describe('from the session recording, the reason is about the judged trials\' segments', () => {
+  // The judged trial's segment holds no key press; the typing is elsewhere.
+  const noKeys = (rec, k) => { rec.segments[k].events = [{ type: 'mouse.click', t: rec.segments[k].t_load + 50 }]; return rec; };
+  it('typing only in a segment no trial matches', () => {
+    const p = participantFromRecording('U', noKeys(keyRecording([['q1', 10, []], ['zzz', 60010, botGaps(30)]]), 0));
+    p.trials.pop();
+    assert.deepEqual([analyzeTyping(p).state, analyzeTyping(p).verdictReason], ['not assessed', NO_TYPING]);
+  });
+  it('typing only in a trial outside the phase scope', () => {
+    const full = participantFromRecording('S', noKeys(keyRecording([['w', 10, botGaps(30)], ['m', 60010, []]]), 1));
+    full.trials[0].phase = 'warm-up';
+    full.trials[1].phase = 'main';
+    const [scoped] = applyPhaseScope([full], { include: ['main'] });
+    const a = analyzeTyping(scoped, {}, { allTrials: full.trials });
+    assert.deepEqual([a.state, a.verdictReason], ['not assessed', NO_TYPING]);
+  });
+  it('typing only between trials (the whole-session segment)', () => {
+    const p = participantFromRecording('G', noKeys(keyRecording([['q1', 10, []], ['__session__', 60010, botGaps(30)]]), 0));
+    p.trials.pop();
+    assert.deepEqual([analyzeTyping(p).state, analyzeTyping(p).verdictReason], ['not assessed', NO_TYPING]);
   });
 });
 
@@ -319,7 +367,7 @@ describe('the bundled demo sessions', () => {
   });
   it('Mira\'s sessions: nothing judged from their recordings; the old formula where a recording does not reach', () => {
     const w = analyzeTyping(load('DEMO-681w'));
-    assert.deepEqual([w.state, w.rate.source, fastTypingTrials(w)], ['not assessed', 'old formula', 2]);
+    assert.deepEqual([w.state, w.verdictReason, w.rate.source, fastTypingTrials(w)], ['not assessed', NO_TYPING, 'old formula', 2]);
     // Its recording covers the last pass through the tour, trials 11 to 16.
     assert.deepEqual(w.rate.trials.map((x) => x.source), [...Array(11).fill('old formula'), ...Array(6).fill('recording')]);
     // Three trials are called "baseline": byTrial merges them.
@@ -327,7 +375,8 @@ describe('the bundled demo sessions', () => {
     // byIndex keeps them apart: one entry per trial, in order.
     assert.equal(w.byIndex.length, w.rate.trials.length);
     const a3 = analyzeTyping(load('DEMO-a3f3'));
-    assert.deepEqual([a3.state, a3.shortFields, a3.rate.source, fastTypingTrials(a3)], ['not assessed', 0, 'recording', 1]);
+    // Its text box saw only Cmd+V and Tab: no typed character.
+    assert.deepEqual([a3.state, a3.verdictReason, a3.shortFields, a3.rate.source, fastTypingTrials(a3)], ['not assessed', NO_TYPING, 0, 'recording', 1]);
     const m = analyzeTyping(load('DEMO-9mop'));
     assert.deepEqual([m.state, m.rate.source, fastTypingTrials(m)], ['not recorded', 'old formula', 0]);
   });
