@@ -2,10 +2,12 @@
 // The typing section in the report: it rides on each summary
 // (typingAnalysis), recounts fast typing where it recomputed a rate from
 // saved edit times or the recording, writes typing-limits.json, adds a
-// clause to the triage reason and a weight (typingRhythm) to the score table.
+// clause to the triage reason, a weight (typingRhythm) to the score table
+// and six columns to summary.csv.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildReport, REPORT_FILES } from '../../src/cli/report-core.js';
+import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
 import { SCORE_SIGNALS, SIGNAL_LABELS, resolveScoreWeights, formulaText } from '../../src/cli/analyzers/score-weights.js';
 import { TYPING_LIMITS } from '../../src/cli/analyzers/typing.js';
 import { VERSION } from '../../src/shared/constants.js';
@@ -160,5 +162,52 @@ describe('the triage reason', () => {
   it('says nothing of a clean, a not-assessed or a not-recorded verdict', async () => {
     const { built } = await report([HUMAN(), OLD()]);
     assert.deepEqual(built.triage.map((t) => [t.participantId, t.reason]), [['HUMAN', 'clean'], ['OLD', 'fast typing on 1 trials']]);
+  });
+});
+
+describe('summary.csv', () => {
+  const TYPING_COLS = ['typingVerdict', 'typingTells', 'typingFieldsJudged', 'typingFastestMedianMs', 'typingLowestCv', 'typingRateSource'];
+  // Each session's six typing cells, by participant id.
+  const typingCells = (csv) => {
+    const [header, ...rows] = csv.trim().split('\n');
+    const at = header.split(',').indexOf('typingVerdict');
+    return Object.fromEntries(rows.map((r) => r.split(',')).map((r) => [r[0], r.slice(at, at + 6)]));
+  };
+  it('appends the six typing columns after the cursor block', async () => {
+    const { files } = await report([BOT(), HUMAN(), OLD()]);
+    const [header, ...rows] = files['summary.csv'].trim().split('\n');
+    const cols = header.split(',');
+    const at = cols.indexOf('typingVerdict');
+    assert.deepEqual(cols.slice(at, at + 6), TYPING_COLS);
+    assert.ok(at > cols.indexOf('cursorCenteredClicks'), 'after the cursor block');
+    const cells = Object.fromEntries(rows.map((r) => r.split(',')).map((r) => [r[0], r.slice(at, at + 6)]));
+    assert.deepEqual(cells.BOT, ['highly suspicious', 'median gap 41 ms; gap variation 0.02', '1', '41', '0.02', 'recording']);
+    assert.deepEqual(cells.HUMAN, ['clean', '', '1', '181.5', '1.579', 'recording']);
+    assert.deepEqual(cells.OLD, ['not assessed', '', '', '', '', 'old formula']);
+  });
+  it('the six follow deviceMasking, the column that was last: every earlier column keeps its place', async () => {
+    const { files } = await report([OLD()]);
+    const cols = files['summary.csv'].split('\n')[0].split(',');
+    assert.equal(cols.indexOf('typingVerdict'), cols.indexOf('deviceMasking') + 1);
+  });
+  it('fields judged: 0 when no field was long enough, empty when the rhythm was not recorded; the rate source names saved edit times', async () => {
+    // AGE: one gap in its only field (too short to judge). TRACE: a
+    // recording without the page, whose rate still comes from the
+    // recording's edits. TIMES: no rhythm, the rate from saved edit times.
+    const age = participantFromRecording('AGE', keyRecording([['age', 10, [170]]]));
+    const { files } = await report([age, TRACE(), TIMES()]);
+    const cells = typingCells(files['summary.csv']);
+    assert.deepEqual(cells.AGE, ['not assessed', '', '0', '', '', 'recording']);
+    assert.deepEqual(cells.TRACE, ['not assessed', '', '', '', '', 'recording']);
+    assert.deepEqual(cells.TIMES, ['not assessed', '', '', '', '', 'edit times']);
+  });
+  it('the fastest median gap and the lowest variation over many fields, without a stack overflow', () => {
+    // More fields than Math.min(...spread) can take as arguments (a file
+    // can hold that many library summaries).
+    const fields = Array.from({ length: 250000 }, (_, i) => ({ medianMs: 300 - (i % 7), cv: 0.9 - (i % 5) / 10 }));
+    const summary = { participantId: 'MANY', trialCount: 1, meanTypingSpeed: 0, meanMouseEvents: 0, meanPathEfficiency: 0,
+      typingAnalysis: { state: 'ok', verdict: 'clean', tells: [], fields, rate: { source: 'library' } } };
+    const cells = typingCells(buildSummaryCsv([summary], [{ participantId: 'MANY', score: 0, reason: 'clean' }]));
+    assert.deepEqual(cells.MANY, ['clean', '', '250000', '294', '0.5', 'library']);
   });
 });

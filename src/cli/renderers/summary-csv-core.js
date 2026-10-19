@@ -5,6 +5,14 @@
 
 import { csvCell } from '../../shared/csv-cell.js';
 
+// The smallest of one measure over a typing analysis's judged fields, or ''
+// with none. A loop, not Math.min(...): a file can hold more fields than a
+// spread can pass as arguments (as analyzers/typing.js notes).
+const leastOfFields = (s, k) => {
+  const f = s.typingAnalysis?.fields;
+  return f && f.length ? f.reduce((m, x) => Math.min(m, x[k]), Infinity) : '';
+};
+
 // CSV columns in output order. Each entry: [header, accessor function].
 const COLUMNS = [
   ['participantId', (s, t) => s.participantId],
@@ -85,6 +93,21 @@ const COLUMNS = [
   // space-separated (R1, R2, R3a); empty when none fired or the session has
   // no window log. After the cursor block, so its columns keep their places.
   ['deviceMasking', (s) => (s.deviceMasking && Array.isArray(s.deviceMasking.rules) ? s.deviceMasking.rules.join(' ') : '')],
+  // The typing section (analyzers/typing.js): six columns appended after
+  // every other block, so that no earlier column moves. '' means no value:
+  // no analysis, a session whose typing rhythm was not recorded (fields
+  // judged), or no judged field (the fastest median gap, the lowest
+  // variation). typingRateSource says where the typing rates came from:
+  // 'library', 'edit times' (the trial's saved edit times), 'recording' or
+  // 'old formula'; with several, the weakest any judged trial used (old
+  // formula < recording < edit times < library). It names the rate's
+  // source, not the rhythm's. No cell holds a comma.
+  ['typingVerdict', (s) => s.typingAnalysis?.verdict ?? ''],
+  ['typingTells', (s) => s.typingAnalysis ? s.typingAnalysis.tells.map(t => t.short).join('; ') : ''],
+  ['typingFieldsJudged', (s) => s.typingAnalysis && s.typingAnalysis.state !== 'not recorded' ? s.typingAnalysis.fields.length : ''],
+  ['typingFastestMedianMs', (s) => leastOfFields(s, 'medianMs')],
+  ['typingLowestCv', (s) => leastOfFields(s, 'cv')],
+  ['typingRateSource', (s) => s.typingAnalysis?.rate?.source ?? ''],
 ];
 
 export function buildSummaryCsv(summaries, triage) {
