@@ -52,6 +52,11 @@ export const SCORE_SIGNALS = [
   // Masking hides a device and is not evidence of AI use; weight 0.
   { key: 'deviceMasking', weight: 0, count: s => s.deviceMasking && s.deviceMasking.rules.length ? 1 : 0,
     label: 'device masking', hint: 'ranking weight × 1 when the window log contradicts the screen the browser reports (a masking tool, not evidence of AI use); the tier is unchanged.' },
+  // The report's typing verdict (analyzers/typing.js): its level, 0 for a
+  // clean or not-assessed session, 1 for suspicious, 2 for highly
+  // suspicious. Ranks within a tier like every key here.
+  { key: 'typingRhythm',   weight: 0, count: s => (s.typingAnalysis && s.typingAnalysis.level > 0) ? s.typingAnalysis.level : 0,
+    label: 'typing verdict', hint: 'ranking weight × verdict level: suspicious 1, highly suspicious 2; the tier is unchanged.' },
 ];
 
 const KEYS = SCORE_SIGNALS.map(s => s.key);

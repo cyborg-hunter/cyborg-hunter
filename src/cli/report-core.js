@@ -27,12 +27,14 @@ import { computeSummary } from './analyzers/summary.js';
 import { detectEdgeExits } from './analyzers/edge-exit.js';
 import { analyzeCursor } from './analyzers/cursor.js';
 import { analyzeDeviceMasking } from './analyzers/device-masking.js';
+import { analyzeTyping, fastTypingTrials } from './analyzers/typing.js';
 import { rankTriage } from './analyzers/triage.js';
 import { resolveScoreWeights, formulaText } from './analyzers/score-weights.js';
 import { applyPhaseScope, describePhaseScope, findUnmatchedPhaseScopePhases } from './analyzers/phase-scope.js';
 import { buildSummaryCsv } from './renderers/summary-csv-core.js';
 import { buildScoreWeightsJson } from './renderers/score-weights-core.js';
 import { buildCursorLimitsJson } from './renderers/cursor-limits-core.js';
+import { buildTypingLimitsJson } from './renderers/typing-limits-core.js';
 import { buildTriageMd } from './renderers/triage-md-core.js';
 import { buildEventLogCsv } from './renderers/event-log-core.js';
 import { buildExtensionsCsv } from './renderers/extensions-core.js';
@@ -47,7 +49,7 @@ import { isPseudonymized } from './pseudonymize-core.js';
 
 // The text files every report contains, in write order (images/ and replay/
 // files, when there are any, come between extensions.csv and index.html).
-export const REPORT_FILES = ['summary.csv', 'score-weights.json', 'cursor-limits.json', 'triage.md', 'event-log.csv', 'extensions.csv', 'index.html'];
+export const REPORT_FILES = ['summary.csv', 'score-weights.json', 'cursor-limits.json', 'typing-limits.json', 'triage.md', 'event-log.csv', 'extensions.csv', 'index.html'];
 
 // The run id names the cohort and its data: each participant's id with a
 // config-free fingerprint (trial count, first and last trial timestamps), the
@@ -123,6 +125,21 @@ export async function buildReport(participants, config, deps) {
   // the session's window log and the recording's browser line, which phase
   // scoping leaves whole.
   summaries.forEach((s, i) => { s.deviceMasking = analyzeDeviceMasking(scoredParticipants[i]); });
+  // The typing section (analyzers/typing.js) rides on the summary the same
+  // way. It matches recording segments over the participant's every trial
+  // (so a trial outside the phase scope keeps its own segment) and judges
+  // the scoped ones. Where it recomputed a trial's rate (from the saved edit
+  // times or the recording), the fast-typing count follows the recomputed
+  // rates; elsewhere the summary's own count stands (the library's corrected
+  // rate, the old formula's saved rate). A reduced Qualtrics payload's count
+  // is not recounted: summary.js gives it the whole session's count the
+  // payload carries, which the kept rows cannot recount.
+  const typings = scoredParticipants.map((p, i) => analyzeTyping(p, config, { allTrials: participants[i].trials }));
+  summaries.forEach((s, i) => {
+    s.typingAnalysis = typings[i];
+    const recomputed = typings[i].rate.trials.some((r) => r.source === 'edit times' || r.source === 'recording');
+    if (recomputed && !participants[i].reducedPayload) s.trialsWithFastTyping = fastTypingTrials(typings[i]);
+  });
   const edgeExits = detectEdgeExits(scoredParticipants, config);
   const triage = rankTriage(summaries, edgeExits, config);
 
@@ -161,6 +178,8 @@ export async function buildReport(participants, config, deps) {
   const recordedWith = versions.size ? [...versions].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).join(', ') : null;
   sink('cursor-limits.json', buildCursorLimitsJson(recordedWith, cursors));
   log(`  cursor-limits.json — the constants the cursor section used`);
+  sink('typing-limits.json', buildTypingLimitsJson(recordedWith, typings));
+  log(`  typing-limits.json — the constants the typing section used`);
   sink('triage.md', buildTriageMd(triage, config));
   log(`  triage.md — ranked list`);
   const ev = buildEventLogCsv(participants);

@@ -160,6 +160,11 @@ export function generateTriageReason(summary, edgeExitCount = 0) {
   if (edgeExitCount > 0) parts.push(`${edgeExitCount} edge-exit patterns`);
   if (summary.totalSyntheticInsertions > 0) parts.push(`${summary.totalSyntheticInsertions} synthetic insertions`);
   if (summary.totalForeignInputEvents > 0) parts.push(`${summary.totalForeignInputEvents} foreign inputs`);
+  // The typing verdict (analyzers/typing.js), when it counts against the
+  // session; unscored unless scoreWeights.typingRhythm is set. Before the
+  // pointer clause, as the report's sections are ordered.
+  const ta = summary.typingAnalysis;
+  if (ta && ta.level > 0) parts.push(`typing verdict: ${ta.verdict} (${ta.tells.map(t => t.short).join('; ')})`);
   // The pointer verdict (analyzers/cursor.js), when it counts against the
   // session — unscored unless scoreWeights.cursor is set, like the honeypot
   // clause below.

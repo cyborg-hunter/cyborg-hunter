@@ -15,7 +15,7 @@ The bundled dataset (`examples/demo-sessions/`, four sessions recorded on the de
 | Rank | Participant | Tier | Score | Reason |
 |------|-------------|------|-------|--------|
 | 1 | DEMO-9mop | **HARD** | 45 | 4 paste events; 4 copy events; 4 tab-aways ≥10s; 1 tab-away 3–10s; 1 layout shifts; 44 synthetic insertions |
-| 2 | DEMO-bsq6 | **HARD** | 21 | 2 paste events; 2 copy events; 1 tab-away ≥10s; fast typing on 3 trials; 44 synthetic insertions; pointer verdict: highly suspicious (clicks without a path 12/12; centered clicks 8/11) |
+| 2 | DEMO-bsq6 | **HARD** | 21 | 2 paste events; 2 copy events; 1 tab-away ≥10s; fast typing on 2 trials; 44 synthetic insertions; typing verdict: highly suspicious (median gap 58 ms; gap variation 0.07); pointer verdict: highly suspicious (clicks without a path 12/12; centered clicks 8/11) |
 | 3 | DEMO-681w | soft | 13 | 1 paste events; 1 copy events; fast typing on 2 trials; 1 sidebar event; 2 layout shifts; 44 synthetic insertions |
 | 4 | DEMO-a3f3 | clean | 11 | 1 paste events; 3 tab-aways 3–10s; fast typing on 1 trials; 1 sidebar event; 3 layout shifts; 1 zoom changes; 44 synthetic insertions |
 

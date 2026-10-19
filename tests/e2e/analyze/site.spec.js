@@ -49,7 +49,7 @@ test('dropped demo sessions: same triage order as the sample, zip tree matches t
   try {
     const isText = (n) => /\.(csv|md|json|html|js)$/.test(n);
     expect(zip.names.filter(isText)).toEqual(cli.names.filter(isText));
-    for (const n of ['summary.csv', 'triage.md', 'event-log.csv', 'extensions.csv', 'score-weights.json', 'cursor-limits.json']) {
+    for (const n of ['summary.csv', 'triage.md', 'event-log.csv', 'extensions.csv', 'score-weights.json', 'cursor-limits.json', 'typing-limits.json']) {
       expect(zip.text(n), n).toEqual(cli.text(n));
     }
     const pngs = zip.names.filter((n) => n.endsWith('.png'));
