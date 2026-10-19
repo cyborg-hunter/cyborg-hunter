@@ -89,73 +89,57 @@ function heapPop(h) {
 // segment strictly between its two starts (that one would be nearer), so
 // only neighbours on the line are candidates. Trials and segments at one
 // exact time form a group, taken in trial order and recording order. A take
-// moves on in at most two groups and renews only the candidates that touch
-// them (a group left empty joins its two neighbours), so the heap holds a
-// few entries per trial and segment; an entry is stale once its group's
-// version has moved on.
+// moves on in at most two groups and offers only the pairs that touch them
+// (a group left empty joins its two neighbours), so the heap holds a few
+// entries per trial and segment.
 // idx: the trials' indices (on the clock, this label); segs: the label's segments.
 function matchOnClock(idx, segs, trials, base, take) {
   const items = [];
   for (const i of idx) items.push({ p: trials[i].startTime, i });
   for (const c of segs) if (c.o !== null && isNum(base + c.o)) items.push({ p: base + c.o, c });
   items.sort((a, b) => a.p - b.p);   // stable: trial order, then recording order, at one time
-  let last = null;
   const groups = [];
   for (const it of items) {
-    if (!last || last.p !== it.p) {
-      last = { p: it.p, trials: [], segs: [], th: 0, sh: 0, prev: last, next: null, alive: true, wv: 0, pv: 0 };
-      if (last.prev) last.prev.next = last;
-      groups.push(last);
+    let g = groups[groups.length - 1];
+    if (!g || g.p !== it.p) {
+      g = { p: it.p, trials: [], segs: [], th: 0, sh: 0, prev: g || null, next: null };
+      if (g.prev) g.prev.next = g;
+      groups.push(g);
     }
-    if (it.c) last.segs.push(it.c); else last.trials.push(it.i);
+    if (it.c) g.segs.push(it.c); else g.trials.push(it.i);
   }
-  const headTrial = (g) => (g.th < g.trials.length ? g.trials[g.th] : null);
-  const headSeg = (g) => (g.sh < g.segs.length ? g.segs[g.sh] : null);
-  const pair = (d, gt, gs) => {
-    const i = headTrial(gt), c = headSeg(gs);
-    return i !== null && c ? { d, i, c, gt, gs } : null;
-  };
-  // The best pair inside a group (0 ms apart), or between it and the next.
-  const candidate = (g, inside) => {
-    if (inside) return pair(0, g, g);
-    if (!g.next) return null;
-    // As |(base + o) - startTime|: the same number in either direction.
-    const d = g.next.p - g.p;
-    if (!(d <= CLOCK_TOLERANCE_MS)) return null;
-    const x = pair(d, g, g.next), y = pair(d, g.next, g);
-    return x && y ? (before(x, y) ? x : y) : x || y;
-  };
+  // Offer the pairs of first-free items inside a group (b === a) or between
+  // two neighbours a < b; d is |(base + o) - startTime|, either direction.
   const heap = [];
-  const refresh = (g, inside) => {
-    if (!g || !g.alive) return;
-    const v = inside ? ++g.wv : ++g.pv;
-    const x = candidate(g, inside);
-    if (x) heapPush(heap, { ...x, g, inside, v });
+  const push = (d, gt, gs) => {
+    const i = gt.trials[gt.th], c = gs.segs[gs.sh];
+    if (i !== undefined && c !== undefined && d <= CLOCK_TOLERANCE_MS) heapPush(heap, { d, i, c, gt, gs });
   };
-  for (const g of groups) { refresh(g, true); refresh(g, false); }
+  const offer = (a, b) => {
+    if (!a || !b) return;
+    push(b.p - a.p, a, b);
+    if (a !== b) push(b.p - a.p, b, a);
+  };
+  for (const g of groups) { offer(g, g); offer(g, g.next); }
   while (heap.length) {
-    const e = heapPop(heap);
-    if (!e.g.alive || e.v !== (e.inside ? e.g.wv : e.g.pv)) continue;
-    take(e.i, e.c);
-    e.gt.th++;
-    e.gs.sh++;
-    // Unlink a group left empty, then renew every candidate that changed:
-    // inside a touched group, and between each touched group and its
-    // neighbours (a pair of neighbours is kept under the left one).
-    const lefts = new Set();
-    for (const g of e.gt === e.gs ? [e.gt] : [e.gt, e.gs]) {
-      if (g.th === g.trials.length && g.sh === g.segs.length) {
-        g.alive = false;
+    const { i, c, gt, gs } = heapPop(heap);
+    // Stale: the pair's trial or segment is no longer its group's first free
+    // one (taken since; the pair there now was offered when that happened).
+    if (gt.trials[gt.th] !== i || gs.segs[gs.sh] !== c) continue;
+    take(i, c);
+    gt.th++;
+    gs.sh++;
+    for (const g of new Set([gt, gs])) {
+      if (g.th === g.trials.length && g.sh === g.segs.length) {   // empty: its neighbours meet
         if (g.prev) g.prev.next = g.next;
         if (g.next) g.next.prev = g.prev;
-        lefts.add(g.prev);
+        offer(g.prev, g.next);
       } else {
-        refresh(g, true);
-        lefts.add(g);
-        lefts.add(g.prev);
+        offer(g, g);
+        offer(g.prev, g);
+        offer(g, g.next);
       }
     }
-    for (const g of lefts) refresh(g, false);
   }
 }
 

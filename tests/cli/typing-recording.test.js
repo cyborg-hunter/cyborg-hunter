@@ -60,10 +60,19 @@ describe('matchTrialSegments', () => {
     const s1500 = seg('q', 500), s1800 = seg('q', 800);
     assert.deepEqual(matchTrialSegments([trial('q', 1000), trial('q', 1300), trial('q', 1600)], rec([s1500, s1800])), [null, s1800, s1500]);
   });
+  it('a tie in distance goes to the earlier trial', () => {
+    const s1200 = seg('q', 200);
+    assert.deepEqual(matchTrialSegments([trial('q', 1400), trial('q', 1000)], rec([s1200])), [s1200, null]);
+  });
+  it('a tie in distance goes to the segment earlier in the recording', () => {
+    const s1200 = seg('q', 200), s800 = seg('q', -200);
+    assert.deepEqual(matchTrialSegments([trial('q', 1000)], rec([s1200, s800])), [s1200]);
+  });
   it('thousands of trials with one start and one label stay quick: each takes the nearest segment left', () => {
-    // Every trial is nearest to the same segment; once it is taken, every
-    // trial's nearest moves on to the next. Redoing each trial's nearest
-    // pick at each step makes this cubic.
+    // A performance guard, not a check of the matching rule: every trial is
+    // nearest to the same segment, and once it is taken every trial's
+    // nearest moves on to the next. A matcher that redoes each trial's
+    // nearest pick after every take is cubic on this shape.
     const N = 5000;
     const segments = [];
     for (let i = 0; i < N; i++) segments.push(seg('q', (i + 1) * 0.125));
