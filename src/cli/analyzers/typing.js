@@ -11,9 +11,10 @@
 // the same key left out), else nothing ("not recorded"). The rate: the
 // library's corrected charsPerSec (trials carrying typingEdits, 0.17 on),
 // else recomputed from the trial's saved edit times (editTimestamps, kept
-// when keystroke dynamics are on), else from the recording's input events,
-// else the saved charsPerSec under the old formula (N edits over the span,
-// from 2 edits).
+// when keystroke dynamics are on), else from the recording's input events
+// (when the trial's segment holds at least one; a trace-tier recording holds
+// none), else the saved charsPerSec under the old formula (N edits over the
+// span, from 2 edits).
 // A field is named by its tag alone, from either source: an element's id is
 // never read (a page can mirror what is typed into an id).
 //
@@ -443,20 +444,22 @@ export function analyzeTyping(participant, config = {}, options = {}) {
   }
 
   // The rate, trial by trial: the library's (0.17 on: typingEdits is
-  // there), else from the saved edit times, else from the recording, else
-  // the old formula's saved number. oldCps keeps that saved number wherever
-  // the rate was recomputed.
+  // there), else from the saved edit times, else from the recording when
+  // the trial's segment holds an edit, else the old formula's saved number.
+  // A segment without an edit is no source: the trace tier records key
+  // presses but no input event (an input event needs a node, §5.2), so
+  // such a trial keeps its saved rate, as if no segment had matched. oldCps
+  // keeps that saved number wherever the rate was recomputed.
   const rateTrials = trials.map((t, i) => {
     const trialId = trialIdOf(t, i);
     const saved = isNum(t.charsPerSec) ? t.charsPerSec : null;
     const times = isNum(t.typingEdits) ? null : editTimesOf(t);
+    const fromRecording = segs[i] ? recordingEditTimes(segs[i]) : [];
     let r;
     if (isNum(t.typingEdits)) r = { source: 'library', cps: saved, edits: t.typingEdits, oldCps: null };
     else if (times) r = { source: 'edit times', cps: typingRate(times, L.minEdits), edits: times.length, oldCps: saved };
-    else if (segs[i]) {
-      const fromRecording = recordingEditTimes(segs[i]);
-      r = { source: 'recording', cps: typingRate(fromRecording, L.minEdits), edits: fromRecording.length, oldCps: saved };
-    } else r = { source: 'old formula', cps: saved, edits: null, oldCps: null };
+    else if (fromRecording.length) r = { source: 'recording', cps: typingRate(fromRecording, L.minEdits), edits: fromRecording.length, oldCps: saved };
+    else r = { source: 'old formula', cps: saved, edits: null, oldCps: null };
     const judged = r.cps !== null;
     return { trialId, ...r, judged, fast: judged && r.cps > cutoff };
   });

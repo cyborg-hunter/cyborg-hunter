@@ -12,7 +12,7 @@ import { analyzeTyping, fastTypingTrials, TYPING_LIMITS } from '../../src/cli/an
 import { applyPhaseScope } from '../../src/cli/analyzers/phase-scope.js';
 import { summarizeGaps } from '../../src/shared/typing-metrics.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
-import { keyRecording, participantFromRecording, botGaps, humanGaps } from './typing-fixtures.js';
+import { keyRecording, participantFromRecording, traceTier, botGaps, humanGaps } from './typing-fixtures.js';
 
 // A library summary for a field with these gaps, and a 0.17 trial carrying it.
 const summary = (gaps, tag = 'textarea') => ({ field: { tag }, ...summarizeGaps(gaps) });
@@ -129,12 +129,16 @@ describe('from the session recording', () => {
     const a = analyzeTyping(p);
     assert.deepEqual([a.state, a.verdictReason], ['not recorded', 'typing rhythm not recorded and the session recording matches no trial']);
   });
-  it('a trace-tier recording (key presses keep their field\'s tag but no target): not recorded, and the reason says so', () => {
-    const rec = keyRecording([['q1', 10, botGaps(30)]]);
-    for (const e of rec.segments[0].events) if (e.type === 'key.down') { e.target = null; e.anchor.node = null; }
-    const a = analyzeTyping(participantFromRecording('TRACE', rec));
+  it('a trace-tier recording (key presses keep their field\'s tag but no target, and no input event): not recorded, and the reason says so', () => {
+    const p = participantFromRecording('TRACE', traceTier(keyRecording([['q1', 10, botGaps(30)]])));
+    p.trials[0].charsPerSec = 24.4;
+    const a = analyzeTyping(p);
     assert.deepEqual([a.state, a.level, a.fields], ['not recorded', -1, []]);
     assert.equal(a.verdictReason, 'the session recording does not say which field each key went to (recorded without the page)');
+    // Its segment holds no edit, so it is no rate source: the trial keeps
+    // its saved rate, as if no segment had matched.
+    assert.deepEqual(a.rate.trials.map((r) => [r.source, r.cps, r.edits, r.judged, r.fast, r.oldCps]), [['old formula', 24.4, null, true, true, null]]);
+    assert.deepEqual([a.rate.source, fastTypingTrials(a)], ['old formula', 1]);
   });
   it('typing into an editable area alone: not assessed, no typed characters in a text field', () => {
     const rec = keyRecording([['q1', 10, botGaps(30)]]);
@@ -238,9 +242,30 @@ describe('the typing rate', () => {
     p.trials[1].charsPerSec = 11.8;
     const a = analyzeTyping(p);
     assert.equal(a.rate.source, 'recording');
-    // 25 edits over 2.4 s: exactly 10, which is not over 10.
-    assert.deepEqual(a.rate.trials.map((r) => [r.trialId, r.cps, r.edits, r.judged, r.fast, r.oldCps]),
-      [['q1', 10, 25, true, false, 10.4], ['age', null, 2, false, false, 11.8]]);
+    // 25 edits over 2.4 s: exactly 10, which is not over 10. The age
+    // trial's segment holds 2 edits: too few to judge, but its rate still
+    // comes from the recording.
+    assert.deepEqual(a.rate.trials.map((r) => [r.trialId, r.source, r.cps, r.edits, r.judged, r.fast, r.oldCps]),
+      [['q1', 'recording', 10, 25, true, false, 10.4], ['age', 'recording', null, 2, false, false, 11.8]]);
+  });
+  it('a matched segment without an edit is no rate source: the trial keeps its saved rate, as if no segment had matched', () => {
+    // Three trials on the recording's clock: q1's segment holds no event
+    // at all, q2's a click alone, q3's one edit with no time (not an edit
+    // the recording can time). Each falls back to its saved rate.
+    const p = participantFromRecording('NOEDIT', keyRecording([['q1', 10, []], ['q2', 60010, []], ['q3', 120010, []]]));
+    p.replay.recording.segments[0].events = [];
+    p.replay.recording.segments[1].events = [{ type: 'mouse.click', t: 60060 }];
+    p.replay.recording.segments[2].events = [{ type: 'input.value', t: 'x', node: 5, value: 'a' }];
+    p.trials[0].charsPerSec = 12;
+    p.trials[1].charsPerSec = 4;
+    const a = analyzeTyping(p);
+    assert.deepEqual(a.rate.trials.map((r) => [r.trialId, r.source, r.cps, r.edits, r.judged, r.fast, r.oldCps]),
+      [['q1', 'old formula', 12, null, true, true, null], ['q2', 'old formula', 4, null, true, false, null], ['q3', 'old formula', null, null, false, false, null]]);
+    assert.deepEqual([a.rate.source, fastTypingTrials(a)], ['old formula', 1]);
+    // One timed edit is enough: then the recording is the source, though too few to judge.
+    p.replay.recording.segments[1].events.push({ type: 'input.checked', t: 60070, node: 6, checked: true });
+    assert.deepEqual(analyzeTyping(p).rate.trials.map((r) => [r.source, r.cps, r.edits, r.oldCps]),
+      [['old formula', 12, null, null], ['recording', null, 1, 4], ['old formula', null, null, null]]);
   });
   it('older data without a recording: the saved rate under the old formula', () => {
     const a = analyzeTyping({ trials: [{ trialId: 'age', charsPerSec: 11.8 }, { trialId: 'q2' }] }, { typingSpeedThreshold_cps: 10 });
@@ -364,12 +389,17 @@ describe('the bundled demo sessions', () => {
     const r = Object.fromEntries(a.rate.trials.map((x) => [x.trialId, x]));
     assert.deepEqual([r.baseline.cps, r.autotype.cps, r.paste.cps, r.paste.edits, r.paste.oldCps], [16.9, 28.6, null, 2, 157.5]);
     assert.deepEqual([a.rate.source, fastTypingTrials(a)], ['recording', 2]);
+    // The three trials whose segments hold no edit keep their saved rate (none).
+    assert.deepEqual(a.rate.trials.map((x) => [x.trialId, x.source]), [['baseline', 'recording'], ['paste', 'recording'],
+      ['tabaway', 'old formula'], ['autotype', 'recording'], ['guard-entry', 'old formula'], ['guard', 'old formula']]);
   });
-  it('Mira\'s sessions: nothing judged from their recordings; the old formula where a recording does not reach', () => {
+  it('Mira\'s sessions: nothing judged from their recordings; the old formula where a recording holds no edit', () => {
     const w = analyzeTyping(load('DEMO-681w'));
     assert.deepEqual([w.state, w.verdictReason, w.rate.source, fastTypingTrials(w)], ['not assessed', NO_TYPING, 'old formula', 2]);
-    // Its recording covers the last pass through the tour, trials 11 to 16.
-    assert.deepEqual(w.rate.trials.map((x) => x.source), [...Array(11).fill('old formula'), ...Array(6).fill('recording')]);
+    // Its recording covers the last pass through the tour, trials 11 to 16,
+    // and holds no edit: those trials keep their saved rates too.
+    assert.deepEqual(w.rate.trials.map((x) => x.source), Array(17).fill('old formula'));
+    assert.deepEqual(w.rate.trials.slice(11).map((x) => [x.cps, x.edits, x.judged]), Array(6).fill([null, null, false]));
     // Three trials are called "baseline": byTrial merges them.
     assert.deepEqual({ ...w.byTrial.baseline }, { cps: 10.5, judged: true, rhythm: false });
     // byIndex keeps them apart: one entry per trial, in order.
@@ -377,6 +407,9 @@ describe('the bundled demo sessions', () => {
     const a3 = analyzeTyping(load('DEMO-a3f3'));
     // Its text box saw only Cmd+V and Tab: no typed character.
     assert.deepEqual([a3.state, a3.verdictReason, a3.shortFields, a3.rate.source, fastTypingTrials(a3)], ['not assessed', NO_TYPING, 0, 'recording', 1]);
+    // Its first and its autotype trial's segments hold edits; the rest none.
+    assert.deepEqual(a3.rate.trials.map((x) => [x.source, x.edits]), [['recording', 1], ['old formula', null], ['old formula', null],
+      ['old formula', null], ['recording', 44], ['old formula', null], ['old formula', null]]);
     const m = analyzeTyping(load('DEMO-9mop'));
     assert.deepEqual([m.state, m.rate.source, fastTypingTrials(m)], ['not recorded', 'old formula', 0]);
   });

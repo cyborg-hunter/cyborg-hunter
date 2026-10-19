@@ -12,7 +12,7 @@ import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import { SCORE_SIGNALS, SIGNAL_LABELS, resolveScoreWeights, formulaText } from '../../src/cli/analyzers/score-weights.js';
 import { TYPING_LIMITS } from '../../src/cli/analyzers/typing.js';
 import { VERSION } from '../../src/shared/constants.js';
-import { keyRecording, participantFromRecording, botGaps, humanGaps } from './typing-fixtures.js';
+import { keyRecording, participantFromRecording, traceTier, botGaps, humanGaps } from './typing-fixtures.js';
 
 const config = { outputDir: '.', participantIdField: 'participantId' };
 async function report(participants, cfg = config) {
@@ -30,11 +30,12 @@ const OLD = () => ({ participantId: 'OLD', trials: [{ trialId: 'age', startTime:
 // cutoff of 10.
 const TIMES = () => ({ participantId: 'TIMES', trials: [{ ...OLD().trials[0], editTimestamps: Array.from({ length: 25 }, (_, i) => 5000 + 100 * i) }] });
 // A recording without the page (trace tier): its key presses keep their
-// field's tag but name no field.
+// field's tag but name no field, and it holds no edit. The old formula
+// saved 24.4 cps for the trial.
 const TRACE = () => {
-  const rec = keyRecording([['q1', 10, botGaps(30)]]);
-  for (const e of rec.segments[0].events) if (e.type === 'key.down') { e.target = null; e.anchor.node = null; }
-  return participantFromRecording('TRACE', rec);
+  const p = participantFromRecording('TRACE', traceTier(keyRecording([['q1', 10, botGaps(30)]])));
+  p.trials[0].charsPerSec = 24.4;
+  return p;
 };
 
 describe('typingAnalysis on each summary', () => {
@@ -91,13 +92,30 @@ describe('typingAnalysis on each summary', () => {
       rateSource: { library: 0, editTimes: 0, recording: 2, oldFormula: 1 },
       verdicts: { highlySuspicious: 1, suspicious: 0, clean: 1, notAssessed: 1 } });
   });
-  it('typing-limits.json: a recording without the page counts as rhythm not recorded, its rate as from the recording', async () => {
+  it('typing-limits.json: a recording without the page counts as rhythm not recorded, its rate as the old formula\'s', async () => {
     const { byId, files } = await report([TRACE()]);
     assert.deepEqual([byId.TRACE.typingAnalysis.state, byId.TRACE.typingAnalysis.source], ['not recorded', 'recording']);
     assert.deepEqual(JSON.parse(files['typing-limits.json']).sessions, { total: 1,
       rhythmSource: { library: 0, recording: 0, notRecorded: 1 },
-      rateSource: { library: 0, editTimes: 0, recording: 1, oldFormula: 0 },
+      rateSource: { library: 0, editTimes: 0, recording: 0, oldFormula: 1 },
       verdicts: { highlySuspicious: 0, suspicious: 0, clean: 0, notAssessed: 1 } });
+  });
+  it('a recording without the page: the trial keeps its saved rate, and fast typing keeps counting it', async () => {
+    const { byId } = await report([TRACE()]);
+    const a = byId.TRACE.typingAnalysis;
+    assert.equal(a.verdictReason, 'the session recording does not say which field each key went to (recorded without the page)');
+    assert.deepEqual(a.rate.trials.map((r) => [r.trialId, r.source, r.cps, r.judged, r.fast]), [['q1', 'old formula', 24.4, true, true]]);
+    assert.deepEqual([a.rate.source, byId.TRACE.trialsWithFastTyping], ['old formula', 1]);
+  });
+  it('a recount over a recording that times one trial\'s edits and not another\'s counts the other at its saved rate', async () => {
+    // q1: software typing with its edits (24.4 cps from the recording); q2:
+    // a segment without an edit, whose old formula saved 12 cps.
+    const p = participantFromRecording('MIXED', keyRecording([['q1', 10, botGaps(30)], ['q2', 60010, []]]));
+    p.replay.recording.segments[1].events = [];
+    p.trials[1].charsPerSec = 12;
+    const { byId } = await report([p]);
+    assert.deepEqual(byId.MIXED.typingAnalysis.rate.trials.map((r) => [r.source, r.cps, r.fast]), [['recording', 24.4, true], ['old formula', 12, true]]);
+    assert.deepEqual([byId.MIXED.typingAnalysis.rate.source, byId.MIXED.trialsWithFastTyping], ['old formula', 2]);
   });
 });
 
@@ -193,13 +211,13 @@ describe('summary.csv', () => {
   });
   it('fields judged: 0 when no field was long enough, empty when the rhythm was not recorded; the rate source names saved edit times', async () => {
     // AGE: one gap in its only field (too short to judge). TRACE: a
-    // recording without the page, whose rate still comes from the
-    // recording's edits. TIMES: no rhythm, the rate from saved edit times.
+    // recording without the page, which holds no edit, so the trial keeps
+    // the old formula's rate. TIMES: no rhythm, the rate from saved edit times.
     const age = participantFromRecording('AGE', keyRecording([['age', 10, [170]]]));
     const { files } = await report([age, TRACE(), TIMES()]);
     const cells = typingCells(files['summary.csv']);
     assert.deepEqual(cells.AGE, ['not assessed', '', '0', '', '', 'recording']);
-    assert.deepEqual(cells.TRACE, ['not assessed', '', '', '', '', 'recording']);
+    assert.deepEqual(cells.TRACE, ['not assessed', '', '', '', '', 'old formula']);
     assert.deepEqual(cells.TIMES, ['not assessed', '', '', '', '', 'edit times']);
   });
   it('the fastest median gap and the lowest variation over many fields, without a stack overflow', () => {
@@ -261,23 +279,27 @@ describe('the Typing dynamics section', () => {
     assert.match(fast, /<td>1 of 1 trials \(age 20\)<\/td>/);
     assert.doesNotMatch(fast, /old formula/);
   });
-  it('a recording without the page: the rhythm is not recorded, and no note says it was computed from the recording; its rate was, and that note stays', async () => {
+  it('a recording without the page: the rhythm is not recorded, and no note says it was computed from the recording; nor its rate, which is the old formula\'s, marked', async () => {
     const trace = pane((await report([TRACE()])).files['index.html'], 'TRACE');
     assert.match(trace, /<span class="verdict-badge" data-level="-1">not assessed<\/span> <span class="muted">the session recording does not say which field each key went to \(recorded without the page\)\.<\/span>/);
     assert.match(trace, /<tr class=""><th>none<\/th><td>not recorded<\/td><\/tr>/);
     assert.doesNotMatch(trace, /Computed from the session recording/);
-    assert.match(trace, /<td>1 of 1 trials \(q1 24\.4\)<\/td>/);
-    assert.match(trace, /<p class="muted note">A rate rebuilt from a recording can undercount keys typed faster than the page’s frames\.<\/p><\/div>/);
+    assert.match(trace, /<td>1 of 1 trials \(q1 24\.4 \(old formula\)\)<\/td>/);
+    assert.doesNotMatch(trace, /undercount/);
+    assert.match(trace, /<p class="muted note">A rate marked “old formula” is the one a library before 0\.17 saved/);
   });
   it('a recording that holds no typing: the placeholder says so, and no undercount note, since no rate came from it', async () => {
     // A segment matched to q1 that holds nothing (the rhythm's source is
-    // the recording, its rate counts no edit), beside a trial with no
-    // segment whose old formula saved 11.8 cps.
+    // the recording; with no edit in it, q1's rate falls back to the old
+    // formula, which saved none), beside a trial with no segment whose old
+    // formula saved 11.8 cps.
     const rec = keyRecording([['q1', 10, []]]);
     rec.segments[0].events = [];
     const p = participantFromRecording('EMPTY', rec);
     p.trials.push({ ...OLD().trials[0], startTime: 900000 });
-    const empty = pane((await report([p])).files['index.html'], 'EMPTY');
+    const { files, byId } = await report([p]);
+    assert.deepEqual(byId.EMPTY.typingAnalysis.rate.trials.map((r) => [r.trialId, r.source, r.cps]), [['q1', 'old formula', null], ['age', 'old formula', 11.8]]);
+    const empty = pane(files['index.html'], 'EMPTY');
     assert.match(empty, /<span class="muted">the session recording holds no typed characters in a text field of the judged trials\.<\/span>/);
     assert.match(empty, /<tr class=""><th>none<\/th><td>no typing in a text field<\/td><\/tr>/);
     assert.match(empty, /<p class="muted note">Computed from the session recording: data from libraries before 0\.17 carry no rhythm summaries\.<\/p>/);

@@ -143,7 +143,10 @@ export async function buildReport(participants, config, deps) {
   // the scoped ones. Where it recomputed a trial's rate (from the saved edit
   // times or the recording), the fast-typing count follows the recomputed
   // rates; elsewhere the summary's own count stands (the library's corrected
-  // rate, the old formula's saved rate). Where the summary took the
+  // rate, the old formula's saved rate). A trial whose segment holds no edit
+  // (a trace-tier recording holds none) is not recomputed: it keeps its saved
+  // rate, so the summary's count and the recount both count it by that rate.
+  // Where the summary took the
   // whole-session count a reduced Qualtrics payload carries, that count
   // stands too: the kept rows cannot recount it. A reduced payload under a
   // phase scope, or one without a usable carried count, was counted from its

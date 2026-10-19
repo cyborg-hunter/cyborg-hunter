@@ -1546,9 +1546,9 @@ function renderTypingSection(s) {
     notes.push('Computed from the session recording: data from libraries before 0.17 carry no rhythm summaries.');
   }
   // The undercount note follows the rate's source: wherever a trial's rate
-  // or keystrokes were rebuilt from the recording. A trial whose recording
-  // holds no edit is neither judged nor too short, and the section prints
-  // no number from it.
+  // or keystrokes were rebuilt from the recording. A trial whose segment
+  // holds no edit keeps its saved rate (the analysis falls back to the old
+  // formula), so it draws no note.
   if (ta.rate.trials.some((r) => isObj(r) && r.source === 'recording' && isNum(r.edits) && r.edits > 0)) {
     notes.push('A rate rebuilt from a recording can undercount keys typed faster than the page’s frames.');
   }

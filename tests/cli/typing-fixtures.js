@@ -1,7 +1,8 @@
 // tests/cli/typing-fixtures.js
 // Synthetic typing for the typing tests: no real participant's keystrokes.
 // keyRecording builds a SessionRecording v2 whose segments hold key presses
-// (and the input events they cause) at given gaps; participantFromRecording
+// (and the input events they cause) at given gaps; traceTier turns it into
+// what the trace tier records of the same keys; participantFromRecording
 // gives it trials that start on the recording's clock, as the library's do.
 
 const NO_MODS = { ctrl: false, shift: false, alt: false, meta: false };
@@ -51,6 +52,18 @@ export function keyRecording(fields, base = 1000) {
       return { index: i, label, t_load: tLoad, events };
     })
   };
+}
+
+// The same recording as the recorder writes it at the trace tier (no DOM,
+// src/replay/capture-trace.js): its key presses keep their field's tag but
+// name no node, and it holds no input event, since an input event needs a
+// node (§5.2). Changes the recording in place and returns it.
+export function traceTier(recording) {
+  for (const s of recording.segments) {
+    s.events = s.events.filter((e) => e.type !== 'input.value');
+    for (const e of s.events) { e.target = null; e.anchor.node = null; }
+  }
+  return recording;
 }
 
 // A participant whose trials are the recording's segments, each starting
