@@ -1,11 +1,13 @@
 // src/cli/renderers/timeline-client.js
 // The report's hover and pin line over a participant's "Session timeline"
 // block (html-index-core.js renderTimelineBlock): one vertical line through
-// both images where the pointer is, with a label (the time, the trial and its
-// phase, its typing rate, "events not kept" over a page a Qualtrics payload
-// trimmed, and "tabbed away" / "sidebar open" when the session was), and a
-// dashed red line pinned on a click; a click within 6 px of a pin removes
-// it. Pins live in the open page only: not saved, not in the PNGs. It runs
+// both images where the pointer is, a label in the block's header row (the
+// time, the trial and its phase, its typing rate, "events not kept" over a
+// page a Qualtrics payload trimmed, and "tabbed away" / "sidebar open" when
+// the session was), and a dashed red line pinned on a click; a click within
+// 6 px of a pin removes it. Nothing but the lines is drawn over the images,
+// so no text covers a chart's title or legend. Pins live in the open page
+// only: not saved, not in the PNGs. It runs
 // in the CLI report and in the analyzer's sandboxed report frame alike: it
 // needs no storage and no network.
 //
@@ -52,24 +54,28 @@ export function chTimelineLabel(data, sec) {
   return parts.join(' · ');
 }
 
-// Wires one stage: the line and its label follow the pointer over the
-// plotted area; a click pins a line there or removes the pin within 6 px.
-// Pins are kept as fractions of the stage's width, so they stay on their
-// time when the window is resized.
+// Wires one stage: the line follows the pointer over the plotted area and
+// the header's readout (renderTimelineBlock's .tl-readout, between the
+// heading and "enlarge") says what is under it; both clear when the pointer
+// leaves the plotted area. A click pins a line there or removes the pin
+// within 6 px. Pins are kept as fractions of the stage's width, so they stay
+// on their time when the window is resized.
 export function chWireTimelineStage(stage) {
   var data;
   try { data = JSON.parse(stage.getAttribute('data-timeline')); } catch (e) { return; }
   if (!data || !(data.domain > 0) || !Array.isArray(data.trials)) return;
+  var block = stage.closest('.tl-block');
+  var readout = block ? block.querySelector('.tl-head .tl-readout') : null;
+  // renderTimelineBlock always writes the readout; a stage without one is
+  // not the report's, and is left alone.
+  if (!readout) return;
   var doc = stage.ownerDocument;
   var line = doc.createElement('div');
   line.className = 'tl-line';
   line.hidden = true;
-  var label = doc.createElement('div');
-  label.className = 'tl-readout';
-  label.hidden = true;
   stage.appendChild(line);
-  stage.appendChild(label);
   var pins = [];
+  function clear() { line.hidden = true; readout.textContent = ''; }
   // Where the pointer is, as a fraction of the stage's width, and the time
   // there; null over the margins.
   function at(clientX) {
@@ -82,16 +88,12 @@ export function chWireTimelineStage(stage) {
   }
   stage.addEventListener('mousemove', function (e) {
     var a = at(e.clientX);
-    if (!a) { line.hidden = true; label.hidden = true; return; }
+    if (!a) { clear(); return; }
     line.hidden = false;
-    label.hidden = false;
     line.style.left = (100 * a.f) + '%';
-    label.textContent = chTimelineLabel(data, a.sec);
-    label.style.left = (100 * a.f) + '%';
-    // Past 60 % of the width the label goes left of the line, to stay inside.
-    label.style.transform = a.f > 0.6 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)';
+    readout.textContent = chTimelineLabel(data, a.sec);
   });
-  stage.addEventListener('mouseleave', function () { line.hidden = true; label.hidden = true; });
+  stage.addEventListener('mouseleave', clear);
   stage.addEventListener('click', function (e) {
     var a = at(e.clientX);
     if (!a) return;
@@ -105,7 +107,6 @@ export function chWireTimelineStage(stage) {
     var pin = doc.createElement('div');
     pin.className = 'tl-pin';
     pin.style.left = (100 * a.f) + '%';
-    pin.title = chTimelineLabel(data, a.sec);
     stage.appendChild(pin);
     pins.push({ f: a.f, el: pin });
   });

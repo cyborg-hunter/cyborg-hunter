@@ -149,6 +149,24 @@ test('timed trials on a domain of no length: no note that the times are missing,
   assert.ok(!html.includes('class="muted note tl-note"'), 'no note');
 });
 
+// The in-page report knows which charts were drawn: when the typing chart
+// failed to draw (its entry is null), there is no typing profile above for
+// the note to point at, although the trials have rates.
+test('in the in-page report, the note shows only when the typing chart was drawn', async () => {
+  const old = structuredClone(p);
+  for (const t of old.trials) delete t.startTime;
+  const TL = 'data:image/png;base64,AAA2';
+  const drawn = await renderIndexHtml(summaries, triage, [old], config, false, {
+    imageSources: { [PID]: { typingProfile: 'data:image/png;base64,AAA1', sessionTimeline: TL, trajectories: null } } });
+  assert.ok(drawn.includes('<h4 class="section-heading">Typing profile</h4>'));
+  assert.ok(drawn.includes('class="muted note tl-note"'));
+  const failed = await renderIndexHtml(summaries, triage, [old], config, false, {
+    imageSources: { [PID]: { typingProfile: null, sessionTimeline: TL, trajectories: null } } });
+  assert.ok(!failed.includes('<h4 class="section-heading">Typing profile</h4>'));
+  assert.match(failed, /<div class="tl-stage"[^>]*>\s*<img src="data:image\/png;base64,AAA2"/);
+  assert.ok(!failed.includes('class="muted note tl-note"'), 'no note pointing at a chart that is not there');
+});
+
 // The note points at the typing profile above it: a session whose trials
 // have no rate and no paste gets no typing chart (typing-profile-core.js),
 // so there is nothing above for the note to point at.

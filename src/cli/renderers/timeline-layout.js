@@ -334,10 +334,11 @@ export function timelineRows({ phasesStrip = false, trialsStrip = false } = {}) 
 // truncated] (cps for a judged trial only; truncated: the page's events were
 // not kept, see trialSpans), each tab-away [startSec, endSec] and each
 // sidebar span [startSec, endSec] (one still open at the end runs to the end
-// of the domain). Seconds are rounded to 0.01, which keeps the attribute
-// small. Rounding moves a time by at most 0.005 s: under a pixel on a
-// domain of 8.8 s or more (where a pixel spans 0.01 s or more), up to
-// 4.4 px on a one-second session.
+// of the domain). Seconds and rates are rounded to 0.01, which keeps the
+// attribute small and the label free of long fractions (a rate an older
+// payload saved unrounded). Rounding moves a time by at most 0.005 s: under
+// a pixel on a domain of 8.8 s or more (where a pixel spans 0.01 s or
+// more), up to 4.4 px on a one-second session.
 export function hoverData(layout) {
   const r = (v) => Math.round(v * 100) / 100;
   const tabAways = Array.isArray(layout.events?.tabAways) ? layout.events.tabAways : [];
@@ -346,7 +347,7 @@ export function hoverData(layout) {
     w: TIMELINE_GEOMETRY.width, left: TIMELINE_GEOMETRY.left, chart: CHART_W, domain: r(layout.domainSec),
     trials: layout.spans.map((s) => {
       const b = layout.bars[s.index];
-      return [s.id, s.phase, r(s.startSec), r(s.endSec), b && b.kind === 'typed' ? b.cps : null, s.truncated === true];
+      return [s.id, s.phase, r(s.startSec), r(s.endSec), b && b.kind === 'typed' ? r(b.cps) : null, s.truncated === true];
     }),
     tabs: tabAways.filter((e) => isObj(e) && isNum(e.t_sec))
       .map((e) => [r(e.t_sec), r(e.t_sec + (isNum(e.duration_ms) ? e.duration_ms : 0) / 1000)]),

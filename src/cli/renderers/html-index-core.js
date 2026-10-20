@@ -566,10 +566,20 @@ ${fontFaceCss}    :root {
        and pin script (timeline-client.js) draws over. The images fill the
        stage's width with no border of their own (an outline frames the
        stage), so a fraction of the stage's width is that fraction of each
-       image; the script maps it to a time. */
+       image; the script maps it to a time.
+       The header row holds the heading, the script's readout (what is under
+       the pointer) and "enlarge". The readout takes the room between the
+       other two and is cut on one line with an ellipsis: the heading and the
+       button never shrink, so it cannot push "enlarge" out or wrap the row,
+       and it never covers a chart. */
     .tl-head { display: flex; align-items: baseline; gap: 12px; }
+    .tl-head .section-heading { flex: none; }
+    .tl-readout {
+      flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--ink); font: 13px/1.3 var(--ff-sora);
+    }
     .tl-enlarge {
-      margin-left: auto; padding: 2px 8px; border: 1px solid var(--line); border-radius: 0;
+      flex: none; padding: 2px 8px; border: 1px solid var(--line); border-radius: 0;
       background: var(--surface); color: var(--ink); cursor: zoom-in;
       font-family: var(--ff-recursive); font-size: 13px;
     }
@@ -583,10 +593,6 @@ ${fontFaceCss}    :root {
     .tl-line, .tl-pin { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
     .tl-line { border-left: 1.5px solid var(--ink); }
     .tl-pin { border-left: 1.5px dashed var(--hard); }
-    .tl-readout {
-      position: absolute; top: 4px; padding: 4px 7px; background: rgba(15, 15, 15, 0.9); color: #fff;
-      font: 12px/1.3 var(--ff-sora); white-space: nowrap; pointer-events: none;
-    }
 
     /* Lightbox overlay — hidden by default; the client script adds .open to show it.
        It opens fitted to the window; .actual shows the figure at its own pixel
@@ -1375,9 +1381,12 @@ function lacksTrialTimes(participant) {
 // draws over (timeline-client.js). data-timeline holds that script's numbers
 // (timeline-layout.js hoverData), from the layout the PNGs were drawn with.
 // A missing image removes itself and the other stays; with neither, the
-// block hides. "enlarge" shows both in the lightbox (openStack). The note
-// points at the typing profile's own block above, so it is written only when
-// there is one (typing-profile-core.js draws none when every bar is empty).
+// block hides. "enlarge" shows both in the lightbox (openStack); the header
+// row's .tl-readout is where the script writes what is under the pointer.
+// The note points at the typing profile's own block above, so it is written
+// only when there is one: an image to show (the in-page report has none when
+// the chart failed to draw) and a bar to draw (typing-profile-core.js draws
+// nothing when every bar is empty).
 function renderTimelineBlock(layout, withTyping, srcOf, participant) {
   const pics = (withTyping ? [['typingProfile', 'typing_profile', 'Typing speed per trial, on the session time axis']] : [])
     .concat([['sessionTimeline', 'session_timeline', 'Session timeline']])
@@ -1385,14 +1394,14 @@ function renderTimelineBlock(layout, withTyping, srcOf, participant) {
     .filter((x) => x.src !== null && x.src !== undefined);
   if (!pics.length) return '';
   const data = layout ? ` data-timeline="${esc(JSON.stringify(hoverData(layout)))}"` : '';
-  const typingBlockAbove = !!layout && layout.bars.some((b) => b.kind !== 'none');
+  const typingBlockAbove = srcOf('typingProfile', 'typing_profile') != null && !!layout && layout.bars.some((b) => b.kind !== 'none');
   const note = layout && !layout.aligned && typingBlockAbove && lacksTrialTimes(participant)
     ? `
       <p class="muted note tl-note">The typing profile above has one bar per trial: lining it up with this timeline needs each trial's start time and duration (startTime, duration_ms), which these data do not carry.</p>`
     : '';
   return `
     <div class="image-block tl-block">
-      <div class="tl-head"><h4 class="section-heading">Session timeline</h4><button type="button" class="tl-enlarge">enlarge</button></div>
+      <div class="tl-head"><h4 class="section-heading">Session timeline</h4><span class="tl-readout"></span><button type="button" class="tl-enlarge">enlarge</button></div>
       <div class="tl-stage"${data}>${pics.map((x) => `
         <img src="${esc(x.src)}" alt="${x.alt}" onerror="var b=this.closest('.tl-block');this.remove();if(!b.querySelector('img'))b.style.display='none'">`).join('')}
       </div>${note}

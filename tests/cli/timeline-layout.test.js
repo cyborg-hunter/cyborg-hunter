@@ -268,6 +268,17 @@ describe('the numbers the hover script reads', () => {
       sidebars: [[1, 2], [9, 12.35]],
     });
   });
+
+  it('a judged rate is rounded as the times are, so the label never prints a long fraction', () => {
+    // A rate the library saved unrounded (older payloads), drawn without a
+    // typing analysis: the bar keeps its value, the hover number is rounded.
+    const trials = [trial('a', 0, 4000, { charsPerSec: 10 / 3 }), trial('b', 4000, 2000, { charsPerSec: 2 / 3 })];
+    const { spans } = trialSpans(trials, 0);
+    const bars = typingBars(trials, null, 10);
+    assert.equal(bars[0].cps, 10 / 3);
+    const rows = hoverData({ domainSec: 6, spans, bars, events: {} }).trials;
+    assert.deepEqual(rows.map((r) => r[4]), [3.33, 0.67]);
+  });
 });
 
 // A session of n trials, one every everyMs, each durMs long, with a copy and

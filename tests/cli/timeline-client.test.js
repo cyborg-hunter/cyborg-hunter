@@ -17,6 +17,7 @@ import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import { parseQualtricsExport } from '../../src/cli/qualtrics-csv.js';
 import { sessionLayout } from '../../src/cli/renderers/session-timeline-core.js';
 import { hoverData } from '../../src/cli/renderers/timeline-layout.js';
+import { reportCss, parseRules, lastProp } from './report-css-helpers.js';
 
 // Trial entries as hoverData writes them: [id, phase, startSec, endSec, cps,
 // truncated].
@@ -80,10 +81,12 @@ describe('the inline script', () => {
   // The report's markup for DEMO-FIXT (its trials carry start times, so the
   // charts align), with the script run from its source text in a fresh
   // context: a function that used anything from its module would throw.
-  async function page() {
+  // `edit` changes the participant before the report is built.
+  async function page(edit) {
     const config = { outputDir: '.', participantIdField: 'participantId' };
     const raw = JSON.parse(readFileSync(new URL('../fixtures/demo/DEMO-FIXT.json', import.meta.url), 'utf8'));
     const p = extractIntegrityData(raw, config);
+    if (edit) edit(p);
     const summaries = computeSummary([p], config);
     const html = await renderIndexHtml(summaries, rankTriage(summaries, detectEdgeExits([p], config), config), [p], config, true, {});
     const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
@@ -93,9 +96,12 @@ describe('the inline script', () => {
     // one client pixel is one unit of the chart's own 1000.
     stage.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600 });
     runInNewContext(timelineScript(), { document: win.document });
-    return { win, stage, data: JSON.parse(stage.getAttribute('data-timeline')) };
+    const readout = stage.closest('.tl-block').querySelector('.tl-readout');
+    const move = (x) => stage.dispatchEvent(new win.MouseEvent('mousemove', { clientX: x, bubbles: true }));
+    return { win, html, stage, readout, move, data: JSON.parse(stage.getAttribute('data-timeline')) };
   }
   const xAt = (d, sec) => d.left + (sec / d.domain) * d.chart;
+  const mid = (t) => (t[2] + t[3]) / 2;
 
   it('the stage holds the typing chart above the timeline', async () => {
     const { stage } = await page();
@@ -103,15 +109,81 @@ describe('the inline script', () => {
       ['images/typing_profile_DEMO-FIXT.png', 'images/session_timeline_DEMO-FIXT.png']);
   });
 
-  it('a move over a trial shows the line and its label; the left margin hides them', async () => {
-    const { win, stage, data } = await page();
+  it('the readout is in the header row, between the heading and "enlarge"; nothing in the stage holds text', async () => {
+    const { stage, readout, move, data } = await page();
+    const head = stage.closest('.tl-block').querySelector('.tl-head');
+    assert.deepEqual([...head.children].map((c) => c.className), ['section-heading', 'tl-readout', 'tl-enlarge']);
+    assert.equal(readout.parentNode, head);
+    move(xAt(data, mid(data.trials[2])));
+    stage.dispatchEvent(new stage.ownerDocument.defaultView.MouseEvent('click', { clientX: 500, bubbles: true }));
+    assert.equal(stage.querySelector('.tl-readout'), null);
+    assert.deepEqual([...stage.children].map((c) => c.className || c.tagName), ['IMG', 'IMG', 'tl-line', 'tl-pin']);
+    assert.equal(stage.textContent.trim(), '', 'only lines over the images');
+  });
+
+  it('a move over a trial shows the line and writes its label in the header; the left margin clears both', async () => {
+    const { stage, readout, move, data } = await page();
     const tab = data.trials.find((t) => t[0] === 'act1-tabaway');
-    stage.dispatchEvent(new win.MouseEvent('mousemove', { clientX: xAt(data, (tab[2] + tab[3]) / 2), bubbles: true }));
+    move(xAt(data, mid(tab)));
     assert.equal(stage.querySelector('.tl-line').hidden, false);
-    assert.match(stage.querySelector('.tl-readout').textContent, /trial act1-tabaway/);
-    stage.dispatchEvent(new win.MouseEvent('mousemove', { clientX: 20, bubbles: true }));
+    assert.equal(readout.textContent, chTimelineLabel(data, mid(tab)));
+    assert.match(readout.textContent, /trial act1-tabaway/);
+    move(20);
     assert.equal(stage.querySelector('.tl-line').hidden, true);
-    assert.equal(stage.querySelector('.tl-readout').hidden, true);
+    assert.equal(readout.textContent, '');
+  });
+
+  it('leaving the stage clears the line and the readout', async () => {
+    const { win, stage, readout, move, data } = await page();
+    move(xAt(data, mid(data.trials[0])));
+    assert.notEqual(readout.textContent, '');
+    stage.dispatchEvent(new win.MouseEvent('mouseleave'));
+    assert.equal(stage.querySelector('.tl-line').hidden, true);
+    assert.equal(readout.textContent, '');
+  });
+
+  it('an unrounded saved rate reads rounded in the label', async () => {
+    const { readout, move, data } = await page((p) => { p.trials[0].charsPerSec = 10 / 3; });
+    move(xAt(data, mid(data.trials[0])));
+    assert.match(readout.textContent, / · 3\.33 cps$/);
+  });
+
+  // A trial id and a phase reach the page from participant data, through
+  // data-timeline: they stay an attribute value, make no element, and the
+  // label shows them as the text they are.
+  it('a hostile trial id and phase stay text: escaped in the attribute, no element made, shown as written', async () => {
+    const ID = '"></div><script>x</script>';
+    const PHASE = 'a &quot;b&quot; <i>c';
+    const plain = await page();
+    const { win, html, stage, readout, move, data } = await page((p) => { p.trials[2].trialId = ID; p.trials[2].phase = PHASE; });
+    const attr = html.match(/<div class="tl-stage" data-timeline="([^"]*)">/);
+    assert.ok(attr, 'the attribute ends where it should');
+    assert.ok(!/[<>"]/.test(attr[1]), 'no raw < > or " inside it');
+    assert.ok(attr[1].includes('&amp;quot;b&amp;quot;'), "the phase's own &quot; is escaped, not decoded");
+    assert.equal(win.document.querySelectorAll('.tl-stage').length, 1);
+    for (const tag of ['script', 'i']) {
+      assert.equal(win.document.querySelectorAll(tag).length, plain.win.document.querySelectorAll(tag).length, 'no ' + tag + ' made');
+    }
+    assert.deepEqual(data.trials[2].slice(0, 2), [ID, PHASE]);
+    move(xAt(data, mid(data.trials[2])));
+    assert.ok(readout.textContent.includes('trial ' + ID + ' (' + PHASE + ')'), readout.textContent);
+    assert.equal(readout.children.length, 0);
+    assert.equal(stage.querySelectorAll('img').length, 2);
+  });
+
+  // The header row's layout, read from the report's CSS (a real browser
+  // checks the rendered row): the readout takes the room between the heading
+  // and the button and is cut on one line, and neither of those shrinks.
+  it('the readout is cut on one line with an ellipsis; the heading and "enlarge" never shrink', async () => {
+    const rules = parseRules(await reportCss());
+    assert.equal(lastProp(rules, '.tl-head', 'display'), 'flex');
+    assert.equal(lastProp(rules, '.tl-head .section-heading', 'flex'), 'none');
+    assert.equal(lastProp(rules, '.tl-enlarge', 'flex'), 'none');
+    for (const [prop, value] of [['flex', '1 1 auto'], ['min-width', '0'], ['overflow', 'hidden'],
+      ['text-overflow', 'ellipsis'], ['white-space', 'nowrap']]) {
+      assert.equal(lastProp(rules, '.tl-readout', prop), value, prop);
+    }
+    assert.equal(lastProp(rules, '.tl-readout', 'position'), null, 'not placed over the stage');
   });
 
   it('a click pins a line, a click within 6 px removes it, a click elsewhere adds another', async () => {
