@@ -307,6 +307,35 @@ test('session timeline: phase names above the Trials strip never run into each o
   assert.ok(first[2] >= TIMELINE_GEOMETRY.left && first[2] + first[1].length * 5.8 <= CHART_RIGHT, `x ${first[2]}`);
 });
 
+test('session timeline: the header\'s offset note clears the phase names above the Trials strip by 3 px', async () => {
+  // A sans-serif's glyphs reach about 0.74 em above the baseline and 0.22 em
+  // below it (node-canvas measures 6.58 px of a bold 9 px name and 2.14 px of
+  // the 10 px note, 7.29 px above the note's baseline, 2.43 px under an
+  // 11 px subtitle with descenders).
+  const ASCENT = 0.74, DESCENT = 0.22;
+  const PH = structuredClone(P);
+  ['tutorial', 'tutorial', 'main', 'main', 'main', 'main'].forEach((ph, i) => { PH.trials[i].phase = ph; });
+  const log = [];
+  await drawSessionTimeline(PH, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  // Each text with the font size in effect when it was drawn.
+  let size = null;
+  const texts = [];
+  for (const c of log) {
+    if (c[0] === 'set:font') size = Number(/(\d+(?:\.\d+)?)px/.exec(c[1])[1]);
+    else if (c[0] === 'fillText') texts.push({ text: String(c[1]), x: c[2], y: c[3], size });
+  }
+  const note = texts.find(t => t.text.startsWith('(perfNow'));
+  const subtitle = texts.find(t => t.text.startsWith('condition='));
+  // DEMO-FIXT has no session start, so the note is drawn; the Trials strip
+  // is the first row and the names sit 3 px above it.
+  const name = texts.find(t => t.text === 'tutorial' && t.y === TIMELINE_ROW.top - 3);
+  assert.ok(note && subtitle && name, 'note, subtitle and a phase name drawn');
+  const clearance = (name.y - ASCENT * name.size) - (note.y + DESCENT * note.size);
+  assert.ok(clearance >= 3, `note to phase name: ${clearance.toFixed(2)} px`);
+  // And the note does not reach up into the subtitle.
+  assert.ok((note.y - ASCENT * note.size) - (subtitle.y + DESCENT * subtitle.size) > 0, 'note clear of the subtitle');
+});
+
 // ── Trajectories core ────────────────────────────────────────────────────
 import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js';
 

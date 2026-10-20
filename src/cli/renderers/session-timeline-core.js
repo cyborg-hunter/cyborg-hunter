@@ -656,11 +656,13 @@ function drawHeader(ctx, p, events) {
   const dur = p.metadata?.totalDurationMs ? `${(p.metadata.totalDurationMs / 60000).toFixed(1)} min` : '?';
   ctx.fillText(`condition=${cond}  duration=${dur}  trials=${(p.trials || []).length}`, LEFT_PAD, 38);
 
-  // Sessionoffset note
+  // Sessionoffset note. At y 50 it clears the phase names drawn 3 px above
+  // a Trials strip in the first row (TIMELINE_ROW.top) by about 3 px, and
+  // the subtitle's descenders by about 2.
   ctx.font = '10px sans-serif';
   if (!events.sessionOffsetMs) {
     ctx.fillStyle = '#999';
-    ctx.fillText(`(perfNow→session-rel offset not derivable — perfNow events may drift ~20-60s)`, LEFT_PAD, 53);
+    ctx.fillText(`(perfNow→session-rel offset not derivable — perfNow events may drift ~20-60s)`, LEFT_PAD, 50);
   }
 }
 

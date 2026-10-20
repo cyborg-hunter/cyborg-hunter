@@ -57,7 +57,7 @@
    "fillText",
    "(perfNow→session-rel offset not derivable — perfNow events may drift ~20-60s)",
    90,
-   53
+   50
   ],
   [
    "set:fillStyle",
