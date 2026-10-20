@@ -798,15 +798,18 @@ function drawTrialsStripNames(ctx, names, y) {
 }
 
 // Text cut with an ellipsis to fit `room` px at `perChar` px a character
-// ('' when not even one character and the ellipsis fit).
-function fitText(text, room, perChar) {
+// ('' when not even one character and the ellipsis fit). Exported for
+// typing-profile-core.js, which places the phase names the same way.
+export function fitText(text, room, perChar) {
   const fit = Math.floor(room / perChar);
   if (text.length <= fit) return text;
   return fit >= 2 ? text.slice(0, fit - 1) + '…' : '';
 }
 
 // Diagonal lines over a rectangle, clipped to it: a trimmed page's band.
-function hatch(ctx, x, y, w, h) {
+// Exported for typing-profile-core.js, whose one-bar-per-trial chart marks
+// a trimmed page the same way.
+export function hatch(ctx, x, y, w, h) {
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, w, h);

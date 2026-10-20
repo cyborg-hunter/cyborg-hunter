@@ -35,6 +35,12 @@ function participantFile(pid, n = 2, trialExtra = {}, extra = {}) {
   return { participantId: pid, trials, metadata: { startTime: '2026-01-01T00:00:00.000Z' }, ...extra };
 }
 
+// Trial fields that give a trial a bar on the typing chart: a saved rate and
+// no saved edit times (keystroke dynamics off), so the typing analysis keeps
+// the saved rate. (integrity()'s two edit times would be recomputed, and two
+// edits are too few to judge a rate.)
+const TYPED = { charsPerSec: 4, editTimestamps: [] };
+
 // Ingests `files` ({ name: object | string }) from a fresh directory.
 async function ingestFilesOf(files, over = {}) {
   const d = mkdtempSync(join(tmpdir(), 'ch-hostile-'));
@@ -93,8 +99,8 @@ function limitedCanvasFactory(log) {
 describe('the plots of one participant', () => {
   it('a plot that fails for one participant is a warning naming them; the report and the others\' plots are written', async () => {
     const { participants, config } = await ingestFilesOf({
-      'BOOM.json': participantFile('BOOM', 2, { charsPerSec: 4 }),
-      'B.json': participantFile('B', 2, { charsPerSec: 4 }),
+      'BOOM.json': participantFile('BOOM', 2, TYPED),
+      'B.json': participantFile('B', 2, TYPED),
     });
     // A canvas whose text drawing fails whenever it names BOOM.
     const make = makeRecordingCanvasFactory([]);
@@ -119,7 +125,7 @@ describe('the plots of one participant', () => {
 
   it('a participant with many trials still gets plots, each canvas within the size browsers and node-canvas allow', async () => {
     const { participants, config } = await ingestFilesOf({
-      'MANY.json': participantFile('MANY', 900, { charsPerSec: 4 }),
+      'MANY.json': participantFile('MANY', 900, TYPED),
     });
     const log = [];
     const { built, files } = await report(participants, config, { createCanvas: limitedCanvasFactory(log) });
@@ -128,10 +134,13 @@ describe('the plots of one participant', () => {
     assert.ok(files.has('images/typing_profile_MANY.png'));
     const sizes = log.filter((e) => e[0] === 'createCanvas');
     assert.ok(sizes.every(([, w, h]) => w <= MAX_SIDE && h <= MAX_SIDE), JSON.stringify(sizes));
-    // Each capped plot says how many trials it shows.
+    // The trajectory grid says how many trials it shows. The typing profile
+    // needs no cap: these trials carry start times, so it is drawn on the
+    // session time axis, as wide as the timeline whatever the trial count.
     const texts = log.filter((e) => e[0] === 'fillText').map((e) => String(e[1]));
     assert.ok(texts.some((t) => /first 400 of 900 trials/.test(t)), 'the trajectory grid says it is capped');
-    assert.ok(texts.some((t) => /first 800 of 900 trials/.test(t)), 'the typing profile says it is capped');
+    assert.ok(texts.includes('Typing Speed Profile — MANY'), 'the typing profile, on the time axis and uncapped');
+    assert.ok(sizes.filter(([, w]) => w === 1000).length >= 2, 'the timeline and the typing profile, 1000 px wide');
   });
 });
 

@@ -452,47 +452,41 @@ function styleSets(log, prop, color) {
 }
 
 // config.typingSpeedThreshold_cps is the real fallback key the renderer
-// reads (see the `threshold =` line in typing-profile-core.js) — NOT
+// reads (timeline-layout.js typingThreshold) — NOT
 // config.thresholds.typingSpeedCps. DEMO-FIXT's participant already carries
-// session.config.thresholds.typingSpeedCps = 10 (higher precedence per that
-// same three-tier fallback), so this value only matters for participants
-// without a saved threshold; set to 10 so both sources agree here.
+// session.config.thresholds.typingSpeedCps = 10 (higher precedence), so this
+// value only matters for participants without a saved threshold; set to 10
+// so both sources agree here.
+// DEMO-FIXT's trials carry start times, so the chart is drawn on the session
+// time axis: 1000 × 204, the same left margin as the timeline.
 snapshotTest('typing-profile core draw log', 'drawlog-typing-profile.json',
   (cc) => drawTypingProfile(P, { outputDir: '.', typingSpeedThreshold_cps: 10 }, cc),
   (log) => {
-    // Non-tautological checks: the legend swatches (fillStyle '#2196F3' for
-    // "typed", '#f44336' for "> threshold") are set once each unconditionally
-    // before the bar loop runs, so bare presence checks would pass on an
-    // all-blank chart too. These use occurrence counts derived from
-    // DEMO-FIXT's own trials: exactly one typed trial (act1-baseline,
-    // charsPerSec=9.1) below the 10 cps threshold, one paste-only trial
-    // (act1-paste, 2 pasteEvents, no charsPerSec), and none above threshold.
-    assert.equal(styleSets(log, 'fillStyle', '#2196F3'), 2,
-      'below-threshold typed bar: 1 legend swatch + 1 bar (act1-baseline, 9.1 < 10 cps)');
-    assert.equal(styleSets(log, 'fillStyle', '#f44336'), 1,
-      'no above-threshold bar in the baseline fixture — legend swatch only (enriched test below adds one)');
-
-    // Threshold line: measured, not merely present — '#ff0000' is unique to
-    // this line (no other draw call in the function uses pure red), and the
-    // checked coordinates are real computed values: maxSpeed = max(9.1, 0×4,
-    // threshold×1.5) = 15, so threshY = 50 + 200 − 10×(200/15) ≈ 116.67, and
-    // canvasW − 10 = (60 + 6×38 + 20) − 10 = 298.
+    assert.deepEqual(log[0], ['createCanvas', 1000, 204]);
+    // Occurrence counts from DEMO-FIXT's own trials: one typed trial
+    // (act1-baseline, 9.1 cps, under the 10 cps threshold), one paste-only
+    // trial (act1-paste), none above the threshold. Each colour is also set
+    // once by its legend swatch.
+    assert.equal(styleSets(log, 'fillStyle', '#2196F3'), 2, 'legend + the act1-baseline bar');
+    assert.equal(styleSets(log, 'fillStyle', '#f44336'), 1, 'legend only');
+    // The threshold line spans the chart: the axis tops out at 15 (1.5 × the
+    // threshold), so y = 44 + 130 − 10 × 130/15 ≈ 87.33, from x 90 to 970.
     const lineIdx = log.findIndex(c => c[0] === 'set:strokeStyle' && c[1] === '#ff0000');
     assert.ok(lineIdx >= 0, 'threshold line strokeStyle set');
-    assert.deepEqual(log[lineIdx + 1], ['set:lineWidth', 1.5]);
-    assert.deepEqual(log[lineIdx + 2], ['setLineDash', [5, 3]]);
-    assert.deepEqual(log[lineIdx + 3], ['beginPath']);
-    assert.deepEqual(log[lineIdx + 4], ['moveTo', 60, 116.67]);
-    assert.deepEqual(log[lineIdx + 5], ['lineTo', 298, 116.67]);
+    assert.deepEqual(log.slice(lineIdx + 1, lineIdx + 6), [
+      ['set:lineWidth', 1.5], ['setLineDash', [5, 3]], ['beginPath'], ['moveTo', 90, 87.33], ['lineTo', 970, 87.33]]);
+    // A light guide at each of the six trial starts, as on the timeline.
+    assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 6);
+    // P above the paste-only trial; no copy in the fixture, so C and R only in the legend.
+    const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+    assert.equal(texts.filter(t => t === 'P').length, 1);
+    assert.equal(texts.filter(t => t === 'C').length, 1);
+    assert.equal(texts.filter(t => t === 'R').length, 1);
   });
 
-// Enriched variant: DEMO-FIXT has only one typed trial (act1-baseline, 9.1
-// cps) and it sits below the 10 cps threshold, so the above-threshold red
-// bar branch never fires in the baseline snapshot above. Boost a no-data
-// trial (act1-tabaway) to a real above-threshold speed on a structuredClone
-// so P above stays untouched. 15 cps also keeps maxSpeed (and so threshY)
-// identical to the baseline (max(..., 15) still ties threshold×1.5 = 15),
-// which keeps this fixture easy to reason about against the one above.
+// Enriched: a no-data trial (act1-tabaway) boosted to 15 cps, over the
+// threshold. Without a typing analysis the library rate is judged, so the
+// red bar draws. 15 still ties 1.5 × the threshold, so the axis is unchanged.
 const P_TYPING_ENRICHED = structuredClone(P);
 const typingBoostIdx = P_TYPING_ENRICHED.trials.findIndex(t => t.trialId === 'act1-tabaway');
 P_TYPING_ENRICHED.trials[typingBoostIdx].charsPerSec = 15; // > 10 cps threshold
@@ -500,12 +494,188 @@ P_TYPING_ENRICHED.trials[typingBoostIdx].charsPerSec = 15; // > 10 cps threshold
 snapshotTest('typing-profile core draw log (enriched)', 'drawlog-typing-profile-enriched.json',
   (cc) => drawTypingProfile(P_TYPING_ENRICHED, { outputDir: '.', typingSpeedThreshold_cps: 10 }, cc),
   (log) => {
-    assert.ok(log.length > 267, `enriched log has ${log.length} calls (baseline: 267)`);
-    assert.equal(styleSets(log, 'fillStyle', '#f44336'), 2,
-      'above-threshold red bar now draws: 1 legend swatch + 1 bar (act1-tabaway boosted to 15 cps)');
-    assert.equal(styleSets(log, 'fillStyle', '#2196F3'), 2,
-      'below-threshold bar count unchanged — act1-baseline (9.1 cps) is still the only one');
+    const baseCalls = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'cli', 'drawlog-typing-profile.json'), 'utf8')).calls;
+    assert.ok(log.length > baseCalls, `enriched log has ${log.length} calls (baseline: ${baseCalls})`);
+    assert.equal(styleSets(log, 'fillStyle', '#f44336'), 2, 'legend + the boosted act1-tabaway bar');
+    assert.equal(styleSets(log, 'fillStyle', '#2196F3'), 2, 'act1-baseline is still the only bar under the threshold');
   });
+
+// Data whose trials carry no start times: one 30 px bar per trial, as before
+// 0.17, on a canvas at least 600 px wide so the legend fits.
+const P_PER_TRIAL = structuredClone(P);
+for (const t of P_PER_TRIAL.trials) delete t.startTime;
+
+snapshotTest('typing-profile core draw log (one bar per trial)', 'drawlog-typing-profile-per-trial.json',
+  (cc) => drawTypingProfile(P_PER_TRIAL, { outputDir: '.', typingSpeedThreshold_cps: 10 }, cc),
+  (log) => {
+    assert.deepEqual(log[0], ['createCanvas', 600, 300]);
+    // maxSpeed = max(9.1, 1.5 × 10) = 15, so threshY = 50 + 200 − 10 × 200/15 ≈ 116.67.
+    const lineIdx = log.findIndex(c => c[0] === 'set:strokeStyle' && c[1] === '#ff0000');
+    assert.deepEqual(log.slice(lineIdx + 1, lineIdx + 6), [
+      ['set:lineWidth', 1.5], ['setLineDash', [5, 3]], ['beginPath'], ['moveTo', 60, 116.67], ['lineTo', 590, 116.67]]);
+    assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 0, 'no trial guides off the time axis');
+  });
+
+test('typing-profile core: the R mark comes from the typing analysis', () => {
+  const log = [];
+  drawTypingProfile(P, { outputDir: '.', typingSpeedThreshold_cps: 10 }, makeRecordingCanvasFactory(log),
+    { byIndex: [{ cps: 9.1, judged: true, rhythm: true }, null, null, null, null, null] });
+  const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+  assert.equal(texts.filter(t => t === 'R').length, 2, 'the legend and act1-baseline');
+});
+
+test('typing-profile core: a trial the analysis does not judge gets no bar', () => {
+  const log = [];
+  drawTypingProfile(P, { outputDir: '.', typingSpeedThreshold_cps: 10 }, makeRecordingCanvasFactory(log),
+    { byIndex: [{ cps: null, judged: false, rhythm: false }, null, null, null, null, null] });
+  assert.equal(styleSets(log, 'fillStyle', '#2196F3'), 1, 'the legend swatch only');
+});
+
+test('typing-profile core: one bar per trial keeps its cap and says so', () => {
+  const P_MANY = structuredClone(P_PER_TRIAL);
+  const first = P_MANY.trials[0];
+  P_MANY.trials = Array.from({ length: 900 }, (_, i) => ({ ...first, trialId: 'm-' + i }));
+  const log = [];
+  drawTypingProfile(P_MANY, { outputDir: '.', typingSpeedThreshold_cps: 10 }, makeRecordingCanvasFactory(log));
+  assert.ok(log.some(c => c[0] === 'fillText' && /first 800 of 900 trials/.test(c[1])));
+  assert.ok(log[0][1] <= 32767);
+});
+
+// Crowded sessions on the time axis: n trials one second apart, each with a
+// copy and a paste and a rate, built with a loop.
+function crowdedSession(n) {
+  const trials = [];
+  for (let i = 0; i < n; i++) {
+    trials.push({ trialId: 'n' + i, startTime: i * 1000, duration_ms: 900, charsPerSec: 4,
+      copyEvents: [{ type: 'copy', t: i * 1000 + 100 }], pasteEvents: [{ type: 'paste', t: i * 1000 + 200 }] });
+  }
+  return { participantId: 'N-' + n, session: {}, metadata: {}, trials };
+}
+
+test('typing-profile core: 300 trials hide their lines and glyphs, and the legend says so; 20 keep them', () => {
+  const texts = (log) => log.filter(c => c[0] === 'fillText').map(c => c[1]);
+  const crowded = [];
+  drawTypingProfile(crowdedSession(300), { outputDir: '.' }, makeRecordingCanvasFactory(crowded));
+  assert.ok(texts(crowded).includes('trial lines hidden (300 trials)'), 'the legend names the hidden lines');
+  assert.equal(crowded.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 0, 'no trial line');
+  // About 2 px a bar: C only in the legend, no P above any bar.
+  assert.equal(texts(crowded).filter(t => t === 'C').length, 1);
+  assert.equal(texts(crowded).filter(t => t === 'P').length, 0);
+  const spread = [];
+  drawTypingProfile(crowdedSession(20), { outputDir: '.' }, makeRecordingCanvasFactory(spread));
+  assert.ok(!texts(spread).some(t => /trial lines hidden/.test(t)));
+  assert.equal(spread.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 20, 'a line at every start');
+  assert.equal(texts(spread).filter(t => t === 'C').length, 21, 'the legend and every bar');
+  assert.equal(texts(spread).filter(t => t === 'P').length, 20);
+});
+
+// Participant data is untrusted: a rate or a threshold far past any
+// person's. The axis stops at 1,000,000 chars/sec (timeline-layout.js
+// typingAxis); a faster bar is cut at the chart's top, a threshold over the
+// top is not drawn, and the tick labels are written short (200k, 1M) so
+// they clear the rotated axis title.
+import { TYPING_ROW, barRect, xOf } from '../../src/cli/renderers/timeline-layout.js';
+import { sessionLayout } from '../../src/cli/renderers/session-timeline-core.js';
+
+test('typing-profile core: a rate over the axis cap is cut at the chart top, under short tick labels', () => {
+  const p = structuredClone(P);
+  p.trials[0].charsPerSec = 5e6; // act1-baseline, which also pasted
+  p.trials[0].pasteEvents = [{ type: 'paste', t: p.trials[0].startTime + 100 }];
+  const log = [];
+  drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const L = sessionLayout(p, { outputDir: '.' });
+  const { x, w } = barRect(L.spans[0], L.domainSec);
+  const r = (v) => Math.round(v * 100) / 100;
+  // The red bar over act1-baseline's span (its faint column is the same rectangle, in grey).
+  const barAt = log.findIndex((c, k) => c[0] === 'fillRect' && c[1] === r(x) && c[3] === r(w)
+    && log[k - 1][0] === 'set:fillStyle' && log[k - 1][1] === '#f44336');
+  assert.ok(barAt > 0, 'the act1-baseline bar');
+  assert.deepEqual(log[barAt], ['fillRect', r(x), TYPING_ROW.top, r(w), TYPING_ROW.chart], 'from the chart top to the baseline');
+  // No room above the cut bar (the subtitle is there): its P goes inside
+  // the bar's top, outlined in white.
+  const glyphY = TYPING_ROW.top + 3 + 9;
+  assert.ok(log.some(c => c[0] === 'strokeText' && c[1] === 'P' && c[3] === glyphY), 'the outline');
+  assert.ok(log.some(c => c[0] === 'fillText' && c[1] === 'P' && c[3] === glyphY), 'the glyph');
+  // The tick labels, right-aligned 6 px left of the chart.
+  const ticks = log.filter(c => c[0] === 'fillText' && c[2] === TIMELINE_GEOMETRY.left - 6).map(c => c[1]);
+  assert.deepEqual(ticks, ['0', '200k', '400k', '600k', '800k', '1M']);
+});
+
+test('typing-profile core: a negative rate or threshold draws nothing under the baseline', () => {
+  const p = structuredClone(P);
+  p.trials[0].charsPerSec = -50;
+  p.session.config.thresholds.typingSpeedCps = -5;
+  const log = [];
+  drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const baseline = TYPING_ROW.top + TYPING_ROW.chart;
+  // Every rectangle after the background ends at the baseline or above it.
+  const rects = log.filter(c => c[0] === 'fillRect').slice(1);
+  assert.ok(rects.every(c => c[2] + c[4] <= baseline), JSON.stringify(rects));
+  assert.equal(styleSets(log, 'strokeStyle', '#ff0000'), 0, 'no threshold line');
+});
+
+test('typing-profile core: a threshold over the axis top draws no threshold line', () => {
+  const p = structuredClone(P);
+  p.session.config.thresholds.typingSpeedCps = 2e6;
+  const log = [];
+  drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  assert.ok(log.length > 0, 'the chart is drawn');
+  assert.equal(styleSets(log, 'strokeStyle', '#ff0000'), 0);
+});
+
+test('typing-profile core: one bar per trial hatches a page a trimmed Qualtrics payload kept without its events', () => {
+  const p = structuredClone(P_PER_TRIAL);
+  p.trials[2].integrityTruncated = true;
+  const log = [];
+  drawTypingProfile(p, { outputDir: '.', typingSpeedThreshold_cps: 10 }, makeRecordingCanvasFactory(log));
+  // 100 px wider than without a trimmed page, for the legend's sixth item.
+  assert.deepEqual(log[0], ['createCanvas', 700, 300]);
+  // The timeline's hatch (its own stroke colour): the trimmed column and the legend's swatch.
+  assert.equal(styleSets(log, 'strokeStyle', '#78909c'), 2);
+  assert.ok(log.some(c => c[0] === 'fillText' && c[1] === 'events not kept'), 'the legend item');
+  const plain = [];
+  drawTypingProfile(P_PER_TRIAL, { outputDir: '.', typingSpeedThreshold_cps: 10 }, makeRecordingCanvasFactory(plain));
+  assert.equal(styleSets(plain, 'strokeStyle', '#78909c'), 0);
+  assert.ok(!plain.some(c => c[0] === 'fillText' && c[1] === 'events not kept'));
+});
+
+test('typing-profile core: a long participant id is cut with an ellipsis, clear of the legend and the canvas edge', () => {
+  // The recording canvas measures 6 px a character.
+  const title = (log) => log.find(c => c[0] === 'fillText' && String(c[1]).startsWith('Typing Speed Profile'));
+  const legendX = (log) => log.find(c => c[0] === 'fillText' && c[1] === 'typed')[2];
+  const longId = 'x'.repeat(150);
+  const aligned = structuredClone(P);
+  aligned.participantId = longId;
+  const a = [];
+  drawTypingProfile(aligned, { outputDir: '.' }, makeRecordingCanvasFactory(a));
+  assert.ok(title(a)[1].endsWith('…'));
+  // Ends at least 16 px before the legend's first swatch (16 px left of its label).
+  assert.ok(title(a)[2] + title(a)[1].length * 6 <= legendX(a) - 16 - 16, JSON.stringify(title(a)));
+  const perTrial = structuredClone(P_PER_TRIAL);
+  perTrial.participantId = longId;
+  const b = [];
+  drawTypingProfile(perTrial, { outputDir: '.' }, makeRecordingCanvasFactory(b));
+  assert.ok(title(b)[1].endsWith('…'));
+  assert.ok(title(b)[2] + title(b)[1].length * 6 <= b[0][1] - 10, JSON.stringify(title(b)));
+});
+
+test('typing-profile core: phase names sit under the baseline where each phase begins, the change on a dark line', () => {
+  const p = structuredClone(P);
+  ['tutorial', 'tutorial', 'main', 'main', 'main', 'main'].forEach((ph, i) => { p.trials[i].phase = ph; });
+  // A fast bar at the change, so a name inside the chart would run into it.
+  p.trials[2].charsPerSec = 15;
+  const log = [];
+  drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const L = sessionLayout(p, { outputDir: '.' });
+  const r = (v) => Math.round(v * 100) / 100;
+  const nameY = TYPING_ROW.top + TYPING_ROW.chart + 13;
+  const names = log.filter(c => c[0] === 'fillText' && (c[1] === 'tutorial' || c[1] === 'main'));
+  assert.deepEqual(names, [
+    ['fillText', 'tutorial', r(xOf(L.spans[0].startSec, L.domainSec) + 3), nameY],
+    ['fillText', 'main', r(xOf(L.spans[2].startSec, L.domainSec) + 3), nameY]]);
+  // One dark dashed line, at the change (the first phase is not a change).
+  assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '6,3').length, 1);
+});
 
 // Skip/bail branch: a participant with trials but no typing data at all (no
 // charsPerSec, no pasteEvents on any trial) draws nothing and returns null —

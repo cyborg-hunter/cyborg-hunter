@@ -1,191 +1,372 @@
 // src/cli/renderers/typing-profile-core.js
 //
-// Pure drawing core for per-participant typing-speed bar-chart images — no
-// Node APIs, so the browser /analyze/ page bundles it directly.
-// report-core.js calls drawTypingProfile per participant with an injected
-// canvas factory and hands the encoded PNG to its sink. Mirrors the
-// session-timeline-core.js / trajectories-core.js split.
+// Pure drawing core for per-participant typing-speed images — no Node APIs,
+// so the browser /analyze/ page bundles it directly. report-core.js calls
+// drawTypingProfile per participant with an injected canvas factory and hands
+// the encoded PNG to its sink. Mirrors the session-timeline-core.js /
+// trajectories-core.js split.
 //
-// drawTypingProfile(p, config, createCanvas) draws one participant's typing
-// speed bar chart — one bar per trial's chars/sec, with a horizontal
-// threshold line and bars above threshold colored red — and returns the
-// drawn canvas (or null if there's nothing to draw: no trials, or no trial
-// has either a typed speed or a paste event). createCanvas is injected so
-// this module never imports the `canvas` package directly — a browser
-// caller can pass a document-canvas-backed factory instead.
+// drawTypingProfile(p, config, createCanvas, typingAnalysis) returns the drawn
+// canvas, or null when no trial has a judged rate or a paste. Two layouts,
+// decided by timeline-layout.js trialSpans:
+//   aligned   — every trial carries startTime and duration_ms: one bar per
+//               trial from its start to its end on the session timeline's
+//               time axis (the same width and left margin), so the report
+//               stacks the two images and one vertical line crosses both;
+//   per trial — older data: one 30 px bar per trial, as before 0.17; the
+//               report says that alignment needs trial start times.
+// Bars: a judged trial's rate (the report's typing analysis, else the
+// library's charsPerSec), red above the participant's threshold; a hatched
+// bar for a trial with a paste and no judged rate; C, P and a red R above the
+// bars (copy or cut, paste, typing rhythm). Both layouts share the y-axis
+// rule (timeline-layout.js typingAxis): round steps, capped for rates no
+// person types, so a bar faster than the axis top is cut at the chart's top.
+// createCanvas is injected so this module never imports the `canvas`
+// package directly.
 
-const BAR_WIDTH = 30;
-const BAR_GAP = 8;
-const CHART_HEIGHT = 200;
-const TOP_PAD = 50;
-const BOTTOM_PAD = 50;
-const LEFT_PAD = 60;
-// At most this many bars, the first trials: the canvas grows by a bar per
-// trial, and node-canvas and browsers refuse a side longer than 32767 pixels
-// (861 bars). The title says when trials are left out.
+import { sessionLayout, drawGuideLines, fitText, hatch } from './session-timeline-core.js';
+import { TIMELINE_GEOMETRY, CHART_W, TYPING_ROW, xOf, barRect, typingAxis, trialLabel } from './timeline-layout.js';
+
+// The per-trial layout's geometry (before 0.17 the only one).
+const PER_TRIAL = { barWidth: 30, barGap: 8, chartHeight: 200, top: 50, bottom: 50, left: 60 };
+// At most this many bars in the per-trial layout, the first trials: that
+// canvas grows by a bar per trial, and node-canvas and browsers refuse a side
+// longer than 32767 pixels (861 bars). The title says when trials are left
+// out. The aligned layout is 1000 px wide whatever the count.
 const MAX_BARS = 800;
 
-// ── Per-participant renderer ─────────────────────────────────────────────
-// Returns the drawn canvas, or null if there's no data to draw (caller
-// decides what "no data" means — report-core.js writes no PNG).
-export function drawTypingProfile(p, config, createCanvas) {
-  if (p.trials.length === 0) return null;
-  const trials = p.trials.slice(0, MAX_BARS);
-  const shown = trials.length < p.trials.length ? ` (first ${trials.length} of ${p.trials.length} trials)` : '';
+const COLOR = {
+  typed: '#2196F3', fast: '#f44336', threshold: '#ff0000',
+  // A faint column for every trial on the time axis, so a trial without
+  // typing still shows where it was.
+  column: 'rgba(207, 216, 220, 0.35)',
+  phaseLabel: '#263238',
+};
+const GLYPH_COLOR = { C: '#f57c00', P: '#555', R: '#b71c1c' };
+// A glyph is about this tall above its baseline (bold 11 px).
+const GLYPH_H = 9;
 
-  // Per-participant threshold line: prefer the typing-speed cutoff the library
-  // actually screened this participant with (saved in session.config.thresholds)
-  // so the red "fast typing" line matches summary.csv's count; fall back to the
-  // CLI/default. A strict participant (8 cps) otherwise shows a 10 cps line.
-  const threshold =
-    p.session?.config?.thresholds?.typingSpeedCps ?? config.typingSpeedThreshold_cps ?? 10;
+export function drawTypingProfile(p, config, createCanvas, typingAnalysis = null) {
+  const trials = Array.isArray(p.trials) ? p.trials : [];
+  if (trials.length === 0) return null;
+  const L = sessionLayout(p, config, typingAnalysis);
+  if (L.bars.every((b) => b.kind === 'none')) return null;
+  return L.aligned ? drawAligned(p, L, createCanvas) : drawPerTrial(p, L, createCanvas);
+}
 
-  // Per-trial state. We distinguish three cases:
-  //   "typed"       — charsPerSec is a real number, draw a normal bar
-  //   "paste-only"  — charsPerSec is null but there's a paste event; draw a
-  //                   grey hatched marker so the absence is legible. Single
-  //                   paste fires one input event, under typingMinEdits (20)
-  //                   → computeTypingSpeed returns null. Without this, a
-  //                   pasted response looks identical to a very slow one.
-  //   "no-data"     — neither, leave blank
-  const kinds = trials.map(t => {
-    if (typeof t.charsPerSec === 'number') return 'typed';
-    if ((t.pasteEvents || []).length > 0) return 'paste-only';
-    return 'no-data';
-  });
-  const speeds = trials.map(t => (typeof t.charsPerSec === 'number' ? t.charsPerSec : 0));
-  if (kinds.every(k => k === 'no-data')) return null;
-
-  const canvasW = LEFT_PAD + trials.length * (BAR_WIDTH + BAR_GAP) + 20;
-  const canvasH = TOP_PAD + CHART_HEIGHT + BOTTOM_PAD;
-  const canvas = createCanvas(canvasW, canvasH);
+// ── On the session time axis ─────────────────────────────────────────────
+function drawAligned(p, L, createCanvas) {
+  const { width, left, right } = TIMELINE_GEOMETRY;
+  const T = TYPING_ROW.top;
+  const CH = TYPING_ROW.chart;
+  const height = T + CH + TYPING_ROW.bottom;
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // Background
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvasW, canvasH);
+  ctx.fillRect(0, 0, width, height);
 
-  // Title
+  // The legend at the right of the title's line, then the title, cut to the
+  // room left of it (a long participant id would run under the legend).
+  // Under the legend, the subtitle's line ends with the note a crowded
+  // session gets (timeline-layout.js guides), as on the timeline's legend.
+  const legendLeft = drawLegend(ctx, width - right, 22, false);
   ctx.fillStyle = '#333';
   ctx.font = 'bold 14px sans-serif';
-  ctx.fillText(`Typing Speed Profile — ${p.participantId}${shown}`, LEFT_PAD, 20);
-  ctx.font = '10px sans-serif';
+  ctx.fillText(fitWidth(ctx, `Typing Speed Profile — ${p.participantId}`, legendLeft - 16 - left), left, 22);
+  ctx.font = '11px sans-serif';
   ctx.fillStyle = '#666';
-  ctx.fillText(`Threshold: ${threshold} chars/sec`, LEFT_PAD, 35);
+  ctx.fillText(`same time axis as the session timeline below · threshold ${L.threshold} chars/sec`, left, 38);
+  const hidden = L.guides.trialLinesHidden;
+  if (hidden > 0) {
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`trial lines hidden (${hidden} trials)`, width - right, 38);
+    ctx.textAlign = 'left';
+  }
 
-  // Legend — three states documented in the `kinds` comment above.
-  const legendY = 35;
-  const legendX0 = LEFT_PAD + 180;
-  ctx.fillStyle = '#2196F3';
-  ctx.fillRect(legendX0, legendY - 8, 12, 10);
-  ctx.fillStyle = '#666';
-  ctx.fillText('typed', legendX0 + 16, legendY);
-  ctx.fillStyle = '#f44336';
-  ctx.fillRect(legendX0 + 60, legendY - 8, 12, 10);
-  ctx.fillStyle = '#666';
-  ctx.fillText('> threshold', legendX0 + 76, legendY);
-  // Hatched swatch for paste-only
-  drawHatchedRect(ctx, legendX0 + 150, legendY - 8, 12, 10);
-  ctx.fillStyle = '#666';
-  ctx.fillText('paste (P)', legendX0 + 166, legendY);
-
-  // Y-axis scaling
-  const maxSpeed = Math.max(...speeds, threshold * 1.5);
-  const yScale = CHART_HEIGHT / maxSpeed;
-
-  // Y-axis labels
-  ctx.fillStyle = '#666';
+  // Y-axis: round steps, labelled at the left margin, with a light grid.
+  const axis = typingAxis(L.threshold, L.bars);
+  const yOf = (v) => T + CH - (v / axis.max) * CH;
   ctx.font = '9px sans-serif';
-  const yTicks = 5;
-  for (let t = 0; t <= yTicks; t++) {
-    const val = (maxSpeed / yTicks) * t;
-    const y = TOP_PAD + CHART_HEIGHT - val * yScale;
-    ctx.fillText(`${val.toFixed(1)}`, 5, y + 3);
-    // Grid line
+  ctx.textAlign = 'right';
+  for (let v = 0; v <= axis.max; v += axis.step) {
+    ctx.fillStyle = '#666';
+    ctx.fillText(tickLabel(v), left - 6, yOf(v) + 3);
     ctx.strokeStyle = '#eee';
     ctx.lineWidth = 0.5;
     ctx.beginPath();
-    ctx.moveTo(LEFT_PAD, y);
-    ctx.lineTo(canvasW - 10, y);
+    ctx.moveTo(left, yOf(v));
+    ctx.lineTo(left + CHART_W, yOf(v));
     ctx.stroke();
   }
+  ctx.save();
+  ctx.translate(left - 34, T + CH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#444';
+  ctx.font = '10px sans-serif';
+  ctx.fillText('chars/sec', 0, 0);
+  ctx.restore();
+  ctx.textAlign = 'left';
 
-  // Threshold line
-  const threshY = TOP_PAD + CHART_HEIGHT - threshold * yScale;
-  ctx.strokeStyle = '#ff0000';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([5, 3]);
-  ctx.beginPath();
-  ctx.moveTo(LEFT_PAD, threshY);
-  ctx.lineTo(canvasW - 10, threshY);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  // Threshold line; not drawn off the chart (a threshold over the capped
+  // axis top, or below 0: participant data).
+  if (L.threshold >= 0 && L.threshold <= axis.max) drawThreshold(ctx, yOf(L.threshold), left, left + CHART_W);
 
-  // Bars
-  const PASTE_BAR_H = CHART_HEIGHT * 0.2; // Paste-only marker height: fixed 20% of chart.
-  for (let i = 0; i < trials.length; i++) {
-    const kind = kinds[i];
-    const speed = speeds[i];
-    const x = LEFT_PAD + i * (BAR_WIDTH + BAR_GAP);
-
-    if (kind === 'paste-only') {
-      // Fixed-height hatched grey bar + "P" marker. The height is arbitrary
-      // — the point is visible presence, not magnitude (we have no CPS to
-      // show). Sits at the bottom like a normal bar.
-      const y = TOP_PAD + CHART_HEIGHT - PASTE_BAR_H;
-      drawHatchedRect(ctx, x, y, BAR_WIDTH, PASTE_BAR_H);
+  // One column per trial, its bar from its start to its end. A rate over the
+  // axis top is cut at the chart's top (barTop).
+  for (const s of L.spans) {
+    const b = L.bars[s.index];
+    const { x, w } = barRect(s, L.domainSec);
+    ctx.fillStyle = COLOR.column;
+    ctx.fillRect(x, T, w, CH);
+    let top = T + CH;
+    if (b.kind === 'typed') {
+      top = barTop(yOf(b.cps), T, T + CH);
+      ctx.fillStyle = b.fast ? COLOR.fast : COLOR.typed;
+      ctx.fillRect(x, top, w, T + CH - top);
+    } else if (b.kind === 'paste-only') {
+      top = T + CH - 22;
+      drawHatchedRect(ctx, x, top, w, 22);
       ctx.strokeStyle = '#888';
       ctx.lineWidth = 0.5;
-      ctx.strokeRect(x, y, BAR_WIDTH, PASTE_BAR_H);
-      // "P" marker above the bar
-      ctx.fillStyle = '#555';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText('P', x + BAR_WIDTH / 2 - 3, y - 3);
-    } else if (kind === 'typed') {
-      const barH = speed * yScale;
-      const y = TOP_PAD + CHART_HEIGHT - barH;
-      ctx.fillStyle = speed > threshold ? '#f44336' : '#2196F3';
-      ctx.fillRect(x, y, BAR_WIDTH, barH);
-      ctx.strokeStyle = '#333';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(x, y, BAR_WIDTH, barH);
-      if (speed > 0) {
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 9px sans-serif';
-        ctx.fillText(speed.toFixed(1), x + 3, y + 12);
-      }
-      // Mixed: typed AND pasted in the same trial. The bar shows the typing
-      // rate (legitimate signal); the "P" glyph above it flags that *some*
-      // of the response came in via paste. Distinct from pure paste-only
-      // (which is a hatched bar, no colored fill).
-      if ((trials[i].pasteEvents || []).length > 0) {
-        ctx.fillStyle = '#555';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('P', x + BAR_WIDTH / 2 - 3, y - 3);
-      }
+      ctx.strokeRect(x, top, w, 22);
     }
-    // 'no-data' → render nothing (blank column)
-
-    // Trial label (always drawn, even for blank columns)
-    const trialId = trials[i].trialId || trials[i].ruleId || `T${i + 1}`;
-    ctx.fillStyle = '#333';
-    ctx.font = '8px sans-serif';
-    ctx.save();
-    ctx.translate(x + BAR_WIDTH / 2, TOP_PAD + CHART_HEIGHT + 10);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillText(trialId.substring(0, 12), 0, 0);
-    ctx.restore();
+    // Above the bar; on a bar that reaches the top of the chart there is no
+    // room above it (the subtitle is there), so inside its top, outlined in
+    // white to read over the bar (and past its sides when it is narrow).
+    if (top - 3 - GLYPH_H >= T) drawGlyphs(ctx, b.glyphs, x + w / 2, top - 3);
+    else drawGlyphs(ctx, b.glyphs, x + w / 2, top + 3 + GLYPH_H, true);
   }
 
   // Baseline
   ctx.strokeStyle = '#333';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(LEFT_PAD, TOP_PAD + CHART_HEIGHT);
-  ctx.lineTo(canvasW - 10, TOP_PAD + CHART_HEIGHT);
+  ctx.moveTo(left, T + CH);
+  ctx.lineTo(left + CHART_W, T + CH);
+  ctx.stroke();
+
+  // The timeline's guides, over the chart, and each phase's name under the
+  // baseline where the phase begins (inside the chart a name would run into
+  // a tall bar and its glyphs), placed as the Trials strip places the names
+  // above it: cut to the room before the chart's right edge, and left out
+  // when it would run into the name before it (its line still marks the
+  // change).
+  drawGuideLines(ctx, L.guides, (sec) => xOf(sec, L.domainSec), L.domainSec, T, T + CH);
+  ctx.font = 'bold 9px sans-serif';
+  ctx.fillStyle = COLOR.phaseLabel;
+  let nameRight = -Infinity;
+  for (const run of L.guides.runs) {
+    const x = xOf(run.sec, L.domainSec) + 3;
+    const text = fitText(run.label, Math.min(CHART_W - 2, width - right - x), 5.8);
+    if (!text || x < nameRight + 6) continue;
+    ctx.fillText(text, x, T + CH + 13);
+    nameRight = x + text.length * 5.8;
+  }
+
+  return canvas;
+}
+
+// ── One bar per trial (trials without start times) ───────────────────────
+function drawPerTrial(p, L, createCanvas) {
+  const G = PER_TRIAL;
+  const bars = L.bars.slice(0, MAX_BARS);
+  const shown = bars.length < L.bars.length ? ` (first ${bars.length} of ${L.bars.length} trials)` : '';
+  // At least 600 px, so the legend fits beside the threshold's label, and
+  // 700 when it also names the trimmed pages' hatch.
+  const trimmed = bars.some((b) => b.truncated);
+  const canvasW = Math.max(trimmed ? 700 : 600, G.left + bars.length * (G.barWidth + G.barGap) + 20);
+  const canvasH = G.top + G.chartHeight + G.bottom;
+  const canvas = createCanvas(canvasW, canvasH);
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  // The title, its participant id cut to the canvas so the count of trials
+  // shown stays whole.
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 14px sans-serif';
+  const idRoom = canvasW - 10 - G.left - (shown ? ctx.measureText(shown).width : 0);
+  ctx.fillText(fitWidth(ctx, `Typing Speed Profile — ${p.participantId}`, idRoom) + shown, G.left, 20);
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = '#666';
+  ctx.fillText(`Threshold: ${L.threshold} chars/sec`, G.left, 35);
+  drawLegend(ctx, canvasW - 10, 35, trimmed);
+
+  // Y-axis: the time-axis chart's round steps (typingAxis), labelled at the
+  // left edge, with a light grid.
+  const axis = typingAxis(L.threshold, bars);
+  const yOf = (v) => G.top + G.chartHeight - (v / axis.max) * G.chartHeight;
+  ctx.font = '9px sans-serif';
+  for (let v = 0; v <= axis.max; v += axis.step) {
+    ctx.fillStyle = '#666';
+    ctx.fillText(tickLabel(v), 5, yOf(v) + 3);
+    ctx.strokeStyle = '#eee';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(G.left, yOf(v));
+    ctx.lineTo(canvasW - 10, yOf(v));
+    ctx.stroke();
+  }
+
+  if (L.threshold >= 0 && L.threshold <= axis.max) drawThreshold(ctx, yOf(L.threshold), G.left, canvasW - 10);
+
+  // Bars. The paste-only marker's height is arbitrary (20 % of the chart):
+  // the point is visible presence, not magnitude. A page a trimmed Qualtrics
+  // payload kept without its events is hatched behind its bar, faintly (a
+  // background, not a bar), with the timeline's Trials-strip hatch: its
+  // pastes and copies are not there to show.
+  const pasteH = G.chartHeight * 0.2;
+  bars.forEach((b, i) => {
+    const x = G.left + i * (G.barWidth + G.barGap);
+    if (b.truncated) {
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      hatch(ctx, x, G.top, G.barWidth, G.chartHeight);
+      ctx.restore();
+    }
+    let top = G.top + G.chartHeight;
+    if (b.kind === 'paste-only') {
+      top = G.top + G.chartHeight - pasteH;
+      drawHatchedRect(ctx, x, top, G.barWidth, pasteH);
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(x, top, G.barWidth, pasteH);
+    } else if (b.kind === 'typed') {
+      top = barTop(yOf(b.cps), G.top, G.top + G.chartHeight);
+      const barH = G.top + G.chartHeight - top;
+      ctx.fillStyle = b.fast ? COLOR.fast : COLOR.typed;
+      ctx.fillRect(x, top, G.barWidth, barH);
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(x, top, G.barWidth, barH);
+      // The rate inside the bar's top, when the bar is tall enough and the
+      // number fits its width.
+      ctx.font = 'bold 9px sans-serif';
+      const rate = b.cps.toFixed(1);
+      if (b.cps > 0 && barH >= 14 && ctx.measureText(rate).width <= G.barWidth - 4) {
+        ctx.fillStyle = '#fff';
+        ctx.fillText(rate, x + 3, top + 12);
+      }
+    }
+    drawGlyphs(ctx, b.glyphs, x + G.barWidth / 2, top - 3);
+
+    // Trial label (always drawn, even for blank columns)
+    ctx.fillStyle = '#333';
+    ctx.font = '8px sans-serif';
+    ctx.save();
+    ctx.translate(x + G.barWidth / 2, G.top + G.chartHeight + 10);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillText(trialLabel(p.trials[i], i).substring(0, 12), 0, 0);
+    ctx.restore();
+  });
+
+  // Baseline
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(G.left, G.top + G.chartHeight);
+  ctx.lineTo(canvasW - 10, G.top + G.chartHeight);
   ctx.stroke();
 
   return canvas;
+}
+
+// ── Shared pieces ────────────────────────────────────────────────────────
+// A tick value, written short from a thousand up (1.5k, 200k, 1M): at 9 px
+// a label as long as 100000 would run into the rotated axis title. The axis
+// tops out at 1,000,000 (typingAxis), so M is only ever 1M.
+function tickLabel(v) {
+  if (v >= 1e6) return v / 1e6 + 'M';
+  if (v >= 1e3) return v / 1e3 + 'k';
+  return String(v);
+}
+
+// A bar's top: its rate's y, kept between the chart's top (a rate over the
+// capped axis) and its baseline (a negative rate: participant data).
+function barTop(y, chartTop, baseline) {
+  return Math.min(baseline, Math.max(chartTop, y));
+}
+
+// The dashed red threshold line at y, from x0 to x1.
+function drawThreshold(ctx, y, x0, x1) {
+  ctx.strokeStyle = COLOR.threshold;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 3]);
+  ctx.beginPath();
+  ctx.moveTo(x0, y);
+  ctx.lineTo(x1, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Text cut with an ellipsis to fit `room` px in the current font. The cut
+// starts from the share of the text that fits at its average width, so a
+// very long id costs a few measures, not one per character.
+function fitWidth(ctx, text, room) {
+  const full = ctx.measureText(text).width;
+  if (full <= room) return text;
+  let n = Math.min(text.length - 1, Math.floor((text.length * room) / full));
+  while (n > 0 && ctx.measureText(text.slice(0, n) + '…').width > room) n--;
+  return text.slice(0, n) + '…';
+}
+
+// C, P and R centred on cx with their baseline at y, each in its colour;
+// `outlined` draws a white outline under each, for a glyph over a bar.
+function drawGlyphs(ctx, glyphs, cx, y, outlined = false) {
+  let gx = cx - 3 - 5 * (glyphs.length - 1);
+  ctx.font = 'bold 11px sans-serif';
+  for (const g of glyphs) {
+    if (outlined) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.strokeText(g, gx, y);
+    }
+    ctx.fillStyle = GLYPH_COLOR[g];
+    ctx.fillText(g, gx, y);
+    gx += 10;
+  }
+}
+
+// The legend, right-aligned with its last item ending at `right`: the three
+// bar kinds, then the two glyphs that are not bars (P is named with the
+// hatched bar), and on the one-bar-per-trial chart, when a page was trimmed,
+// the timeline's hatch. Returns the x where its first item begins.
+function drawLegend(ctx, right, y, trimmed) {
+  const items = [
+    { swatch: COLOR.typed, label: 'typed' },
+    { swatch: COLOR.fast, label: '> threshold' },
+    { hatched: true, label: 'paste, no typing (P)' },
+    { glyph: 'C', label: 'copy or cut' },
+    { glyph: 'R', label: 'typing rhythm' },
+  ];
+  if (trimmed) items.push({ trimmed: true, label: 'events not kept' });
+  let x = right;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    ctx.font = '10px sans-serif';
+    x -= ctx.measureText(it.label).width;
+    ctx.fillStyle = '#666';
+    ctx.fillText(it.label, x, y);
+    x -= 16;
+    if (it.swatch) {
+      ctx.fillStyle = it.swatch;
+      ctx.fillRect(x, y - 8, 12, 10);
+    } else if (it.hatched) {
+      drawHatchedRect(ctx, x, y - 8, 12, 10);
+    } else if (it.trimmed) {
+      hatch(ctx, x, y - 8, 12, 10);
+    } else {
+      ctx.fillStyle = GLYPH_COLOR[it.glyph];
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(it.glyph, x + 2, y);
+    }
+    x -= 10;
+  }
+  return x + 10;
 }
 
 // Cross-hatched fill for paste-only markers. Uses a light grey background

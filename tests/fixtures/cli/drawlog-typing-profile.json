@@ -1,10 +1,10 @@
 {
- "calls": 267,
+ "calls": 262,
  "log": [
   [
    "createCanvas",
-   308,
-   300
+   1000,
+   204
   ],
   [
    "set:fillStyle",
@@ -14,47 +14,16 @@
    "fillRect",
    0,
    0,
-   308,
-   300
-  ],
-  [
-   "set:fillStyle",
-   "#333"
-  ],
-  [
-   "set:font",
-   "bold 14px sans-serif"
-  ],
-  [
-   "fillText",
-   "Typing Speed Profile — DEMO-FIXT",
-   60,
-   20
+   1000,
+   204
   ],
   [
    "set:font",
    "10px sans-serif"
   ],
   [
-   "set:fillStyle",
-   "#666"
-  ],
-  [
-   "fillText",
-   "Threshold: 10 chars/sec",
-   60,
-   35
-  ],
-  [
-   "set:fillStyle",
-   "#2196F3"
-  ],
-  [
-   "fillRect",
-   240,
-   27,
-   12,
-   10
+   "measureText",
+   "typing rhythm"
   ],
   [
    "set:fillStyle",
@@ -62,20 +31,31 @@
   ],
   [
    "fillText",
-   "typed",
-   256,
-   35
+   "typing rhythm",
+   892,
+   22
   ],
   [
    "set:fillStyle",
-   "#f44336"
+   "#b71c1c"
   ],
   [
-   "fillRect",
-   300,
-   27,
-   12,
-   10
+   "set:font",
+   "bold 11px sans-serif"
+  ],
+  [
+   "fillText",
+   "R",
+   878,
+   22
+  ],
+  [
+   "set:font",
+   "10px sans-serif"
+  ],
+  [
+   "measureText",
+   "copy or cut"
   ],
   [
    "set:fillStyle",
@@ -83,9 +63,41 @@
   ],
   [
    "fillText",
-   "> threshold",
-   316,
-   35
+   "copy or cut",
+   800,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#f57c00"
+  ],
+  [
+   "set:font",
+   "bold 11px sans-serif"
+  ],
+  [
+   "fillText",
+   "C",
+   786,
+   22
+  ],
+  [
+   "set:font",
+   "10px sans-serif"
+  ],
+  [
+   "measureText",
+   "paste, no typing (P)"
+  ],
+  [
+   "set:fillStyle",
+   "#666"
+  ],
+  [
+   "fillText",
+   "paste, no typing (P)",
+   654,
+   22
   ],
   [
    "save"
@@ -96,8 +108,8 @@
   ],
   [
    "fillRect",
-   390,
-   27,
+   638,
+   14,
    12,
    10
   ],
@@ -106,8 +118,8 @@
   ],
   [
    "rect",
-   390,
-   27,
+   638,
+   14,
    12,
    10
   ],
@@ -127,13 +139,13 @@
   ],
   [
    "moveTo",
-   380,
-   27
+   628,
+   14
   ],
   [
    "lineTo",
-   390,
-   37
+   638,
+   24
   ],
   [
    "stroke"
@@ -143,13 +155,13 @@
   ],
   [
    "moveTo",
-   385,
-   27
+   633,
+   14
   ],
   [
    "lineTo",
-   395,
-   37
+   643,
+   24
   ],
   [
    "stroke"
@@ -159,13 +171,13 @@
   ],
   [
    "moveTo",
-   390,
-   27
+   638,
+   14
   ],
   [
    "lineTo",
-   400,
-   37
+   648,
+   24
   ],
   [
    "stroke"
@@ -175,13 +187,13 @@
   ],
   [
    "moveTo",
-   395,
-   27
+   643,
+   14
   ],
   [
    "lineTo",
-   405,
-   37
+   653,
+   24
   ],
   [
    "stroke"
@@ -191,13 +203,13 @@
   ],
   [
    "moveTo",
-   400,
-   27
+   648,
+   14
   ],
   [
    "lineTo",
-   410,
-   37
+   658,
+   24
   ],
   [
    "stroke"
@@ -207,13 +219,13 @@
   ],
   [
    "moveTo",
-   405,
-   27
+   653,
+   14
   ],
   [
    "lineTo",
-   415,
-   37
+   663,
+   24
   ],
   [
    "stroke"
@@ -223,13 +235,13 @@
   ],
   [
    "moveTo",
-   410,
-   27
+   658,
+   14
   ],
   [
    "lineTo",
-   420,
-   37
+   668,
+   24
   ],
   [
    "stroke"
@@ -238,28 +250,112 @@
    "restore"
   ],
   [
+   "set:font",
+   "10px sans-serif"
+  ],
+  [
+   "measureText",
+   "> threshold"
+  ],
+  [
    "set:fillStyle",
    "#666"
   ],
   [
    "fillText",
-   "paste (P)",
-   406,
-   35
+   "> threshold",
+   562,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#f44336"
+  ],
+  [
+   "fillRect",
+   546,
+   14,
+   12,
+   10
+  ],
+  [
+   "set:font",
+   "10px sans-serif"
+  ],
+  [
+   "measureText",
+   "typed"
   ],
   [
    "set:fillStyle",
    "#666"
+  ],
+  [
+   "fillText",
+   "typed",
+   506,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#2196F3"
+  ],
+  [
+   "fillRect",
+   490,
+   14,
+   12,
+   10
+  ],
+  [
+   "set:fillStyle",
+   "#333"
+  ],
+  [
+   "set:font",
+   "bold 14px sans-serif"
+  ],
+  [
+   "measureText",
+   "Typing Speed Profile — DEMO-FIXT"
+  ],
+  [
+   "fillText",
+   "Typing Speed Profile — DEMO-FIXT",
+   90,
+   22
+  ],
+  [
+   "set:font",
+   "11px sans-serif"
+  ],
+  [
+   "set:fillStyle",
+   "#666"
+  ],
+  [
+   "fillText",
+   "same time axis as the session timeline below · threshold 10 chars/sec",
+   90,
+   38
   ],
   [
    "set:font",
    "9px sans-serif"
   ],
   [
+   "set:textAlign",
+   "right"
+  ],
+  [
+   "set:fillStyle",
+   "#666"
+  ],
+  [
    "fillText",
-   "0.0",
-   5,
-   253
+   "0",
+   84,
+   177
   ],
   [
    "set:strokeStyle",
@@ -274,22 +370,26 @@
   ],
   [
    "moveTo",
-   60,
-   250
+   90,
+   174
   ],
   [
    "lineTo",
-   298,
-   250
+   970,
+   174
   ],
   [
    "stroke"
   ],
   [
+   "set:fillStyle",
+   "#666"
+  ],
+  [
    "fillText",
-   "3.0",
-   5,
-   213
+   "5",
+   84,
+   133.67
   ],
   [
    "set:strokeStyle",
@@ -304,22 +404,26 @@
   ],
   [
    "moveTo",
-   60,
-   210
+   90,
+   130.67
   ],
   [
    "lineTo",
-   298,
-   210
+   970,
+   130.67
   ],
   [
    "stroke"
   ],
   [
+   "set:fillStyle",
+   "#666"
+  ],
+  [
    "fillText",
-   "6.0",
-   5,
-   173
+   "10",
+   84,
+   90.33
   ],
   [
    "set:strokeStyle",
@@ -334,22 +438,26 @@
   ],
   [
    "moveTo",
-   60,
-   170
+   90,
+   87.33
   ],
   [
    "lineTo",
-   298,
-   170
+   970,
+   87.33
   ],
   [
    "stroke"
   ],
   [
+   "set:fillStyle",
+   "#666"
+  ],
+  [
    "fillText",
-   "9.0",
-   5,
-   133
+   "15",
+   84,
+   47
   ],
   [
    "set:strokeStyle",
@@ -364,76 +472,53 @@
   ],
   [
    "moveTo",
-   60,
-   130
+   90,
+   44
   ],
   [
    "lineTo",
-   298,
-   130
+   970,
+   44
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "translate",
+   56,
+   109
+  ],
+  [
+   "rotate",
+   -1.57
+  ],
+  [
+   "set:textAlign",
+   "center"
+  ],
+  [
+   "set:fillStyle",
+   "#444"
+  ],
+  [
+   "set:font",
+   "10px sans-serif"
   ],
   [
    "fillText",
-   "12.0",
-   5,
-   93
+   "chars/sec",
+   0,
+   0
   ],
   [
-   "set:strokeStyle",
-   "#eee"
+   "restore"
   ],
   [
-   "set:lineWidth",
-   0.5
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   60,
-   90
-  ],
-  [
-   "lineTo",
-   298,
-   90
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "fillText",
-   "15.0",
-   5,
-   53
-  ],
-  [
-   "set:strokeStyle",
-   "#eee"
-  ],
-  [
-   "set:lineWidth",
-   0.5
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   60,
-   50
-  ],
-  [
-   "lineTo",
-   298,
-   50
-  ],
-  [
-   "stroke"
+   "set:textAlign",
+   "left"
   ],
   [
    "set:strokeStyle",
@@ -455,13 +540,13 @@
   ],
   [
    "moveTo",
-   60,
-   116.67
+   90,
+   87.33
   ],
   [
    "lineTo",
-   298,
-   116.67
+   970,
+   87.33
   ],
   [
    "stroke"
@@ -472,72 +557,40 @@
   ],
   [
    "set:fillStyle",
+   "rgba(207, 216, 220, 0.35)"
+  ],
+  [
+   "fillRect",
+   95.79,
+   44,
+   277.63,
+   130
+  ],
+  [
+   "set:fillStyle",
    "#2196F3"
   ],
   [
    "fillRect",
-   60,
-   128.67,
-   30,
-   121.33
-  ],
-  [
-   "set:strokeStyle",
-   "#333"
-  ],
-  [
-   "set:lineWidth",
-   0.5
-  ],
-  [
-   "strokeRect",
-   60,
-   128.67,
-   30,
-   121.33
-  ],
-  [
-   "set:fillStyle",
-   "#fff"
+   95.79,
+   95.13,
+   277.63,
+   78.87
   ],
   [
    "set:font",
-   "bold 9px sans-serif"
-  ],
-  [
-   "fillText",
-   "9.1",
-   63,
-   140.67
+   "bold 11px sans-serif"
   ],
   [
    "set:fillStyle",
-   "#333"
+   "rgba(207, 216, 220, 0.35)"
   ],
   [
-   "set:font",
-   "8px sans-serif"
-  ],
-  [
-   "save"
-  ],
-  [
-   "translate",
-   75,
-   260
-  ],
-  [
-   "rotate",
-   0.79
-  ],
-  [
-   "fillText",
-   "act1-baselin",
-   0,
-   0
-  ],
-  [
-   "restore"
+   "fillRect",
+   374.42,
+   44,
+   15.99,
+   130
   ],
   [
    "save"
@@ -548,20 +601,20 @@
   ],
   [
    "fillRect",
-   98,
-   210,
-   30,
-   40
+   374.42,
+   152,
+   15.99,
+   22
   ],
   [
    "beginPath"
   ],
   [
    "rect",
-   98,
-   210,
-   30,
-   40
+   374.42,
+   152,
+   15.99,
+   22
   ],
   [
    "clip"
@@ -579,13 +632,13 @@
   ],
   [
    "moveTo",
-   58,
-   210
+   352.42,
+   152
   ],
   [
    "lineTo",
-   98,
-   250
+   374.42,
+   174
   ],
   [
    "stroke"
@@ -595,13 +648,13 @@
   ],
   [
    "moveTo",
-   63,
-   210
+   357.42,
+   152
   ],
   [
    "lineTo",
-   103,
-   250
+   379.42,
+   174
   ],
   [
    "stroke"
@@ -611,13 +664,13 @@
   ],
   [
    "moveTo",
-   68,
-   210
+   362.42,
+   152
   ],
   [
    "lineTo",
-   108,
-   250
+   384.42,
+   174
   ],
   [
    "stroke"
@@ -627,13 +680,13 @@
   ],
   [
    "moveTo",
-   73,
-   210
+   367.42,
+   152
   ],
   [
    "lineTo",
-   113,
-   250
+   389.42,
+   174
   ],
   [
    "stroke"
@@ -643,13 +696,13 @@
   ],
   [
    "moveTo",
-   78,
-   210
+   372.42,
+   152
   ],
   [
    "lineTo",
-   118,
-   250
+   394.42,
+   174
   ],
   [
    "stroke"
@@ -659,13 +712,13 @@
   ],
   [
    "moveTo",
-   83,
-   210
+   377.42,
+   152
   ],
   [
    "lineTo",
-   123,
-   250
+   399.42,
+   174
   ],
   [
    "stroke"
@@ -675,13 +728,13 @@
   ],
   [
    "moveTo",
-   88,
-   210
+   382.42,
+   152
   ],
   [
    "lineTo",
-   128,
-   250
+   404.42,
+   174
   ],
   [
    "stroke"
@@ -691,13 +744,13 @@
   ],
   [
    "moveTo",
-   93,
-   210
+   387.42,
+   152
   ],
   [
    "lineTo",
-   133,
-   250
+   409.42,
+   174
   ],
   [
    "stroke"
@@ -707,13 +760,13 @@
   ],
   [
    "moveTo",
-   98,
-   210
+   392.42,
+   152
   ],
   [
    "lineTo",
-   138,
-   250
+   414.42,
+   174
   ],
   [
    "stroke"
@@ -723,13 +776,13 @@
   ],
   [
    "moveTo",
-   103,
-   210
+   397.42,
+   152
   ],
   [
    "lineTo",
-   143,
-   250
+   419.42,
+   174
   ],
   [
    "stroke"
@@ -739,13 +792,13 @@
   ],
   [
    "moveTo",
-   108,
-   210
+   402.42,
+   152
   ],
   [
    "lineTo",
-   148,
-   250
+   424.42,
+   174
   ],
   [
    "stroke"
@@ -755,173 +808,13 @@
   ],
   [
    "moveTo",
-   113,
-   210
+   407.42,
+   152
   ],
   [
    "lineTo",
-   153,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   118,
-   210
-  ],
-  [
-   "lineTo",
-   158,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   123,
-   210
-  ],
-  [
-   "lineTo",
-   163,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   128,
-   210
-  ],
-  [
-   "lineTo",
-   168,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   133,
-   210
-  ],
-  [
-   "lineTo",
-   173,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   138,
-   210
-  ],
-  [
-   "lineTo",
-   178,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   143,
-   210
-  ],
-  [
-   "lineTo",
-   183,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   148,
-   210
-  ],
-  [
-   "lineTo",
-   188,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   153,
-   210
-  ],
-  [
-   "lineTo",
-   193,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   158,
-   210
-  ],
-  [
-   "lineTo",
-   198,
-   250
-  ],
-  [
-   "stroke"
-  ],
-  [
-   "beginPath"
-  ],
-  [
-   "moveTo",
-   163,
-   210
-  ],
-  [
-   "lineTo",
-   203,
-   250
+   429.42,
+   174
   ],
   [
    "stroke"
@@ -939,169 +832,84 @@
   ],
   [
    "strokeRect",
-   98,
-   210,
-   30,
-   40
-  ],
-  [
-   "set:fillStyle",
-   "#555"
+   374.42,
+   152,
+   15.99,
+   22
   ],
   [
    "set:font",
    "bold 11px sans-serif"
   ],
   [
+   "set:fillStyle",
+   "#555"
+  ],
+  [
    "fillText",
    "P",
-   110,
-   207
+   379.42,
+   149
   ],
   [
    "set:fillStyle",
-   "#333"
+   "rgba(207, 216, 220, 0.35)"
+  ],
+  [
+   "fillRect",
+   391.42,
+   44,
+   575.13,
+   130
   ],
   [
    "set:font",
-   "8px sans-serif"
-  ],
-  [
-   "save"
-  ],
-  [
-   "translate",
-   113,
-   260
-  ],
-  [
-   "rotate",
-   0.79
-  ],
-  [
-   "fillText",
-   "act1-paste",
-   0,
-   0
-  ],
-  [
-   "restore"
+   "bold 11px sans-serif"
   ],
   [
    "set:fillStyle",
-   "#333"
+   "rgba(207, 216, 220, 0.35)"
+  ],
+  [
+   "fillRect",
+   967.55,
+   44,
+   2,
+   130
   ],
   [
    "set:font",
-   "8px sans-serif"
-  ],
-  [
-   "save"
-  ],
-  [
-   "translate",
-   151,
-   260
-  ],
-  [
-   "rotate",
-   0.79
-  ],
-  [
-   "fillText",
-   "act1-tabaway",
-   0,
-   0
-  ],
-  [
-   "restore"
+   "bold 11px sans-serif"
   ],
   [
    "set:fillStyle",
-   "#333"
+   "rgba(207, 216, 220, 0.35)"
+  ],
+  [
+   "fillRect",
+   968.77,
+   44,
+   2,
+   130
   ],
   [
    "set:font",
-   "8px sans-serif"
-  ],
-  [
-   "save"
-  ],
-  [
-   "translate",
-   189,
-   260
-  ],
-  [
-   "rotate",
-   0.79
-  ],
-  [
-   "fillText",
-   "act1-sidebar",
-   0,
-   0
-  ],
-  [
-   "restore"
+   "bold 11px sans-serif"
   ],
   [
    "set:fillStyle",
-   "#333"
+   "rgba(207, 216, 220, 0.35)"
+  ],
+  [
+   "fillRect",
+   969.71,
+   44,
+   2,
+   130
   ],
   [
    "set:font",
-   "8px sans-serif"
-  ],
-  [
-   "save"
-  ],
-  [
-   "translate",
-   227,
-   260
-  ],
-  [
-   "rotate",
-   0.79
-  ],
-  [
-   "fillText",
-   "act1-autotyp",
-   0,
-   0
-  ],
-  [
-   "restore"
-  ],
-  [
-   "set:fillStyle",
-   "#333"
-  ],
-  [
-   "set:font",
-   "8px sans-serif"
-  ],
-  [
-   "save"
-  ],
-  [
-   "translate",
-   265,
-   260
-  ],
-  [
-   "rotate",
-   0.79
-  ],
-  [
-   "fillText",
-   "act2-fullscr",
-   0,
-   0
-  ],
-  [
-   "restore"
+   "bold 11px sans-serif"
   ],
   [
    "set:strokeStyle",
@@ -1116,16 +924,216 @@
   ],
   [
    "moveTo",
-   60,
-   250
+   90,
+   174
   ],
   [
    "lineTo",
-   298,
-   250
+   970,
+   174
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   96.5,
+   44
+  ],
+  [
+   "lineTo",
+   96.5,
+   174
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   374.5,
+   44
+  ],
+  [
+   "lineTo",
+   374.5,
+   174
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   391.5,
+   44
+  ],
+  [
+   "lineTo",
+   391.5,
+   174
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   968.5,
+   44
+  ],
+  [
+   "lineTo",
+   968.5,
+   174
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   969.5,
+   44
+  ],
+  [
+   "lineTo",
+   969.5,
+   174
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   970.5,
+   44
+  ],
+  [
+   "lineTo",
+   970.5,
+   174
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "set:font",
+   "bold 9px sans-serif"
+  ],
+  [
+   "set:fillStyle",
+   "#263238"
   ]
  ]
 }

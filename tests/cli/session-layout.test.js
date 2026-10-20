@@ -7,6 +7,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { sessionLayout, deriveSessionOffset, collectEvents } from '../../src/cli/renderers/session-timeline-core.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { buildReport } from '../../src/cli/report-core.js';
+import { analyzeTyping } from '../../src/cli/analyzers/typing.js';
+import { hoverData } from '../../src/cli/renderers/timeline-layout.js';
+import { makeRecordingCanvasFactory } from './recording-canvas.js';
+import { keyRecording, participantFromRecording, botGaps, humanGaps } from './typing-fixtures.js';
 
 const FIXT = JSON.parse(readFileSync(new URL('../fixtures/demo/DEMO-FIXT.json', import.meta.url), 'utf8'));
 const P = extractIntegrityData(FIXT, { outputDir: '.', participantIdField: 'participantId' });
@@ -93,5 +98,39 @@ describe('sessionLayout', () => {
     assert.ok(L.domainSec > 17, `the domain covers the last trial (${L.domainSec})`);
     const open = L.events.sidebarSpans.find((s) => !s.closed);
     assert.equal(open.end_sec, L.domainSec);
+  });
+});
+
+describe('under a phase scope', () => {
+  // A tutorial typed by a person, then the main trial typed by software
+  // (synthetic keys, typing-fixtures.js). The scope keeps the main trial,
+  // whose rhythm rule fires.
+  const scoped = () => {
+    const p = participantFromRecording('SCOPED', keyRecording([['tutorial', 10, humanGaps(120, 1)], ['main', 60010, botGaps(30)]]));
+    p.trials[0].phase = 'tutorial';
+    p.trials[1].phase = 'main';
+    return p;
+  };
+  const config = { outputDir: '.', participantIdField: 'participantId', phaseScope: { include: ['main'] } };
+
+  it('the typing chart keeps the R of an in-scope trial, and the hover rate is the full analysis\'s', async () => {
+    const log = [];
+    const built = await buildReport([scoped()], config, {
+      sink: () => {}, createCanvas: makeRecordingCanvasFactory(log), encodePng: async () => new Uint8Array(0) });
+    // The summary's analysis covers the scoped trial only: one entry for the
+    // two trials the charts draw, so the chart cannot use it.
+    const summaryAnalysis = built.summaries[0].typingAnalysis;
+    assert.equal(summaryAnalysis.byIndex.length, 1);
+    // Only the typing chart writes a bare R: its legend's and the main trial's.
+    assert.equal(log.filter((c) => c[0] === 'fillText' && c[1] === 'R').length, 2);
+    // The chart's rates come from the analysis of every trial: the main
+    // trial's rate is the one the full analysis judged, which the summary's
+    // analysis would have left out.
+    const p = scoped();
+    const full = analyzeTyping(p, config);
+    assert.equal(full.byIndex[1].rhythm, true);
+    assert.ok(full.byIndex[1].cps > 0);
+    assert.equal(hoverData(sessionLayout(p, config, full)).trials[1][4], full.byIndex[1].cps);
+    assert.equal(hoverData(sessionLayout(p, config, summaryAnalysis)).trials[1][4], null);
   });
 });

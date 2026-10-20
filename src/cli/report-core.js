@@ -264,9 +264,17 @@ export async function buildReport(participants, config, deps) {
       }
     }
     log(`  session timelines — rendered (${rendered}/${participants.length})`);
-    for (const p of participants) {
+    // The bars' rates and R marks come from the typing analysis.
+    // summaries[i] is participants[i]'s (computeSummary keeps the order, and
+    // a phase scope maps participants one to one). Under a phase scope the
+    // summary's analysis judged the scoped trials only, while the chart
+    // draws every trial, so the chart's analysis is taken over the whole
+    // participant (analyzeTyping never throws).
+    for (let i = 0; i < participants.length; i++) {
+      const p = participants[i];
       try {
-        const canvas = drawTypingProfile(p, config, deps.createCanvas);
+        const typing = config.phaseScope ? analyzeTyping(p, config) : summaries[i].typingAnalysis || null;
+        const canvas = drawTypingProfile(p, config, deps.createCanvas, typing);
         if (!canvas) continue;
         await emit(`images/typing_profile_${fileId(p)}.png`, canvas, p.participantId, 'typingProfile');
       } catch (err) {
