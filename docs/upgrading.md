@@ -83,10 +83,11 @@ chart moves onto the session timeline's time axis.
 - The triage reason names the typing verdict when it counts against the
   session, before the pointer verdict; `scoreWeights.typingRhythm`
   (default 0) can rank by it.
-- `typing_profile_*.png` draws the rates the section and `summary.csv` use,
-  the corrected ones where the report could recompute them, no longer the
-  rates the library saved, and marks a trial where a typing-rhythm rule
-  fired with a red **R**.
+- `typing_profile_*.png` draws the typing analysis's rate for each trial,
+  the one the section and `summary.csv` use: the corrected rate where the
+  data allow one (a 0.17 library, saved edit times, a `dom`-tier
+  recording), else the old-formula rate the library saved, unmarked on the
+  chart. It marks a trial where a typing-rhythm rule fired with a red **R**.
 - `typing_profile_<id>.png` is drawn on the session timeline's time axis
   (1000 px wide, one bar per trial from its start to its end) and the report
   shows it in one **Session timeline** block with the timeline. Scripts that
@@ -100,7 +101,7 @@ chart moves onto the session timeline's time axis.
   it marks **C** and **R** as well as **P**.
 - `session_timeline_<id>.png` gains rows (a Text input lane, and a Trials
   strip when every trial carries `startTime` and `duration_ms`) and is
-  taller; the phase strip appears only for sessions with gallery phase
+  taller; the Phases strip appears only for sessions with gallery phase
   bands.
 
 ## 0.16.0 — from 0.15

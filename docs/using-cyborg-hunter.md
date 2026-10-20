@@ -28,7 +28,7 @@ To name a trial's segment or pass trial-level options, give the trial its own en
 | Param | Type | Purpose |
 |---|---|---|
 | `trialId` | string | Used as the trial's identifier in the report. Defaults to `trial-{index}`. |
-| `phase` | string | Free-form tag (e.g. `'training'`, `'test'`) — passed through to the trial report for filtering in analysis. The report colours the session timeline's Trials strip by phase and draws a labelled line where the phase changes; without it, the trials are told apart by name only. |
+| `phase` | string | Free-form tag (e.g. `'training'`, `'test'`) — passed through to the trial report for filtering in analysis. The report colours the session timeline's Trials strip by phase and draws a labelled line where the phase changes; without it, the strip alternates two greys and writes each trial's name where its band has room. |
 | `decoyAnswer` | string \| false | Works only with `decoyAnswers: true` (off by default; in `window.CyborgHunterConfig` under the one-line setup, in the init config in manual mode). With it on, **every** trial gets a hidden decoy, framed per `decoyFraming`: this string when set, else text taken from the page's first response option (or a generic "validation trial" notice); `false` skips the trial. An AI tool scraping the page may surface it. It is off-screen but in the accessibility tree, so a screen reader reads it, unless `decoyVisibility: 'aria-hidden'`. The library records the injected text in the trial's `decoy` metadata — it does **not** auto-match it against paste/typed text. Cross-reference the decoy string with `event-log.csv` paste/typed content downstream to flag hits. |
 | `experimentContainer` | string \| Element | Selector or DOM element bounding the response area. Used for the foreign-input detector — typing outside this region is flagged. |
 
@@ -728,18 +728,22 @@ Visual renderers depend on `node-canvas` (Cairo bindings). If `npm install canva
 ### Reading the session timeline
 
 Each participant's pane has a **Session timeline** block: the typing chart
-above the session timeline, on one time axis. Move the pointer across it and
-one line crosses both, while the block's header row names the time, the
-trial (and its phase), the trial's typing rate, and whether the participant
-was tabbed away or had a sidebar open then. Click to pin a dashed line, for
-example where a copy happened, and look down the lanes for what came next;
-click a pinned line to remove it. Pins stay until the page is closed or
-reloaded. **enlarge** shows the two images in the overlay, fitted to the
-window; **1:1** shows them at the size they were drawn.
+above the session timeline, on one time axis (a session with no judged
+typing rate and no paste has no typing chart, and the block holds the
+timeline alone). Move the pointer across it and one line crosses both, while
+the block's header row names the time, the trial (and its phase), the
+trial's typing rate, and whether the participant was tabbed away or had a
+sidebar open then. Click to pin a dashed line, for example where a copy
+happened, and look down the lanes for what came next; click a pinned line to
+remove it. Pins stay until the page is closed or reloaded, and in the
+analyzer until the report is rebuilt (a settings change rebuilds it).
+**enlarge** shows the two images in the overlay, fitted to the window;
+**1:1** shows them at the size they were drawn.
 
 A dashed line marks each trial start. When the trial starts average under
-6 px apart on the chart, those lines are left out and both images' legends
-say "trial lines hidden (N trials)"; the lines at phase changes stay.
+6 px apart in the image's own pixels (the report scales the image to the
+pane), those lines are left out and both images' legends say "trial lines
+hidden (N trials)"; the lines at phase changes stay.
 
 Copies, cuts, pastes and drops are logged by the monitor **inside its trials
 only**: a copy on a page the monitor does not run as a trial (a consent page
@@ -752,9 +756,10 @@ script or an autofill inserts many at once.
 Give your trials a `phase` (see [Per-trial parameters](#per-trial-parameters))
 to get the Trials strip coloured by phase and a labelled line at each phase
 change. The two charts line up only when every trial carries its start time
-and duration (`startTime`, `duration_ms`); on data without them the typing
-chart keeps one bar per trial in its own **Typing profile** block, and a
-note under the timeline says why.
+and duration (`startTime`, `duration_ms`). The library writes both into
+every trial report, so there is nothing to set; data assembled another way
+can lack them, and then the typing chart keeps one bar per trial in its own
+**Typing profile** block, and a note under the timeline says why.
 
 ### Annotating participants
 
