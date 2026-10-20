@@ -31,6 +31,9 @@ import { inferTier } from '../../replay/viewer-model.js';
 import { inlineSafeSrc } from '../../shared/inline-safe.js';
 import { annotationBlock } from './annotation-client.js';
 import { sanitize, fileIds } from './report-id.js';
+import { sessionLayout } from './session-timeline-core.js';
+import { hoverData } from './timeline-layout.js';
+import { timelineScript } from './timeline-client.js';
 
 /**
  * Renders the report's index.html as a string. `opts.replayClientSrc` is the
@@ -558,6 +561,33 @@ ${fontFaceCss}    :root {
     }
     .zoomable:hover img { opacity: 0.92; }
 
+    /* Session timeline block (renderTimelineBlock): the typing chart and the
+       session timeline on one time axis, stacked in a stage that the hover
+       and pin script (timeline-client.js) draws over. The images fill the
+       stage's width with no border of their own (an outline frames the
+       stage), so a fraction of the stage's width is that fraction of each
+       image; the script maps it to a time. */
+    .tl-head { display: flex; align-items: baseline; gap: 12px; }
+    .tl-enlarge {
+      margin-left: auto; padding: 2px 8px; border: 1px solid var(--line); border-radius: 0;
+      background: var(--surface); color: var(--ink); cursor: zoom-in;
+      font-family: var(--ff-recursive); font-size: 13px;
+    }
+    .tl-enlarge:hover { background: var(--bg); }
+    .tl-enlarge:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .tl-stage {
+      position: relative; cursor: crosshair; max-width: 1000px; margin-top: 6px; background: #fff;
+      outline: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .detail .tl-stage img { width: 100%; height: auto; margin: 0; border: 0; box-shadow: none; }
+    .tl-line, .tl-pin { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
+    .tl-line { border-left: 1.5px solid var(--ink); }
+    .tl-pin { border-left: 1.5px dashed var(--hard); }
+    .tl-readout {
+      position: absolute; top: 4px; padding: 4px 7px; background: rgba(15, 15, 15, 0.9); color: #fff;
+      font: 12px/1.3 var(--ff-sora); white-space: nowrap; pointer-events: none;
+    }
+
     /* Lightbox overlay — hidden by default; the client script adds .open to show it.
        It opens fitted to the window; .actual shows the figure at its own pixel
        size (figures are drawn once, at 1x) and the overlay scrolls. The top
@@ -577,6 +607,13 @@ ${fontFaceCss}    :root {
        would put that corner out of reach). */
     .lightbox-overlay.actual { overflow: auto; align-items: flex-start; justify-content: flex-start; }
     .lightbox-overlay.actual img { max-width: none; max-height: none; margin: auto; cursor: zoom-out; }
+    /* The timeline block's two images enlarged together (openStack): one
+       column fitted to the window's width, scrolling when taller; at 1:1
+       their drawn size. */
+    .lightbox-stack { max-width: 100%; max-height: 100%; overflow: auto; background: #fff; cursor: zoom-in; }
+    .lightbox-overlay .lightbox-stack img { display: block; width: 100%; height: auto; max-height: none; border-radius: 0; cursor: inherit; }
+    .lightbox-overlay.actual .lightbox-stack { max-width: none; max-height: none; overflow: visible; margin: auto; cursor: zoom-out; }
+    .lightbox-overlay.actual .lightbox-stack img { width: auto; }
     .lightbox-tools { position: fixed; top: 16px; right: 76px; display: flex; gap: 8px; }
     .lightbox-tools button {
       padding: 6px 12px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 4px;
@@ -718,6 +755,7 @@ ${fontFaceCss}    :root {
     </div>
     <span class="lightbox-close" aria-label="Close">&times;</span>
     <img id="lightbox-img" alt="">
+    <div id="lightbox-stack" class="lightbox-stack" hidden></div>
   </div>
 
   <script>
@@ -739,6 +777,7 @@ ${fontFaceCss}    :root {
       const overlayImg  = document.getElementById('lightbox-img');
       const zoomBtn     = overlay.querySelector('.lightbox-zoom');
       const fullBtn     = overlay.querySelector('.lightbox-fullscreen');
+      const overlayStack = document.getElementById('lightbox-stack');
 
       // Module-scoped current selection, indexed by participantId. The handlers below read it.
       let currentId = null;
@@ -805,9 +844,28 @@ ${fontFaceCss}    :root {
       function closeLightbox() {
         overlay.classList.remove('open');
         overlayImg.src = '';
+        // The timeline block's pair (openStack) goes too.
+        overlayStack.textContent = '';
+        overlayStack.hidden = true;
+        overlayImg.hidden = false;
         setActual(false);
         // Closing the figure leaves its fullscreen too.
         if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+      }
+      // A Session timeline block's "enlarge": both images, stacked as on the
+      // page, in the same overlay (fitted, 1:1 and fullscreen as one figure).
+      function openStack(block) {
+        overlayStack.textContent = '';
+        block.querySelectorAll('.tl-stage img').forEach(img => {
+          const copy = document.createElement('img');
+          copy.src = img.getAttribute('src');
+          copy.alt = img.alt;
+          overlayStack.appendChild(copy);
+        });
+        overlayImg.hidden = true;
+        overlayStack.hidden = false;
+        setActual(false);
+        overlay.classList.add('open');
       }
 
       // --- Legend modal wiring ---
@@ -826,11 +884,14 @@ ${fontFaceCss}    :root {
           overlay.classList.add('open');
         });
       });
+      document.querySelectorAll('.tl-enlarge').forEach(btn => {
+        btn.addEventListener('click', () => openStack(btn.closest('.tl-block')));
+      });
       // A click on the figure switches between fitted and 1:1; the controls do
       // what they say; a click anywhere else closes.
       overlay.addEventListener('click', e => {
         if (e.target.closest('.lightbox-tools')) return;
-        if (e.target === overlayImg) { setActual(!overlay.classList.contains('actual')); return; }
+        if (e.target === overlayImg || e.target.closest('.lightbox-stack')) { setActual(!overlay.classList.contains('actual')); return; }
         closeLightbox();
       });
       zoomBtn.addEventListener('click', () => setActual(!overlay.classList.contains('actual')));
@@ -987,6 +1048,12 @@ ${fontFaceCss}    :root {
           }
         }
       });
+    })();
+  </script>
+  <script>
+    // The Session timeline blocks' hover and pin line (timeline-client.js).
+    (function () {
+${inlineSafeSrc(timelineScript())}
     })();
   </script>
   <style>
@@ -1225,22 +1292,23 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
   const tier = tierOf(t);
   const s = t.summary || {};
 
-  // Image sections — three .image-block wrappers (session timeline, typing
-  // profile, mouse trajectories). The plot cores (session-timeline-core.js,
-  // typing-profile-core.js, trajectories-core.js) skip participants under
-  // various conditions, so not every participant has every image. The
-  // wrapper exists so onerror can hide both
-  // the heading and the image together — without it, a missing PNG would leave
-  // an orphan section heading floating above nothing.
+  // Image sections. The typing chart and the session timeline share one
+  // "Session timeline" block when the trials line up on the session time
+  // axis (renderTimelineBlock); otherwise the typing chart keeps its own
+  // block, one bar per trial, and the timeline block holds the timeline
+  // alone with a note. The plot cores skip participants under various
+  // conditions, so not every participant has every image: each block wraps
+  // its heading with its image(s), so a missing PNG hides with its heading.
   //
   // In-page report (imageSources present, keyed by the RAW participant id):
   // swap the file-path src for a data URI supplied per plot, and omit a
-  // plot's block entirely when its entry is null/undefined rather than
-  // pointing at a PNG that doesn't exist in the sandboxed iframe.
+  // plot entirely when its entry is null/undefined rather than pointing at a
+  // PNG that doesn't exist in the sandboxed iframe.
   const inlineImages = imageSources ? imageSources[t.participantId] : null;
+  const srcOf = (key, file) => (inlineImages ? inlineImages[key] : `images/${file}_${imageName}.png`);
   const imageBlock = (key, file, label, alt) => {
-    const src = inlineImages ? inlineImages[key] : `images/${file}_${imageName}.png`;
-    if (inlineImages && (src === null || src === undefined)) return '';
+    const src = srcOf(key, file);
+    if (src === null || src === undefined) return '';
     return `
     <div class="image-block">
       <h4 class="section-heading">${label}</h4>
@@ -1252,11 +1320,11 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
   };
   let imagesHtml;
   if (visualsRendered || inlineImages) {
-    // Order: typing profile → tab timeline → mouse trajectories. Typing speed
-    // first because it's the most directly comparable across participants
-    // (one bar per trial, threshold line).
-    imagesHtml = imageBlock('typingProfile', 'typing_profile', 'Typing profile', 'Typing profile')
-      + imageBlock('sessionTimeline', 'session_timeline', 'Session timeline', 'Session timeline')
+    // Order: typing → timeline → mouse trajectories, as before 0.17.
+    const layout = blockLayout(participant, config, s);
+    const aligned = !!(layout && layout.aligned);
+    imagesHtml = (aligned ? '' : imageBlock('typingProfile', 'typing_profile', 'Typing profile', 'Typing profile'))
+      + renderTimelineBlock(layout, aligned, srcOf, participant)
       + imageBlock('trajectories', 'trajectories', 'Mouse trajectories', 'Mouse trajectories');
   } else {
     imagesHtml = `<p class="muted note">${esc(visualsUnavailableNote)}</p>`;
@@ -1274,6 +1342,61 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     ${renderCursorSection(s, participant, replayShownExternally)}
     ${renderReplaySection(participant, sanitized, replayShownExternally)}
   </section>`;
+}
+
+// The layout both charts were drawn with (session-timeline-core.js
+// sessionLayout), or null without a participant or when its data cannot be
+// laid out: the block then shows its images with no hover numbers. The
+// typing analysis is the one report-core.js drew the typing chart with, so
+// the PNG and the hover numbers agree: under a phase scope the summary's
+// own analysis covers the scoped trials only while the charts draw every
+// trial, and report-core.js keeps the whole participant's beside it
+// (chartTypingAnalysis). It is not recomputed here: the page is built after
+// the replay pass, which can take a recording out of the participant.
+function blockLayout(participant, config, s) {
+  if (!participant) return null;
+  try {
+    return sessionLayout(participant, config || {}, s.chartTypingAnalysis || s.typingAnalysis || null);
+  } catch (e) { return null; }
+}
+
+// True when some trial lacks a numeric start time or duration: the reason
+// the note under a timeline block gives for the typing profile's own block.
+// Trials that carry both can still fail to align (times that span no time,
+// sessionLayout), and the note would then be false.
+function lacksTrialTimes(participant) {
+  const trials = participant && Array.isArray(participant.trials) ? participant.trials : [];
+  const num = (v) => typeof v === 'number' && Number.isFinite(v);
+  return trials.some((tr) => !tr || typeof tr !== 'object' || !num(tr.startTime) || !num(tr.duration_ms));
+}
+
+// The "Session timeline" block: the typing chart (when the trials align)
+// above the session timeline, stacked in one stage the hover and pin script
+// draws over (timeline-client.js). data-timeline holds that script's numbers
+// (timeline-layout.js hoverData), from the layout the PNGs were drawn with.
+// A missing image removes itself and the other stays; with neither, the
+// block hides. "enlarge" shows both in the lightbox (openStack). The note
+// points at the typing profile's own block above, so it is written only when
+// there is one (typing-profile-core.js draws none when every bar is empty).
+function renderTimelineBlock(layout, withTyping, srcOf, participant) {
+  const pics = (withTyping ? [['typingProfile', 'typing_profile', 'Typing speed per trial, on the session time axis']] : [])
+    .concat([['sessionTimeline', 'session_timeline', 'Session timeline']])
+    .map(([key, file, alt]) => ({ src: srcOf(key, file), alt }))
+    .filter((x) => x.src !== null && x.src !== undefined);
+  if (!pics.length) return '';
+  const data = layout ? ` data-timeline="${esc(JSON.stringify(hoverData(layout)))}"` : '';
+  const typingBlockAbove = !!layout && layout.bars.some((b) => b.kind !== 'none');
+  const note = layout && !layout.aligned && typingBlockAbove && lacksTrialTimes(participant)
+    ? `
+      <p class="muted note tl-note">The typing profile above has one bar per trial: lining it up with this timeline needs each trial's start time and duration (startTime, duration_ms), which these data do not carry.</p>`
+    : '';
+  return `
+    <div class="image-block tl-block">
+      <div class="tl-head"><h4 class="section-heading">Session timeline</h4><button type="button" class="tl-enlarge">enlarge</button></div>
+      <div class="tl-stage"${data}>${pics.map((x) => `
+        <img src="${esc(x.src)}" alt="${x.alt}" onerror="var b=this.closest('.tl-block');this.remove();if(!b.querySelector('img'))b.style.display='none'">`).join('')}
+      </div>${note}
+    </div>`;
 }
 
 // Renders the per-participant "Session replay" section in one of three

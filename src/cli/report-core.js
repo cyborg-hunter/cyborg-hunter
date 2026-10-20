@@ -156,6 +156,14 @@ export async function buildReport(participants, config, deps) {
     s.typingAnalysis = typings[i];
     const recomputed = typings[i].rate.trials.some((r) => r.source === 'edit times' || r.source === 'recording');
     if (recomputed && !usesCarriedFastTyping(scoredParticipants[i])) s.trialsWithFastTyping = fastTypingTrials(typings[i]);
+    // The analysis the typing chart and the page's hover numbers draw. Under
+    // a phase scope the summary's analysis judged the scoped trials only,
+    // while the charts draw every trial, so the charts' is taken over the
+    // whole participant (analyzeTyping never throws). Taken here, once, and
+    // read by both: the replay pass below rewrites a recording it cannot
+    // load out of the participant, and an analysis taken after it would no
+    // longer see that recording's keys.
+    if (config.phaseScope) s.chartTypingAnalysis = analyzeTyping(participants[i], config);
   });
   const edgeExits = detectEdgeExits(scoredParticipants, config);
   const triage = rankTriage(summaries, edgeExits, config);
@@ -267,13 +275,12 @@ export async function buildReport(participants, config, deps) {
     // The bars' rates and R marks come from the typing analysis.
     // summaries[i] is participants[i]'s (computeSummary keeps the order, and
     // a phase scope maps participants one to one). Under a phase scope the
-    // summary's analysis judged the scoped trials only, while the chart
-    // draws every trial, so the chart's analysis is taken over the whole
-    // participant (analyzeTyping never throws).
+    // chart's analysis is the whole participant's (chartTypingAnalysis,
+    // above), which the page's hover numbers read too.
     for (let i = 0; i < participants.length; i++) {
       const p = participants[i];
       try {
-        const typing = config.phaseScope ? analyzeTyping(p, config) : summaries[i].typingAnalysis || null;
+        const typing = summaries[i].chartTypingAnalysis || summaries[i].typingAnalysis || null;
         const canvas = drawTypingProfile(p, config, deps.createCanvas, typing);
         if (!canvas) continue;
         await emit(`images/typing_profile_${fileId(p)}.png`, canvas, p.participantId, 'typingProfile');

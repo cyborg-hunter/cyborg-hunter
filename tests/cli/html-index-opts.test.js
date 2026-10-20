@@ -110,3 +110,52 @@ test('the in-page report (imageSources) guards history.replaceState; default doe
   // additive in the in-page report, not a replacement for the underlying call.
   assert.ok(plain.includes("history.replaceState(null, '', `#p-${sanitized}`);"));
 });
+
+// The in-page report stacks both charts in one Session timeline block, with
+// the hover numbers the script reads; DEMO-FIXT's trials carry start times.
+test('the in-page report stacks both charts in one block with its hover numbers', async () => {
+  const html = await renderIndexHtml(summaries, triage, [p], config, false, {
+    imageSources: { [PID]: { typingProfile: 'data:image/png;base64,AAA1', sessionTimeline: 'data:image/png;base64,AAA2', trajectories: null } },
+  });
+  const stage = html.match(/<div class="tl-stage" data-timeline="([^"]*)">([\s\S]*?)<\/div>/);
+  assert.ok(stage, 'one stage with its numbers');
+  assert.deepEqual([...stage[2].matchAll(/src="([^"]+)"/g)].map((m) => m[1]), ['data:image/png;base64,AAA1', 'data:image/png;base64,AAA2']);
+  const data = JSON.parse(stage[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
+  assert.deepEqual([data.w, data.left, data.chart], [1000, 90, 880]);
+  assert.equal(data.trials.length, p.trials.length);
+  assert.ok(html.includes('class="tl-enlarge"'));
+  assert.ok(!html.includes('<h4 class="section-heading">Typing profile</h4>'), 'no separate typing block when the charts align');
+});
+
+test('trials without start times: the typing profile keeps its own block and the timeline block says why', async () => {
+  const old = structuredClone(p);
+  for (const t of old.trials) delete t.startTime;
+  const html = await renderIndexHtml(summaries, triage, [old], config, true, {});
+  assert.ok(html.includes('<h4 class="section-heading">Typing profile</h4>'));
+  assert.match(html, /<div class="tl-stage"[^>]*>\s*<img src="images\/session_timeline_[^"]+"/);
+  assert.ok(html.includes('class="muted note tl-note"'));
+});
+
+// Every trial carries its times, but they span no time (the session's own
+// times do not parse and every trial starts and ends at 0): the charts do
+// not align and no timeline is drawn, yet nothing is missing from the data,
+// so the note, which says the times are missing, is not written.
+test('timed trials on a domain of no length: no note that the times are missing, and no error', async () => {
+  const z = { participantId: 'Z-0', session: {}, metadata: { startTime: 'not a time', endTime: 'not a time' },
+    trials: [{ trialId: 'a', startTime: 0, duration_ms: 0, charsPerSec: 5 }, { trialId: 'b', startTime: 0, duration_ms: 0, charsPerSec: 6 }] };
+  const zs = computeSummary([z], config);
+  const html = await renderIndexHtml(zs, rankTriage(zs, detectEdgeExits([z], config), config), [z], config, true, {});
+  assert.ok(html.includes('<h4 class="section-heading">Typing profile</h4>'), 'the typing chart is one bar per trial, in its own block');
+  assert.ok(!html.includes('class="muted note tl-note"'), 'no note');
+});
+
+// The note points at the typing profile above it: a session whose trials
+// have no rate and no paste gets no typing chart (typing-profile-core.js),
+// so there is nothing above for the note to point at.
+test('trials without start times and with no typing chart: no note', async () => {
+  const old = structuredClone(p);
+  for (const t of old.trials) { delete t.startTime; delete t.charsPerSec; delete t.pasteEvents; }
+  const html = await renderIndexHtml(summaries, triage, [old], config, true, {});
+  assert.match(html, /<div class="tl-stage"[^>]*>\s*<img src="images\/session_timeline_[^"]+"/);
+  assert.ok(!html.includes('class="muted note tl-note"'));
+});

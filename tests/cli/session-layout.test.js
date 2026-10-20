@@ -150,4 +150,23 @@ describe('under a phase scope', () => {
     assert.equal(hoverData(sessionLayout(p, config, full)).trials[1][4], full.byIndex[1].cps);
     assert.equal(hoverData(sessionLayout(p, config, summaryAnalysis)).trials[1][4], null);
   });
+
+  // The page is built after the replay pass, which takes a recording it
+  // cannot load (this synthetic one) out of the participant: an analysis
+  // taken then would see no keys. The page reads the one the chart drew.
+  it('the page\'s hover numbers come from the same full analysis as the chart', async () => {
+    let html = '';
+    const p = scoped();
+    await buildReport([p], config, {
+      sink: (name, body) => { if (name === 'index.html') html = body; },
+      createCanvas: makeRecordingCanvasFactory([]), encodePng: async () => new Uint8Array(0) });
+    assert.equal(p.replay.recording, undefined, 'the replay pass took the recording out');
+    const attr = html.match(/<div class="tl-stage" data-timeline="([^"]*)">/);
+    assert.ok(attr, 'the block carries its hover numbers');
+    const data = JSON.parse(attr[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
+    const full = analyzeTyping(scoped(), config);
+    assert.equal(data.trials.length, 2);
+    assert.ok(full.byIndex[1].cps > 0);
+    assert.equal(data.trials[1][4], full.byIndex[1].cps, 'the main trial\'s rate, which the scoped analysis leaves out');
+  });
 });
