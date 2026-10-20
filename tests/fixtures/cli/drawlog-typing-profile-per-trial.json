@@ -1,5 +1,5 @@
 {
- "calls": 283,
+ "calls": 281,
  "log": [
   [
    "createCanvas",
@@ -18,8 +18,12 @@
    300
   ],
   [
-   "set:fillStyle",
-   "#333"
+   "set:font",
+   "10px sans-serif"
+  ],
+  [
+   "measureText",
+   "threshold 10 chars/sec"
   ],
   [
    "set:font",
@@ -30,10 +34,18 @@
    "Typing Speed Profile — DEMO-FIXT"
   ],
   [
+   "set:fillStyle",
+   "#333"
+  ],
+  [
    "fillText",
    "Typing Speed Profile — DEMO-FIXT",
    60,
    20
+  ],
+  [
+   "measureText",
+   "Typing Speed Profile — DEMO-FIXT"
   ],
   [
    "set:font",
@@ -45,9 +57,9 @@
   ],
   [
    "fillText",
-   "Threshold: 10 chars/sec",
-   60,
-   35
+   "threshold 10 chars/sec",
+   264,
+   20
   ],
   [
    "set:font",
@@ -559,10 +571,6 @@
    140.67
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -997,20 +1005,6 @@
    40
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
-   "set:fillStyle",
-   "#555"
-  ],
-  [
-   "fillText",
-   "P",
-   110,
-   207
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1038,10 +1032,6 @@
   ],
   [
    "restore"
-  ],
-  [
-   "set:font",
-   "bold 11px sans-serif"
   ],
   [
    "set:fillStyle",
@@ -1073,10 +1063,6 @@
    "restore"
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1106,10 +1092,6 @@
    "restore"
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1137,10 +1119,6 @@
   ],
   [
    "restore"
-  ],
-  [
-   "set:font",
-   "bold 11px sans-serif"
   ],
   [
    "set:fillStyle",
@@ -1194,6 +1172,20 @@
   ],
   [
    "stroke"
+  ],
+  [
+   "set:font",
+   "bold 11px sans-serif"
+  ],
+  [
+   "set:fillStyle",
+   "#555"
+  ],
+  [
+   "fillText",
+   "P",
+   109,
+   207
   ]
  ]
 }

@@ -1,5 +1,5 @@
 {
- "calls": 264,
+ "calls": 259,
  "log": [
   [
    "createCanvas",
@@ -578,10 +578,6 @@
    78.87
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
    "set:fillStyle",
    "rgba(207, 216, 220, 0.35)"
   ],
@@ -838,20 +834,6 @@
    22
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
-   "set:fillStyle",
-   "#555"
-  ],
-  [
-   "fillText",
-   "P",
-   379.42,
-   149
-  ],
-  [
    "set:fillStyle",
    "rgba(207, 216, 220, 0.35)"
   ],
@@ -874,10 +856,6 @@
    130
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
    "set:fillStyle",
    "rgba(207, 216, 220, 0.35)"
   ],
@@ -887,10 +865,6 @@
    44,
    2,
    130
-  ],
-  [
-   "set:font",
-   "bold 11px sans-serif"
   ],
   [
    "set:fillStyle",
@@ -904,10 +878,6 @@
    130
   ],
   [
-   "set:font",
-   "bold 11px sans-serif"
-  ],
-  [
    "set:fillStyle",
    "rgba(207, 216, 220, 0.35)"
   ],
@@ -917,10 +887,6 @@
    44,
    2,
    130
-  ],
-  [
-   "set:font",
-   "bold 11px sans-serif"
   ],
   [
    "set:strokeStyle",
@@ -1145,6 +1111,20 @@
   [
    "set:fillStyle",
    "#263238"
+  ],
+  [
+   "set:font",
+   "bold 11px sans-serif"
+  ],
+  [
+   "set:fillStyle",
+   "#555"
+  ],
+  [
+   "fillText",
+   "P",
+   378.42,
+   149
   ]
  ]
 }

@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import {
   TIMELINE_GEOMETRY, CHART_W, NO_PHASE, xOf, barRect, trialLabel, phaseOf, trialSpans, inputMarks,
   phaseRuns, guides, coverDomain, typingThreshold, typingBars, typingAxis, timelineRows, hoverData,
+  GLYPH, glyphPlaces,
 } from '../../src/cli/renderers/timeline-layout.js';
 import { parseQualtricsExport } from '../../src/cli/qualtrics-csv.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
@@ -182,6 +183,54 @@ describe('typing bars', () => {
     for (const a of [typingAxis(10, [{ kind: 'typed', cps: 1e300 }]), typingAxis(Number.MAX_VALUE, [])]) {
       assert.ok(Number.isFinite(a.max) && a.max / a.step <= 8, JSON.stringify(a));
     }
+  });
+});
+
+describe('glyph places over a bar', () => {
+  // Bold 11 px glyphs, each about GLYPH.w wide and GLYPH.h tall above its
+  // baseline; GLYPH.step apart in a row, GLYPH.line apart in a column.
+  const box = (g) => ({ x0: g.x, x1: g.x + GLYPH.w, y0: g.y - GLYPH.h, y1: g.y });
+
+  it('a row centred over the bar, 3 px above it, when the row fits the bar\'s width', () => {
+    assert.deepEqual({ ...GLYPH }, { w: 8, h: 9, step: 10, line: 11 });
+    assert.deepEqual(glyphPlaces(['C', 'P'], { x: 100, w: 20, top: 150 }, 44), [
+      { glyph: 'C', x: 101, y: 147, outlined: false },
+      { glyph: 'P', x: 111, y: 147, outlined: false }]);
+  });
+
+  it('a column when the row is wider than the bar, its lowest glyph 3 px above the bar', () => {
+    assert.deepEqual(glyphPlaces(['C', 'P', 'R'], { x: 100, w: 12, top: 150 }, 44).map((g) => [g.glyph, g.x, g.y, g.outlined]),
+      [['C', 102, 125, false], ['P', 102, 136, false], ['R', 102, 147, false]]);
+    // Two glyphs make an 18 px row: a column on a 17 px bar, a row on an 18 px one.
+    assert.equal(new Set(glyphPlaces(['C', 'P'], { x: 0, w: 17, top: 150 }, 44).map((g) => g.x)).size, 1);
+    assert.equal(new Set(glyphPlaces(['C', 'P'], { x: 0, w: 18, top: 150 }, 44).map((g) => g.y)).size, 1);
+  });
+
+  it('inside the bar\'s top, outlined, when above it they would cross the plot\'s top', () => {
+    // A column of three needs 3 + 9 + 2 × 11 = 34 px above the bar.
+    assert.deepEqual(glyphPlaces(['C', 'P', 'R'], { x: 100, w: 12, top: 77 }, 44).map((g) => [g.y, g.outlined]),
+      [[89, true], [100, true], [111, true]]);
+    assert.equal(glyphPlaces(['C', 'P', 'R'], { x: 100, w: 12, top: 78 }, 44)[0].outlined, false);
+    // A row needs 12 px.
+    assert.equal(glyphPlaces(['C'], { x: 100, w: 12, top: 56 }, 44)[0].outlined, false);
+    assert.equal(glyphPlaces(['C'], { x: 100, w: 12, top: 55 }, 44)[0].outlined, true);
+  });
+
+  it('every glyph stays between its bar\'s sides and under the plot\'s top, for every bar at least 8 px wide', () => {
+    for (let w = 8; w <= 40; w += 0.25) {
+      for (const glyphs of [['C'], ['P'], ['C', 'P'], ['C', 'R'], ['C', 'P', 'R']]) {
+        for (const top of [44, 50, 80, 150, 174]) {
+          for (const b of glyphPlaces(glyphs, { x: 100, w, top }, 44).map(box)) {
+            assert.ok(b.x0 >= 100 && b.x1 <= 100 + w, `${glyphs} on a ${w} px bar`);
+            assert.ok(b.y0 >= 44, `${glyphs} over a bar at ${top}`);
+          }
+        }
+      }
+    }
+  });
+
+  it('no glyph, no place', () => {
+    assert.deepEqual(glyphPlaces([], { x: 0, w: 10, top: 0 }, 0), []);
   });
 });
 

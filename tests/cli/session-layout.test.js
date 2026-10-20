@@ -5,7 +5,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { sessionLayout, deriveSessionOffset, collectEvents } from '../../src/cli/renderers/session-timeline-core.js';
+import { sessionLayout, deriveSessionOffset, collectEvents, drawSessionTimeline } from '../../src/cli/renderers/session-timeline-core.js';
+import { drawTypingProfile } from '../../src/cli/renderers/typing-profile-core.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { buildReport } from '../../src/cli/report-core.js';
 import { analyzeTyping } from '../../src/cli/analyzers/typing.js';
@@ -87,6 +88,22 @@ describe('sessionLayout', () => {
     // The Text input lane still has every copy and paste.
     assert.equal(L.marks.copies.length, 300);
     assert.equal(L.marks.pastes.length, 300);
+  });
+
+  it('timed trials on a domain of no length do not align: no timeline is drawn, so the typing chart is one bar per trial', async () => {
+    // Session start and end times that do not parse leave the timeline's own
+    // domain unreadable; the trials all start and end at the session's start.
+    const p = { participantId: 'Z-0', session: {}, metadata: { startTime: 'not a time', endTime: 'not a time' },
+      trials: [{ trialId: 'a', startTime: 0, duration_ms: 0, charsPerSec: 5 }, { trialId: 'b', startTime: 0, duration_ms: 0, charsPerSec: 6 }] };
+    const L = sessionLayout(p, {});
+    assert.equal(L.domainSec, 0);
+    assert.equal(L.aligned, false);
+    assert.deepEqual(L.spans, []);
+    assert.deepEqual(L.guides.trialStarts, []);
+    assert.equal(await drawSessionTimeline(p, {}, makeRecordingCanvasFactory([])), null, 'no timeline');
+    const log = [];
+    drawTypingProfile(p, {}, makeRecordingCanvasFactory(log));
+    assert.deepEqual(log[0], ['createCanvas', 600, 300], 'one bar per trial');
   });
 
   it('an open sidebar runs to the end of the domain, past the session\'s recorded duration', () => {

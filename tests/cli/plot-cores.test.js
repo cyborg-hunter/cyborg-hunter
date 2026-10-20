@@ -509,7 +509,8 @@ snapshotTest('typing-profile core draw log (one bar per trial)', 'drawlog-typing
   (cc) => drawTypingProfile(P_PER_TRIAL, { outputDir: '.', typingSpeedThreshold_cps: 10 }, cc),
   (log) => {
     assert.deepEqual(log[0], ['createCanvas', 600, 300]);
-    // maxSpeed = max(9.1, 1.5 × 10) = 15, so threshY = 50 + 200 − 10 × 200/15 ≈ 116.67.
+    // The axis tops out at 15 (typingAxis: 1.5 × the threshold, over the
+    // 9.1 cps bar), so threshY = 50 + 200 − 10 × 200/15 ≈ 116.67.
     const lineIdx = log.findIndex(c => c[0] === 'set:strokeStyle' && c[1] === '#ff0000');
     assert.deepEqual(log.slice(lineIdx + 1, lineIdx + 6), [
       ['set:lineWidth', 1.5], ['setLineDash', [5, 3]], ['beginPath'], ['moveTo', 60, 116.67], ['lineTo', 590, 116.67]]);
@@ -574,7 +575,7 @@ test('typing-profile core: 300 trials hide their lines and glyphs, and the legen
 // typingAxis); a faster bar is cut at the chart's top, a threshold over the
 // top is not drawn, and the tick labels are written short (200k, 1M) so
 // they clear the rotated axis title.
-import { TYPING_ROW, barRect, xOf } from '../../src/cli/renderers/timeline-layout.js';
+import { TYPING_ROW, GLYPH, barRect, xOf } from '../../src/cli/renderers/timeline-layout.js';
 import { sessionLayout } from '../../src/cli/renderers/session-timeline-core.js';
 
 test('typing-profile core: a rate over the axis cap is cut at the chart top, under short tick labels', () => {
@@ -602,16 +603,65 @@ test('typing-profile core: a rate over the axis cap is cut at the chart top, und
 });
 
 test('typing-profile core: a negative rate or threshold draws nothing under the baseline', () => {
-  const p = structuredClone(P);
-  p.trials[0].charsPerSec = -50;
-  p.session.config.thresholds.typingSpeedCps = -5;
+  // act1-baseline at −50 chars/sec, a threshold of −5.
+  const negative = (base) => {
+    const p = structuredClone(base);
+    p.trials[0].charsPerSec = -50;
+    p.session.config.thresholds.typingSpeedCps = -5;
+    return p;
+  };
+  // Every rectangle after the background has a height of 0 or more and ends
+  // at the baseline or above it (an unclamped bar would be drawn from below
+  // the baseline with a negative height, painting down the canvas).
+  const above = (log, baseline) => log.filter(c => c[0] === 'fillRect').slice(1).every(c => c[4] >= 0 && c[2] + c[4] <= baseline);
+  const r = (v) => Math.round(v * 100) / 100;
+
+  const p = negative(P);
   const log = [];
   drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
   const baseline = TYPING_ROW.top + TYPING_ROW.chart;
-  // Every rectangle after the background ends at the baseline or above it.
-  const rects = log.filter(c => c[0] === 'fillRect').slice(1);
-  assert.ok(rects.every(c => c[2] + c[4] <= baseline), JSON.stringify(rects));
+  assert.ok(above(log, baseline), JSON.stringify(log.filter(c => c[0] === 'fillRect')));
+  const L = sessionLayout(p, { outputDir: '.' });
+  const { x, w } = barRect(L.spans[0], L.domainSec);
+  const barAt = log.findIndex((c, k) => c[0] === 'fillRect' && c[1] === r(x) && log[k - 1][1] === '#2196F3');
+  assert.deepEqual(log[barAt], ['fillRect', r(x), baseline, r(w), 0], 'a bar of no height on the baseline');
   assert.equal(styleSets(log, 'strokeStyle', '#ff0000'), 0, 'no threshold line');
+
+  // One bar per trial: the same.
+  const perTrial = [];
+  drawTypingProfile(negative(P_PER_TRIAL), { outputDir: '.' }, makeRecordingCanvasFactory(perTrial));
+  assert.ok(above(perTrial, 250), JSON.stringify(perTrial.filter(c => c[0] === 'fillRect')));
+  assert.ok(perTrial.some(c => c[0] === 'fillRect' && c[1] === 60 && c[2] === 250 && c[4] === 0), 'act1-baseline, no height');
+  assert.equal(styleSets(perTrial, 'strokeStyle', '#ff0000'), 0, 'no threshold line');
+});
+
+// The threshold is participant data: printed short (0.1 + 0.2 reads 0.3, a
+// huge one in exponent form), and on the one-bar-per-trial chart after the
+// title, clear of the legend on the line under it.
+test('typing-profile core: the threshold is printed short, and on one bar per trial clear of the legend', () => {
+  const withThreshold = (base, v) => {
+    const p = structuredClone(base);
+    p.session.config.thresholds.typingSpeedCps = v;
+    return p;
+  };
+  const texts = (log) => log.filter(c => c[0] === 'fillText');
+  for (const [v, shown] of [[0.1 + 0.2, '0.3'], [1e300, '1.0e+300']]) {
+    const log = [];
+    drawTypingProfile(withThreshold(P_PER_TRIAL, v), { outputDir: '.' }, makeRecordingCanvasFactory(log));
+    const label = texts(log).find(c => String(c[1]).startsWith('threshold '));
+    assert.equal(label[1], `threshold ${shown} chars/sec`);
+    // On the title's line, after the title; the legend is on the line under it.
+    const title = texts(log).find(c => String(c[1]).startsWith('Typing Speed Profile'));
+    assert.equal(label[3], title[3]);
+    assert.ok(label[2] >= title[2] + title[1].length * 6, 'after the title');
+    assert.ok(label[2] + label[1].length * 6 <= log[0][1] - 10, 'inside the canvas');
+    const legend = texts(log).find(c => c[1] === 'typed');
+    assert.ok(legend[3] - 10 >= label[3], 'the legend\'s line is under the threshold\'s');
+    // The time-axis chart's subtitle prints it the same way.
+    const aligned = [];
+    drawTypingProfile(withThreshold(P, v), { outputDir: '.' }, makeRecordingCanvasFactory(aligned));
+    assert.ok(texts(aligned).some(c => c[1] === `same time axis as the session timeline below · threshold ${shown} chars/sec`));
+  }
 });
 
 test('typing-profile core: a threshold over the axis top draws no threshold line', () => {
@@ -621,6 +671,81 @@ test('typing-profile core: a threshold over the axis top draws no threshold line
   drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
   assert.ok(log.length > 0, 'the chart is drawn');
   assert.equal(styleSets(log, 'strokeStyle', '#ff0000'), 0);
+});
+
+// Neighbours' glyphs: n trials one second apart, each with a copy and a
+// paste, and the rhythm rule fired in every third (from a typing analysis);
+// bars at 3 and 4 chars/sec under a 10 cps threshold.
+function glyphSession(n, rateOf = (i) => (i % 2 ? 3 : 4)) {
+  const trials = [];
+  for (let i = 0; i < n; i++) {
+    trials.push({ trialId: 'g' + i, startTime: i * 1000, duration_ms: 900, charsPerSec: rateOf(i),
+      copyEvents: [{ type: 'copy', t: i * 1000 + 100 }], pasteEvents: [{ type: 'paste', t: i * 1000 + 200 }] });
+  }
+  const p = { participantId: 'G-' + n, session: {}, metadata: {}, trials };
+  const ta = { byIndex: trials.map((t, i) => ({ cps: t.charsPerSec, judged: true, rhythm: i % 3 === 0 })) };
+  return { p, ta };
+}
+// The C, P and R drawn over the bars: those after the legend, which is drawn
+// right to left and ends with its "typed" item.
+function barGlyphs(log) {
+  const from = log.findIndex(c => c[0] === 'fillText' && c[1] === 'typed');
+  return log.map((c, k) => [c, k]).filter(([c, k]) => k > from && c[0] === 'fillText' && ['C', 'P', 'R'].includes(c[1]));
+}
+
+for (const [n, px] of [[60, 13], [40, 20]]) {
+  test(`typing-profile core: ${n} trials (bars about ${px} px): no glyph runs into a neighbour's glyphs or bar, none is above the plot`, () => {
+    const { p, ta } = glyphSession(n);
+    const log = [];
+    drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(log), ta);
+    const L = sessionLayout(p, { outputDir: '.' }, ta);
+    const bars = L.spans.map(s => barRect(s, L.domainSec));
+    assert.ok(Math.abs(bars[0].w - px) < 1.5, `bars ${bars[0].w} px wide`);
+    const glyphs = barGlyphs(log);
+    assert.equal(glyphs.length, 2 * n + Math.ceil(n / 3), 'C and P over every bar, R over every third');
+    // Each glyph's box (GLYPH.w wide, GLYPH.h tall above its baseline), and the bar under its centre.
+    const boxes = glyphs.map(([c]) => {
+      const x0 = c[2], x1 = c[2] + GLYPH.w;
+      return { x0, x1, top: c[3] - GLYPH.h, owner: bars.findIndex(b => (x0 + x1) / 2 >= b.x && (x0 + x1) / 2 <= b.x + b.w) };
+    });
+    for (const b of boxes) {
+      assert.ok(b.owner >= 0, 'over a bar');
+      const bar = bars[b.owner];
+      assert.ok(b.x0 >= bar.x - 0.01 && b.x1 <= bar.x + bar.w + 0.01, `between bar ${b.owner}'s sides`);
+      assert.ok(b.top >= TYPING_ROW.top, 'under the plot\'s top');
+    }
+    for (const a of boxes) for (const b of boxes) {
+      if (a.owner !== b.owner) assert.ok(a.x1 <= b.x0 || b.x1 <= a.x0, `trial ${a.owner}'s glyph and trial ${b.owner}'s overlap`);
+    }
+    // Drawn after every column and bar, so no later bar paints over a glyph.
+    const lastRect = log.map(c => c[0]).lastIndexOf('fillRect');
+    assert.ok(glyphs[0][1] > lastRect, 'glyphs after the bars');
+  });
+}
+
+test('typing-profile core: glyphs over a bar at the plot\'s top go inside it, outlined, in both layouts', () => {
+  // act1-baseline at 15 chars/sec (the axis top) with a copy and a paste.
+  const fast = (base) => {
+    const p = structuredClone(base);
+    p.trials[0].charsPerSec = 15;
+    p.trials[0].copyEvents = [{ type: 'copy', t: 50 }];
+    p.trials[0].pasteEvents = [{ type: 'paste', t: 100 }];
+    return p;
+  };
+  for (const [base, plotTop] of [[P, TYPING_ROW.top], [P_PER_TRIAL, 50]]) {
+    const log = [];
+    drawTypingProfile(fast(base), { outputDir: '.', typingSpeedThreshold_cps: 10 }, makeRecordingCanvasFactory(log));
+    const glyphs = barGlyphs(log).map(([c]) => c);
+    const c = glyphs.find(g => g[1] === 'C');
+    assert.equal(c[3], plotTop + 3 + GLYPH.h, 'inside the bar\'s top');
+    assert.ok(log.some(e => e[0] === 'strokeText' && e[1] === 'C' && e[3] === c[3]), 'outlined');
+    assert.ok(glyphs.every(g => g[3] - GLYPH.h >= plotTop), 'none above the plot');
+  }
+  // One bar per trial: the rate inside the bar goes under the glyphs.
+  const log = [];
+  drawTypingProfile(fast(P_PER_TRIAL), { outputDir: '.', typingSpeedThreshold_cps: 10 }, makeRecordingCanvasFactory(log));
+  const rate = log.find(e => e[0] === 'fillText' && e[1] === '15.0');
+  assert.ok(rate[3] - 9 > 50 + 3 + GLYPH.h, 'the rate under the glyph row');
 });
 
 test('typing-profile core: one bar per trial hatches a page a trimmed Qualtrics payload kept without its events', () => {
@@ -671,10 +796,26 @@ test('typing-profile core: phase names sit under the baseline where each phase b
   const nameY = TYPING_ROW.top + TYPING_ROW.chart + 13;
   const names = log.filter(c => c[0] === 'fillText' && (c[1] === 'tutorial' || c[1] === 'main'));
   assert.deepEqual(names, [
-    ['fillText', 'tutorial', r(xOf(L.spans[0].startSec, L.domainSec) + 3), nameY],
-    ['fillText', 'main', r(xOf(L.spans[2].startSec, L.domainSec) + 3), nameY]]);
+    ['fillText', 'tutorial', r(xOf(L.spans[0].startSec, L.domainSec) + 2), nameY],
+    ['fillText', 'main', r(xOf(L.spans[2].startSec, L.domainSec) + 2), nameY]]);
   // One dark dashed line, at the change (the first phase is not a change).
   assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '6,3').length, 1);
+});
+
+test('typing-profile core: stacked over the timeline, the phase names line up with the Trials strip\'s', async () => {
+  // Phases crowded enough that the placement rule cuts and leaves names out.
+  const p = structuredClone(P);
+  ['practice', 'main', 'practice', 'main', 'debrief', 'end-of-session'].forEach((ph, i) => { p.trials[i].phase = ph; });
+  const names = ['practice', 'main', 'debrief', 'end-of-session'];
+  // A name, or one cut with an ellipsis (a trial id cut in the strip is not one).
+  const isName = (t) => typeof t === 'string' && names.some(n => t === n || (t.endsWith('…') && t.length > 2 && n.startsWith(t.slice(0, -1))));
+  const placed = (log) => log.filter(c => c[0] === 'fillText' && isName(c[1])).map(c => [c[1], c[2]]);
+  const typing = [];
+  drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(typing));
+  const timeline = [];
+  await drawSessionTimeline(p, { outputDir: '.' }, makeRecordingCanvasFactory(timeline));
+  assert.ok(placed(typing).length >= 2);
+  assert.deepEqual(placed(typing), placed(timeline));
 });
 
 // Skip/bail branch: a participant with trials but no typing data at all (no

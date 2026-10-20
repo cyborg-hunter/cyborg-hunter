@@ -202,12 +202,17 @@ export function sessionLayout(p, config, typingAnalysis = null) {
   const baseDomain = computeXDomain(p, events, phases);
   const offsetMs = events.sessionOffsetMs;
   const trials = Array.isArray(p.trials) ? p.trials : [];
-  const { aligned, spans } = trialSpans(trials, offsetMs);
+  const timed = trialSpans(trials, offsetMs);
   const marks = inputMarks(trials, offsetMs);
   const threshold = typingThreshold(p, config);
   // The domain first: the guides measure the trial starts' spacing on it,
   // and the typing bars their widths.
-  const domainSec = coverDomain(baseDomain, spans, marks);
+  const domainSec = coverDomain(baseDomain, timed.spans, marks);
+  // A domain of no length (unreadable session times, every trial at the
+  // session's start) is no time axis: the timeline draws nothing (renderOne),
+  // so the trials do not align and the typing chart is one bar per trial.
+  const aligned = timed.aligned && domainSec > 0;
+  const spans = aligned ? timed.spans : [];
   // A sidebar still open at the end runs to the end of the final domain
   // (computeXDomain closed it at the session's duration, before the trials
   // and the Text input marks widened the domain), as the page draws it.
@@ -765,22 +770,33 @@ function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
   ctx.fillText(runs.length ? 'Trials · phase' : 'Trials', LEFT_PAD - 6, y + PHASE_STRIP_H / 2 + 3);
   ctx.textAlign = 'left';
   if (namesInside) return names;
-  // Phase names above the strip, each right of its line: cut to the room
-  // between its line and the chart's right edge (never more than the chart),
-  // and left out when not even that fits or when it would run into the name
-  // before it (its line and colour still mark the change).
+  // Phase names above the strip, placed by phaseNamePlaces.
   ctx.font = 'bold 9px sans-serif';
   ctx.fillStyle = C.phaseLabel;
+  for (const n of phaseNamePlaces(runs, X)) ctx.fillText(n.text, n.x, y - 3);
+  return names;
+}
+
+// Where the phase names go along the chart, each right of its line: cut to
+// the room between its line and the chart's right edge (never more than the
+// chart), and left out when not even that fits or when it would run into
+// the name before it (its line and colour still mark the change). X maps
+// seconds to x. The Trials strip writes them above itself and the typing
+// chart under its baseline, from this one rule, so the names of the stacked
+// images line up. Widths are estimated, 5.8 px a character in bold 9 px.
+export function phaseNamePlaces(runs, X) {
+  const chartW = CANVAS_W - LEFT_PAD - RIGHT_PAD;
   const chartRight = CANVAS_W - RIGHT_PAD;
+  const out = [];
   let right = -Infinity;
   for (const run of runs) {
     const x = X(run.sec) + 2;
     const text = fitText(run.label, Math.min(chartW - 2, chartRight - x), 5.8);
     if (!text || x < right + 6) continue;
-    ctx.fillText(text, x, y - 3);
+    out.push({ text, x });
     right = x + text.length * 5.8;
   }
-  return names;
+  return out;
 }
 
 // The phase names drawTrialsStrip placed inside the strip at y, each on a
@@ -798,9 +814,8 @@ function drawTrialsStripNames(ctx, names, y) {
 }
 
 // Text cut with an ellipsis to fit `room` px at `perChar` px a character
-// ('' when not even one character and the ellipsis fit). Exported for
-// typing-profile-core.js, which places the phase names the same way.
-export function fitText(text, room, perChar) {
+// ('' when not even one character and the ellipsis fit).
+function fitText(text, room, perChar) {
   const fit = Math.floor(room / perChar);
   if (text.length <= fit) return text;
   return fit >= 2 ? text.slice(0, fit - 1) + '…' : '';

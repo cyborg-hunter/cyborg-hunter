@@ -247,6 +247,40 @@ export function typingBars(trials, typingAnalysis, threshold, timeAxis = null) {
   });
 }
 
+// The C, P and R glyphs over a typing bar (bold 11 px): each about w px
+// wide and h px tall above its baseline, `step` px apart in a row and `line`
+// px apart in a column. GLYPH_MIN_PX above is one glyph's width.
+export const GLYPH = Object.freeze({ w: 8, h: 9, step: 10, line: 11 });
+
+// Where each glyph over one bar ({ x, w, top }: its left edge, width and
+// top) goes, for both layouts of the typing chart: [{ glyph, x, y,
+// outlined }], x the glyph's left edge and y its baseline. In a row centred
+// on the bar when the row fits the bar's width, else in a column centred on
+// it, so a bar's glyphs stay between its own sides (a bar with glyphs is at
+// least one glyph wide) and never reach a neighbour's glyphs or bar. Above
+// the bar, the lowest line 3 px over its top; when the glyphs would then
+// cross the plot's top (plotTop: the subtitle or the legend is above it),
+// inside the bar's top instead, from 3 px under it, outlined so they read
+// over the bar. A bar that leaves too little room above is tall, with room
+// inside.
+export function glyphPlaces(glyphs, bar, plotTop) {
+  const n = glyphs.length;
+  if (n === 0) return [];
+  const rowW = n * GLYPH.step - (GLYPH.step - GLYPH.w);
+  const inRow = rowW <= bar.w;
+  const lines = inRow ? 1 : n;
+  const blockH = GLYPH.h + (lines - 1) * GLYPH.line;
+  const outlined = bar.top - 3 - blockH < plotTop;
+  const firstY = outlined ? bar.top + 3 + GLYPH.h : bar.top - 3 - (lines - 1) * GLYPH.line;
+  const cx = bar.x + bar.w / 2;
+  return glyphs.map((glyph, k) => ({
+    glyph,
+    x: inRow ? cx - rowW / 2 + k * GLYPH.step : cx - GLYPH.w / 2,
+    y: inRow ? firstY : firstY + k * GLYPH.line,
+    outlined,
+  }));
+}
+
 // The typing chart's y-axis: from 0 to a round number above both the fastest
 // judged trial and 1.5 × the threshold, in steps of 5, 10 or 20 up to 160.
 // Above 160 the step is the smallest 1, 2 or 5 × a power of ten that keeps
