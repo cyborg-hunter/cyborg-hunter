@@ -429,6 +429,39 @@
     }
     .zoomable:hover img { opacity: 0.92; }
 
+    /* Session timeline block (renderTimelineBlock): the typing chart and the
+       session timeline on one time axis, stacked in a stage that the hover
+       and pin script (timeline-client.js) draws over. The images fill the
+       stage's width with no border of their own (an outline frames the
+       stage), so a fraction of the stage's width is that fraction of each
+       image; the script maps it to a time.
+       The header row holds the heading, the script's readout (what is under
+       the pointer) and "enlarge". The readout takes the room between the
+       other two and is cut on one line with an ellipsis: the heading and the
+       button never shrink, so it cannot push "enlarge" out or wrap the row,
+       and it never covers a chart. */
+    .tl-head { display: flex; align-items: baseline; gap: 12px; }
+    .tl-head .section-heading { flex: none; }
+    .tl-readout {
+      flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      color: var(--ink); font: 13px/1.3 var(--ff-sora);
+    }
+    .tl-enlarge {
+      flex: none; padding: 2px 8px; border: 1px solid var(--line); border-radius: 0;
+      background: var(--surface); color: var(--ink); cursor: zoom-in;
+      font-family: var(--ff-recursive); font-size: 13px;
+    }
+    .tl-enlarge:hover { background: var(--bg); }
+    .tl-enlarge:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .tl-stage {
+      position: relative; cursor: crosshair; max-width: 1000px; margin-top: 6px; background: #fff;
+      outline: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .detail .tl-stage img { width: 100%; height: auto; margin: 0; border: 0; box-shadow: none; }
+    .tl-line, .tl-pin { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
+    .tl-line { border-left: 1.5px solid var(--ink); }
+    .tl-pin { border-left: 1.5px dashed var(--hard); }
+
     /* Lightbox overlay — hidden by default; the client script adds .open to show it.
        It opens fitted to the window; .actual shows the figure at its own pixel
        size (figures are drawn once, at 1x) and the overlay scrolls. The top
@@ -448,6 +481,13 @@
        would put that corner out of reach). */
     .lightbox-overlay.actual { overflow: auto; align-items: flex-start; justify-content: flex-start; }
     .lightbox-overlay.actual img { max-width: none; max-height: none; margin: auto; cursor: zoom-out; }
+    /* The timeline block's two images enlarged together (openStack): one
+       column fitted to the window's width, scrolling when taller; at 1:1
+       their drawn size. */
+    .lightbox-stack { max-width: 100%; max-height: 100%; overflow: auto; background: #fff; cursor: zoom-in; }
+    .lightbox-overlay .lightbox-stack img { display: block; width: 100%; height: auto; max-height: none; border-radius: 0; cursor: inherit; }
+    .lightbox-overlay.actual .lightbox-stack { max-width: none; max-height: none; overflow: visible; margin: auto; cursor: zoom-out; }
+    .lightbox-overlay.actual .lightbox-stack img { width: auto; }
     .lightbox-tools { position: fixed; top: 16px; right: 76px; display: flex; gap: 8px; }
     .lightbox-tools button {
       padding: 6px 12px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 4px;
@@ -759,19 +799,12 @@
     </div></div>
   
     
-    <div class="image-block">
-      <h4 class="section-heading">Typing profile</h4>
-      <a href="images/typing_profile_DEMO-FIXT.png" class="zoomable">
-        <img src="images/typing_profile_DEMO-FIXT.png" alt="Typing profile"
-             onerror="this.closest('.image-block').style.display='none'">
-      </a>
-    </div>
-    <div class="image-block">
-      <h4 class="section-heading">Session timeline</h4>
-      <a href="images/session_timeline_DEMO-FIXT.png" class="zoomable">
-        <img src="images/session_timeline_DEMO-FIXT.png" alt="Session timeline"
-             onerror="this.closest('.image-block').style.display='none'">
-      </a>
+    <div class="image-block tl-block">
+      <div class="tl-head"><h4 class="section-heading">Session timeline</h4><span class="tl-readout"></span><button type="button" class="tl-enlarge">enlarge</button></div>
+      <div class="tl-stage" data-timeline="{&quot;w&quot;:1000,&quot;left&quot;:90,&quot;chart&quot;:880,&quot;domain&quot;:17.46,&quot;trials&quot;:[[&quot;act1-baseline&quot;,null,0.11,5.64,9.1,false],[&quot;act1-paste&quot;,null,5.64,5.98,null,false],[&quot;act1-tabaway&quot;,null,5.98,17.41,null,false],[&quot;act1-sidebar&quot;,null,17.41,17.43,null,false],[&quot;act1-autotype&quot;,null,17.43,17.45,null,false],[&quot;act2-fullscreen-entry&quot;,null,17.45,17.46,null,false]],&quot;tabs&quot;:[[5.99,17.19]],&quot;sidebars&quot;:[]}">
+        <img src="images/typing_profile_DEMO-FIXT.png" alt="Typing speed per trial, on the session time axis" onerror="var b=this.closest('.tl-block');this.remove();if(!b.querySelector('img'))b.style.display='none'">
+        <img src="images/session_timeline_DEMO-FIXT.png" alt="Session timeline" onerror="var b=this.closest('.tl-block');this.remove();if(!b.querySelector('img'))b.style.display='none'">
+      </div>
     </div>
     <div class="image-block">
       <h4 class="section-heading">Mouse trajectories</h4>
@@ -860,6 +893,7 @@
     </div>
     <span class="lightbox-close" aria-label="Close">&times;</span>
     <img id="lightbox-img" alt="">
+    <div id="lightbox-stack" class="lightbox-stack" hidden></div>
   </div>
 
   <script>
@@ -881,6 +915,7 @@
       const overlayImg  = document.getElementById('lightbox-img');
       const zoomBtn     = overlay.querySelector('.lightbox-zoom');
       const fullBtn     = overlay.querySelector('.lightbox-fullscreen');
+      const overlayStack = document.getElementById('lightbox-stack');
 
       // Module-scoped current selection, indexed by participantId. The handlers below read it.
       let currentId = null;
@@ -947,9 +982,28 @@
       function closeLightbox() {
         overlay.classList.remove('open');
         overlayImg.src = '';
+        // The timeline block's pair (openStack) goes too.
+        overlayStack.textContent = '';
+        overlayStack.hidden = true;
+        overlayImg.hidden = false;
         setActual(false);
         // Closing the figure leaves its fullscreen too.
         if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+      }
+      // A Session timeline block's "enlarge": both images, stacked as on the
+      // page, in the same overlay (fitted, 1:1 and fullscreen as one figure).
+      function openStack(block) {
+        overlayStack.textContent = '';
+        block.querySelectorAll('.tl-stage img').forEach(img => {
+          const copy = document.createElement('img');
+          copy.src = img.getAttribute('src');
+          copy.alt = img.alt;
+          overlayStack.appendChild(copy);
+        });
+        overlayImg.hidden = true;
+        overlayStack.hidden = false;
+        setActual(false);
+        overlay.classList.add('open');
       }
 
       // --- Legend modal wiring ---
@@ -968,11 +1022,14 @@
           overlay.classList.add('open');
         });
       });
+      document.querySelectorAll('.tl-enlarge').forEach(btn => {
+        btn.addEventListener('click', () => openStack(btn.closest('.tl-block')));
+      });
       // A click on the figure switches between fitted and 1:1; the controls do
       // what they say; a click anywhere else closes.
       overlay.addEventListener('click', e => {
         if (e.target.closest('.lightbox-tools')) return;
-        if (e.target === overlayImg) { setActual(!overlay.classList.contains('actual')); return; }
+        if (e.target === overlayImg || e.target.closest('.lightbox-stack')) { setActual(!overlay.classList.contains('actual')); return; }
         closeLightbox();
       });
       zoomBtn.addEventListener('click', () => setActual(!overlay.classList.contains('actual')));
@@ -1129,6 +1186,87 @@
           }
         }
       });
+    })();
+  </script>
+  <script>
+    // The Session timeline blocks' hover and pin line (timeline-client.js).
+    (function () {
+function chClock(sec) {
+  var m = Math.floor(sec / 60);
+  var s = Math.round(sec - m * 60);
+  if (s === 60) { m += 1; s = 0; }
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+function chTimelineLabel(data, sec) {
+  var parts = [chClock(sec)];
+  var trial = null;
+  for (var i = 0; i < data.trials.length; i++) {
+    var t = data.trials[i];
+    if (sec >= t[2] && sec < t[3]) { trial = t; break; }
+  }
+  if (trial) {
+    parts.push('trial ' + trial[0] + (trial[1] ? ' (' + trial[1] + ')' : '') + (trial[4] != null ? ' · ' + trial[4] + ' cps' : ''));
+    // A page whose events the payload did not keep (integrityTruncated):
+    // no paste or copy on it can be seen, which is not the same as none.
+    if (trial[5] === true) parts.push('events not kept');
+  } else if (data.trials.length) parts.push('between trials');
+  if (data.tabs.some(function (x) { return sec >= x[0] && sec <= x[1]; })) parts.push('tabbed away');
+  if (data.sidebars.some(function (x) { return sec >= x[0] && sec <= x[1]; })) parts.push('sidebar open');
+  return parts.join(' · ');
+}
+function chWireTimelineStage(stage) {
+  var data;
+  try { data = JSON.parse(stage.getAttribute('data-timeline')); } catch (e) { return; }
+  if (!data || !(data.domain > 0) || !Array.isArray(data.trials)) return;
+  var block = stage.closest('.tl-block');
+  var readout = block ? block.querySelector('.tl-head .tl-readout') : null;
+  // renderTimelineBlock always writes the readout; a stage without one is
+  // not the report's, and is left alone.
+  if (!readout) return;
+  var doc = stage.ownerDocument;
+  var line = doc.createElement('div');
+  line.className = 'tl-line';
+  line.hidden = true;
+  stage.appendChild(line);
+  var pins = [];
+  function clear() { line.hidden = true; readout.textContent = ''; }
+  // Where the pointer is, as a fraction of the stage's width, and the time
+  // there; null over the margins.
+  function at(clientX) {
+    var r = stage.getBoundingClientRect();
+    if (!(r.width > 0)) return null;
+    var f = (clientX - r.left) / r.width;
+    var u = f * data.w;
+    if (u < data.left || u > data.left + data.chart) return null;
+    return { f: f, sec: ((u - data.left) / data.chart) * data.domain, width: r.width };
+  }
+  stage.addEventListener('mousemove', function (e) {
+    var a = at(e.clientX);
+    if (!a) { clear(); return; }
+    line.hidden = false;
+    line.style.left = (100 * a.f) + '%';
+    readout.textContent = chTimelineLabel(data, a.sec);
+  });
+  stage.addEventListener('mouseleave', clear);
+  stage.addEventListener('click', function (e) {
+    var a = at(e.clientX);
+    if (!a) return;
+    for (var i = 0; i < pins.length; i++) {
+      if (Math.abs(pins[i].f - a.f) * a.width < 6) {
+        pins[i].el.remove();
+        pins.splice(i, 1);
+        return;
+      }
+    }
+    var pin = doc.createElement('div');
+    pin.className = 'tl-pin';
+    pin.style.left = (100 * a.f) + '%';
+    stage.appendChild(pin);
+    pins.push({ f: a.f, el: pin });
+  });
+}
+document.querySelectorAll(".tl-stage").forEach(function (stage) { chWireTimelineStage(stage); });
+
     })();
   </script>
   <style>
