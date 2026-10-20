@@ -35,7 +35,17 @@ const P = extractIntegrityData(FIXT, { outputDir: '.', participantIdField: 'part
 
 import { drawSessionTimeline } from '../../src/cli/renderers/session-timeline-core.js';
 snapshotTest('session-timeline core draw log', 'drawlog-session-timeline.json',
-  (cc) => drawSessionTimeline(P, { outputDir: '.' }, cc));
+  (cc) => drawSessionTimeline(P, { outputDir: '.' }, cc),
+  (log) => {
+    // DEMO-FIXT's six trials carry start times, so the Trials strip and the
+    // Text input lane are drawn, with a light guide at each trial start; it
+    // has no gallery phase bands, so no Phases strip.
+    const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+    assert.ok(texts.includes('Trials'), 'Trials strip label');
+    assert.ok(texts.includes('Text input'), 'Text input lane label');
+    assert.ok(!texts.includes('Phases'), 'no Phases strip without gallery bands');
+    assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 6, 'one guide per trial start');
+  });
 
 // Enriched variant: DEMO-FIXT records no sidebar / viewport-shift / guard
 // events, so the baseline snapshot never enters those lanes' draw loops.
@@ -43,7 +53,7 @@ snapshotTest('session-timeline core draw log', 'drawlog-session-timeline.json',
 // a deep copy so drawSidebars / drawLayoutShifts / drawGuardViolations draw
 // for real. metadata.startTime is absent from the fixture → deriveSessionOffset
 // returns 0, so every injected perfNow `t` plots directly at t/1000 seconds
-// (x-domain ≈ 17.2s, set by the fixture's own 11.2s tab-away).
+// (x-domain ≈ 17.46s, set by the last trial's end).
 //
 // NOT injected: a second gallery for drawPhaseGuides' multi-gallery branch.
 // DEMO-FIXT trials all carry phase:"default", which derivePhases excludes from
@@ -56,11 +66,8 @@ P_ENRICHED.session.sidebarEvents = [
   { type: 'opened', t: 2000 },   // span 2s → 5s, closed (solid bar, no dash)
   { type: 'closed', t: 5000 },
   { type: 'opened', t: 15000 },  // trailing open, never closed → dashed-border
-                                 // branch. Its end extends to sessionDurSec,
-                                 // which is 0 here (fixture has no session
-                                 // duration metadata), so it draws as the
-                                 // 3px min-width stub at 15s — the dash still
-                                 // executes.
+                                 // branch. It runs to the end of the domain,
+                                 // which the last trial's end sets (≈17.46s).
 ];
 P_ENRICHED.session.viewportWidthShifts = [
   { t: 3000, delta: -350 },      // tick at 3s
@@ -75,14 +82,15 @@ P_ENRICHED.guardFriction = { violations: [
 snapshotTest('session-timeline core draw log (enriched)', 'drawlog-session-timeline-enriched.json',
   (cc) => drawSessionTimeline(P_ENRICHED, { outputDir: '.' }, cc),
   (log) => {
-    // Strictly more drawing than the 218-call baseline. The per-lane checks
+    // Strictly more drawing than the baseline render. The per-lane checks
     // are count/shape-based, NOT bare `some(color)`: the legend swatches
     // (drawLegendRow) set every lane color once even when a lane drew
     // nothing, and drawLayoutShifts sets its strokeStyle before an empty
     // loop — so mere presence would pass on the un-enriched baseline too.
-    assert.ok(log.length > 218, `enriched log has ${log.length} calls (baseline: 218)`);
+    const baseCalls = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'cli', 'drawlog-session-timeline.json'), 'utf8')).calls;
+    assert.ok(log.length > baseCalls, `enriched log has ${log.length} calls (baseline: ${baseCalls})`);
     const fills = (color) => log.filter(c => c[0] === 'set:fillStyle' && c[1] === color).length;
-    // 2 sidebar spans (closed pair + trailing unclosed stub) + 1 legend swatch
+    // 2 sidebar spans (closed pair + trailing unclosed span) + 1 legend swatch
     assert.ok(fills('#8e24aa') >= 3, `sidebar fillStyle ×${fills('#8e24aa')}, want ≥3 (2 spans + legend)`);
     // 2 violation groups (clustered 400ms pair, 12s singleton) + 1 legend swatch
     assert.ok(fills('#c62828') >= 3, `guard fillStyle ×${fills('#c62828')}, want ≥3 (2 groups + legend)`);
@@ -93,11 +101,130 @@ snapshotTest('session-timeline core draw log (enriched)', 'drawlog-session-timel
     const lsEnd = log.findIndex((c, i) => i > lsStart && c[0] === 'set:fillStyle');
     assert.equal(log.slice(lsStart, lsEnd).filter(c => c[0] === 'moveTo').length, 2,
       'two viewport-shift ticks drawn');
-    // Unclosed trailing sidebar → dashed-border branch. Nothing else in this
-    // render calls setLineDash (phase guides skip: < 2 galleries), and the
-    // baseline log has zero setLineDash calls.
-    assert.ok(log.some(c => c[0] === 'setLineDash'), 'unclosed sidebar dashed border drawn');
+    // Unclosed trailing sidebar → its dashed white border (strokeStyle
+    // '#fff'), which nothing else in the timeline draws.
+    assert.ok(log.some(c => c[0] === 'set:strokeStyle' && c[1] === '#fff'), 'unclosed sidebar dashed border drawn');
   });
+
+test('session timeline: phases the experiment sets colour the Trials strip and draw a labelled line where they change', async () => {
+  const P_PHASED = structuredClone(P);
+  ['tutorial', 'tutorial', 'main', 'main', 'main', 'main'].forEach((ph, i) => { P_PHASED.trials[i].phase = ph; });
+  const log = [];
+  await drawSessionTimeline(P_PHASED, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+  assert.ok(texts.includes('Trials · phase'));
+  assert.ok(texts.includes('tutorial') && texts.includes('main'), 'each phase named where it begins');
+  assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '6,3').length, 1, 'one phase change, one dark line');
+});
+
+test('session timeline: trials without start times get no Trials strip and no trial guides; the Text input lane stays', async () => {
+  const P_OLD = structuredClone(P);
+  for (const t of P_OLD.trials) delete t.startTime;
+  const log = [];
+  await drawSessionTimeline(P_OLD, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+  assert.ok(!texts.includes('Trials'));
+  assert.ok(texts.includes('Text input'));
+  assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 0);
+});
+
+test('session timeline: the Phases strip shows when the gallery bands exist, and only then', async () => {
+  const G = { participantId: 'G-1', session: {}, galleryStudyMs: [30000],
+    metadata: { startTime: '2026-01-01T00:00:00.000Z', endTime: '2026-01-01T00:10:00.000Z' },
+    trials: [{ trialId: 'c-1', rulePosition: 0, timestamp: '2026-01-01T00:02:00.000Z', rt: 4000 }] };
+  const log = [];
+  await drawSessionTimeline(G, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+  assert.ok(texts.includes('Phases'));
+  assert.ok(!texts.includes('Trials'));
+});
+
+test('session timeline: copies, pastes, drops and synthetic insertions are drawn in the Text input lane', async () => {
+  const P_INPUT = structuredClone(P);
+  const t0 = P_INPUT.trials[0].startTime;
+  P_INPUT.trials[0].copyEvents = [{ type: 'copy', t: t0 + 100 }, { type: 'cut', t: t0 + 200 }];
+  P_INPUT.trials[0].dropEvents = [{ t: t0 + 300 }];
+  P_INPUT.trials[0].syntheticInsertions = [{ t: t0 + 400 }, { t: t0 + 420 }, { t: t0 + 440 }];
+  const log = [];
+  await drawSessionTimeline(P_INPUT, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const fills = (color) => log.filter(c => c[0] === 'set:fillStyle' && c[1] === color).length;
+  assert.ok(fills('#f57c00') >= 3, 'two copy marks + the legend');
+  assert.ok(fills('#7b1fa2') >= 2, 'one drop mark + the legend');
+  assert.ok(log.some(c => c[0] === 'fillText' && c[1] === '×3'), 'the synthetic count');
+});
+
+test('session timeline: a crowded session hides its trial lines and says so in the legend', async () => {
+  // 300 trials one second apart: their starts are about 3 px apart on the
+  // chart, under the 6 px a line needs. Built with a loop.
+  const trials = [];
+  for (let i = 0; i < 300; i++) trials.push({ trialId: 'n' + i, startTime: i * 1000, duration_ms: 900 });
+  const log = [];
+  await drawSessionTimeline({ participantId: 'N-300', session: {}, metadata: {}, trials }, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+  assert.ok(texts.includes('Trials'), 'the Trials strip is still drawn');
+  assert.ok(texts.includes('trial lines hidden (300 trials)'), 'the legend names the hidden lines');
+  assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 0, 'no trial line');
+});
+
+test('session timeline: pages a Qualtrics payload trimmed are hatched, and the footer counts them', async () => {
+  // The Qualtrics reader's fixture: response R_2 is a payload reduced to
+  // level 2, so pages 1 to 4 lost their events (integrityTruncated) and only
+  // page 5 keeps its pastes.
+  const { parseQualtricsExport } = await import('../../src/cli/qualtrics-csv.js');
+  const csv = readFileSync(join(here, 'fixtures', 'qualtrics-export.csv'), 'utf8');
+  const PQ = extractIntegrityData(parseQualtricsExport(csv, {}).responses[1].raw, {});
+  const log = [];
+  await drawSessionTimeline(PQ, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  // The hatch's stroke colour is its own: one set per trimmed page.
+  assert.equal(log.filter(c => c[0] === 'set:strokeStyle' && c[1] === '#78909c').length, 4, 'four pages hatched');
+  const texts = log.filter(c => c[0] === 'fillText').map(c => c[1]);
+  assert.ok(texts.some(t => typeof t === 'string' && t.includes('events of 4 trials not kept by the Qualtrics payload')),
+    'the footer note');
+  // A session with no trimmed page has neither.
+  const plain = [];
+  await drawSessionTimeline(P, { outputDir: '.' }, makeRecordingCanvasFactory(plain));
+  assert.equal(plain.filter(c => c[0] === 'set:strokeStyle' && c[1] === '#78909c').length, 0);
+  assert.ok(!plain.some(c => c[0] === 'fillText' && String(c[1]).includes('not kept')));
+});
+
+test('session timeline: phase names never cover each other or the Phases strip', async () => {
+  // Gallery phase bands and trials with phases: both strips, 6 px apart, so
+  // the trials' phase names go inside the Trials strip (y 95 + 15).
+  const start = Date.parse('2026-01-01T00:00:00.000Z');
+  const iso = (ms) => new Date(start + ms).toISOString();
+  const trials = [];
+  let at = 30000;
+  for (let r = 0; r < 2; r++) {
+    trials.push({ trialId: `gallery-${r + 1}`, phase: 'gallery', startTime: 5000 + at, duration_ms: 60000 });
+    at += 60000;
+    for (let k = 0; k < 4; k++) {
+      trials.push({ trialId: `r${r + 1}-c${k + 1}`, phase: 'classification', rulePosition: r, ruleId: `rule-${r + 1}`,
+        startTime: 5000 + at, duration_ms: 10000, rt: 10000, timestamp: iso(at + 10000) });
+      at += 10000;
+    }
+  }
+  const G2 = { participantId: 'G-2', session: {}, galleryStudyMs: [60000, 60000],
+    metadata: { startTime: iso(0), endTime: iso(at + 30000) }, trials };
+  const log = [];
+  await drawSessionTimeline(G2, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const texts = log.filter(c => c[0] === 'fillText');
+  assert.ok(texts.some(c => c[1] === 'Phases') && texts.some(c => c[1] === 'Trials · phase'), 'both strips');
+  // The legend names 'gallery' too, at y 16: only the strip's names here.
+  const names = texts.filter(c => (c[1] === 'gallery' || c[1] === 'classification') && c[3] > 60);
+  assert.equal(names.length, 4, 'each of the four phases named');
+  assert.ok(names.every(c => c[3] === 110), 'inside the Trials strip, not over the Phases strip');
+
+  // Above the strip, a name that would run into the one before it is left
+  // out, and one at the right edge ends at the chart's edge (x 970).
+  const PC = structuredClone(P);
+  ['practice', 'main', 'practice', 'main', 'debrief', 'end-of-session'].forEach((ph, i) => { PC.trials[i].phase = ph; });
+  const crowded = [];
+  await drawSessionTimeline(PC, { outputDir: '.' }, makeRecordingCanvasFactory(crowded));
+  const above = crowded.filter(c => c[0] === 'fillText' && c[3] === 62).map(c => [c[1], c[2]]);
+  assert.deepEqual(above.map(([t]) => t), ['practice', 'main', 'main']);
+  const [last] = above.slice(-1);
+  assert.ok(last[1] + 'main'.length * 5.8 <= 970, 'the last name ends at the chart edge');
+});
 
 // ── Trajectories core ────────────────────────────────────────────────────
 import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js';

@@ -1,10 +1,10 @@
 {
- "calls": 218,
+ "calls": 314,
  "log": [
   [
    "createCanvas",
    1000,
-   357
+   395
   ],
   [
    "set:fillStyle",
@@ -15,7 +15,7 @@
    0,
    0,
    1000,
-   357
+   395
   ],
   [
    "set:fillStyle",
@@ -71,6 +71,98 @@
    24
   ],
   [
+   "set:fillStyle",
+   "#cfd8dc"
+  ],
+  [
+   "fillRect",
+   95.79,
+   66,
+   278.13,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#e3e7ea"
+  ],
+  [
+   "fillRect",
+   374.42,
+   66,
+   16.49,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#cfd8dc"
+  ],
+  [
+   "fillRect",
+   391.42,
+   66,
+   575.63,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#e3e7ea"
+  ],
+  [
+   "fillRect",
+   967.55,
+   66,
+   1.5,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#cfd8dc"
+  ],
+  [
+   "fillRect",
+   968.77,
+   66,
+   1.5,
+   22
+  ],
+  [
+   "set:fillStyle",
+   "#e3e7ea"
+  ],
+  [
+   "fillRect",
+   969.71,
+   66,
+   1.5,
+   22
+  ],
+  [
+   "set:font",
+   "9px sans-serif"
+  ],
+  [
+   "set:fillStyle",
+   "#37474f"
+  ],
+  [
+   "fillText",
+   "act1-baseline",
+   98.79,
+   80
+  ],
+  [
+   "fillText",
+   "a…",
+   377.42,
+   80
+  ],
+  [
+   "fillText",
+   "act1-tabaway",
+   394.42,
+   80
+  ],
+  [
    "set:strokeStyle",
    "#e0e0e0"
   ],
@@ -99,13 +191,21 @@
   ],
   [
    "fillText",
-   "Phases",
+   "Trials",
    84,
    80
   ],
   [
    "set:textAlign",
    "left"
+  ],
+  [
+   "set:font",
+   "bold 9px sans-serif"
+  ],
+  [
+   "set:fillStyle",
+   "#263238"
   ],
   [
    "set:fillStyle",
@@ -130,6 +230,110 @@
    "strokeRect",
    90,
    95,
+   880,
+   32
+  ],
+  [
+   "set:fillStyle",
+   "#444"
+  ],
+  [
+   "set:font",
+   "10px sans-serif"
+  ],
+  [
+   "set:textAlign",
+   "right"
+  ],
+  [
+   "fillText",
+   "Text input",
+   84,
+   114
+  ],
+  [
+   "set:textAlign",
+   "left"
+  ],
+  [
+   "set:fillStyle",
+   "#d32f2f"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   375.35,
+   112
+  ],
+  [
+   "lineTo",
+   370.35,
+   120.5
+  ],
+  [
+   "lineTo",
+   380.35,
+   120.5
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set:fillStyle",
+   "#d32f2f"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   383.05,
+   112
+  ],
+  [
+   "lineTo",
+   378.05,
+   120.5
+  ],
+  [
+   "lineTo",
+   388.05,
+   120.5
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set:fillStyle",
+   "#fafafa"
+  ],
+  [
+   "fillRect",
+   90,
+   133,
+   880,
+   32
+  ],
+  [
+   "set:strokeStyle",
+   "#e0e0e0"
+  ],
+  [
+   "set:lineWidth",
+   0.5
+  ],
+  [
+   "strokeRect",
+   90,
+   133,
    880,
    32
   ],
@@ -149,7 +353,7 @@
    "fillText",
    "Tab-aways",
    84,
-   114
+   152
   ],
   [
    "set:textAlign",
@@ -161,9 +365,9 @@
   ],
   [
    "fillRect",
-   396.47,
-   99,
-   573.53,
+   391.78,
+   137,
+   564.74,
    24
   ],
   [
@@ -176,9 +380,9 @@
   ],
   [
    "strokeRect",
-   396.47,
-   99,
-   573.53,
+   391.78,
+   137,
+   564.74,
    24
   ],
   [
@@ -188,7 +392,7 @@
   [
    "fillRect",
    90,
-   133,
+   171,
    880,
    32
   ],
@@ -203,7 +407,7 @@
   [
    "strokeRect",
    90,
-   133,
+   171,
    880,
    32
   ],
@@ -223,7 +427,7 @@
    "fillText",
    "Sidebars",
    84,
-   152
+   190
   ],
   [
    "set:textAlign",
@@ -236,7 +440,7 @@
   [
    "fillRect",
    90,
-   171,
+   209,
    880,
    32
   ],
@@ -251,7 +455,7 @@
   [
    "strokeRect",
    90,
-   171,
+   209,
    880,
    32
   ],
@@ -271,7 +475,7 @@
    "fillText",
    "Viewport shifts",
    84,
-   190
+   228
   ],
   [
    "set:textAlign",
@@ -292,7 +496,7 @@
   [
    "fillRect",
    90,
-   209,
+   247,
    880,
    32
   ],
@@ -307,7 +511,7 @@
   [
    "strokeRect",
    90,
-   209,
+   247,
    880,
    32
   ],
@@ -327,11 +531,203 @@
    "fillText",
    "Guard-friction",
    84,
-   228
+   266
   ],
   [
    "set:textAlign",
    "left"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   96.5,
+   65
+  ],
+  [
+   "lineTo",
+   96.5,
+   279
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   374.5,
+   65
+  ],
+  [
+   "lineTo",
+   374.5,
+   279
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   391.5,
+   65
+  ],
+  [
+   "lineTo",
+   391.5,
+   279
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   968.5,
+   65
+  ],
+  [
+   "lineTo",
+   968.5,
+   279
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   969.5,
+   65
+  ],
+  [
+   "lineTo",
+   969.5,
+   279
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set:strokeStyle",
+   "rgba(55, 71, 79, 0.45)"
+  ],
+  [
+   "set:lineWidth",
+   1
+  ],
+  [
+   "setLineDash",
+   [
+    3,
+    3
+   ]
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   970.5,
+   65
+  ],
+  [
+   "lineTo",
+   970.5,
+   279
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
   ],
   [
    "set:strokeStyle",
@@ -347,12 +743,12 @@
   [
    "moveTo",
    90,
-   253
+   291
   ],
   [
    "lineTo",
    970,
-   253
+   291
   ],
   [
    "stroke"
@@ -379,12 +775,12 @@
   [
    "moveTo",
    90,
-   253
+   291
   ],
   [
    "lineTo",
    90,
-   257
+   295
   ],
   [
    "stroke"
@@ -393,7 +789,7 @@
    "fillText",
    "0s",
    90,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -405,12 +801,12 @@
   [
    "moveTo",
    200,
-   253
+   291
   ],
   [
    "lineTo",
    200,
-   257
+   295
   ],
   [
    "stroke"
@@ -419,7 +815,7 @@
    "fillText",
    "2s",
    200,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -431,12 +827,12 @@
   [
    "moveTo",
    310,
-   253
+   291
   ],
   [
    "lineTo",
    310,
-   257
+   295
   ],
   [
    "stroke"
@@ -445,7 +841,7 @@
    "fillText",
    "4s",
    310,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -457,21 +853,21 @@
   [
    "moveTo",
    420,
-   253
+   291
   ],
   [
    "lineTo",
    420,
-   257
+   295
   ],
   [
    "stroke"
   ],
   [
    "fillText",
-   "6s",
+   "7s",
    420,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -483,12 +879,12 @@
   [
    "moveTo",
    530,
-   253
+   291
   ],
   [
    "lineTo",
    530,
-   257
+   295
   ],
   [
    "stroke"
@@ -497,7 +893,7 @@
    "fillText",
    "9s",
    530,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -509,12 +905,12 @@
   [
    "moveTo",
    640,
-   253
+   291
   ],
   [
    "lineTo",
    640,
-   257
+   295
   ],
   [
    "stroke"
@@ -523,7 +919,7 @@
    "fillText",
    "11s",
    640,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -535,12 +931,12 @@
   [
    "moveTo",
    750,
-   253
+   291
   ],
   [
    "lineTo",
    750,
-   257
+   295
   ],
   [
    "stroke"
@@ -549,7 +945,7 @@
    "fillText",
    "13s",
    750,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -561,12 +957,12 @@
   [
    "moveTo",
    860,
-   253
+   291
   ],
   [
    "lineTo",
    860,
-   257
+   295
   ],
   [
    "stroke"
@@ -575,7 +971,7 @@
    "fillText",
    "15s",
    860,
-   269
+   307
   ],
   [
    "set:strokeStyle",
@@ -587,12 +983,12 @@
   [
    "moveTo",
    970,
-   253
+   291
   ],
   [
    "lineTo",
    970,
-   257
+   295
   ],
   [
    "stroke"
@@ -601,7 +997,7 @@
    "fillText",
    "17s",
    970,
-   269
+   307
   ],
   [
    "set:textAlign",
@@ -610,166 +1006,6 @@
   [
    "set:font",
    "9px sans-serif"
-  ],
-  [
-   "measureText",
-   "classification"
-  ],
-  [
-   "set:fillStyle",
-   "#333"
-  ],
-  [
-   "fillText",
-   "classification",
-   886,
-   16
-  ],
-  [
-   "set:fillStyle",
-   "#bbdefb"
-  ],
-  [
-   "fillRect",
-   872,
-   9,
-   9,
-   8
-  ],
-  [
-   "set:strokeStyle",
-   "#666"
-  ],
-  [
-   "set:lineWidth",
-   0.4
-  ],
-  [
-   "strokeRect",
-   872,
-   9,
-   9,
-   8
-  ],
-  [
-   "measureText",
-   "typing"
-  ],
-  [
-   "set:fillStyle",
-   "#333"
-  ],
-  [
-   "fillText",
-   "typing",
-   833,
-   16
-  ],
-  [
-   "set:fillStyle",
-   "#e1bee7"
-  ],
-  [
-   "fillRect",
-   819,
-   9,
-   9,
-   8
-  ],
-  [
-   "set:strokeStyle",
-   "#666"
-  ],
-  [
-   "set:lineWidth",
-   0.4
-  ],
-  [
-   "strokeRect",
-   819,
-   9,
-   9,
-   8
-  ],
-  [
-   "measureText",
-   "gallery"
-  ],
-  [
-   "set:fillStyle",
-   "#333"
-  ],
-  [
-   "fillText",
-   "gallery",
-   774,
-   16
-  ],
-  [
-   "set:fillStyle",
-   "#ffe0b2"
-  ],
-  [
-   "fillRect",
-   760,
-   9,
-   9,
-   8
-  ],
-  [
-   "set:strokeStyle",
-   "#666"
-  ],
-  [
-   "set:lineWidth",
-   0.4
-  ],
-  [
-   "strokeRect",
-   760,
-   9,
-   9,
-   8
-  ],
-  [
-   "measureText",
-   "framing (pre / transition / post)"
-  ],
-  [
-   "set:fillStyle",
-   "#333"
-  ],
-  [
-   "fillText",
-   "framing (pre / transition / post)",
-   559,
-   16
-  ],
-  [
-   "set:fillStyle",
-   "#eceff1"
-  ],
-  [
-   "fillRect",
-   545,
-   9,
-   9,
-   8
-  ],
-  [
-   "set:strokeStyle",
-   "#666"
-  ],
-  [
-   "set:lineWidth",
-   0.4
-  ],
-  [
-   "strokeRect",
-   545,
-   9,
-   9,
-   8
   ],
   [
    "measureText",
@@ -783,7 +1019,7 @@
    "fillText",
    "guard-friction",
    886,
-   28
+   16
   ],
   [
    "set:fillStyle",
@@ -792,7 +1028,7 @@
   [
    "fillRect",
    872,
-   21,
+   9,
    9,
    8
   ],
@@ -807,7 +1043,7 @@
   [
    "strokeRect",
    872,
-   21,
+   9,
    9,
    8
   ],
@@ -823,7 +1059,7 @@
    "fillText",
    "viewport shift",
    785,
-   28
+   16
   ],
   [
    "set:fillStyle",
@@ -832,7 +1068,7 @@
   [
    "fillRect",
    771,
-   21,
+   9,
    9,
    8
   ],
@@ -847,7 +1083,7 @@
   [
    "strokeRect",
    771,
-   21,
+   9,
    9,
    8
   ],
@@ -863,7 +1099,7 @@
    "fillText",
    "sidebar (open span)",
    654,
-   28
+   16
   ],
   [
    "set:fillStyle",
@@ -872,7 +1108,7 @@
   [
    "fillRect",
    640,
-   21,
+   9,
    9,
    8
   ],
@@ -887,7 +1123,7 @@
   [
    "strokeRect",
    640,
-   21,
+   9,
    9,
    8
   ],
@@ -903,7 +1139,7 @@
    "fillText",
    "tab ≥10s",
    589,
-   28
+   16
   ],
   [
    "set:fillStyle",
@@ -912,7 +1148,7 @@
   [
    "fillRect",
    575,
-   21,
+   9,
    9,
    8
   ],
@@ -927,7 +1163,7 @@
   [
    "strokeRect",
    575,
-   21,
+   9,
    9,
    8
   ],
@@ -943,7 +1179,7 @@
    "fillText",
    "tab 3–10s",
    518,
-   28
+   16
   ],
   [
    "set:fillStyle",
@@ -952,7 +1188,7 @@
   [
    "fillRect",
    504,
-   21,
+   9,
    9,
    8
   ],
@@ -967,7 +1203,7 @@
   [
    "strokeRect",
    504,
-   21,
+   9,
    9,
    8
   ],
@@ -983,7 +1219,7 @@
    "fillText",
    "tab ≤3s",
    459,
-   28
+   16
   ],
   [
    "set:fillStyle",
@@ -992,7 +1228,7 @@
   [
    "fillRect",
    445,
-   21,
+   9,
    9,
    8
   ],
@@ -1007,9 +1243,178 @@
   [
    "strokeRect",
    445,
-   21,
+   9,
    9,
    8
+  ],
+  [
+   "measureText",
+   "synthetic insertion"
+  ],
+  [
+   "set:fillStyle",
+   "#333"
+  ],
+  [
+   "fillText",
+   "synthetic insertion",
+   856,
+   28
+  ],
+  [
+   "set:strokeStyle",
+   "#3949ab"
+  ],
+  [
+   "set:lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   846.5,
+   21
+  ],
+  [
+   "lineTo",
+   846.5,
+   29
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "measureText",
+   "drop"
+  ],
+  [
+   "set:fillStyle",
+   "#333"
+  ],
+  [
+   "fillText",
+   "drop",
+   815,
+   28
+  ],
+  [
+   "set:fillStyle",
+   "#7b1fa2"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   805.5,
+   21
+  ],
+  [
+   "lineTo",
+   809.5,
+   25
+  ],
+  [
+   "lineTo",
+   805.5,
+   29
+  ],
+  [
+   "lineTo",
+   801.5,
+   25
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "measureText",
+   "paste"
+  ],
+  [
+   "set:fillStyle",
+   "#333"
+  ],
+  [
+   "fillText",
+   "paste",
+   768,
+   28
+  ],
+  [
+   "set:fillStyle",
+   "#d32f2f"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   758.5,
+   21
+  ],
+  [
+   "lineTo",
+   754.5,
+   27.8
+  ],
+  [
+   "lineTo",
+   762.5,
+   27.8
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "measureText",
+   "copy / cut"
+  ],
+  [
+   "set:fillStyle",
+   "#333"
+  ],
+  [
+   "fillText",
+   "copy / cut",
+   691,
+   28
+  ],
+  [
+   "set:fillStyle",
+   "#f57c00"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   681.5,
+   29
+  ],
+  [
+   "lineTo",
+   677.5,
+   22.2
+  ],
+  [
+   "lineTo",
+   685.5,
+   22.2
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
   ],
   [
    "set:font",
@@ -1023,13 +1428,19 @@
    "fillText",
    "Tab-aways  total=1  (> 3s: 1)    All 1 plotted from session-level events (incl. off-trial)",
    90,
-   285
+   323
   ],
   [
    "fillText",
    "Sidebars  0 openings    Viewport shifts  0    Guard-friction violations  0",
    90,
-   299
+   337
+  ],
+  [
+   "fillText",
+   "Text input (inside trials)  copies/cuts 0    pastes 2    drops 0    synthetic insertions 0",
+   90,
+   351
   ]
  ]
 }

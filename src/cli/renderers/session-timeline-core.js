@@ -22,16 +22,26 @@
 //   between trials.
 //
 // Layout:
-//   Title strip
+//   Title strip, legend rows at the right
 //   ─────────────────────────────────────────────
-//   Phase strip      [consent | tut | comp | gallery+class+typing per rule]
+//   Phases strip     [gallery / typing / classification bands; only when
+//                     derivePhases finds the gallery bands]
+//   Trials strip     one band per trial, coloured by its `phase` when the
+//                     experiment sets phases; only when the trials align
+//   Text input       copy / cut ▼, paste ▲, drop ◆, synthetic insertions |
 //   Tab-aways lane   |  vertical markers, colored by duration bin
 //   Sidebars lane    |  horizontal spans, opened → closed
 //   Layout shifts    |  thin vertical ticks
 //   Guard-friction   |  vertical markers, dark red
+//   Guides           light dashed line at each trial start, dark at each
+//                     phase change (also drawn on the typing chart above)
 //   ─────────────────────────────────────────────
 //   X-axis ticks      0, M:SS labels
 //   Footer            session-level counts + "off-trial tab-aways" note
+//
+// The image shares its width and left margin with the typing chart
+// (timeline-layout.js TIMELINE_GEOMETRY), and sessionLayout below is the
+// layout both draw from and the report page reads.
 //
 // X-axis unit: seconds elapsed since session start. Events recorded in
 // performance.now() ms ("perfNow") are converted to session-relative seconds
@@ -55,19 +65,20 @@
 //     without session-level event data simply lose those lanes (rendered empty).
 
 import { countSidebarOpenings } from '../analyzers/summary.js';
+import {
+  TIMELINE_GEOMETRY, TIMELINE_ROW, NO_PHASE, trialSpans, inputMarks, guides, coverDomain,
+  typingThreshold, typingBars, timelineRows,
+} from './timeline-layout.js';
 
 // ── Layout constants ─────────────────────────────────────────────────────
-const CANVAS_W = 1000;
-const LEFT_PAD = 90;
-const RIGHT_PAD = 30;
-const TOP_PAD = 65;
-const BOTTOM_PAD = 110;
-
-const LANE_HEIGHT = 32;
-const LANE_GAP = 6;
-const LANE_NAMES = ['Tab-aways', 'Sidebars', 'Viewport shifts', 'Guard-friction'];
-const N_LANES = LANE_NAMES.length;
-const PHASE_STRIP_H = 24;
+// The geometry and the rows are timeline-layout.js's, shared with the typing
+// chart and the page.
+const CANVAS_W = TIMELINE_GEOMETRY.width;
+const LEFT_PAD = TIMELINE_GEOMETRY.left;
+const RIGHT_PAD = TIMELINE_GEOMETRY.right;
+const BOTTOM_PAD = TIMELINE_ROW.bottom;
+const LANE_HEIGHT = TIMELINE_ROW.lane;
+const PHASE_STRIP_H = TIMELINE_ROW.strip;
 
 // ── Colors ───────────────────────────────────────────────────────────────
 const C = {
@@ -96,22 +107,44 @@ const C = {
   sidebarSpan: '#8e24aa',      // purple
   layoutShift: '#00897b',      // teal
   guardViolation: '#c62828',   // dark red
+
+  // Text input marks, in the replay viewer's colours
+  copy: '#f57c00',             // orange ▼ (copy or cut)
+  paste: '#d32f2f',            // red ▲
+  drop: '#7b1fa2',             // purple ◆
+  synthetic: '#3949ab',        // indigo tick
+  // Trials strip: alternating greys when the study sets no phases
+  trialA: '#cfd8dc',
+  trialB: '#e3e7ea',
+  trialText: '#37474f',
+  phaseLabel: '#263238',
+  // Hatch over a trial whose events a trimmed Qualtrics payload did not keep
+  trimmedHatch: '#78909c',
+};
+
+// Trials strip fills by phase, in order of first appearance.
+const PHASE_FILL = ['#bbdefb', '#ffe0b2', '#e1bee7', '#c8e6c9', '#eceff1'];
+
+// The dashed guides (drawGuideLines), the same on both images.
+const GUIDE = {
+  trial: { color: 'rgba(55, 71, 79, 0.45)', width: 1, dash: [3, 3] },
+  phase: { color: 'rgba(38, 50, 56, 0.85)', width: 1.3, dash: [6, 3] },
 };
 
 // ── Per-participant renderer ─────────────────────────────────────────────
 // Returns the drawn canvas, or null if there's no data anywhere to draw
 // (caller decides what "no data" means — report-core.js writes no PNG).
 async function renderOne(p, config, createCanvas) {
-  const events = collectEvents(p, config);
-  const phases = derivePhases(p);
-  const xDomainSec = computeXDomain(p, events, phases);
+  const L = sessionLayout(p, config);
+  const xDomainSec = L.domainSec;
 
   if (xDomainSec <= 0) {
     // No data anywhere. Skip silently.
     return null;
   }
 
-  const canvasH = TOP_PAD + PHASE_STRIP_H + LANE_GAP + N_LANES * (LANE_HEIGHT + LANE_GAP) + BOTTOM_PAD;
+  const rows = timelineRows({ phasesStrip: L.galleryPhases, trialsStrip: L.aligned });
+  const canvasH = rows.height;
   const canvas = createCanvas(CANVAS_W, canvasH);
   const ctx = canvas.getContext('2d');
 
@@ -119,26 +152,62 @@ async function renderOne(p, config, createCanvas) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, CANVAS_W, canvasH);
 
-  drawHeader(ctx, p, events);
+  drawHeader(ctx, p, L.events);
 
   const chartW = CANVAS_W - LEFT_PAD - RIGHT_PAD;
   const xScale = chartW / xDomainSec;
 
-  drawPhaseStrip(ctx, phases, xScale, xDomainSec, chartW);
-  drawLanes(ctx, events, xScale, xDomainSec, chartW);
-  // Dashed vertical guides at every rule boundary (= start of each gallery
-  // phase). Drawn AFTER lanes so the markers sit on top of event bars and
-  // it's easy to see "this event happened during rule N" by tracing the
-  // line down through the lanes.
-  const lanesTopY = TOP_PAD + PHASE_STRIP_H + LANE_GAP;
-  const lanesBottomY = lanesTopY + N_LANES * (LANE_HEIGHT + LANE_GAP) - LANE_GAP;
-  drawPhaseGuides(ctx, phases, xScale, xDomainSec, lanesTopY, lanesBottomY);
+  if (rows.phasesY !== null) drawPhaseStrip(ctx, L.phases, xScale, xDomainSec, chartW, rows.phasesY);
+  // With the Phases strip right above, the Trials strip has no room over it
+  // for the phase names: they go inside it.
+  if (rows.trialsY !== null) drawTrialsStrip(ctx, L, xScale, xDomainSec, chartW, rows.trialsY, rows.phasesY !== null);
+  drawLanes(ctx, L, rows, xScale, xDomainSec, chartW);
+  // Guides go on after the lanes so they sit on top of the event marks:
+  // follow a line down to see which trial or phase an event fell in.
+  drawGuideLines(ctx, L.guides, (sec) => LEFT_PAD + sec * xScale, xDomainSec, rows.guidesTop, rows.lanesBottom);
+  drawPhaseGuides(ctx, L.phases, xScale, xDomainSec, rows.guidesTop, rows.lanesBottom);
   drawXAxis(ctx, xDomainSec, chartW, canvasH);
-  drawLegendAndFooter(ctx, p, events, canvasH);
+  drawLegendAndFooter(ctx, p, L, canvasH);
 
   return canvas;
 }
 export { renderOne as drawSessionTimeline };
+
+// ── The shared layout ────────────────────────────────────────────────────
+// What both images of the report's "Session timeline" block and the page
+// use (typing-profile-core.js, html-index-core.js): the events on the
+// session time axis, the phase bands, the session offset, the x-domain
+// (widened to every trial and Text input mark), the trial spans and whether
+// the charts align, the Text input marks, the guides, the typing threshold
+// and the typing bars. typingAnalysis is the summary's (report-core.js);
+// without one the bars come from the library's rates.
+export function sessionLayout(p, config, typingAnalysis = null) {
+  const events = collectEvents(p, config);
+  const phases = derivePhases(p);
+  // Sets events.sessionOffsetMs and every event's t_sec (computeXDomain).
+  const baseDomain = computeXDomain(p, events, phases);
+  const offsetMs = events.sessionOffsetMs;
+  const trials = Array.isArray(p.trials) ? p.trials : [];
+  const { aligned, spans } = trialSpans(trials, offsetMs);
+  const marks = inputMarks(trials, offsetMs);
+  const threshold = typingThreshold(p, config);
+  // The domain first: the guides measure the trial starts' spacing on it,
+  // and the typing bars their widths.
+  const domainSec = coverDomain(baseDomain, spans, marks);
+  // A sidebar still open at the end runs to the end of the final domain
+  // (computeXDomain closed it at the session's duration, before the trials
+  // and the Text input marks widened the domain), as the page draws it.
+  for (const s of events.sidebarSpans) if (!s.closed) s.end_sec = domainSec;
+  return {
+    events, phases, offsetMs, domainSec, aligned, spans, marks, threshold,
+    // The strip shows the gallery / typing / classification bands only:
+    // derivePhases also returns framing bands for any session with a start
+    // time, which say nothing on their own.
+    galleryPhases: phases.some((ph) => ph.type === 'gallery' && ph.endSec > ph.startSec),
+    guides: guides(spans, domainSec),
+    bars: typingBars(trials, typingAnalysis, threshold, aligned ? { spans, domainSec } : null),
+  };
+}
 
 // ── Event collection ─────────────────────────────────────────────────────
 // All events are normalized to a `t_sec` field (session-relative seconds)
@@ -581,8 +650,7 @@ function drawHeader(ctx, p, events) {
   }
 }
 
-function drawPhaseStrip(ctx, phases, xScale, xDomain, chartW) {
-  const y = TOP_PAD;
+function drawPhaseStrip(ctx, phases, xScale, xDomain, chartW, y) {
   // Background
   ctx.fillStyle = C.laneBg;
   ctx.fillRect(LEFT_PAD, y, chartW, PHASE_STRIP_H);
@@ -621,17 +689,114 @@ function phaseColor(type) {
   }
 }
 
-function drawLanes(ctx, events, xScale, xDomain, chartW) {
-  const baseY = TOP_PAD + PHASE_STRIP_H + LANE_GAP;
-  for (let i = 0; i < N_LANES; i++) {
-    const y = baseY + i * (LANE_HEIGHT + LANE_GAP);
-    drawLaneBackground(ctx, y, chartW);
-    drawLaneLabel(ctx, y, LANE_NAMES[i]);
-    switch (LANE_NAMES[i]) {
-      case 'Tab-aways':       drawTabAways(ctx, y, events.tabAways, xScale, xDomain, events.tabFlickerCutoffMs); break;
-      case 'Sidebars':        drawSidebars(ctx, y, events.sidebarSpans, xScale, xDomain); break;
-      case 'Viewport shifts': drawLayoutShifts(ctx, y, events.layoutShifts, xScale, xDomain); break;
-      case 'Guard-friction':  drawGuardViolations(ctx, y, events.guardViolations, xScale, xDomain); break;
+// The Trials strip: one band per trial from its start to its end, coloured by
+// the trial's phase when the experiment sets phases (the jsPsych extension's
+// `phase` parameter; "default" counts as unset), else in alternating greys so
+// neighbouring trials stay apart. A trial whose events a trimmed Qualtrics
+// payload did not keep is hatched. A trial's id is written in its band when
+// it fits; each phase's name above the strip where the phase begins, or,
+// when the Phases strip sits right above (namesInside), in the strip itself,
+// where it takes the place of the ids it would cover.
+// Text widths are estimated, about 5.2 px a character at 9 px and 5.8 in
+// bold, so the draw log does not depend on the canvas's fonts.
+function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
+  const X = (sec) => LEFT_PAD + clamp(sec, 0, xDomain) * xScale;
+  // Text cut with an ellipsis to fit `room` px at `perChar` px a character
+  // ('' when not even one character and the ellipsis fit).
+  const fitText = (text, room, perChar) => {
+    const fit = Math.floor(room / perChar);
+    if (text.length <= fit) return text;
+    return fit >= 2 ? text.slice(0, fit - 1) + '…' : '';
+  };
+  ctx.fillStyle = C.laneBg;
+  ctx.fillRect(LEFT_PAD, y, chartW, PHASE_STRIP_H);
+  const runs = L.guides.runs;
+  const fillOf = new Map();
+  for (const run of runs) if (!fillOf.has(run.label)) fillOf.set(run.label, PHASE_FILL[fillOf.size % PHASE_FILL.length]);
+  L.spans.forEach((s, i) => {
+    const x0 = X(s.startSec);
+    const w = Math.max(1.5, X(s.endSec) - x0 - 0.5);
+    ctx.fillStyle = runs.length ? fillOf.get(s.phase === null ? NO_PHASE : s.phase) : (i % 2 ? C.trialB : C.trialA);
+    ctx.fillRect(x0, y + 1, w, PHASE_STRIP_H - 2);
+    if (s.truncated) hatch(ctx, x0, y + 1, w, PHASE_STRIP_H - 2);
+  });
+  // Phase names inside the strip: each in the room its phase has up to the
+  // next one. `taken` holds the x extent of each name written.
+  const taken = [];
+  if (namesInside && runs.length) {
+    let lastEnd = 0;
+    for (const s of L.spans) if (s.endSec > lastEnd) lastEnd = s.endSec;
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillStyle = C.phaseLabel;
+    runs.forEach((run, k) => {
+      const x0 = X(run.sec);
+      const text = fitText(run.label, X(k + 1 < runs.length ? runs[k + 1].sec : lastEnd) - x0 - 6, 5.8);
+      if (!text) return;
+      ctx.fillText(text, x0 + 3, y + 15);
+      taken.push([x0, x0 + 3 + text.length * 5.8]);
+    });
+  }
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = C.trialText;
+  for (const s of L.spans) {
+    const x0 = X(s.startSec);
+    const x1 = X(s.endSec);
+    if (x1 - x0 <= 16 || taken.some(([a, b]) => x0 < b + 3 && x1 > a)) continue;
+    const text = fitText(s.id, x1 - x0 - 6, 5.2);
+    if (text) ctx.fillText(text, x0 + 3, y + 15);
+  }
+  ctx.strokeStyle = C.laneBorder;
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(LEFT_PAD, y, chartW, PHASE_STRIP_H);
+  ctx.fillStyle = C.laneLabel;
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(runs.length ? 'Trials · phase' : 'Trials', LEFT_PAD - 6, y + PHASE_STRIP_H / 2 + 3);
+  ctx.textAlign = 'left';
+  if (namesInside) return;
+  // Phase names above the strip. A name that would run into the one before
+  // it is left out (its line and colour still mark the change); one near
+  // the right edge is moved left to end at the chart's edge.
+  ctx.font = 'bold 9px sans-serif';
+  ctx.fillStyle = C.phaseLabel;
+  let right = -Infinity;
+  for (const run of runs) {
+    const w = run.label.length * 5.8;
+    const x = Math.min(X(run.sec) + 2, CANVAS_W - RIGHT_PAD - w);
+    if (x < right + 6) continue;
+    ctx.fillText(run.label, x, y - 3);
+    right = x + w;
+  }
+}
+
+// Diagonal lines over a rectangle, clipped to it: a trimmed page's band.
+function hatch(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.strokeStyle = C.trimmedHatch;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let d = -h; d < w; d += 6) {
+    ctx.moveTo(x + d, y + h);
+    ctx.lineTo(x + d + h, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLanes(ctx, L, rows, xScale, xDomain, chartW) {
+  const events = L.events;
+  for (const lane of rows.lanes) {
+    drawLaneBackground(ctx, lane.y, chartW);
+    drawLaneLabel(ctx, lane.y, lane.name);
+    switch (lane.name) {
+      case 'Text input':      drawTextInput(ctx, lane.y, L.marks, xScale, xDomain); break;
+      case 'Tab-aways':       drawTabAways(ctx, lane.y, events.tabAways, xScale, xDomain, events.tabFlickerCutoffMs); break;
+      case 'Sidebars':        drawSidebars(ctx, lane.y, events.sidebarSpans, xScale, xDomain); break;
+      case 'Viewport shifts': drawLayoutShifts(ctx, lane.y, events.layoutShifts, xScale, xDomain); break;
+      case 'Guard-friction':  drawGuardViolations(ctx, lane.y, events.guardViolations, xScale, xDomain); break;
     }
   }
 }
@@ -745,6 +910,75 @@ function drawGuardViolations(ctx, y, list, xScale, xDomain) {
   }
 }
 
+// The Text input lane: copies and cuts as orange ▼ near the top, pastes as
+// red ▲ and drops as purple ◆ near the bottom, synthetic insertions (text
+// that appeared with no key press, usually a script or an autofill) as thin
+// indigo ticks with "×N" after a trial's last one. Marks outside the domain
+// (an offset that could not be derived) are not drawn.
+function drawTextInput(ctx, y, marks, xScale, xDomain) {
+  const inDomain = (sec) => Number.isFinite(sec) && sec >= 0 && sec <= xDomain;
+  const X = (sec) => LEFT_PAD + sec * xScale;
+  for (const g of marks.synthetic) {
+    const secs = g.secs.filter(inDomain);
+    if (!secs.length) continue;
+    ctx.strokeStyle = C.synthetic;
+    ctx.lineWidth = 1;
+    for (const sec of secs) {
+      ctx.beginPath();
+      ctx.moveTo(X(sec) + 0.5, y + 4);
+      ctx.lineTo(X(sec) + 0.5, y + LANE_HEIGHT - 4);
+      ctx.stroke();
+    }
+    ctx.fillStyle = C.synthetic;
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(`×${secs.length}`, X(secs[secs.length - 1]) + 3, y + 12);
+  }
+  for (const m of marks.copies) if (inDomain(m.sec)) triangle(ctx, X(m.sec), y + 10, false, C.copy);
+  for (const m of marks.pastes) if (inDomain(m.sec)) triangle(ctx, X(m.sec), y + LANE_HEIGHT - 10, true, C.paste);
+  for (const m of marks.drops) if (inDomain(m.sec)) diamond(ctx, X(m.sec), y + LANE_HEIGHT - 10, C.drop);
+}
+
+// A filled triangle centred on (x, y), pointing up or down.
+function triangle(ctx, x, y, up, color, size = 5) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (up) { ctx.moveTo(x, y - size); ctx.lineTo(x - size, y + size * 0.7); ctx.lineTo(x + size, y + size * 0.7); }
+  else { ctx.moveTo(x, y + size); ctx.lineTo(x - size, y - size * 0.7); ctx.lineTo(x + size, y - size * 0.7); }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// A filled diamond centred on (x, y).
+function diamond(ctx, x, y, color, r = 5) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// The block's guides (timeline-layout.js guides), on either image: a light
+// dashed line at each trial start, a dark dashed one at each phase change,
+// from topY to bottomY. X maps seconds to the image's x, the same on both
+// images (TIMELINE_GEOMETRY). Exported for typing-profile-core.js.
+export function drawGuideLines(ctx, g, X, xDomain, topY, bottomY) {
+  const line = (sec, style) => {
+    if (!Number.isFinite(sec) || sec < 0 || sec > xDomain) return;
+    const x = Math.round(X(sec)) + 0.5;
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = style.width;
+    ctx.setLineDash(style.dash);
+    ctx.beginPath();
+    ctx.moveTo(x, topY);
+    ctx.lineTo(x, bottomY);
+    ctx.stroke();
+  };
+  ctx.save();
+  for (const sec of g.trialStarts) line(sec, GUIDE.trial);
+  for (const run of g.phaseChanges) line(run.sec, GUIDE.phase);
+  ctx.restore();
+}
+
 // Dashed vertical guides at each rule boundary (= start of each gallery phase).
 // Numbered at the top so it's easy to see which rule occupies which column.
 // Skipped if there are < 2 galleries (e.g., trial-fields-stripped fallback).
@@ -810,11 +1044,12 @@ function formatSec(sec) {
   return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
 }
 
-function drawLegendAndFooter(ctx, p, events, canvasH) {
-  // Two-row legend: phases on the top row, event types on the bottom row.
-  // Two rows is more readable than a 10-item single line and never silently
-  // truncates (the old single-line version dropped the leftmost entries when
-  // they overflowed, hiding the "gallery" label exactly when we needed it).
+function drawLegendAndFooter(ctx, p, L, canvasH) {
+  const events = L.events;
+  // Right-aligned legend rows: the phase bands (only with the Phases strip),
+  // the lanes' event types, then the Text input marks. One row per group
+  // never truncates (the old single-line version dropped the leftmost
+  // entries when they overflowed).
   const phaseItems = [
     { color: C.phasePre, label: 'framing (pre / transition / post)' },
     { color: C.phaseGallery, label: 'gallery' },
@@ -832,9 +1067,20 @@ function drawLegendAndFooter(ctx, p, events, canvasH) {
     { color: C.layoutShift, label: 'viewport shift' },
     { color: C.guardViolation, label: 'guard-friction' },
   ];
+  const inputItems = [
+    { color: C.copy, label: 'copy / cut', shape: 'down' },
+    { color: C.paste, label: 'paste', shape: 'up' },
+    { color: C.drop, label: 'drop', shape: 'diamond' },
+    { color: C.synthetic, label: 'synthetic insertion', shape: 'tick' },
+  ];
+  // A crowded session draws no trial-start lines (timeline-layout.js
+  // guides); the legend says so, in a text-only item at the end of the last
+  // row.
+  const hidden = L.guides.trialLinesHidden;
+  if (hidden > 0) inputItems.push({ label: `trial lines hidden (${hidden} trials)` });
   ctx.font = '9px sans-serif';
-  drawLegendRow(ctx, phaseItems, 16);
-  drawLegendRow(ctx, eventItems, 28);
+  const legendRows = (L.galleryPhases ? [phaseItems] : []).concat([eventItems, inputItems]);
+  legendRows.forEach((items, i) => drawLegendRow(ctx, items, 16 + 12 * i));
 
   // Footer summary
   const fY = canvasH - BOTTOM_PAD + 38;
@@ -864,10 +1110,20 @@ function drawLegendAndFooter(ctx, p, events, canvasH) {
     ? `All ${events.tabAways.length} plotted from session-level events (incl. off-trial)`
     : `Per-trial events plotted: ${events.tabAways.length}    ` +
       `Off-trial events: ${events.offTrialTabAwayCount} (timing not preserved — pre-0.6.1 payload)`;
+  const m = L.marks;
+  const synthN = m.synthetic.reduce((n, g) => n + g.count, 0);
+  // Pages a Qualtrics payload too large for its field kept without their
+  // events (hatched on the Trials strip): their marks are missing from the
+  // lanes. Counted from the bars, which carry the flag aligned or not.
+  const trimmed = L.bars.filter((b) => b.truncated).length;
+  const trimmedNote = trimmed > 0
+    ? `    events of ${trimmed} trial${trimmed === 1 ? '' : 's'} not kept by the Qualtrics payload` : '';
   const lines = [
     `Tab-aways  total=${tabSessTotal}  (> ${cutoffSecLabel}: ${tabSessLong})    ` + tabNote,
     `Sidebars  ${sidebarOpenings} opening${sidebarOpenings === 1 ? '' : 's'}${spanNote}    ` +
       `Viewport shifts  ${ls}    Guard-friction violations  ${gf}`,
+    `Text input (inside trials)  copies/cuts ${m.copies.length}    pastes ${m.pastes.length}    ` +
+      `drops ${m.drops.length}    synthetic insertions ${synthN}` + trimmedNote,
   ];
   for (let i = 0; i < lines.length; i++) {
     ctx.fillText(lines[i], LEFT_PAD, fY + i * 14);
@@ -875,7 +1131,8 @@ function drawLegendAndFooter(ctx, p, events, canvasH) {
 }
 
 // Right-aligned legend row. Never truncates; if items overflow, they extend
-// leftward past the chart midpoint rather than being silently dropped.
+// leftward past the chart midpoint rather than being silently dropped. An
+// item without a colour is text only.
 function drawLegendRow(ctx, items, yText) {
   let lx = CANVAS_W - RIGHT_PAD;
   for (let i = items.length - 1; i >= 0; i--) {
@@ -884,13 +1141,35 @@ function drawLegendRow(ctx, items, yText) {
     lx -= w;
     ctx.fillStyle = '#333';
     ctx.fillText(it.label, lx, yText);
-    lx -= 5;
+    if (it.color) {
+      lx -= 5;
+      drawSwatch(ctx, it, lx - 9, yText - 7);
+      lx -= 12;
+    } else {
+      lx -= 14;
+    }
+  }
+}
+
+// A 9×8 legend swatch at (x, y): a framed square, or the mark's own shape.
+function drawSwatch(ctx, it, x, y) {
+  const cx = x + 4.5, cy = y + 4;
+  if (it.shape === 'down') triangle(ctx, cx, cy, false, it.color, 4);
+  else if (it.shape === 'up') triangle(ctx, cx, cy, true, it.color, 4);
+  else if (it.shape === 'diamond') diamond(ctx, cx, cy, it.color, 4);
+  else if (it.shape === 'tick') {
+    ctx.strokeStyle = it.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, y);
+    ctx.lineTo(cx, y + 8);
+    ctx.stroke();
+  } else {
     ctx.fillStyle = it.color;
-    ctx.fillRect(lx - 9, yText - 7, 9, 8);
+    ctx.fillRect(x, y, 9, 8);
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 0.4;
-    ctx.strokeRect(lx - 9, yText - 7, 9, 8);
-    lx -= 12;
+    ctx.strokeRect(x, y, 9, 8);
   }
 }
 
