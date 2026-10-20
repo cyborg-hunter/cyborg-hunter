@@ -176,7 +176,8 @@ unlabeled trials should scope with `exclude`. When a scope is active:
   instead of the whole-session score.
 - Ambient session signals with no phase attribution (sidebar events, keyboard
   shortcuts, viewport-width shifts, zoom changes) stay session-wide.
-- Renderers still show the full session — only the scores are scoped.
+- Renderers still show the full session — only the scores are scoped. The
+  typing chart's rates and R marks are the whole participant's.
 
 ### Visual renderers
 

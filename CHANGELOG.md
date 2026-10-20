@@ -11,7 +11,8 @@ device line, a click picture, three new `summary.csv` columns): read
 [docs/upgrading.md](docs/upgrading.md). Typing: the typing rate is
 corrected, which changes the live soft score; trial reports gain a count of
 edits and the typing-rhythm summaries; reports gain a Typing dynamics
-section and six more `summary.csv` columns.
+section and six more `summary.csv` columns. The report's typing chart moves
+onto the session timeline's time axis, in one Session timeline block.
 
 ### Added
 - The centered-clicks rule in the pointer verdict, read from the session
@@ -52,6 +53,19 @@ section and six more `summary.csv` columns.
   `typingFieldsJudged`, `typingFastestMedianMs`, `typingLowestCv`,
   `typingRateSource`; the `typingRhythm` score weight (default 0); a typing
   clause in the triage reason, before the pointer clause.
+- The report's **Session timeline** block: the typing chart is drawn on the
+  session timeline's time axis and stacked above it, with a hover line (the
+  block's header names the time, the trial, its phase and its typing rate
+  under it), click-to-pin lines and an **enlarge** button. Works in the CLI
+  report and in the analyzer.
+- The session timeline gains a Trials strip (coloured by `phase` when set), a
+  Text input lane (copy or cut, paste, drop, synthetic insertions) and dashed
+  guides at trial starts and phase changes; the typing chart draws the same
+  guides and marks C, P and R (typing rhythm) on its bars at least 8 px
+  wide. When the trial starts average under 6 px apart, their lines are left
+  out and both legends say so. Pages a reduced Qualtrics payload kept
+  without their events are hatched and counted in the timeline's footer, and
+  the header reads "events not kept" over them.
 
 ### Changed
 - `cursorChecksRecorded` counts the software-renderer fact: 3–4 with a
@@ -63,6 +77,20 @@ section and six more `summary.csv` columns.
   times or from a session recording that keeps the page (`dom` tier), and
   marks the rest "old formula"; a `trace`-tier recording holds no edits and
   recomputes nothing.
+- The typing chart draws the rates of the Typing dynamics section and
+  `summary.csv` (recomputed where the report recomputes them), no longer the
+  rates the library saved.
+- The typing chart is 1000 px wide on the session time axis whenever every
+  trial carries `startTime` and `duration_ms`, and no longer caps the trials
+  it shows; data where a trial lacks them keeps one bar per trial. The
+  Phases strip (the gallery phase bands) is drawn only for sessions that
+  have those bands.
+- The one-bar-per-trial typing chart steps its y-axis in round numbers (5,
+  10 or 20 up to 160 chars/sec, then 1, 2 or 5 × a power of ten) instead of
+  five equal ticks up to the fastest rate or 1.5 × the threshold; prints the
+  threshold after the title, with the legend on the line below; and is at
+  least 600 px wide (700 when a page was trimmed), so a short session no
+  longer cuts its legend.
 
 ## [0.16.0] — 2026-10-15
 

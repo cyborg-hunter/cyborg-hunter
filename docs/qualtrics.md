@@ -254,7 +254,13 @@ honeypot's list of violations (their count stays), the names of AI
 extensions found on dropped pages, the typing verdict (judged from the kept
 pages' typing rhythm, which level 4 drops; with it the triage reason's
 typing clause and any `scoreWeights.typingRhythm` term), and at level 4 the
-preset name. The payload's `cyborgHunterOneLiner.truncated` is `false` at
+preset name. A kept page whose events the payload dropped (from level 2,
+every kept page row but the newest; at level 4, the newest too) is hatched
+on the session timeline's Trials strip, the timeline's footer adds "events
+of N trials not kept by the Qualtrics payload", and the report's hover
+readout adds "events not kept" over it. When a page lacks its start time,
+the timeline has no Trials strip: the one-bar-per-trial typing chart
+hatches those pages, and the footer line stays. The payload's `cyborgHunterOneLiner.truncated` is `false` at
 level 0; otherwise it names the level, what was dropped and (`totals`) the
 whole session's counts. The browser console shows "The Qualtrics payload was
 reduced" (once per page), and the CLI notes it for that participant:

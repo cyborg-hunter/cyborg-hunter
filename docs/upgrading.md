@@ -15,7 +15,8 @@ study with it; `signals.softwareRenderer: false` turns the new fact off.
 It also changes the typing rate, and with it the live soft score, adds a
 count and the typing-rhythm summaries to every trial report
 (`signals.typingRhythm: false` turns the summaries off), and adds a Typing
-dynamics section with six more `summary.csv` columns.
+dynamics section with six more `summary.csv` columns. The report's typing
+chart moves onto the session timeline's time axis.
 
 ### What changes for newly collected data
 
@@ -82,9 +83,25 @@ dynamics section with six more `summary.csv` columns.
 - The triage reason names the typing verdict when it counts against the
   session, before the pointer verdict; `scoreWeights.typingRhythm`
   (default 0) can rank by it.
-- `typing_profile_*.png` still draws the rates the library saved, by the
-  old formula for data before 0.17; the section and `summary.csv` use the
-  corrected ones.
+- `typing_profile_*.png` draws the rates the section and `summary.csv` use,
+  the corrected ones where the report could recompute them, no longer the
+  rates the library saved, and marks a trial where a typing-rhythm rule
+  fired with a red **R**.
+- `typing_profile_<id>.png` is drawn on the session timeline's time axis
+  (1000 px wide, one bar per trial from its start to its end) and the report
+  shows it in one **Session timeline** block with the timeline. Scripts that
+  read the PNG's size or crop it by trial need the new layout. Data in which
+  a trial lacks `startTime` or `duration_ms` keeps one bar per trial (at
+  most 800), in its own **Typing profile** block. That chart changes too:
+  the y-axis steps in round numbers (5, 10 or 20 up to 160 chars/sec, then
+  1, 2 or 5 × a power of ten) instead of five equal ticks up to the fastest
+  rate or 1.5 × the threshold; the threshold is printed after the title,
+  with the legend on the line below; the chart is at least 600 px wide; and
+  it marks **C** and **R** as well as **P**.
+- `session_timeline_<id>.png` gains rows (a Text input lane, and a Trials
+  strip when every trial carries `startTime` and `duration_ms`) and is
+  taller; the phase strip appears only for sessions with gallery phase
+  bands.
 
 ## 0.16.0 — from 0.15
 

@@ -61,7 +61,7 @@ What a scope does and does not change:
 
 - **Scoped:** per-trial signal counts (paste, copy, drop, tab-away, typing, soft score), and the hard/soft *flags*, which are re-derived from the scoped trials rather than read from the whole-session saved score. A participant whose only pastes happened during an excluded practice phase is not hard-flagged.
 - **Not scoped:** ambient session signals that have no phase attribution (sidebar events, keyboard shortcuts, viewport shifts, zoom changes). These stay session-wide because the library records them outside any trial.
-- **Not scoped:** the renderers. Timelines and trajectory grids still show the full session, so you can see what happened in excluded phases even though it doesn't count.
+- **Not scoped:** the renderers. Timelines and trajectory grids still show the full session, so you can see what happened in excluded phases even though it doesn't count. The typing chart also draws every trial, with the typing rates and R marks of the whole participant, while the Typing dynamics section and `summary.csv` cover the scoped trials.
 
 Two footguns:
 
@@ -105,12 +105,13 @@ In `summary.csv`, `typingFieldsJudged` is empty for the first two (not recorded)
 
 **The typing rate.** The rate is (edits − 1) per second between a trial's first edit and its last, judged from 20 edits and fast above the participant's `typingSpeedCps` (10 by default). Before 0.17 the library counted edits over the time from 2 edits, which read two keys typed into an age field 0.17 s apart as 11.8 characters a second. For older data the report recomputes a trial's rate the new way from the trial's saved edit times (kept when keystroke dynamics or `collectForPostHoc.fullKeystrokeTimestamps` were on), else from the trial's edits in a session recording that keeps the page. A `trace`-tier recording holds no edits, so it recomputes nothing. Otherwise it shows the saved rate marked "(old formula)", and only then adds the note "A rate marked “old formula” is the one a library before 0.17 saved (keystrokes over time, from 2 keystrokes), for a trial with neither saved edit times nor a recording to recompute it from." The "Fast typing" tile counts the trials over the cutoff by the same rates; its hint says "(older data with neither saved edit times nor a recording: the saved rate)". `typingRateSource` in `summary.csv` names the weakest source any judged trial used; it is the rate's source, not the rhythm's, so data recorded with 0.17 and `signals.typingRhythm` off can read `library` there while its rhythm is not recorded. A rate rebuilt from a recording can undercount keys typed faster than the page's frames. The section prints that sentence as a note whenever a trial's edits were read from the recording. In other samples, people have typed 10 to 12 characters a second over a few dozen keys in one field, and software that paces itself stays under 10, so a fast rate is a weak sign on its own.
 
+**The typing chart.** `typing_profile_*.png` draws these rates, the corrected ones where the report could recompute them, on the session time axis (one bar per trial when a trial lacks its start time or duration), and marks a trial where a rhythm rule fired with a red **R** (on a bar at least 8 px wide). See [Reading the session timeline](using-cyborg-hunter.md#reading-the-session-timeline).
+
 **Limits.**
 - Phones and tablets: a virtual keyboard often commits a word at a time, so a field typed that way rarely reaches 20 gaps and the section reads "not assessed". The 60 ms floor has not been checked on mobile keyboards.
 - Dictation, text expanders and autocomplete insert text in other ways than one typed character, so they leave no gaps; what they insert can show as synthetic insertions instead.
 - Software that types with a person's speed and pauses is not caught, nor is a person who retypes an AI's answer by hand.
 - Fast typists come close to the speed rule: the fastest recorded human field had a 75 ms median gap. Watch the replay before excluding anyone.
-- `typing_profile_*.png` still draws the rates the library saved, by the old formula for data before 0.17, while the section and `summary.csv` use the corrected ones.
 
 ## Cursor dynamics
 
