@@ -258,11 +258,12 @@ preset name. A kept page whose events the payload dropped (from level 2,
 every kept page row but the newest; at level 4, the newest too) is hatched
 on the session timeline's Trials strip, the timeline's footer adds "events
 of N trials not kept by the Qualtrics payload", and the Session timeline
-block's header row reads "events not kept" while the pointer is over it.
+block's header row adds "events not kept" while the pointer is over it.
 When a page lacks its start time or duration, there is no Trials strip and
 the header row names no page; the footer line stays, and the
 one-bar-per-trial typing chart, when it is drawn (some page has a judged
-typing rate or a paste), hatches those pages and is at least 700 px wide.
+typing rate or a paste), hatches the pages whose events were not kept, and
+is then at least 700 px wide.
 The payload's `cyborgHunterOneLiner.truncated` is `false` at
 level 0; otherwise it names the level, what was dropped and (`totals`) the
 whole session's counts. The browser console shows "The Qualtrics payload was

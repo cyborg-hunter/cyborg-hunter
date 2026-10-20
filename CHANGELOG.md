@@ -56,8 +56,8 @@ onto the session timeline's time axis, in one Session timeline block.
 - The report's **Session timeline** block: the typing chart is drawn on the
   session timeline's time axis and stacked above it, with a hover line,
   click-to-pin lines and an **enlarge** button. The block's header row
-  names the time, trial, phase and typing rate under the line. Works in the
-  CLI report and in the analyzer.
+  names the time, trial, phase and typing rate under the pointer. Works in
+  the CLI report and in the analyzer.
 - The session timeline gains a Trials strip (coloured by `phase` when set), a
   Text input lane (copy or cut, paste, drop, synthetic insertions) and dashed
   guides at trial starts and phase changes; the typing chart draws the same
@@ -65,7 +65,7 @@ onto the session timeline's time axis, in one Session timeline block.
   wide in the image. When the trial starts average under 6 px apart in the
   image, their lines are left out and both legends say so. Pages a reduced
   Qualtrics payload kept without their events are hatched and counted in
-  the timeline's footer, and the header row reads "events not kept" while
+  the timeline's footer, and the header row adds "events not kept" while
   the pointer is over one.
 
 ### Changed
