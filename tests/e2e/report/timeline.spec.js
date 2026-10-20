@@ -3,12 +3,14 @@
 // file://: the hover label in the block's header row names the trial under
 // the pointer and never covers a chart, a click pins a dashed line and a
 // second click on it removes it, and "enlarge" shows both images in the
-// lightbox, which the close control and Escape both clear. The report is
-// rendered from tests/fixtures/demo/DEMO-FIXT.json (its trials carry start
-// times, so the charts align); the two images are plain PNGs of the charts'
-// size, since the script reads its numbers from the block, not from the
-// pixels. A second set of reports, in a directory of its own, lacks one or
-// both images: the block keeps what loads and hides when nothing does.
+// lightbox, which the close control and Escape both clear, leaving the
+// lightbox to show the next figure opened. The report is rendered from
+// tests/fixtures/demo/DEMO-FIXT.json (its trials carry start times, so the
+// charts align); the two images are plain PNGs of the charts' size, since
+// the script reads its numbers from the block, not from the pixels, and a
+// trajectories PNG is the next figure. A second set of reports, in a
+// directory of its own, lacks one or both timeline images: the block keeps
+// what loads and hides when nothing does.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,6 +24,7 @@ import { renderIndexHtml } from '../../../src/cli/renderers/html-index-core.js';
 import { encodePng } from '../../../demo/analyze/png-encode.js';
 
 const png = (w, h) => encodePng(w, h, new Uint8Array(w * h * 4).fill(235));
+const TRAJECTORIES_W = 600;
 async function render() {
   const config = { outputDir: '.', participantIdField: 'participantId' };
   const raw = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));
@@ -37,6 +40,7 @@ test.beforeAll(async () => {
   mkdirSync(join(dir, 'images'));
   writeFileSync(join(dir, 'images', 'typing_profile_DEMO-FIXT.png'), png(1000, 204));
   writeFileSync(join(dir, 'images', 'session_timeline_DEMO-FIXT.png'), png(1000, 395));
+  writeFileSync(join(dir, 'images', 'trajectories_DEMO-FIXT.png'), png(TRAJECTORIES_W, 300));
 });
 test.afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -52,7 +56,22 @@ async function open(page) {
   const stage = page.locator('#p-DEMO-FIXT .tl-stage');
   await expect(stage.locator('img')).toHaveCount(2);
   await expect.poll(() => stage.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(300);
+  // The report's faces are inline data: settled before any box is compared.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
   return stage;
+}
+// Closed, the lightbox is back to its single figure: the slot is shown and
+// the stack hidden again, so the next figure opened is that figure, not a
+// blank.
+async function expectSingleFigureBack(page) {
+  const img = page.locator('#lightbox-img');
+  await expect(img).not.toHaveAttribute('hidden');
+  await expect(img).not.toHaveCSS('display', 'none');
+  await expect(page.locator('#lightbox-stack')).toHaveCSS('display', 'none');
+  await page.locator('#p-DEMO-FIXT a.zoomable').filter({ has: page.locator('img[alt="Mouse trajectories"]') }).click();
+  await expect(page.locator('#lightbox')).toHaveClass(/open/);
+  await expect(img).toBeVisible();
+  await expect.poll(() => img.evaluate((el) => el.complete && el.naturalWidth)).toBe(TRAJECTORIES_W);
 }
 
 test('the hover label names the trial under the pointer, in the header row above the charts', async ({ page }) => {
@@ -70,10 +89,10 @@ test('the hover label names the trial under the pointer, in the header row above
   const shown = await readout.boundingBox();
   expect(shown.y + shown.height).toBeLessThanOrEqual((await stage.boundingBox()).y);
   expect(await enlarge.boundingBox()).toEqual(enlargeAtRest);
-  // Over the left margin no time is plotted: the line goes and the readout empties.
+  // Over the left margin no time is plotted: the readout empties and the line goes.
   await page.mouse.move(box.x + 5, box.y + 40);
-  await expect(stage.locator('.tl-line')).toBeHidden();
   await expect(readout).toHaveText('');
+  await expect(stage.locator('.tl-line')).toBeHidden();
 });
 
 test('a click pins a dashed line and a second click on it removes it', async ({ page }) => {
@@ -94,11 +113,12 @@ test('enlarge shows both images in the lightbox, and closing clears them', async
   await expect(page.locator('#lightbox-stack img')).toHaveCount(2);
   await expect(page.locator('#lightbox-img')).toBeHidden();
   // The single figure's slot has no source here (closeLightbox empties it),
-  // so it has no box whether or not it is hidden: check the flag itself.
-  await expect(page.locator('#lightbox-img')).toHaveAttribute('hidden', '');
+  // so it has no box whether or not it is hidden: check its display itself.
+  await expect(page.locator('#lightbox-img')).toHaveCSS('display', 'none');
   await page.locator('.lightbox-close').click();
   await expect(page.locator('#lightbox')).not.toHaveClass(/open/);
   await expect(page.locator('#lightbox-stack img')).toHaveCount(0);
+  await expectSingleFigureBack(page);
 });
 
 test('Escape closes the enlarged pair and clears it', async ({ page }) => {
@@ -109,6 +129,7 @@ test('Escape closes the enlarged pair and clears it', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('#lightbox')).not.toHaveClass(/open/);
   await expect(page.locator('#lightbox-stack img')).toHaveCount(0);
+  await expectSingleFigureBack(page);
 });
 
 // A PNG the CLI did not write (the plot cores skip some participants) fails
@@ -147,6 +168,7 @@ test.describe('a missing image', () => {
   });
 
   test('without either image the block hides', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 900 });
     await page.goto(pathToFileURL(join(missing, 'none', 'index.html')).href);
     await expect(page.locator('#p-DEMO-FIXT')).toBeVisible();
     const block = page.locator('#p-DEMO-FIXT .tl-block');
