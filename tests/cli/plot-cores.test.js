@@ -187,12 +187,22 @@ test('session timeline: pages a Qualtrics payload trimmed are hatched, and the f
   assert.ok(!plain.some(c => c[0] === 'fillText' && String(c[1]).includes('not kept')));
 });
 
-test('session timeline: phase names never cover each other or the Phases strip', async () => {
-  // Gallery phase bands and trials with phases: both strips, 6 px apart, so
-  // the trials' phase names go inside the Trials strip (y 95 + 15).
+// ── The Trials strip's phases ────────────────────────────────────────────
+import { TIMELINE_ROW, TIMELINE_GEOMETRY, timelineRows } from '../../src/cli/renderers/timeline-layout.js';
+
+// The rows with both strips, and the y and height of a Trials-strip band.
+const BOTH = timelineRows({ phasesStrip: true, trialsStrip: true });
+const BAND_Y = BOTH.trialsY + 1;
+const BAND_H = TIMELINE_ROW.strip - 2;
+const CHART_RIGHT = TIMELINE_GEOMETRY.width - TIMELINE_GEOMETRY.right;
+
+// A session with the gallery phase bands and trials that set phases: two
+// rules, each a gallery trial then four classification trials, so both
+// strips are drawn. `lead` trials come first.
+function gallerySession(lead = []) {
   const start = Date.parse('2026-01-01T00:00:00.000Z');
   const iso = (ms) => new Date(start + ms).toISOString();
-  const trials = [];
+  const trials = lead.slice();
   let at = 30000;
   for (let r = 0; r < 2; r++) {
     trials.push({ trialId: `gallery-${r + 1}`, phase: 'gallery', startTime: 5000 + at, duration_ms: 60000 });
@@ -203,27 +213,98 @@ test('session timeline: phase names never cover each other or the Phases strip',
       at += 10000;
     }
   }
-  const G2 = { participantId: 'G-2', session: {}, galleryStudyMs: [60000, 60000],
+  return { participantId: 'G-2', session: {}, galleryStudyMs: [60000, 60000],
     metadata: { startTime: iso(0), endTime: iso(at + 30000) }, trials };
+}
+
+// The colour the legend gives a phase band: its swatch, drawn right after
+// its label in the legend rows above the strips.
+function legendColour(log, label) {
+  const i = log.findIndex(c => c[0] === 'fillText' && c[1] === label && c[3] < TIMELINE_ROW.top);
+  const set = i < 0 ? null : log.slice(i + 1).find(c => c[0] === 'set:fillStyle');
+  return set ? set[1] : null;
+}
+
+// The fillStyle in effect at each fillRect at (y, h), in drawing order.
+function fillsAt(log, y, h) {
+  const out = [];
+  let fill = null;
+  for (const c of log) {
+    if (c[0] === 'set:fillStyle') fill = c[1];
+    else if (c[0] === 'fillRect' && c[2] === y && c[4] === h) out.push(fill);
+  }
+  return out;
+}
+
+test('session timeline: a trial phase the report knows keeps the Phases strip\'s colour on the Trials strip', async () => {
+  // Without and with a tutorial trial first: the colour follows the phase's
+  // name, not the order the phases appear in.
+  for (const lead of [[], [{ trialId: 'intro', phase: 'tutorial', startTime: 10000, duration_ms: 15000 }]]) {
+    const log = [];
+    await drawSessionTimeline(gallerySession(lead), { outputDir: '.' }, makeRecordingCanvasFactory(log));
+    const gallery = legendColour(log, 'gallery');
+    const classification = legendColour(log, 'classification');
+    assert.ok(gallery && classification && gallery !== classification, 'the legend colours both phases');
+    const rule = [gallery, classification, classification, classification, classification];
+    const bands = fillsAt(log, BAND_Y, BAND_H);
+    assert.deepEqual(bands.slice(lead.length), [...rule, ...rule], `trial bands after ${lead.length} lead trial(s)`);
+    if (lead.length) {
+      // A phase the report has no colour for takes one no phase band uses.
+      const bandColours = ['framing (pre / transition / post)', 'gallery', 'typing', 'classification'].map(l => legendColour(log, l));
+      assert.ok(!bandColours.includes(bands[0]), `tutorial fill ${bands[0]}`);
+    }
+  }
+});
+
+test('session timeline: with both strips, phase names sit inside the Trials strip on a patch of their colour, over the guides', async () => {
   const log = [];
-  await drawSessionTimeline(G2, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  await drawSessionTimeline(gallerySession(), { outputDir: '.' }, makeRecordingCanvasFactory(log));
   const texts = log.filter(c => c[0] === 'fillText');
   assert.ok(texts.some(c => c[1] === 'Phases') && texts.some(c => c[1] === 'Trials · phase'), 'both strips');
-  // The legend names 'gallery' too, at y 16: only the strip's names here.
-  const names = texts.filter(c => (c[1] === 'gallery' || c[1] === 'classification') && c[3] > 60);
-  assert.equal(names.length, 4, 'each of the four phases named');
-  assert.ok(names.every(c => c[3] === 110), 'inside the Trials strip, not over the Phases strip');
+  // The legend names 'gallery' too, above the strips: only the strip's names.
+  const nameY = BOTH.trialsY + 15;
+  const names = log.map((c, i) => [c, i]).filter(([c]) => c[0] === 'fillText' && c[3] === nameY
+    && (c[1] === 'gallery' || c[1] === 'classification'));
+  assert.equal(names.length, 4, 'each of the four phases named inside the strip');
+  const lastDash = log.map(c => c[0]).lastIndexOf('setLineDash');
+  for (const [c, i] of names) {
+    assert.ok(i > lastDash, `${c[1]} drawn after the last dashed line`);
+    // The drawing call before it (property sets aside) is its patch, in its
+    // phase's colour.
+    let j = i - 1;
+    while (log[j][0].startsWith('set:')) j--;
+    assert.equal(log[j][0], 'fillRect', `${c[1]} on a patch`);
+    const patchFill = log.slice(0, j).reverse().find(d => d[0] === 'set:fillStyle')[1];
+    assert.equal(patchFill, legendColour(log, c[1]), `${c[1]}'s patch in its phase's colour`);
+  }
+  // The rule numbers sit inside the Phases strip, not in the 6 px gap under it.
+  const rules = texts.filter(c => /^r\d$/.test(c[1]));
+  assert.deepEqual(rules.map(c => c[1]), ['r1', 'r2']);
+  assert.ok(rules.every(c => c[3] > BOTH.phasesY && c[3] < BOTH.phasesY + TIMELINE_ROW.strip), 'inside the Phases strip');
+});
 
-  // Above the strip, a name that would run into the one before it is left
-  // out, and one at the right edge ends at the chart's edge (x 970).
+test('session timeline: phase names above the Trials strip never run into each other or past the chart', async () => {
+  // Without the Phases strip the Trials strip is the first row; names sit
+  // 3 px above it.
+  const nameY = TIMELINE_ROW.top - 3;
   const PC = structuredClone(P);
   ['practice', 'main', 'practice', 'main', 'debrief', 'end-of-session'].forEach((ph, i) => { PC.trials[i].phase = ph; });
   const crowded = [];
   await drawSessionTimeline(PC, { outputDir: '.' }, makeRecordingCanvasFactory(crowded));
-  const above = crowded.filter(c => c[0] === 'fillText' && c[3] === 62).map(c => [c[1], c[2]]);
-  assert.deepEqual(above.map(([t]) => t), ['practice', 'main', 'main']);
-  const [last] = above.slice(-1);
-  assert.ok(last[1] + 'main'.length * 5.8 <= 970, 'the last name ends at the chart edge');
+  const above = crowded.filter(c => c[0] === 'fillText' && c[3] === nameY);
+  // The second 'practice' would run into 'main'; the last three phases begin
+  // at the chart's right edge, where no name fits right of its line.
+  assert.deepEqual(above.map(c => c[1]), ['practice', 'main']);
+  assert.ok(above.every(c => c[2] >= TIMELINE_GEOMETRY.left && c[2] + c[1].length * 5.8 <= CHART_RIGHT), 'inside the chart');
+
+  // A name longer than the chart is cut to fit, right of its line.
+  const PL = structuredClone(P);
+  PL.trials.forEach((t, i) => { t.phase = i === 0 ? 'x'.repeat(200) : 'main'; });
+  const long = [];
+  await drawSessionTimeline(PL, { outputDir: '.' }, makeRecordingCanvasFactory(long));
+  const first = long.find(c => c[0] === 'fillText' && c[3] === nameY);
+  assert.ok(first[1].endsWith('…'), 'cut with an ellipsis');
+  assert.ok(first[2] >= TIMELINE_GEOMETRY.left && first[2] + first[1].length * 5.8 <= CHART_RIGHT, `x ${first[2]}`);
 });
 
 // ── Trajectories core ────────────────────────────────────────────────────

@@ -122,8 +122,20 @@ const C = {
   trimmedHatch: '#78909c',
 };
 
-// Trials strip fills by phase, in order of first appearance.
-const PHASE_FILL = ['#bbdefb', '#ffe0b2', '#e1bee7', '#c8e6c9', '#eceff1'];
+// Trials strip fills by phase. A phase the report knows keeps the colour it
+// has everywhere else in the report (the Phases strip's bands, the
+// trajectories panels' PHASE_TINTS in trajectories-core.js), so one phase
+// has one colour. Any other phase takes the next of PHASE_FILL, in order of
+// first appearance: colours no phase band uses. A Map, so a phase called
+// `constructor` or `__proto__` is a name like any other.
+const KNOWN_PHASE_FILL = new Map([
+  ['gallery', C.phaseGallery],
+  ['post_gallery_query', C.phaseTyping],
+  ['typing', C.phaseTyping],
+  ['classification', C.phaseClass],
+  ['end_requery', C.phasePre],
+]);
+const PHASE_FILL = ['#c8e6c9', '#fff59d', '#d7ccc8', '#b2dfdb', '#f8bbd0'];
 
 // The dashed guides (drawGuideLines), the same on both images.
 const GUIDE = {
@@ -159,13 +171,15 @@ async function renderOne(p, config, createCanvas) {
 
   if (rows.phasesY !== null) drawPhaseStrip(ctx, L.phases, xScale, xDomainSec, chartW, rows.phasesY);
   // With the Phases strip right above, the Trials strip has no room over it
-  // for the phase names: they go inside it.
-  if (rows.trialsY !== null) drawTrialsStrip(ctx, L, xScale, xDomainSec, chartW, rows.trialsY, rows.phasesY !== null);
+  // for the phase names: they go inside it, drawn after the guides.
+  const stripNames = rows.trialsY !== null
+    ? drawTrialsStrip(ctx, L, xScale, xDomainSec, chartW, rows.trialsY, rows.phasesY !== null) : [];
   drawLanes(ctx, L, rows, xScale, xDomainSec, chartW);
   // Guides go on after the lanes so they sit on top of the event marks:
   // follow a line down to see which trial or phase an event fell in.
   drawGuideLines(ctx, L.guides, (sec) => LEFT_PAD + sec * xScale, xDomainSec, rows.guidesTop, rows.lanesBottom);
-  drawPhaseGuides(ctx, L.phases, xScale, xDomainSec, rows.guidesTop, rows.lanesBottom);
+  drawPhaseGuides(ctx, L.phases, xScale, xDomainSec, rows.guidesTop, rows.lanesBottom, rows.phasesY);
+  drawTrialsStripNames(ctx, stripNames, rows.trialsY);
   drawXAxis(ctx, xDomainSec, chartW, canvasH);
   drawLegendAndFooter(ctx, p, L, canvasH);
 
@@ -691,28 +705,27 @@ function phaseColor(type) {
 
 // The Trials strip: one band per trial from its start to its end, coloured by
 // the trial's phase when the experiment sets phases (the jsPsych extension's
-// `phase` parameter; "default" counts as unset), else in alternating greys so
-// neighbouring trials stay apart. A trial whose events a trimmed Qualtrics
-// payload did not keep is hatched. A trial's id is written in its band when
-// it fits; each phase's name above the strip where the phase begins, or,
-// when the Phases strip sits right above (namesInside), in the strip itself,
-// where it takes the place of the ids it would cover.
+// `phase` parameter; "default" counts as unset; KNOWN_PHASE_FILL), else in
+// alternating greys so neighbouring trials stay apart. A trial whose events
+// a trimmed Qualtrics payload did not keep is hatched. A trial's id is
+// written in its band when it fits; each phase's name above the strip where
+// the phase begins, or, when the Phases strip sits right above
+// (namesInside), in the strip itself, where it takes the place of the ids it
+// would cover. Those names are returned, not drawn: drawTrialsStripNames
+// draws them after the guides, so no line runs through one.
 // Text widths are estimated, about 5.2 px a character at 9 px and 5.8 in
 // bold, so the draw log does not depend on the canvas's fonts.
 function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
   const X = (sec) => LEFT_PAD + clamp(sec, 0, xDomain) * xScale;
-  // Text cut with an ellipsis to fit `room` px at `perChar` px a character
-  // ('' when not even one character and the ellipsis fit).
-  const fitText = (text, room, perChar) => {
-    const fit = Math.floor(room / perChar);
-    if (text.length <= fit) return text;
-    return fit >= 2 ? text.slice(0, fit - 1) + '…' : '';
-  };
   ctx.fillStyle = C.laneBg;
   ctx.fillRect(LEFT_PAD, y, chartW, PHASE_STRIP_H);
   const runs = L.guides.runs;
   const fillOf = new Map();
-  for (const run of runs) if (!fillOf.has(run.label)) fillOf.set(run.label, PHASE_FILL[fillOf.size % PHASE_FILL.length]);
+  let next = 0;
+  for (const run of runs) {
+    if (fillOf.has(run.label)) continue;
+    fillOf.set(run.label, KNOWN_PHASE_FILL.get(run.label) ?? PHASE_FILL[next++ % PHASE_FILL.length]);
+  }
   L.spans.forEach((s, i) => {
     const x0 = X(s.startSec);
     const w = Math.max(1.5, X(s.endSec) - x0 - 0.5);
@@ -721,19 +734,15 @@ function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
     if (s.truncated) hatch(ctx, x0, y + 1, w, PHASE_STRIP_H - 2);
   });
   // Phase names inside the strip: each in the room its phase has up to the
-  // next one. `taken` holds the x extent of each name written.
-  const taken = [];
+  // next one, with its x, estimated width and phase fill.
+  const names = [];
   if (namesInside && runs.length) {
     let lastEnd = 0;
     for (const s of L.spans) if (s.endSec > lastEnd) lastEnd = s.endSec;
-    ctx.font = 'bold 9px sans-serif';
-    ctx.fillStyle = C.phaseLabel;
     runs.forEach((run, k) => {
       const x0 = X(run.sec);
       const text = fitText(run.label, X(k + 1 < runs.length ? runs[k + 1].sec : lastEnd) - x0 - 6, 5.8);
-      if (!text) return;
-      ctx.fillText(text, x0 + 3, y + 15);
-      taken.push([x0, x0 + 3 + text.length * 5.8]);
+      if (text) names.push({ text, x0, w: text.length * 5.8, fill: fillOf.get(run.label) });
     });
   }
   ctx.font = '9px sans-serif';
@@ -741,7 +750,7 @@ function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
   for (const s of L.spans) {
     const x0 = X(s.startSec);
     const x1 = X(s.endSec);
-    if (x1 - x0 <= 16 || taken.some(([a, b]) => x0 < b + 3 && x1 > a)) continue;
+    if (x1 - x0 <= 16 || names.some((n) => x0 < n.x0 + 3 + n.w + 3 && x1 > n.x0)) continue;
     const text = fitText(s.id, x1 - x0 - 6, 5.2);
     if (text) ctx.fillText(text, x0 + 3, y + 15);
   }
@@ -753,20 +762,45 @@ function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
   ctx.textAlign = 'right';
   ctx.fillText(runs.length ? 'Trials · phase' : 'Trials', LEFT_PAD - 6, y + PHASE_STRIP_H / 2 + 3);
   ctx.textAlign = 'left';
-  if (namesInside) return;
-  // Phase names above the strip. A name that would run into the one before
-  // it is left out (its line and colour still mark the change); one near
-  // the right edge is moved left to end at the chart's edge.
+  if (namesInside) return names;
+  // Phase names above the strip, each right of its line: cut to the room
+  // between its line and the chart's right edge (never more than the chart),
+  // and left out when not even that fits or when it would run into the name
+  // before it (its line and colour still mark the change).
   ctx.font = 'bold 9px sans-serif';
   ctx.fillStyle = C.phaseLabel;
+  const chartRight = CANVAS_W - RIGHT_PAD;
   let right = -Infinity;
   for (const run of runs) {
-    const w = run.label.length * 5.8;
-    const x = Math.min(X(run.sec) + 2, CANVAS_W - RIGHT_PAD - w);
-    if (x < right + 6) continue;
-    ctx.fillText(run.label, x, y - 3);
-    right = x + w;
+    const x = X(run.sec) + 2;
+    const text = fitText(run.label, Math.min(chartW - 2, chartRight - x), 5.8);
+    if (!text || x < right + 6) continue;
+    ctx.fillText(text, x, y - 3);
+    right = x + text.length * 5.8;
   }
+  return names;
+}
+
+// The phase names drawTrialsStrip placed inside the strip at y, each on a
+// patch of its phase's fill: drawn after the guides, so the patch hides the
+// dashed lines under the name.
+function drawTrialsStripNames(ctx, names, y) {
+  if (!names.length) return;
+  ctx.font = 'bold 9px sans-serif';
+  for (const n of names) {
+    ctx.fillStyle = n.fill;
+    ctx.fillRect(n.x0 + 2, y + 6, n.w + 2, 12);
+    ctx.fillStyle = C.phaseLabel;
+    ctx.fillText(n.text, n.x0 + 3, y + 15);
+  }
+}
+
+// Text cut with an ellipsis to fit `room` px at `perChar` px a character
+// ('' when not even one character and the ellipsis fit).
+function fitText(text, room, perChar) {
+  const fit = Math.floor(room / perChar);
+  if (text.length <= fit) return text;
+  return fit >= 2 ? text.slice(0, fit - 1) + '…' : '';
 }
 
 // Diagonal lines over a rectangle, clipped to it: a trimmed page's band.
@@ -980,9 +1014,12 @@ export function drawGuideLines(ctx, g, X, xDomain, topY, bottomY) {
 }
 
 // Dashed vertical guides at each rule boundary (= start of each gallery phase).
-// Numbered at the top so it's easy to see which rule occupies which column.
+// Numbered so it's easy to see which rule occupies which column: inside the
+// top of the gallery band on the Phases strip when it is drawn (stripY: the
+// 6 px gap under the strip has no room for a 9 px label), else just above
+// the lines.
 // Skipped if there are < 2 galleries (e.g., trial-fields-stripped fallback).
-function drawPhaseGuides(ctx, phases, xScale, xDomain, topY, bottomY) {
+function drawPhaseGuides(ctx, phases, xScale, xDomain, topY, bottomY, stripY = null) {
   const galleries = phases.filter(p => p.type === 'gallery'
     && Number.isFinite(p.startSec)
     && p.startSec >= 0
@@ -995,7 +1032,7 @@ function drawPhaseGuides(ctx, phases, xScale, xDomain, topY, bottomY) {
   ctx.setLineDash([3, 3]);
   ctx.fillStyle = '#555';
   ctx.font = '9px sans-serif';
-  ctx.textAlign = 'center';
+  ctx.textAlign = stripY === null ? 'center' : 'left';
 
   for (let i = 0; i < galleries.length; i++) {
     const g = galleries[i];
@@ -1004,8 +1041,9 @@ function drawPhaseGuides(ctx, phases, xScale, xDomain, topY, bottomY) {
     ctx.moveTo(x, topY);
     ctx.lineTo(x, bottomY);
     ctx.stroke();
-    // Rule number label just above the lanes
-    ctx.fillText(`r${i + 1}`, x, topY - 2);
+    // Rule number label: in the gallery band, or just above the lanes
+    if (stripY === null) ctx.fillText(`r${i + 1}`, x, topY - 2);
+    else ctx.fillText(`r${i + 1}`, x + 3, stripY + 11);
   }
 
   ctx.restore();
