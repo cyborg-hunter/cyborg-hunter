@@ -42,11 +42,11 @@ const GLYPH_MIN_PX = 8;
 const isObj = (v) => v !== null && typeof v === 'object';
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 
-// x of a time on either image; a time outside the domain is drawn at its edge.
-// An empty or broken domain (or a time that is not a number) puts it at the
-// left margin rather than at NaN.
+// x of a time on either image; a time outside the domain (±Infinity
+// included) is drawn at its edge. An empty or broken domain, or a time that
+// is not a number, puts it at the left margin rather than at NaN.
 export function xOf(sec, domainSec) {
-  if (!isNum(domainSec) || domainSec <= 0 || Number.isNaN(sec)) return TIMELINE_GEOMETRY.left;
+  if (!isNum(domainSec) || domainSec <= 0 || typeof sec !== 'number' || Number.isNaN(sec)) return TIMELINE_GEOMETRY.left;
   const s = Math.max(0, Math.min(domainSec, sec));
   return TIMELINE_GEOMETRY.left + (s / domainSec) * CHART_W;
 }
@@ -143,15 +143,27 @@ export function phaseRuns(spans) {
 // The guides both images draw: a light line at every trial start and a dark
 // one where the phase changes. The first run is the session's first phase,
 // not a change: it gets its label on the Trials strip and no line.
-// A crowded session gets no trial-start lines: when the chart's width
-// divided by the number of trials (their starts' average distance on a
-// chart they fill) is under TRIAL_LINE_MIN_PX, trialStarts is empty and
-// trialLinesHidden holds the number of trials, which both images' legends
-// print ("trial lines hidden (N trials)"); otherwise it is 0. Phase lines
-// are always drawn.
-export function guides(spans) {
+// A crowded session gets no trial-start lines: when the starts' mean gap on
+// the chart (domainSec wide), the distance from the leftmost start's x to
+// the rightmost's over the N − 1 gaps between them, is under
+// TRIAL_LINE_MIN_PX, trialStarts is empty and trialLinesHidden holds the
+// number of trials, which both images' legends print ("trial lines hidden
+// (N trials)"); otherwise it is 0. The gap is measured where the trials are:
+// instructions, a gallery band or a long tail can squeeze the trials into
+// part of the chart. A single trial keeps its line; a domain that is not a
+// number puts every start at one x (xOf), so two or more lose theirs.
+// Phase lines are always drawn.
+export function guides(spans, domainSec) {
   const runs = phaseRuns(spans);
-  const crowded = spans.length > 0 && CHART_W / spans.length < TRIAL_LINE_MIN_PX;
+  // The extreme x positions by a loop: Math.min(...xs) overflows the stack
+  // on a very long session.
+  let minX = Infinity, maxX = -Infinity;
+  for (const s of spans) {
+    const x = xOf(s.startSec, domainSec);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+  }
+  const crowded = spans.length > 1 && (maxX - minX) / (spans.length - 1) < TRIAL_LINE_MIN_PX;
   return {
     trialStarts: crowded ? [] : spans.map((s) => s.startSec),
     trialLinesHidden: crowded ? spans.length : 0,
@@ -204,6 +216,8 @@ export function typingThreshold(p, config) {
 // the Text input lane still marks every copy and paste (inputMarks), and the
 // Typing dynamics section names the trials where the rhythm rule fired.
 // Without it (one 30 px bar per trial) every bar keeps its glyphs.
+// truncated: the trial's events were not kept (as trialSpans reads it), so
+// the chart drawn one bar per trial, which has no spans, can mark it too.
 export function typingBars(trials, typingAnalysis, threshold, timeAxis = null) {
   const list = Array.isArray(trials) ? trials : [];
   const byIndex = isObj(typingAnalysis) && Array.isArray(typingAnalysis.byIndex) && typingAnalysis.byIndex.length === list.length
@@ -218,6 +232,8 @@ export function typingBars(trials, typingAnalysis, threshold, timeAxis = null) {
     const judged = cps !== null && (own ? own.judged === true : true);
     const pastes = Array.isArray(t.pasteEvents) ? t.pasteEvents.length : 0;
     const copies = Array.isArray(t.copyEvents) ? t.copyEvents.length : 0;
+    // By position: trialSpans returns a span for every trial or none, so
+    // spans[index] is this trial's (an empty list leaves every glyph on).
     const span = spans ? spans[index] : null;
     const narrow = isObj(span) && barRect(span, timeAxis.domainSec).w < GLYPH_MIN_PX;
     const glyphs = [];
@@ -226,19 +242,41 @@ export function typingBars(trials, typingAnalysis, threshold, timeAxis = null) {
       if (pastes > 0) glyphs.push('P');
       if (own && own.rhythm === true) glyphs.push('R');
     }
-    return { index, kind: judged ? 'typed' : pastes > 0 ? 'paste-only' : 'none', cps: judged ? cps : null, fast: judged && cps > threshold, glyphs };
+    return { index, kind: judged ? 'typed' : pastes > 0 ? 'paste-only' : 'none', cps: judged ? cps : null, fast: judged && cps > threshold,
+      glyphs, truncated: t.integrityTruncated === true };
   });
 }
 
 // The typing chart's y-axis: from 0 to a round number above both the fastest
-// judged trial and 1.5 × the threshold, in steps of 5, 10 or 20.
+// judged trial and 1.5 × the threshold, in steps of 5, 10 or 20 up to 160.
+// Above 160 the step is the smallest 1, 2 or 5 × a power of ten that keeps
+// the axis to at most TYPING_AXIS_STEPS steps, and the top is capped at
+// TYPING_AXIS_CAP cps. The chart is 130 px tall, so more steps crowd its
+// labels (a script typing 2,000 characters a second would give 100 of 20),
+// and the drawer labels every step from 0 to max: on a rate near the
+// largest number (hostile data) that loop would never end. A rate over the
+// cap is taller than the axis.
+const TYPING_AXIS_STEPS = 8;
+const TYPING_AXIS_CAP = 1e6;
 export function typingAxis(threshold, bars) {
   let raw = isNum(threshold) ? threshold * 1.5 : 0;
   for (const b of Array.isArray(bars) ? bars : []) {
     if (isObj(b) && b.kind === 'typed' && isNum(b.cps) && b.cps > raw) raw = b.cps;
   }
-  const step = raw > 40 ? 20 : raw > 20 ? 10 : 5;
-  return { max: Math.max(step, Math.ceil(raw / step) * step), step };
+  if (raw <= 160) {
+    const step = raw > 40 ? 20 : raw > 20 ? 10 : 5;
+    return { max: Math.max(step, Math.ceil(raw / step) * step), step };
+  }
+  // raw is at most the cap here (threshold × 1.5 can overflow to Infinity),
+  // so the loop ends by a step of 2 × 10^5.
+  raw = Math.min(raw, TYPING_AXIS_CAP);
+  for (let power = 10; ; power *= 10) {
+    for (const m of [1, 2, 5]) {
+      const step = m * power;
+      const steps = Math.ceil(raw / step);
+      if (steps <= TYPING_AXIS_STEPS) return { max: steps * step, step };
+    }
+  }
 }
 
 // The session timeline's rows, top to bottom: the gallery phase strip (only
@@ -262,8 +300,10 @@ export function timelineRows({ phasesStrip = false, trialsStrip = false } = {}) 
 // truncated] (cps for a judged trial only; truncated: the page's events were
 // not kept, see trialSpans), each tab-away [startSec, endSec] and each
 // sidebar span [startSec, endSec] (one still open at the end runs to the end
-// of the domain). Seconds are rounded to 0.01: the attribute stays small, and
-// a pixel is never narrower than 0.01 s.
+// of the domain). Seconds are rounded to 0.01, which keeps the attribute
+// small. Rounding moves a time by at most 0.005 s: under a pixel on a
+// domain of 8.8 s or more (where a pixel spans 0.01 s or more), up to
+// 4.4 px on a one-second session.
 export function hoverData(layout) {
   const r = (v) => Math.round(v * 100) / 100;
   const tabAways = Array.isArray(layout.events?.tabAways) ? layout.events.tabAways : [];

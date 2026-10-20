@@ -100,7 +100,7 @@ describe('phases and guides', () => {
   });
 
   it('a guide at every trial start; a phase line at every change after the first run', () => {
-    const g = guides(spans);
+    const g = guides(spans, 5);
     assert.deepEqual(g.trialStarts, [0, 1, 2, 3, 4]);
     assert.equal(g.trialLinesHidden, 0);
     assert.deepEqual(g.phaseChanges.map((r) => r.label), ['main', NO_PHASE, 'debrief']);
@@ -110,7 +110,7 @@ describe('phases and guides', () => {
   it('no phase set anywhere ("default" included): no runs, no phase lines', () => {
     const plain = trialSpans([trial('a', 0, 1000, { phase: 'default' }), trial('b', 1000, 1000)], 0).spans;
     assert.deepEqual(phaseRuns(plain), []);
-    assert.deepEqual(guides(plain).phaseChanges, []);
+    assert.deepEqual(guides(plain, 2).phaseChanges, []);
   });
 
   it('the domain grows to the last trial end and the last mark, and never shrinks', () => {
@@ -174,6 +174,15 @@ describe('typing bars', () => {
     assert.deepEqual(typingAxis(10, [{ kind: 'none', cps: null }]), { max: 15, step: 5 });
     assert.deepEqual(typingAxis(0, []), { max: 5, step: 5 });
   });
+
+  it('above 160 cps the step grows (1, 2 or 5 × a power of ten) so the axis keeps at most 8 steps', () => {
+    assert.deepEqual(typingAxis(10, [{ kind: 'typed', cps: 161 }]), { max: 200, step: 50 });
+    assert.deepEqual(typingAxis(10, [{ kind: 'typed', cps: 500 }]), { max: 500, step: 100 });
+    assert.deepEqual(typingAxis(10, [{ kind: 'typed', cps: 2000 }]), { max: 2000, step: 500 });
+    for (const a of [typingAxis(10, [{ kind: 'typed', cps: 1e300 }]), typingAxis(Number.MAX_VALUE, [])]) {
+      assert.ok(Number.isFinite(a.max) && a.max / a.step <= 8, JSON.stringify(a));
+    }
+  });
 });
 
 describe('the session timeline\'s rows', () => {
@@ -227,11 +236,13 @@ function crowded(n, everyMs, durMs, phaseAt = () => undefined) {
   }
   return trials;
 }
+// The domain those trials give on their own: up to the last trial's end.
+const domainOf = (trials) => coverDomain(0, trialSpans(trials, 0).spans, inputMarks(trials, 0));
 
 describe('crowded sessions', () => {
   it('300 trials: no trial-start lines, and the number of trials for the legend; phase lines stay', () => {
     const trials = crowded(300, 2000, 1500, (i) => (i < 150 ? 'practice' : 'main'));
-    const g = guides(trialSpans(trials, 0).spans);
+    const g = guides(trialSpans(trials, 0).spans, domainOf(trials));
     assert.deepEqual(g.trialStarts, []);
     assert.equal(g.trialLinesHidden, 300);
     assert.deepEqual(g.phaseChanges, [{ sec: 300, label: 'main' }]);
@@ -257,20 +268,36 @@ describe('crowded sessions', () => {
   it('20 trials: a line at every trial start, and the glyphs above their bars', () => {
     const trials = crowded(20, 30000, 25000);
     const { spans } = trialSpans(trials, 0);
-    const domainSec = coverDomain(0, spans, inputMarks(trials, 0));
-    const g = guides(spans);
+    const domainSec = domainOf(trials);
+    const g = guides(spans, domainSec);
     assert.equal(g.trialStarts.length, 20);
     assert.equal(g.trialLinesHidden, 0);
     assert.ok(typingBars(trials, null, 10, { spans, domainSec }).every((b) => b.glyphs.join('') === 'CP'));
   });
 
-  it('trial-start lines need starts 6 px apart on average over the 880 px chart: 146 trials keep them, 147 do not', () => {
-    const keep = guides(trialSpans(crowded(146, 1000, 500), 0).spans);
-    assert.equal(keep.trialStarts.length, 146);
+  it('trial-start lines need starts 6 px apart on average on the chart: 147 trials keep them, 148 do not', () => {
+    // Trials 1 s apart, the domain at the last one's end (n − 0.5 s): the
+    // starts average 880 / (n − 0.5) px apart, 6.007 for 147 and 5.966 for 148.
+    const keepTrials = crowded(147, 1000, 500);
+    const keep = guides(trialSpans(keepTrials, 0).spans, domainOf(keepTrials));
+    assert.equal(keep.trialStarts.length, 147);
     assert.equal(keep.trialLinesHidden, 0);
-    const hide = guides(trialSpans(crowded(147, 1000, 500), 0).spans);
+    const hideTrials = crowded(148, 1000, 500);
+    const hide = guides(trialSpans(hideTrials, 0).spans, domainOf(hideTrials));
     assert.deepEqual(hide.trialStarts, []);
-    assert.equal(hide.trialLinesHidden, 147);
+    assert.equal(hide.trialLinesHidden, 148);
+  });
+
+  it('the spacing is measured where the trials are: 100 trials squeezed into the last tenth of the domain lose their lines', () => {
+    // 100 trials 1 s apart from 900 s on a 1000 s domain: their starts span
+    // 87 px, under 1 px apart, though 880 / 100 trials would be 8.8 px.
+    const trials = [];
+    for (let i = 0; i < 100; i++) trials.push(trial('q-' + (i + 1), 900000 + i * 1000, 500));
+    const g = guides(trialSpans(trials, 0).spans, 1000);
+    assert.deepEqual(g.trialStarts, []);
+    assert.equal(g.trialLinesHidden, 100);
+    // One trial has no spacing to measure: its line is drawn.
+    assert.deepEqual(guides(trialSpans([trial('a', 900000, 500)], 0).spans, 1000).trialStarts, [900]);
   });
 
   it('a bar 8 px wide keeps its glyphs, a narrower one has none; a trial with no span keeps them', () => {
@@ -304,9 +331,18 @@ describe('trimmed Qualtrics pages', () => {
     assert.deepEqual([...new Set(inputMarks(trials, 0).pastes.map((m) => m.index))], [4]);
   });
 
+  it('the typing bars carry the flag too, for the chart drawn one bar per trial', () => {
+    assert.deepEqual(typingBars(trials, null, 10).map((b) => b.truncated), [true, true, true, true, false]);
+    // Without start times the trials do not align, and only the bars say so.
+    const loose = trials.map(({ startTime, ...rest }) => rest);
+    assert.deepEqual(trialSpans(loose, 0).spans, []);
+    assert.deepEqual(typingBars(loose, null, 10).map((b) => b.truncated), [true, true, true, true, false]);
+  });
+
   it('only true marks a page trimmed', () => {
-    const spans = trialSpans([trial('a', 0, 1000, { integrityTruncated: 'true' }), trial('b', 1000, 1000, { integrityTruncated: 1 })], 0).spans;
-    assert.deepEqual(spans.map((s) => s.truncated), [false, false]);
+    const list = [trial('a', 0, 1000, { integrityTruncated: 'true' }), trial('b', 1000, 1000, { integrityTruncated: 1 }), null];
+    assert.deepEqual(trialSpans(list.slice(0, 2), 0).spans.map((s) => s.truncated), [false, false]);
+    assert.deepEqual(typingBars(list, null, 10).map((b) => b.truncated), [false, false, false]);
   });
 });
 
@@ -332,6 +368,15 @@ describe('hostile data', () => {
     assert.equal(xOf(5, NaN), 90);
     assert.equal(xOf(5, Infinity), 90);
     assert.equal(xOf(NaN, 100), 90);
+    assert.equal(xOf(undefined, 100), 90);
+    assert.equal(xOf('5', 100), 90);
+    assert.equal(xOf(Infinity, 100), 970);
+    assert.equal(xOf(-Infinity, 100), 90);
+  });
+
+  it('a domain that is not a number puts every trial start at one x: the lines are hidden', () => {
+    const spans = trialSpans([trial('a', 0, 1000), trial('b', 1000, 1000)], 0).spans;
+    assert.equal(guides(spans, NaN).trialLinesHidden, 2);
   });
 
   it('a timeline domain that is not a number (unreadable start and end times) is widened from 0', () => {
