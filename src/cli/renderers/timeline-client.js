@@ -114,7 +114,11 @@ export function chWireTimelineStage(stage) {
 
 // The script the report inlines (html-index-core.js wraps it in an IIFE and
 // inlineSafeSrc): the three functions, then the call on every stage. The
-// call names the function by its `.name`: the analyzer bundle may rename it.
+// analyzer does not call this in its bundle, where a function's text is
+// esbuild's reprint: it inlines this text as node gives it, baked at build
+// time (tools/build-analyze.mjs), so its report is the CLI's byte for byte.
+// The call names the function by its `.name`, so a text built from renamed
+// functions would still call the one it defines.
 export function timelineScript() {
   return [chClock, chTimelineLabel, chWireTimelineStage].map(String).join('\n') +
     '\ndocument.querySelectorAll(".tl-stage").forEach(function (stage) { ' + chWireTimelineStage.name + '(stage); });\n';

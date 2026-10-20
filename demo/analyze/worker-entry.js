@@ -55,6 +55,7 @@
 //                   no participant data (the page lists them under the files)
 import replayClientSrc from 'virtual:replay-client-src';
 import fontFaceCss from 'virtual:font-face-css';
+import timelineSrc from 'virtual:timeline-src';
 import sample from 'virtual:sample-data';
 import { REPLAY_STYLES_CSS } from '../../src/cli/renderers/replay-styles.js';
 import { ingestFiles } from '../../src/cli/ingest-core.js';
@@ -262,10 +263,10 @@ async function renderRun(state, config, secret) {
   var built = await buildReport(participants, config, {
     sink: sink, keepImages: true, assetMap: state.assetMap,
     createCanvas: typeof OffscreenCanvas === 'function' ? offscreenCreateCanvas : null, encodePng: offscreenEncodePng,
-    replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, sha256: webSha256,
+    replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, timelineSrc: timelineSrc, sha256: webSha256,
   });
   zip.end();
-  var html = await renderInPageHtml(built, participants, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, bytesToBase64: bytesToBase64 });
+  var html = await renderInPageHtml(built, participants, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, timelineSrc: timelineSrc, bytesToBase64: bytesToBase64 });
   post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts, runId: built.runId, cursorLine: built.cursorLine,
     participants: participants.map(function (p, i) {
       var has = !!(p.replay && p.replay.recording);

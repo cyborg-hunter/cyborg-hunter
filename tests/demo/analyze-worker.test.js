@@ -15,6 +15,8 @@ import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.j
 import { NODE_IMPORT } from '../cli/node-import-pattern.js';
 import { nodeDeps } from '../../src/cli/ingest.js';
 import { KEY_FILE_BANNER, assignCodes, keyFileUpdate, pseudonymCode } from '../../src/cli/pseudonymize-core.js';
+import { timelineScript } from '../../src/cli/renderers/timeline-client.js';
+import { inlineSafeSrc } from '../../src/shared/inline-safe.js';
 
 if (!globalThis.crypto) globalThis.crypto = (await import('node:crypto')).webcrypto;
 
@@ -174,6 +176,23 @@ test('run on the sample streams a zip of the full report and returns the in-page
   assert.match(done.html, /DEMO-9mop/);
   const phases = new Set(w.messages.filter((m) => m.type === 'progress').map((m) => m.phase));
   assert.ok(phases.has('ingest') && phases.has('report'), [...phases].join(','));
+});
+
+// The Session timeline blocks' script is timeline-client.js's functions as
+// their source text. In the bundle a function's toString is esbuild's
+// reprint of it, so the analyzer takes the text node gives, baked at build
+// time: its downloaded report is the CLI's byte for byte.
+test('both reports carry the timeline script as node writes it, not the bundle\'s reprint', async () => {
+  const w = startWorker();
+  w.send({ type: 'check', files: await sampleEntries(w) });
+  const checked = await w.next('checked');
+  w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  const script = inlineSafeSrc(timelineScript());
+  const files = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
+  assert.ok(strFromU8(files['index.html']).includes(script), 'the downloaded report');
+  assert.ok(done.html.includes(script), 'the in-page report');
 });
 
 // The sample added to a cohort already listed, as the page adds it: without

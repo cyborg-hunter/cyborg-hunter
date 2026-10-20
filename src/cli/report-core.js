@@ -14,6 +14,9 @@
 //   encodePng(canvas)      → Promise<Uint8Array>; required with createCanvas
 //   replayClientSrc, fontFaceCss   the assembled viewer client and the font
 //                          CSS (report.js reads both from disk)
+//   timelineSrc            the Session timeline script's text; absent ⇒
+//                          html-index-core.js takes it from timeline-client.js
+//                          (the analyzer passes the text baked at build time)
 //   assetMap               styled-replay assets, or null
 //   keepImages             true ⇒ result.images[pid][kind] holds the PNG bytes
 //                          (for renderInPageHtml)
@@ -318,7 +321,7 @@ export async function buildReport(participants, config, deps) {
 
   // HTML index page — references images/ and replay/ by path (not embedded).
   const html = await renderIndexHtml(summaries, triage, participants, config, visualsRendered,
-    { replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, runId, generatedAt });
+    { replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, timelineSrc: deps.timelineSrc, runId, generatedAt });
   sink('index.html', html);
   log('  index.html — report page');
 
@@ -332,7 +335,7 @@ export async function buildReport(participants, config, deps) {
 // pass stamps `assetPath` and rewrites unloadable artifacts on the participants.
 // The page keeps the report's annotations (annotationPostMessage): the report
 // runs in a sandboxed frame there, where storage throws.
-// deps = { replayClientSrc, fontFaceCss, bytesToBase64? }
+// deps = { replayClientSrc, fontFaceCss, timelineSrc?, bytesToBase64? }
 export async function renderInPageHtml(built, participants, config, deps) {
   const toB64 = deps.bytesToBase64 || bytesToBase64;
   const imageSources = {};
@@ -346,7 +349,7 @@ export async function renderInPageHtml(built, participants, config, deps) {
   }
   return renderIndexHtml(built.summaries, built.triage, participants, config, built.visualsRendered, {
     imageSources, replayShownExternally: true, selectionPostMessage: true, annotationPostMessage: true,
-    replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss,
+    replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, timelineSrc: deps.timelineSrc,
     runId: built.runId, generatedAt: built.generatedAt,
   });
 }
