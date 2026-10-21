@@ -176,6 +176,7 @@ describe('hygiene gate: process labels', () => {
     assert.strictEqual(gate({ 'src/a.js': 'const a = 1; // ' + W + '\n' + '9 more' }), 1);
     assert.strictEqual(gate({ 'src/a.js': '// carried by ' + W.toUpperCase() + '\n// ' + '3 below' }), 1, 'any case');
     assert.strictEqual(gate({ 'src/a.js': '// carried by ' + w + '\n// ' + '3 below' }), 1, 'any case');
+    assert.strictEqual(gate({ 'src/a.js': ' *   a model. ' + W + '\r\n *     ' + '10(b) settled that\r' }), 1, 'CRLF');
   });
 
   it('passes ordinary prose and code that wraps after the word', () => {
@@ -185,6 +186,14 @@ describe('hygiene gate: process labels', () => {
     assert.strictEqual(gate({ 'src/a.js': '// a ' + W + '\n\n// ' + '3 is unrelated' }), 0);
     assert.strictEqual(gate({ 'src/a.js': '// the Multi' + W + '\n// ' + '3 lanes' }), 0);
     assert.strictEqual(gate({ 'src/a.js': '// the last word: ' + W, 'src/b.js': '3 starts this file' }), 0);
+  });
+
+  // A data file is not prose: a table whose last column is named by the word,
+  // with rows that start with a number, passes.
+  it('passes a data file whose last header is the word', () => {
+    assert.strictEqual(gate({ 'tests/fixtures/a.csv': 'id,score,' + W + '\n3,0.5,paste' }), 0);
+    assert.strictEqual(gate({ 'tests/fixtures/a.tsv': 'id\t' + W + '\n3\tpaste' }), 0);
+    assert.strictEqual(gate({}, { 'data/a.csv': 'id,' + W + '\n3,paste' }), 0);
   });
 
   it('under GATE_SCAN_DIR a label in a built file fails', () => {

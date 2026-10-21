@@ -183,15 +183,24 @@ done
 # case, are read again with awk, which flags such a line when the next one
 # starts, after comment markers (//, *, #, <!--, --), with a digit. The word
 # and then a word on the next line is ordinary prose and passes. FNR == 1
-# resets each file.
+# resets each file; \r in the end class reads a CRLF file as an LF one. Data
+# files are skipped (split_data): a table whose last column is named "Task"
+# has rows that start with a number.
 split_end_re='(^|[^A-Za-z0-9_])[Tt][Aa][Ss][Kk][Ss]?[[:space:]]*$'
 split_label_hits() {
   awk 'FNR == 1 { prev = 0 }
        prev && /^[ \t]*(\/\/+|\*+|#+|<!--|--)?[ \t]*[0-9]/ { print FILENAME ":" (FNR - 1) ": " prevline " / " $0 }
-       { t = tolower($0); prev = (t ~ /^tasks?[ \t]*$/ || t ~ /[^a-z0-9_]tasks?[ \t]*$/); prevline = $0 }' "$@"
+       { t = tolower($0); prev = (t ~ /^tasks?[ \t\r]*$/ || t ~ /[^a-z0-9_]tasks?[ \t\r]*$/); prevline = $0 }' "$@"
 }
+split_data=('*.csv' '*.tsv' '*.json' '*.jsonl')
+split_skip_tracked=()
+split_skip_scanned=()
+for g in "${split_data[@]}"; do
+  split_skip_tracked+=(":(exclude)$g")
+  split_skip_scanned+=("--exclude=$g")
+done
 split_files=()
-while IFS= read -r -d '' f; do split_files+=("$f"); done < <(git grep -I -l -z -E "$split_end_re" -- "${label_paths[@]}" ":(exclude)$self" 2>/dev/null || true)
+while IFS= read -r -d '' f; do split_files+=("$f"); done < <(git grep -I -l -z -E "$split_end_re" -- "${label_paths[@]}" ":(exclude)$self" "${split_skip_tracked[@]}" 2>/dev/null || true)
 if [ "${#split_files[@]}" -gt 0 ] && raw=$(split_label_hits "${split_files[@]}") && [ -n "$raw" ]; then
   echo "PROCESS LABEL split across a line break:"
   printf '%s\n' "$raw" | sed 's/^/  /'
@@ -200,7 +209,7 @@ if [ "${#split_files[@]}" -gt 0 ] && raw=$(split_label_hits "${split_files[@]}")
 fi
 if [ -n "${GATE_SCAN_DIR:-}" ] && [ -d "$GATE_SCAN_DIR" ]; then
   split_files=()
-  while IFS= read -r -d '' f; do split_files+=("$f"); done < <(grep -rlIE --null "$split_end_re" "$GATE_SCAN_DIR" 2>/dev/null || true)
+  while IFS= read -r -d '' f; do split_files+=("$f"); done < <(grep -rlIE --null "${split_skip_scanned[@]}" "$split_end_re" "$GATE_SCAN_DIR" 2>/dev/null || true)
   if [ "${#split_files[@]}" -gt 0 ] && raw=$(split_label_hits "${split_files[@]}") && [ -n "$raw" ]; then
     echo "PROCESS LABEL split across a line break in \$GATE_SCAN_DIR ($GATE_SCAN_DIR):"
     printf '%s\n' "$raw" | sed 's/^/  /'
