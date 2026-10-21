@@ -68,7 +68,7 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `typingSpeedThreshold_cps` | number | `10` | Chars/sec above this counts as fast typing (used unless the participant's saved runtime `typingSpeedCps` is present) |
+| `typingSpeedThreshold_cps` | number | `10` | Chars/sec above this counts as fast typing (used unless the participant's saved runtime `typingSpeedCps` is a finite number; a saved value of any other kind is ignored) |
 | `tabAwayMinDuration_ms` | number | `3000` | **Reserved — not consumed.** The live tab-away cutoff is the *library* threshold `thresholds.tabAwayDurationMs` (saved per participant), with this CLI value never read |
 | `idleGapThreshold_ms` | number | `10000` | **Reserved — not consumed** by the current CLI |
 | `suspiciouslyFastRT_ms` | number | `2000` | **Reserved — not consumed** by the current CLI |
