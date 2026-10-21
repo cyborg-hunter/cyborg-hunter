@@ -4,7 +4,8 @@
 // papaparse + fflate) to a string; pass 2 bundles the page (main.js) with that
 // string as a virtual module, so the page creates its worker from a blob URL
 // and never loads a second file. The replay viewer client, the report fonts,
-// the Session timeline script and the bundled sessions' trackers
+// the scripts the report inlines by their source text and the bundled
+// sessions' trackers
 // (examples/demo-sessions) are baked in the same way, so the offline file
 // carries them too; the sessions' replay recordings are not: the site serves
 // them and the page fetches them on Load sample data. platform 'browser' is
@@ -68,14 +69,33 @@ function virtual(modules) {
   };
 }
 
+// The scripts the report inlines by their source text, by name, as node
+// gives them (the functions as written): in the bundle a function's toString
+// is esbuild's reprint, and the analyzer's report must be the CLI's byte for
+// byte. The worker passes this map to both reports as `inlineSrc`, and
+// renderIndexHtml takes each text from it. To add a script: one line here,
+// `name: itsScript(),`, and at its use site in renderIndexHtml
+// `inlineSafeSrc(inlineSrc.name ?? itsScript())`. The analyzer's worker test
+// checks every entry in both reports.
+export function inlineSources() {
+  const sources = {
+    timeline: timelineScript(),
+  };
+  // inlineSafeSrc cannot neutralise these (src/shared/inline-safe.js), and
+  // the bundle's own check below cannot see them: fill() writes each text
+  // with every `<` escaped.
+  for (const [name, src] of Object.entries(sources)) {
+    const hazards = inlineSrcHazards(src);
+    if (hazards.length) throw new Error('the ' + name + ' script cannot be inlined safely: it ' + hazards.join('; and it '));
+  }
+  return sources;
+}
+
 function sharedModules() {
   return {
     'virtual:replay-client-src': readReplayClientSrc(),
     'virtual:font-face-css': buildFontFaceCss(),
-    // The text node gives (the functions as written): in the bundle a
-    // function's toString is esbuild's reprint, and the analyzer's report must
-    // be the CLI's byte for byte.
-    'virtual:timeline-src': timelineScript(),
+    'virtual:inline-src': inlineSources(),
     'virtual:sample-data': sampleData(),
   };
 }

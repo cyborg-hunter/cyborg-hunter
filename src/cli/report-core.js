@@ -14,9 +14,10 @@
 //   encodePng(canvas)      → Promise<Uint8Array>; required with createCanvas
 //   replayClientSrc, fontFaceCss   the assembled viewer client and the font
 //                          CSS (report.js reads both from disk)
-//   timelineSrc            the Session timeline script's text; absent ⇒
-//                          html-index-core.js takes it from timeline-client.js
-//                          (the analyzer passes the text baked at build time)
+//   inlineSrc              the scripts the report inlines by their source
+//                          text, { name: text }; absent ⇒ html-index-core.js
+//                          takes each from its function (the analyzer passes
+//                          the texts baked at build time)
 //   assetMap               styled-replay assets, or null
 //   keepImages             true ⇒ result.images[pid][kind] holds the PNG bytes
 //                          (for renderInPageHtml)
@@ -344,7 +345,7 @@ export async function buildReport(participants, config, deps) {
 
   // HTML index page — references images/ and replay/ by path (not embedded).
   const html = await renderIndexHtml(summaries, triage, shown, config, visualsRendered,
-    { replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, timelineSrc: deps.timelineSrc, runId, generatedAt });
+    { replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, inlineSrc: deps.inlineSrc, runId, generatedAt });
   sink('index.html', html);
   log('  index.html — report page');
 
@@ -362,7 +363,7 @@ export async function buildReport(participants, config, deps) {
 // replay pass settled: `assetPath` stamped, an unloadable artifact rewritten.
 // The page keeps the report's annotations (annotationPostMessage): the report
 // runs in a sandboxed frame there, where storage throws.
-// deps = { replayClientSrc, fontFaceCss, timelineSrc?, bytesToBase64? }
+// deps = { replayClientSrc, fontFaceCss, inlineSrc?, bytesToBase64? }
 export async function renderInPageHtml(built, config, deps) {
   const participants = built.participants;
   const toB64 = deps.bytesToBase64 || bytesToBase64;
@@ -377,7 +378,7 @@ export async function renderInPageHtml(built, config, deps) {
   }
   return renderIndexHtml(built.summaries, built.triage, participants, config, built.visualsRendered, {
     imageSources, replayShownExternally: true, selectionPostMessage: true, annotationPostMessage: true,
-    replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, timelineSrc: deps.timelineSrc,
+    replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, inlineSrc: deps.inlineSrc,
     runId: built.runId, generatedAt: built.generatedAt,
   });
 }

@@ -9,13 +9,12 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { File } from 'node:buffer';
 import { createRequire } from 'node:module';
 import { unzipSync, strFromU8 } from 'fflate';
-import { buildWorkerSrc } from '../../tools/build-analyze.mjs';
+import { buildWorkerSrc, inlineSources } from '../../tools/build-analyze.mjs';
 import { REPORT_FILES } from '../../src/cli/report-core.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
 import { NODE_IMPORT } from '../cli/node-import-pattern.js';
 import { nodeDeps } from '../../src/cli/ingest.js';
 import { KEY_FILE_BANNER, assignCodes, keyFileUpdate, pseudonymCode } from '../../src/cli/pseudonymize-core.js';
-import { timelineScript } from '../../src/cli/renderers/timeline-client.js';
 import { inlineSafeSrc } from '../../src/shared/inline-safe.js';
 import { keyRecording, botGaps, humanGaps } from '../cli/typing-fixtures.js';
 import { makeRecordingCanvasFactory } from '../cli/recording-canvas.js';
@@ -180,21 +179,27 @@ test('run on the sample streams a zip of the full report and returns the in-page
   assert.ok(phases.has('ingest') && phases.has('report'), [...phases].join(','));
 });
 
-// The Session timeline blocks' script is timeline-client.js's functions as
-// their source text. In the bundle a function's toString is esbuild's
-// reprint of it, so the analyzer takes the text node gives, baked at build
-// time: its downloaded report is the CLI's byte for byte.
-test('both reports carry the timeline script as node writes it, not the bundle\'s reprint', async () => {
+// The scripts the report inlines by their source text (the Session timeline
+// blocks' script among them). In the bundle a function's toString is
+// esbuild's reprint of it, so the analyzer takes the texts node gives, baked
+// at build time (inlineSources): its downloaded report is the CLI's byte for
+// byte. Every entry of the map, in both reports.
+test('both reports carry every script inlined by its source text as node writes it, not the bundle\'s reprint', async () => {
+  const sources = inlineSources();
+  assert.ok('timeline' in sources, 'the map holds the timeline script');
   const w = startWorker();
   w.send({ type: 'check', files: await sampleEntries(w) });
   const checked = await w.next('checked');
   w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
   const done = await w.next('done', 'error');
   assert.equal(done.type, 'done', done.message);
-  const script = inlineSafeSrc(timelineScript());
   const files = unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)));
-  assert.ok(strFromU8(files['index.html']).includes(script), 'the downloaded report');
-  assert.ok(done.html.includes(script), 'the in-page report');
+  const downloaded = strFromU8(files['index.html']);
+  for (const [name, src] of Object.entries(sources)) {
+    const script = inlineSafeSrc(src);
+    assert.ok(downloaded.includes(script), name + ': the downloaded report');
+    assert.ok(done.html.includes(script), name + ': the in-page report');
+  }
 });
 
 // The sample added to a cohort already listed, as the page adds it: without

@@ -52,11 +52,14 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // was hand-rolled in nine places and missing from exactly this one, which is
   // why the rule now lives in one module.
   const replayClientSrc = inlineSafeSrc(opts.replayClientSrc);
-  // The Session timeline blocks' script (timeline-client.js), as source text.
-  // The analyzer passes the text node gave at build time (tools/build-analyze.mjs):
+  // The scripts inlined by their source text, by name. The analyzer passes
+  // the texts node gave at build time (tools/build-analyze.mjs inlineSources):
   // in its bundle a function's toString is esbuild's reprint, and its report
-  // must be the CLI's byte for byte. Absent ⇒ taken here, as in the CLI.
-  const timelineSrc = inlineSafeSrc(opts.timelineSrc ?? timelineScript());
+  // must be the CLI's byte for byte. Absent ⇒ each is taken here from its
+  // function, as in the CLI.
+  const inlineSrc = opts.inlineSrc ?? {};
+  // The Session timeline blocks' script (timeline-client.js).
+  const timelineSrc = inlineSafeSrc(inlineSrc.timeline ?? timelineScript());
   // @font-face rules for the report's typefaces, as base64 data URIs
   // (report-fonts.js builds them for the CLI, and tools/build-analyze.mjs
   // bakes the same rules into the analyze bundle). Absent → no faces, and

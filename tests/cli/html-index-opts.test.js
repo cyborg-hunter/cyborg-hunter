@@ -13,6 +13,7 @@ import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
 import { rankTriage } from '../../src/cli/analyzers/triage.js';
 import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
+import { timelineScript } from '../../src/cli/renderers/timeline-client.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));
@@ -56,6 +57,21 @@ test('an inlineReplayModels opt embeds nothing: the page is the default one', as
   assert.ok(!html.includes('data-replay-preloaded'));
   assert.ok(!html.includes('const preloaded'));
   assert.strictEqual(html, await renderIndexHtml(summaries, triage, [p], config, false, {}));
+});
+
+// The analyzer passes the texts of the scripts the report inlines by their
+// source text, as node gave them at build time (tools/build-analyze.mjs
+// inlineSources): in its bundle a function's toString is esbuild's reprint.
+// The page carries the text it is given, through inlineSafeSrc; node's own
+// text given that way is the CLI's page byte for byte.
+test('inlineSrc puts the text it carries where the report inlines that script', async () => {
+  const html = await renderIndexHtml(summaries, triage, [p], config, false, {
+    inlineSrc: { timeline: 'var given = "</script>";' },
+  });
+  assert.ok(html.includes('var given = "<\\/script>";'), 'the given text, made safe to inline');
+  assert.ok(!html.includes(timelineScript()), 'not the function\'s own text');
+  const plain = await renderIndexHtml(summaries, triage, [p], config, false, {});
+  assert.strictEqual(await renderIndexHtml(summaries, triage, [p], config, false, { inlineSrc: { timeline: timelineScript() } }), plain);
 });
 
 test('a triage row with no participant object renders without a replay section', async () => {
