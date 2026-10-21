@@ -314,8 +314,11 @@ export async function buildReport(participants, config, deps) {
   //   - replay.assetPath, for a replay it wrote;
   //   - through the model, which aliases the recording, the rewrites of
   //     asset-match.js's applyAssetMap: a matched stylesheet's text, a
-  //     stylesheet update's text, and image references in the page (src,
-  //     srcset).
+  //     stylesheet update's text, and the matched image references in the
+  //     page's elements (refKind): <img> src and srcset, <input type=image>
+  //     src, SVG <image> href and xlink:href, <video> poster, and <source>
+  //     srcset or (in <picture>, or an image file outside <video>/<audio>)
+  //     src. Media sources are never rewritten.
   // Each is written once: a later pass writes the same bytes and nothing
   // more (tests/cli/analyze-report-core.test.js).
   const shown = participants.map((p) => ({ ...p }));

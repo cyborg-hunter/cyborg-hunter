@@ -579,7 +579,8 @@ test('a pseudonymized run, then a re-analysis under another key: the asset note 
 
 // A settings change that reads the files again (another id or integrity
 // field) leaves the last report on screen until the new one is done, and the
-// page's replay card can still load a replay from it meanwhile.
+// page's replay card can still load a replay from it meanwhile, styled as
+// that report's zip styled it (with its images: model.assets).
 test('a run that reads the files again still serves the replays of the report on screen until it is done', async () => {
   const files = styledCohort();
   const w = startWorker();
@@ -587,12 +588,20 @@ test('a run that reads the files again still serves the replays of the report on
   const checked = await w.next('checked', 'error');
   const first = await render(w, 'run', files, checked.config);
   assert.deepEqual(first.done.participants.map((p) => [p.participantId, p.hasReplay]), [['DEMO-FIXT', true]]);
+  const script = strFromU8(first.zip['replay/DEMO-FIXT.replay.js']);
+  const fromZip = JSON.parse(script.slice(script.indexOf('] = ') + 4).replace(/;\s*$/, ''));
+  assert.match(fromZip.assets['https://exp.example.org/study/img/stim.png'], /^data:image\/png;base64,/);
+  const serve = async () => {
+    w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
+    const served = await w.next('replay-model', 'error');
+    assert.equal(served.type, 'replay-model', served.message);
+    assert.equal(served.participantId, 'DEMO-FIXT');
+    assert.deepEqual(served.model, fromZip);
+  };
+  await serve();
   w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
   await w.next('zip');
-  w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
-  const served = await w.next('replay-model', 'error');
-  assert.equal(served.type, 'replay-model', served.message);
-  assert.equal(served.participantId, 'DEMO-FIXT');
+  await serve();
   assert.equal((await w.next('done', 'error')).type, 'done');
 });
 
