@@ -50,8 +50,8 @@ async function xAt(stage, sec) {
   const box = await stage.boundingBox();
   return box.x + ((data.left + (sec / data.domain) * data.chart) / data.w) * box.width;
 }
-async function open(page) {
-  await page.setViewportSize({ width: 1200, height: 900 });
+async function open(page, width = 1200) {
+  await page.setViewportSize({ width, height: 900 });
   await page.goto(pathToFileURL(join(dir, 'index.html')).href);
   const stage = page.locator('#p-DEMO-FIXT .tl-stage');
   await expect(stage.locator('img')).toHaveCount(2);
@@ -93,6 +93,13 @@ test('the hover label names the trial under the pointer, in the header row above
   await page.mouse.move(box.x + 5, box.y + 40);
   await expect(readout).toHaveText('');
   await expect(stage.locator('.tl-line')).toBeHidden();
+});
+
+// The block is not held to the pane's 800 px reading column: the charts
+// are drawn 1000 px wide, and at 1400 px the pane has room for that.
+test('in a 1400 px window the stage shows the charts at their own 1000 px', async ({ page }) => {
+  const stage = await open(page, 1400);
+  expect((await stage.boundingBox()).width).toBe(1000);
 });
 
 test('a click pins a dashed line and a second click on it removes it', async ({ page }) => {

@@ -311,11 +311,12 @@ ${fontFaceCss}    :root {
       border: 1px solid var(--line); font-weight: 400; padding: 1px 5px;
     }
 
-    /* Detail pane base. The replay viewer is the exception to the 800px
+    /* Detail pane base. The replay viewer is an exception to the 800px
        reading column: it scales the recording to the room it has, and a
        recorded desktop page is wider than the column. The replay section's
-       own heading and notes keep the column. */
-    .detail .participant > :not(.replay-block),
+       own heading and notes keep the column. The Session timeline block is
+       the other: it grows to its charts' own width (.tl-block below). */
+    .detail .participant > :not(.replay-block):not(.tl-block),
     .detail .replay-block > :not(.replay-mount) { max-width: 800px; }
 
     /* Empty-state hint when filter+search combine to hide every row.
@@ -572,11 +573,17 @@ ${fontFaceCss}    :root {
        stage's width with no border of their own (an outline frames the
        stage), so a fraction of the stage's width is that fraction of each
        image; the script maps it to a time.
+       The block is not held to the 800px reading column: it takes up to
+       1000px, the width both charts are drawn at, so a wide enough pane
+       shows them at their own size (at 800px their 9px labels read as 7px);
+       a narrower pane scales them to fit. The header row keeps the block's
+       width, so "enlarge" stays over the stage's right edge.
        The header row holds the heading, the script's readout (what is under
        the pointer) and "enlarge". The readout takes the room between the
        other two and is cut on one line with an ellipsis: the heading and the
        button never shrink, so it cannot push "enlarge" out or wrap the row,
        and it never covers a chart. */
+    .tl-block { max-width: 1000px; }
     .tl-head { display: flex; align-items: baseline; gap: 12px; }
     .tl-head .section-heading { flex: none; }
     .tl-readout {
