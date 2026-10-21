@@ -306,6 +306,41 @@ test('session timeline: with both strips, phase names sit inside the Trials stri
   assert.ok(rules.every(c => c[3] > BOTH.phasesY && c[3] < BOTH.phasesY + TIMELINE_ROW.strip), 'inside the Phases strip');
 });
 
+// The gallery bands take their width from the gallery's durations
+// (galleryStudyMs). Without them each band has no width and there is no
+// Phases strip, while the trials still set phases: their names go above the
+// Trials strip, on the line a rule number written there would take. A rule
+// number is written only inside a gallery band that holds it, as a phase
+// name is, so a band of no width has its line and no number.
+test('session timeline: gallery bands of no width get no rule number, so none crosses a phase name', async () => {
+  const G = gallerySession();
+  delete G.galleryStudyMs;
+  const log = [];
+  await drawSessionTimeline(G, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const texts = log.filter(c => c[0] === 'fillText');
+  assert.ok(!texts.some(c => c[1] === 'Phases'), 'no Phases strip');
+  const nameY = timelineRows({ trialsStrip: true }).trialsY - 3;
+  const names = phaseNamesAt(log, nameY);
+  assert.deepEqual(names.map(n => n[0]), ['gallery', 'classification', 'gallery', 'classification'], 'the names above the strip');
+  // Each text's box: 7 px of ink over its baseline; a rule number (9 px,
+  // 5.2 px a character) centred on its x, a name (bold, 5.8) from its x.
+  const rules = texts.filter(c => /^r\d+$/.test(c[1]))
+    .map(c => ({ text: c[1], left: c[2] - c[1].length * 2.6, right: c[2] + c[1].length * 2.6, top: c[3] - 7, bottom: c[3] }));
+  const nameBoxes = names.map(([text, x]) => ({ text, left: x, right: x + text.length * 5.8, top: nameY - 7, bottom: nameY }));
+  const crossing = rules.flatMap(r => nameBoxes.filter(n => boxesMeet(r, n)).map(n => `${r.text} over ${n.text} at x ${r.left.toFixed(1)}–${r.right.toFixed(1)}`));
+  assert.deepEqual(crossing, [], 'no rule number crosses a phase name');
+  assert.deepEqual(rules.map(r => r.text), [], 'no rule number on a band of no width');
+
+  // With the Phases strip: a one-second gallery band (about 3 px) is too
+  // narrow for its number, the minute-long one holds it.
+  const N = gallerySession();
+  N.galleryStudyMs = [60000, 1000];
+  const narrow = [];
+  await drawSessionTimeline(N, { outputDir: '.' }, makeRecordingCanvasFactory(narrow));
+  assert.ok(narrow.some(c => c[0] === 'fillText' && c[1] === 'Phases'), 'the Phases strip');
+  assert.deepEqual(narrow.filter(c => c[0] === 'fillText' && /^r\d+$/.test(c[1])).map(c => c[1]), ['r1'], 'only the band that holds its number');
+});
+
 test('session timeline: phase names above the Trials strip never run into each other or past the chart', async () => {
   // Without the Phases strip the Trials strip is the first row; names sit
   // 3 px above it.

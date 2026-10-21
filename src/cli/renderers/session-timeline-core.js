@@ -1161,9 +1161,12 @@ export function drawGuideLines(ctx, g, X, xDomain, topY, bottomY) {
 
 // Dashed vertical guides at each rule boundary (= start of each gallery phase).
 // Numbered so it's easy to see which rule occupies which column: inside the
-// top of the gallery band on the Phases strip when it is drawn (stripY: the
-// 6 px gap under the strip has no room for a 9 px label), else just above
-// the lines.
+// top of the gallery band on the Phases strip (stripY: the 6 px gap under
+// the strip has no room for a 9 px label), only when the band holds the
+// number 3 px clear of its line and its end (about 5.2 px a character at
+// 9 px), as a phase name is left out of a band too narrow for it. A band of
+// no width (no gallery durations, hence no Phases strip) has its line only:
+// a number above the lines would cross the phase names over the Trials strip.
 // Skipped if there are < 2 galleries (e.g., trial-fields-stripped fallback).
 function drawPhaseGuides(ctx, phases, xScale, xDomain, topY, bottomY, stripY = null) {
   const galleries = phases.filter(p => p.type === 'gallery'
@@ -1178,7 +1181,7 @@ function drawPhaseGuides(ctx, phases, xScale, xDomain, topY, bottomY, stripY = n
   ctx.setLineDash([3, 3]);
   ctx.fillStyle = '#555';
   ctx.font = '9px sans-serif';
-  ctx.textAlign = stripY === null ? 'center' : 'left';
+  ctx.textAlign = 'left';
 
   for (let i = 0; i < galleries.length; i++) {
     const g = galleries[i];
@@ -1187,9 +1190,9 @@ function drawPhaseGuides(ctx, phases, xScale, xDomain, topY, bottomY, stripY = n
     ctx.moveTo(x, topY);
     ctx.lineTo(x, bottomY);
     ctx.stroke();
-    // Rule number label: in the gallery band, or just above the lanes
-    if (stripY === null) ctx.fillText(`r${i + 1}`, x, topY - 2);
-    else ctx.fillText(`r${i + 1}`, x + 3, stripY + 11);
+    const label = `r${i + 1}`;
+    const bandW = (Math.min(xDomain, g.endSec) - g.startSec) * xScale;
+    if (stripY !== null && label.length * 5.2 + 6 <= bandW) ctx.fillText(label, x + 3, stripY + 11);
   }
 
   ctx.restore();
