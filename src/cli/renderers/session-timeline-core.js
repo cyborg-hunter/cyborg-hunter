@@ -1087,18 +1087,33 @@ function drawInputMark(ctx, m) {
 // drawn after the guides, as the phase names in the Trials strip are: a
 // guide that crosses a count stops at its patch. Every patch is drawn
 // before any count, so no patch covers a count's digits; a mark a patch
-// covers (a count kept inside the lane at its end, or a merged one, can
-// reach one) is drawn again before the counts: a mark is evidence, and
-// stays visible.
+// covers (a count that sits at its ticks among marks, or a merged one) is
+// drawn again before the counts: a mark is evidence, and stays visible. A
+// count over such a mark has a 3 px outline of the lane's colour under its
+// text, as the typing chart's letters inside a bar do, so its number reads
+// over the mark.
 function drawInsertionCounts(ctx, lane) {
   if (!lane.counts.length) return;
   const meets = (a, p) => a.left < p.x + p.w && p.x < a.right && a.top < p.y + p.h && p.y < a.bottom;
   ctx.fillStyle = C.laneBg;
   for (const c of lane.counts) ctx.fillRect(c.patch.x, c.patch.y, c.patch.w, c.patch.h);
-  for (const m of lane.marks) if (lane.counts.some((c) => meets(m.box, c.patch))) drawInputMark(ctx, m);
-  ctx.fillStyle = C.synthetic;
+  const over = new Set();
+  for (const m of lane.marks) {
+    const hit = lane.counts.filter((c) => meets(m.box, c.patch));
+    if (!hit.length) continue;
+    drawInputMark(ctx, m);
+    for (const c of hit) over.add(c);
+  }
   ctx.font = 'bold 9px sans-serif';
-  for (const c of lane.counts) ctx.fillText(c.text, c.x, c.y);
+  for (const c of lane.counts) {
+    if (over.has(c)) {
+      ctx.strokeStyle = C.laneBg;
+      ctx.lineWidth = 3;
+      ctx.strokeText(c.text, c.x, c.y);
+    }
+    ctx.fillStyle = C.synthetic;
+    ctx.fillText(c.text, c.x, c.y);
+  }
 }
 
 // A filled triangle centred on (x, y), pointing up or down.

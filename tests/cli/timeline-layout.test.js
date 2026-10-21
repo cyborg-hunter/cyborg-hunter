@@ -266,6 +266,45 @@ describe('insertion counts in the Text input lane', () => {
     assert.deepEqual(spread.map((c) => c.text), ['×6', '×4']);
   });
 
+  it('a count slides at most its patch\'s width to clear marks, else sits at its ticks in the row with fewer marks', () => {
+    const copy = (cx) => ({ left: cx - 5, right: cx + 5, top: 106.5, bottom: 115 });
+    const paste = (cx) => ({ left: cx - 5, right: cx + 5, top: 117, bottom: 125.5 });
+    // Twenty copies 9 px apart after the burst: no clear spot within 13.6 px.
+    const run = Array.from({ length: 20 }, (_, i) => copy(306 + 9 * i));
+    const [sits] = countLabelPlaces([{ count: 5, x: 300 }], run, LANE);
+    assert.equal(sits.x, 303, 'at its ticks');
+    // A copy and a paste under it: row 0 has one mark, row 1 two.
+    const [row0] = countLabelPlaces([{ count: 5, x: 300 }], [...run, ...Array.from({ length: 20 }, (_, i) => paste(306 + 9 * i))], LANE);
+    assert.deepEqual([row0.x, row0.y], [303, 112]);
+    // A copy reaches both rows and a paste only the second, so with the
+    // lane's marks the first row never has more. With boxes in each row
+    // alone, no clear spot in either, and three under the count's place in
+    // the first row against two in the second, it sits in the second.
+    const high = Array.from({ length: 16 }, (_, i) => ({ left: 281 + 5 * i, right: 285 + 5 * i, top: 104, bottom: 111 }));
+    const low = Array.from({ length: 9 }, (_, i) => ({ left: 283 + 10 * i, right: 292 + 10 * i, top: 117, bottom: 121 }));
+    const [row1] = countLabelPlaces([{ count: 5, x: 300 }], [...high, ...low], LANE);
+    assert.deepEqual([row1.x, row1.y], [303, 122]);
+    // One copy right after the burst: cleared within the limit, to its right.
+    const [clears] = countLabelPlaces([{ count: 3, x: 297 }], [copy(305)], LANE);
+    assert.equal(clears.x, 312);
+    // A run of copies to the right, room to the left: the left side, within
+    // the limit (13.6 px for ×3).
+    const [left] = countLabelPlaces([{ count: 3, x: 300 }], [copy(308), copy(318), copy(328), copy(278)], LANE);
+    assert.equal(left.x, 289.4);
+  });
+
+  it('countLabelPlaces stays fast with many marks at one x', () => {
+    // 20,000 bursts at one x, each with a paste there.
+    const n = 20000;
+    const marks = Array.from({ length: n }, () => ({ left: 495, right: 505, top: 117, bottom: 125.5 }));
+    const bursts = Array.from({ length: n }, () => ({ count: 1, x: 500 }));
+    const started = performance.now();
+    const places = countLabelPlaces(bursts, marks, LANE);
+    const ms = performance.now() - started;
+    assert.ok(ms < 1000, `${ms.toFixed(0)} ms`);
+    assert.equal(places.reduce((t, c) => t + Number(c.text.slice(1)), 0), n);
+  });
+
   it('no count meets another, every insertion is counted once, and every count stays inside the lane', () => {
     // Pseudo-random bursts and marks, the same on every run.
     let seed = 7;
@@ -277,6 +316,16 @@ describe('insertion counts in the Text input lane', () => {
         return rand() < 0.5 ? { left: cx - 5, right: cx + 5, top: 106.5, bottom: 115 } : { left: cx - 5, right: cx + 5, top: 117, bottom: 125.5 };
       });
       const places = countLabelPlaces(bursts, marks, LANE);
+      // Bursts 60 px apart never meet: each keeps its own count, within its
+      // patch's width of its ticks (or of the lane's end).
+      const apart = Array.from({ length: 14 }, (_, k) => ({ count: 1 + Math.floor(rand() * 200), x: 100 + 60 * k + rand() * 10 }));
+      const own = countLabelPlaces(apart, marks, LANE);
+      assert.equal(own.length, apart.length, `run ${run}: a count for each burst`);
+      own.forEach((c, k) => {
+        const w = c.text.length * COUNT_LABEL.charW;
+        const home = Math.min(apart[k].x + 3, LANE.right - w - 1);
+        assert.ok(Math.abs(c.x - home) <= w + 2, `run ${run}: ${c.text} at ${c.x}, its ticks at ${apart[k].x}`);
+      });
       const total = places.reduce((n, c) => n + Number(c.text.slice(1)), 0);
       assert.equal(total, bursts.reduce((n, b) => n + b.count, 0), `run ${run}: every insertion counted once`);
       for (let i = 0; i < places.length; i++) {

@@ -296,50 +296,58 @@ export const COUNT_LABEL = Object.freeze({ charW: 5.8, rowH: 10, top: 3, edge: 2
 // drawn under it. bursts are [{ count, x }] (x: the burst's last tick); marks
 // the copy, paste and drop boxes ({ left, right, top, bottom }); lane its
 // { left, right, top, height }.
-// A count goes 3 px right of its last tick, in the first row, pushed right
-// past any mark it would cover in that row and kept inside the lane; when
-// keeping it inside the lane puts it back on a mark (at the session's end),
-// it goes left of the marks it meets instead. One that would cover an
-// earlier count goes to the next row (the row that moves it least; the
-// first on a tie). One that covers a count in every row
-// merges with the counts it covers into one count of their total, at the
-// first of them, which then holds its width in every row: a later burst
-// that reaches it joins it, so a crowd of bursts reads as one total.
+// A count's place is 3 px right of its last tick (kept inside the lane). It
+// slides at most its patch's width from there to clear the marks: right, in
+// either row, the row that moves it least (the first on a tie); else left
+// the same way. With no clear spot that near, it sits at its place, in the
+// row with the fewest marks under it (the drawing puts those marks back over
+// its patch, under its text): a count never strays from its ticks. A row
+// another count covers is not taken. A count covered in every row merges
+// with the counts it meets into one count of their total, at the first of
+// them, which then holds its width in every row: a later burst that reaches
+// it joins it, so a crowd of bursts reads as one total.
 // Another burst's ticks may run under a count's patch (their part outside
 // it stays visible): a count stays beside its own ticks.
+// Each row's marks are kept apart and sorted, so a look-up is a bisection
+// and the marks of the other row are never walked.
+const MARKS_UNDER_CAP = 8;
 export function countLabelPlaces(bursts, marks, lane) {
   const { charW, rowH, top, edge } = COUNT_LABEL;
   const rows = Math.max(1, Math.floor((lane.height - top - edge) / rowH));
   const rowTop = (r) => lane.top + top + r * rowH;
   const widthOf = (count) => ('×' + count).length * charW;
   const inside = (x, w) => Math.max(lane.left + 1, Math.min(x, lane.right - w - 1));
-  // The marks by left edge, so a label meets them in order; maxW bounds how
-  // far left of the label a mark can start and still reach it.
-  const sorted = marks.slice().sort((a, b) => a.left - b.left);
-  const maxW = sorted.reduce((m, b) => Math.max(m, b.right - b.left), 0);
-  // The leftmost mark in row r that a count w wide at x would cover (its
-  // patch reaches 1 px either side of the text), or null: a bisection to
-  // the first mark that can reach that far, then the marks in order.
-  const meets = (x, w, r) => {
+  // Each row's marks (those reaching into its band) by left edge; maxW
+  // bounds how far left of a count a mark can start and still reach it.
+  const byRow = [];
+  for (let r = 0; r < rows; r++) {
+    byRow.push(marks.filter((m) => m.bottom > rowTop(r) && m.top < rowTop(r) + rowH).sort((a, b) => a.left - b.left));
+  }
+  const maxW = marks.reduce((m, b) => Math.max(m, b.right - b.left), 0);
+  // The marks in row r under a count w wide at x (its patch reaches 1 px
+  // either side of the text), leftmost first, at most `cap` of them.
+  const under = (x, w, r, cap) => {
+    const list = byRow[r];
     let lo = 0;
-    let hi = sorted.length;
+    let hi = list.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (sorted[mid].left <= x - 1 - maxW) lo = mid + 1;
+      if (list[mid].left <= x - 1 - maxW) lo = mid + 1;
       else hi = mid;
     }
-    for (let i = lo; i < sorted.length && sorted[i].left < x + w + 1; i++) {
-      const m = sorted[i];
-      if (m.right > x - 1 && m.bottom > rowTop(r) && m.top < rowTop(r) + rowH) return m;
-    }
-    return null;
+    const out = [];
+    for (let i = lo; i < list.length && list[i].left < x + w + 1 && out.length < cap; i++) if (list[i].right > x - 1) out.push(list[i]);
+    return out;
   };
-  // A count's x in row r: right past the marks, kept inside the lane, and
-  // when that puts it on a mark, left of the marks (as far as the lane goes).
-  const fit = (x, w, r) => {
-    for (let m = meets(x, w, r); m; m = meets(x, w, r)) x = m.right + 2;
-    x = inside(x, w);
-    for (let m = meets(x, w, r); m && m.left - 2 - w >= lane.left + 1; m = meets(x, w, r)) x = m.left - 2 - w;
+  // A clear spot in row r for a count w wide, sliding right (dir 1) or left
+  // (dir −1) from `place` past the marks, no farther than `limit` and inside
+  // the lane; null when there is none.
+  const slide = (place, w, r, dir, limit) => {
+    let x = place;
+    for (let m = under(x, w, r, 1)[0]; m; m = under(x, w, r, 1)[0]) {
+      x = dir > 0 ? m.right + 2 : m.left - 2 - w;
+      if (Math.abs(x - place) > limit + 1e-9 || x !== inside(x, w)) return null;
+    }
     return x;
   };
   // Whether a placed count covers a count w wide at x in row r.
@@ -347,18 +355,28 @@ export function countLabelPlaces(bursts, marks, lane) {
   const placed = [];
   for (const b of bursts.slice().sort((p, q) => p.x - q.x)) {
     const w = widthOf(b.count);
-    const at = [];
+    const place = inside(b.x + 3, w);
+    const free = (x, r) => !placed.some((a) => covers(a, x, w, r));
     let best = null;
-    for (let r = 0; r < rows; r++) {
-      at[r] = fit(b.x + 3, w, r);
-      const moved = Math.abs(at[r] - (b.x + 3));
-      if (!placed.some((a) => covers(a, at[r], w, r)) && (best === null || moved < best.moved)) best = { x: at[r], row: r, moved };
+    for (const dir of [1, -1]) {
+      for (let r = 0; r < rows; r++) {
+        const x = slide(place, w, r, dir, w + 2);
+        if (x !== null && free(x, r) && (best === null || Math.abs(x - place) < best.moved)) best = { x, row: r, moved: Math.abs(x - place) };
+      }
+      if (best) break;
+    }
+    if (!best) {
+      for (let r = 0; r < rows; r++) {
+        if (!free(place, r)) continue;
+        const n = under(place, w, r, MARKS_UNDER_CAP).length;
+        if (best === null || n < best.n) best = { x: place, row: r, n };
+      }
     }
     if (best) {
       placed.push({ count: b.count, x: best.x, w, row: best.row, merged: false });
       continue;
     }
-    const hit = placed.filter((a) => at.some((x, r) => covers(a, x, w, r)));
+    const hit = placed.filter((a) => { for (let r = 0; r < rows; r++) if (covers(a, place, w, r)) return true; return false; });
     const first = hit.reduce((f, a) => (a.x < f.x ? a : f));
     first.count = hit.reduce((n, a) => n + a.count, b.count);
     first.merged = true;

@@ -552,6 +552,46 @@ test('session timeline: insertion bursts too crowded for the rows merge into one
   assert.deepEqual(counts.map((c) => c.text), ['×15'], 'one count, the five bursts\' total');
 });
 
+test('session timeline: with a copy in every trial, each count stays within a patch\'s width of its own ticks', async () => {
+  // 40 one-minute trials with a copy 5 s into each (a ▼ every 22 px, 12 px
+  // apart: too close for a count to clear), and bursts of 5 and 3 insertions
+  // in trials 20 and 22.
+  const trials = [];
+  for (let k = 0; k < 40; k++) {
+    const start = 1000 + k * 60000;
+    const t = { trialId: 't' + k, startTime: start, duration_ms: 59000, copyEvents: [{ type: 'copy', t: start + 5000 }] };
+    if (k === 20) t.syntheticInsertions = [0, 1, 2, 3, 4].map((i) => ({ t: start + 30000 + i * 100 }));
+    if (k === 22) t.syntheticInsertions = [0, 1, 2].map((i) => ({ t: start + 30000 + i * 100 }));
+    trials.push(t);
+  }
+  const p = { participantId: 'COPYRUN', session: {}, metadata: {}, trials };
+  const L = sessionLayout(p, { outputDir: '.' });
+  const log = [];
+  await drawSessionTimeline(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const counts = countsIn(log);
+  assert.deepEqual(counts.map((c) => c.text), ['×5', '×3'], 'both counts, whole and apart');
+  L.marks.synthetic.forEach((g, k) => {
+    const c = counts[k];
+    const tick = xOf(g.secs[g.secs.length - 1], L.domainSec);
+    const limit = c.text.length * 5.8 + 2;
+    assert.ok(Math.abs(c.x - (tick + 3)) <= limit, `${c.text} at ${c.x}, its last tick at ${tick.toFixed(1)}`);
+  });
+  assert.ok(!boxesMeet(countBox(counts[0]), countBox(counts[1])), 'the counts apart');
+  // Sitting over a ▼, a count's text is drawn after the ▼ drawn again over
+  // its patch, outlined in the lane's colour, so the number stays whole on top.
+  for (const c of counts) {
+    const under = markBoxes(L, TEXT_INPUT_Y).filter((m) => boxesMeet(countBox(c), m));
+    assert.ok(under.length > 0, `${c.text} sits over a ▼`);
+    for (const m of under) {
+      const cx = Math.round((m.left + 5) * 100) / 100;
+      const redrawn = log.findIndex((d, i) => i > Math.min(...countPatchesIn(log).map((q) => q.i)) && d[0] === 'moveTo' && d[1] === cx);
+      assert.ok(redrawn > 0 && redrawn < c.i, `the ▼ at ${cx} drawn again over the patch, under ${c.text}`);
+    }
+    const outline = log.findIndex((d) => d[0] === 'strokeText' && d[1] === c.text && d[2] === c.x && d[3] === c.y);
+    assert.ok(outline > 0 && outline < c.i, `${c.text} outlined before it is filled`);
+  }
+});
+
 test('session timeline: a copy right after an insertion burst is not covered by its count', async () => {
   const PI = structuredClone(P);
   const t0 = PI.trials[0].startTime;
