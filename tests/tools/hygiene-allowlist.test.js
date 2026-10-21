@@ -109,6 +109,7 @@ const label = {
   finding: 'finding ' + '6',
   sol: 'Sol ' + 'round-1'
 };
+const W = 'Task';
 
 describe('hygiene gate: process labels', () => {
   it('fails on a label in source, tests, tools and packages', () => {
@@ -135,10 +136,34 @@ describe('hygiene gate: process labels', () => {
   it('does not scan docs', () => {
     assert.strictEqual(gate({ 'docs/guide.md': label.task }), 0);
     assert.strictEqual(gate({ 'README.md': label.round }), 0);
+    assert.strictEqual(gate({ 'docs/guide.md': '// a model. ' + W + '\n// ' + '10(b) settled it' }), 0);
+  });
+
+  // A comment wrapped inside a label: one line ends in the word, the next
+  // starts (after comment markers) with the number, so neither line alone
+  // carries it. The pieces are joined at runtime: no line of this file ends
+  // in the word.
+  it('fails on a label split across a line break', () => {
+    assert.strictEqual(gate({ 'src/a.js': ' *   a model. ' + W + '\n *     ' + '10(b) settled that' }), 1);
+    assert.strictEqual(gate({ 'tests/a.test.js': '// carried by ' + W + 's\n// ' + '4-7 below' }), 1);
+    assert.strictEqual(gate({ 'tools/a.sh': '# done in ' + W + '  \n#   ' + '3, then' }), 1);
+    assert.strictEqual(gate({ 'demo/a.html': '<p>see ' + W + '\n<!-- ' + '12 -->' }), 1);
+    assert.strictEqual(gate({ 'src/a.js': 'const a = 1; // ' + W + '\n' + '9 more' }), 1);
+  });
+
+  it('passes ordinary prose and code that wraps after the word', () => {
+    assert.strictEqual(gate({ 'src/a.js': '// each ' + W + '\n// list grows by one' }), 0);
+    assert.strictEqual(gate({ 'src/a.js': '// one ' + W + '\n// ten things later' }), 0);
+    assert.strictEqual(gate({ 'src/a.js': 'class ' + W + '\n{ run() { return 3; } }' }), 0);
+    assert.strictEqual(gate({ 'src/a.js': '// a ' + W + '\n\n// ' + '3 is unrelated' }), 0);
+    assert.strictEqual(gate({ 'src/a.js': '// the Multi' + W + '\n// ' + '3 lanes' }), 0);
+    assert.strictEqual(gate({ 'src/a.js': '// the last word: ' + W, 'src/b.js': '3 starts this file' }), 0);
   });
 
   it('under GATE_SCAN_DIR a label in a built file fails', () => {
     assert.strictEqual(gate({}, { 'dist/ch.js': '// ' + label.round }), 1);
     assert.strictEqual(gate({}, { 'dist/ch.js': '// ordinary comment, Task done' }), 0);
+    assert.strictEqual(gate({}, { 'dist/ch.js': '// see ' + W + '\n// ' + '10(b)' }), 1);
+    assert.strictEqual(gate({}, { 'dist/ch.js': '// see ' + W + '\n// list' }), 0);
   });
 });

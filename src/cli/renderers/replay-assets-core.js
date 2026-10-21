@@ -35,10 +35,10 @@ import { applyAssetMap, assetMatchSummary, assetNoteText } from '../asset-match.
  *     refuse. v1 degraded and rendered the rest; v2 skips the participant and
  *     says so.
  *   - a refusal already stamped by INGEST: a jsPsych v1 recording the
- *     converter would not migrate, which never gets as far as a model. Task
- *     10(b) settled that a replay which does not make it is visible on three
- *     surfaces, and the CLI line report-core.js prints from this list is one of
- *     them, so both origins have to be accounted for here or the console is a
+ *     converter would not migrate, which never gets as far as a model. A
+ *     replay that does not make it is meant to be visible on three surfaces,
+ *     and the CLI line report-core.js prints from this list is one of them,
+ *     so both origins have to be accounted for here or the console is a
  *     partial account.
  *
  * A corrupted file (ingest's `parse_failed`) deliberately stays out: it keeps

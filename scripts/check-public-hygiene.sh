@@ -41,7 +41,8 @@
 # They mean nothing to an outside reader. The label_patterns below run over
 # those paths only (src, tests, tools, packages, bin, build.js,
 # build-targets.js, demo; never docs, never this file), and over
-# $GATE_SCAN_DIR when it is set.
+# $GATE_SCAN_DIR when it is set. A task label split across a line break is
+# caught there too (split_label_hits).
 #
 # Runs from anywhere in the repo. Scans tracked files (git grep) plus,
 # optionally, $GATE_SCAN_DIR (plain grep).
@@ -173,6 +174,37 @@ for pat in "${label_patterns[@]}"; do
     fi
   fi
 done
+
+# A label split across a line break: a wrapped comment can end one line with
+# "Task" and start the next with the number, and the line-by-line greps above
+# see neither half. The files with a line ending in "Task" or "Tasks" are read
+# again with awk, which flags such a line when the next one starts, after
+# comment markers (//, *, #, <!--, --), with a digit. "Task" and then a word
+# on the next line is ordinary prose and passes. FNR == 1 resets each file.
+split_end_re='(^|[^A-Za-z0-9_])Tasks?[[:space:]]*$'
+split_label_hits() {
+  awk 'FNR == 1 { prev = 0 }
+       prev && /^[ \t]*(\/\/+|\*+|#+|<!--|--)?[ \t]*[0-9]/ { print FILENAME ":" (FNR - 1) ": " prevline " / " $0 }
+       { prev = ($0 ~ /^Tasks?[ \t]*$/ || $0 ~ /[^A-Za-z0-9_]Tasks?[ \t]*$/); prevline = $0 }' "$@"
+}
+split_files=()
+while IFS= read -r -d '' f; do split_files+=("$f"); done < <(git grep -I -l -z -E "$split_end_re" -- "${label_paths[@]}" ":(exclude)$self" 2>/dev/null || true)
+if [ "${#split_files[@]}" -gt 0 ] && raw=$(split_label_hits "${split_files[@]}") && [ -n "$raw" ]; then
+  echo "PROCESS LABEL split across a line break:"
+  printf '%s\n' "$raw" | sed 's/^/  /'
+  echo
+  fail=1
+fi
+if [ -n "${GATE_SCAN_DIR:-}" ] && [ -d "$GATE_SCAN_DIR" ]; then
+  split_files=()
+  while IFS= read -r -d '' f; do split_files+=("$f"); done < <(grep -rlIE --null "$split_end_re" "$GATE_SCAN_DIR" 2>/dev/null || true)
+  if [ "${#split_files[@]}" -gt 0 ] && raw=$(split_label_hits "${split_files[@]}") && [ -n "$raw" ]; then
+    echo "PROCESS LABEL split across a line break in \$GATE_SCAN_DIR ($GATE_SCAN_DIR):"
+    printf '%s\n' "$raw" | sed 's/^/  /'
+    echo
+    fail=1
+  fi
+fi
 
 # --- Commit-message mode (opt-in): GATE_COMMIT=<rev> -------------------------
 # Scans the message of <rev> with the patterns above (same personal-host
