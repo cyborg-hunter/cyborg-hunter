@@ -4,7 +4,7 @@
 // the CLI does. config.js adds the file read, CLI flags and path resolution.
 import { DEFAULT_CLI_CONFIG } from '../shared/schema.js';
 import { validateConfig } from '../shared/validation.js';
-import { resolveScoreWeights } from './analyzers/score-weights.js';
+import { resolveScoreWeights, resolveHardAt } from './analyzers/score-weights.js';
 
 // Returns the merged config and every warning loadConfig prints, in its
 // order: unknown keys (typos) first, then the value checks. `undefined` is
@@ -49,5 +49,7 @@ export function cliConfigWarnings(config) {
   // This is the single place scoreWeights warnings reach the console
   // (rankTriage resolves the same weights silently).
   warnings.push(...resolveScoreWeights(config?.scoreWeights).warnings);
+  // hardAt is validated like scoreWeights, and its warnings are printed here too.
+  warnings.push(...resolveHardAt(config?.hardAt).warnings);
   return warnings;
 }

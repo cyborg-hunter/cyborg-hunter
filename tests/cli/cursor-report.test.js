@@ -65,7 +65,7 @@ describe('the cursor weight', () => {
     const sig = SCORE_SIGNALS.find(s => s.key === 'cursor');
     assert.ok(sig); assert.equal(sig.weight, 0);
     assert.equal(SIGNAL_LABELS.cursor, 'pointer verdict (cursor)');
-    assert.equal(sig.hint, 'ranking weight × verdict level: suspicious 1, highly suspicious 2; the tier is unchanged.');
+    assert.equal(sig.hint, 'ranking weight × verdict level: suspicious 1, highly suspicious 2.');
     assert.equal(sig.count({ cursorAnalysis: { level: 2 } }), 2);
     assert.equal(sig.count({ cursorAnalysis: { level: 1 } }), 1);
     assert.equal(sig.count({ cursorAnalysis: { level: -1 } }), 0);

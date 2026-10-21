@@ -161,7 +161,7 @@ describe('the typingRhythm weight', () => {
     assert.ok(sig);
     assert.equal(sig.weight, 0);
     assert.equal(SIGNAL_LABELS.typingRhythm, 'typing verdict (typingRhythm)');
-    assert.equal(sig.hint, 'ranking weight × verdict level: suspicious 1, highly suspicious 2; the tier is unchanged.');
+    assert.equal(sig.hint, 'ranking weight × verdict level: suspicious 1, highly suspicious 2.');
     assert.equal(sig.count({ typingAnalysis: { level: 2 } }), 2);
     assert.equal(sig.count({ typingAnalysis: { level: -1 } }), 0);
     assert.equal(sig.count({}), 0);

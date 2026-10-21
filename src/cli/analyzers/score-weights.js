@@ -11,7 +11,12 @@
 //
 // A user's scoreWeights is merged PER KEY onto the defaults (the config loader
 // merges top-level keys only), so writing one key never zeroes the others.
-// The hard/soft/clean tier does not depend on these weights.
+// The hard/soft/clean tier does not depend on these weights. config.hardAt
+// (resolveHardAt below) is the report's own tier rule: a count at or over
+// it adds `hard*` beside the library's own `hard` (triage.js reportTier).
+// "The library's tier", here and below, is the tier the report computed
+// from the data: the library's, or its phase-scoped recount under a phase
+// scope (config.phaseScope).
 
 import { findClosestKey } from '../../shared/validation.js';
 
@@ -41,22 +46,22 @@ export const SCORE_SIGNALS = [
   // clean or not-assessed session, 1 for suspicious, 2 for highly
   // suspicious. Ranks within a tier like every key here.
   { key: 'cursor',         weight: 0, count: s => (s.cursorAnalysis && s.cursorAnalysis.level > 0) ? s.cursorAnalysis.level : 0,
-    label: 'pointer verdict', hint: 'ranking weight × verdict level: suspicious 1, highly suspicious 2; the tier is unchanged.' },
+    label: 'pointer verdict', hint: 'ranking weight × verdict level: suspicious 1, highly suspicious 2.' },
   // The software-renderer device fact (analyzers/cursor.js
   // checks.softwareRenderer): 1 when the browser drew without a graphics
   // card. Not a tell; at weight 0 it ranks nothing until a study sets one.
   { key: 'softwareRenderer', weight: 0,
     count: s => { const c = s.cursorAnalysis && s.cursorAnalysis.checks && s.cursorAnalysis.checks.softwareRenderer; return c && typeof c === 'object' && c.fired ? 1 : 0; },
-    label: 'software renderer', hint: 'ranking weight × 1 when the browser drew without a graphics card; the tier and the pointer verdict are unchanged.' },
+    label: 'software renderer', hint: 'ranking weight × 1 when the browser drew without a graphics card; the pointer verdict is unchanged.' },
   // Device masking (analyzers/device-masking.js): 1 when any rule fired.
   // Masking hides a device and is not evidence of AI use; weight 0.
   { key: 'deviceMasking', weight: 0, count: s => s.deviceMasking && s.deviceMasking.rules.length ? 1 : 0,
-    label: 'device masking', hint: 'ranking weight × 1 when the window log contradicts the screen the browser reports (a masking tool, not evidence of AI use); the tier is unchanged.' },
+    label: 'device masking', hint: 'ranking weight × 1 when the window log contradicts the screen the browser reports (a masking tool, not evidence of AI use).' },
   // The report's typing verdict (analyzers/typing.js): its level, 0 for a
   // clean or not-assessed session, 1 for suspicious, 2 for highly
   // suspicious. Ranks within a tier like every key here.
   { key: 'typingRhythm',   weight: 0, count: s => (s.typingAnalysis && s.typingAnalysis.level > 0) ? s.typingAnalysis.level : 0,
-    label: 'typing verdict', hint: 'ranking weight × verdict level: suspicious 1, highly suspicious 2; the tier is unchanged.' },
+    label: 'typing verdict', hint: 'ranking weight × verdict level: suspicious 1, highly suspicious 2.' },
 ];
 
 const KEYS = SCORE_SIGNALS.map(s => s.key);
@@ -134,6 +139,68 @@ export function resolveScoreWeights(user) {
 
   const isDefault = KEYS.every(k => !differsFromDefault(weights, k));
   return { weights, isDefault, warnings };
+}
+
+// config.hardAt: { signalKey: n }. The report moves a participant whose count
+// for that signal is n or more into the hard tier, shown as `hard*` beside
+// the library's own `hard` (triage.js reportTier). The count is the one the
+// score weighs (SCORE_SIGNALS[].count) before any cap; for the verdict keys
+// it is the verdict's level. Validated like scoreWeights: an unknown key
+// warns with the closest name, a value that is not a whole number ≥ 1 warns,
+// and both are ignored; null for a key is no rule. Nothing here throws.
+// Returns { hardAt: { key: n }, warnings }.
+export function resolveHardAt(user) {
+  const hardAt = {};
+  const warnings = [];
+  if (user == null) return { hardAt, warnings };
+  if (!isPlainObject(user)) {
+    warnings.push(`hardAt must be an object of signal counts (got ${show(user)}); no hard-at rule is applied.`);
+    return { hardAt, warnings };
+  }
+  for (const [key, value] of Object.entries(user)) {
+    if (!KEYS.includes(key)) {
+      const guess = findClosestKey(key, KEYS);
+      warnings.push(`hardAt: unknown signal "${key}"${guess ? ` (did you mean "${guess}"?)` : ''}; it is ignored. Keys are case-sensitive.`);
+      continue;
+    }
+    if (value === null) continue;
+    if (!Number.isInteger(value) || value < 1) {
+      warnings.push(`hardAt.${key} must be a whole number ≥ 1 (got ${show(value)}); it is ignored.`);
+      continue;
+    }
+    hardAt[key] = value;
+  }
+  return { hardAt, warnings };
+}
+
+// The report score from a participant's counts and the weights, both in
+// SCORE_SIGNALS order ([{ weight, max }]): min(count, max) × weight, summed in
+// table order, as decomposeScore and rankTriage compute it. The report page
+// re-scores with this function when its Weights… dialog changes a weight
+// (weights-panel.js), so it is inlined by its source text: self-contained,
+// ES5, nothing from this module.
+export function scoreFromCounts(counts, weights) {
+  var score = 0;
+  for (var i = 0; i < counts.length; i++) {
+    var w = weights[i];
+    if (w.weight === 0) continue;
+    score += (w.max == null ? counts[i] : Math.min(counts[i], w.max)) * w.weight;
+  }
+  return score;
+}
+
+// The report's tier. `lib` is the library's tier (the tier the report
+// computed from the data: the library's, or its phase-scoped recount under a
+// phase scope). Its 'hard' stays 'hard'; otherwise 'hard*' when any count
+// reaches its hard-at count (SCORE_SIGNALS order, null for none), else the
+// library's 'soft' or 'clean'. It never lowers the tier it is given.
+// Inlined like scoreFromCounts.
+export function reportTierFromCounts(lib, counts, hardAt) {
+  if (lib === 'hard') return 'hard';
+  for (var i = 0; i < counts.length; i++) {
+    if (hardAt[i] != null && counts[i] >= hardAt[i]) return 'hard*';
+  }
+  return lib;
 }
 
 // A cap on a zero-weight signal changes nothing, so it does not make the

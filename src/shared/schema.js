@@ -38,6 +38,7 @@ export const DEFAULT_CLI_CONFIG = {
   replayDir: null,             // replay artifacts dir; defaults to dataDir
   assetsDir: null,             // experiment stylesheets/images for styled replays; matched by URL path suffix (cli/asset-match.js)
   scoreWeights: null,          // report-score weights, merged per key onto the defaults (cli/analyzers/score-weights.js)
+  hardAt: null,                // the report's own hard tier per signal count, shown as hard* (cli/analyzers/score-weights.js resolveHardAt)
   filePattern: "*.json",
   participantIdField: "participantId",
   trialIdField: "trialId",
