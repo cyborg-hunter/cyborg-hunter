@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import {
   TIMELINE_GEOMETRY, CHART_W, NO_PHASE, xOf, barRect, trialLabel, phaseOf, trialSpans, inputMarks,
   phaseRuns, guides, coverDomain, typingThreshold, typingBars, typingAxis, timelineRows, hoverData,
-  GLYPH, glyphPlaces,
+  GLYPH, glyphPlaces, COUNT_LABEL, countLabelPlaces,
 } from '../../src/cli/renderers/timeline-layout.js';
 import { parseQualtricsExport } from '../../src/cli/qualtrics-csv.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
@@ -231,6 +231,62 @@ describe('glyph places over a bar', () => {
 
   it('no glyph, no place', () => {
     assert.deepEqual(glyphPlaces([], { x: 0, w: 10, top: 0 }, 0), []);
+  });
+});
+
+describe('insertion counts in the Text input lane', () => {
+  const LANE = { left: 90, right: 970, top: 100, height: 32 };
+  const textBox = (c) => ({ left: c.x, right: c.x + (c.text.length) * COUNT_LABEL.charW, top: c.y - 7, bottom: c.y });
+  const meet = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const patchBox = (c) => ({ left: c.patch.x, right: c.patch.x + c.patch.w, top: c.patch.y, bottom: c.patch.y + c.patch.h });
+
+  it('two rows fit a 32 px lane: patches at y + 3 and y + 13, baselines at y + 12 and y + 22', () => {
+    const places = countLabelPlaces([{ count: 44, x: 300 }, { count: 3, x: 310 }], [], LANE);
+    assert.deepEqual(places.map((c) => [c.text, c.x, c.y, c.patch.y, c.patch.h]),
+      [['×44', 303, 112, 103, 10], ['×3', 313, 122, 113, 10]]);
+  });
+
+  it('a count is pushed right past a mark in its row, and kept inside the lane', () => {
+    const copy = { left: 300, right: 310, top: 106.5, bottom: 115 };
+    assert.equal(countLabelPlaces([{ count: 3, x: 297 }], [copy], LANE)[0].x, 312);
+    // A count at the end of the lane ends 1 px inside it, patch and all.
+    const [end] = countLabelPlaces([{ count: 10000, x: 969 }], [], LANE);
+    assert.ok(end.patch.x + end.patch.w <= LANE.right, `patch ends at ${end.patch.x + end.patch.w}`);
+  });
+
+  it('a crowd merges into one count of its total, at its first burst, however many bursts reach it', () => {
+    // Bursts 1 px apart: each later one reaches the merged count.
+    for (const n of [3, 5, 12]) {
+      const bursts = Array.from({ length: n }, (_, k) => ({ count: k + 1, x: 400 + k }));
+      const places = countLabelPlaces(bursts, [], LANE);
+      assert.deepEqual(places.map((c) => [c.text, c.x]), [['×' + (n * (n + 1)) / 2, 403]], `${n} bursts`);
+    }
+    // A burst past the merged count's end keeps a count of its own.
+    const spread = countLabelPlaces([1, 2, 3, 4].map((count, k) => ({ count, x: k < 3 ? 400 + k : 440 })), [], LANE);
+    assert.deepEqual(spread.map((c) => c.text), ['×6', '×4']);
+  });
+
+  it('no count meets another, every insertion is counted once, and every count stays inside the lane', () => {
+    // Pseudo-random bursts and marks, the same on every run.
+    let seed = 7;
+    const rand = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
+    for (let run = 0; run < 50; run++) {
+      const bursts = Array.from({ length: 2 + Math.floor(rand() * 30) }, () => ({ count: 1 + Math.floor(rand() * 200), x: 90 + rand() * 880 }));
+      const marks = Array.from({ length: Math.floor(rand() * 40) }, () => {
+        const cx = 95 + rand() * 870;
+        return rand() < 0.5 ? { left: cx - 5, right: cx + 5, top: 106.5, bottom: 115 } : { left: cx - 5, right: cx + 5, top: 117, bottom: 125.5 };
+      });
+      const places = countLabelPlaces(bursts, marks, LANE);
+      const total = places.reduce((n, c) => n + Number(c.text.slice(1)), 0);
+      assert.equal(total, bursts.reduce((n, b) => n + b.count, 0), `run ${run}: every insertion counted once`);
+      for (let i = 0; i < places.length; i++) {
+        assert.ok(places[i].patch.x >= LANE.left && places[i].patch.x + places[i].patch.w <= LANE.right, `run ${run}: inside the lane`);
+        for (let j = i + 1; j < places.length; j++) {
+          assert.ok(!meet(textBox(places[i]), textBox(places[j])), `run ${run}: ${places[i].text} and ${places[j].text} apart`);
+          assert.ok(!meet(patchBox(places[i]), textBox(places[j])) && !meet(patchBox(places[j]), textBox(places[i])), `run ${run}: no patch on a count`);
+        }
+      }
+    }
   });
 });
 

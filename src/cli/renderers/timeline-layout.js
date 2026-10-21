@@ -281,6 +281,106 @@ export function glyphPlaces(glyphs, bar, plotTop) {
   }));
 }
 
+// The Text input lane's "×N" counts (bold 9 px, about charW px a character
+// and 7 px of ink over the baseline): each on a patch rowH px tall, in rows
+// from `top` px under the lane's top edge, as many as fit with `edge` px
+// clear of its bottom border. A 32 px lane holds two (patches at y + 3 and
+// y + 13); a third would end on the border. The marks fill the lane's height
+// (copies' ▼ from y + 6.5 to y + 15, pastes and drops from y + 17 to y + 27,
+// ticks from y + 4 to y + 28), so no row is free of them: a count keeps clear
+// of the marks at its own x.
+export const COUNT_LABEL = Object.freeze({ charW: 5.8, rowH: 10, top: 3, edge: 2 });
+
+// Where each burst's count goes in the Text input lane: [{ text, x, y,
+// patch }], x the text's left edge, y its baseline and patch the rectangle
+// drawn under it. bursts are [{ count, x }] (x: the burst's last tick); marks
+// the copy, paste and drop boxes ({ left, right, top, bottom }); lane its
+// { left, right, top, height }.
+// A count goes 3 px right of its last tick, in the first row, pushed right
+// past any mark it would cover in that row and kept inside the lane; when
+// keeping it inside the lane puts it back on a mark (at the session's end),
+// it goes left of the marks it meets instead. One that would cover an
+// earlier count goes to the next row (the row that moves it least; the
+// first on a tie). One that covers a count in every row
+// merges with the counts it covers into one count of their total, at the
+// first of them, which then holds its width in every row: a later burst
+// that reaches it joins it, so a crowd of bursts reads as one total.
+// Another burst's ticks may run under a count's patch (their part outside
+// it stays visible): a count stays beside its own ticks.
+export function countLabelPlaces(bursts, marks, lane) {
+  const { charW, rowH, top, edge } = COUNT_LABEL;
+  const rows = Math.max(1, Math.floor((lane.height - top - edge) / rowH));
+  const rowTop = (r) => lane.top + top + r * rowH;
+  const widthOf = (count) => ('×' + count).length * charW;
+  const inside = (x, w) => Math.max(lane.left + 1, Math.min(x, lane.right - w - 1));
+  // The marks by left edge, so a label meets them in order; maxW bounds how
+  // far left of the label a mark can start and still reach it.
+  const sorted = marks.slice().sort((a, b) => a.left - b.left);
+  const maxW = sorted.reduce((m, b) => Math.max(m, b.right - b.left), 0);
+  // The leftmost mark in row r that a count w wide at x would cover (its
+  // patch reaches 1 px either side of the text), or null: a bisection to
+  // the first mark that can reach that far, then the marks in order.
+  const meets = (x, w, r) => {
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid].left <= x - 1 - maxW) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < sorted.length && sorted[i].left < x + w + 1; i++) {
+      const m = sorted[i];
+      if (m.right > x - 1 && m.bottom > rowTop(r) && m.top < rowTop(r) + rowH) return m;
+    }
+    return null;
+  };
+  // A count's x in row r: right past the marks, kept inside the lane, and
+  // when that puts it on a mark, left of the marks (as far as the lane goes).
+  const fit = (x, w, r) => {
+    for (let m = meets(x, w, r); m; m = meets(x, w, r)) x = m.right + 2;
+    x = inside(x, w);
+    for (let m = meets(x, w, r); m && m.left - 2 - w >= lane.left + 1; m = meets(x, w, r)) x = m.left - 2 - w;
+    return x;
+  };
+  // Whether a placed count covers a count w wide at x in row r.
+  const covers = (a, x, w, r) => (a.merged || a.row === r) && a.x - 1 < x + w + 1 && x - 1 < a.x + a.w + 1;
+  const placed = [];
+  for (const b of bursts.slice().sort((p, q) => p.x - q.x)) {
+    const w = widthOf(b.count);
+    const at = [];
+    let best = null;
+    for (let r = 0; r < rows; r++) {
+      at[r] = fit(b.x + 3, w, r);
+      const moved = Math.abs(at[r] - (b.x + 3));
+      if (!placed.some((a) => covers(a, at[r], w, r)) && (best === null || moved < best.moved)) best = { x: at[r], row: r, moved };
+    }
+    if (best) {
+      placed.push({ count: b.count, x: best.x, w, row: best.row, merged: false });
+      continue;
+    }
+    const hit = placed.filter((a) => at.some((x, r) => covers(a, x, w, r)));
+    const first = hit.reduce((f, a) => (a.x < f.x ? a : f));
+    first.count = hit.reduce((n, a) => n + a.count, b.count);
+    first.merged = true;
+    for (const a of hit) if (a !== first) placed.splice(placed.indexOf(a), 1);
+    // Its total may be a digit wider: kept inside the lane, and any count it
+    // now reaches joins it.
+    for (;;) {
+      first.w = widthOf(first.count);
+      first.x = inside(first.x, first.w);
+      const more = placed.find((a) => a !== first && covers(first, a.x, a.w, a.row));
+      if (!more) break;
+      first.count += more.count;
+      first.x = Math.min(first.x, more.x);
+      placed.splice(placed.indexOf(more), 1);
+    }
+  }
+  return placed.sort((a, b) => a.x - b.x).map((a) => ({
+    text: '×' + a.count, x: a.x, y: rowTop(a.row) + rowH - 1,
+    patch: { x: a.x - 1, y: rowTop(a.row), w: a.w + 2, h: rowH },
+  }));
+}
+
 // The typing chart's y-axis: from 0 to a round number above both the fastest
 // judged trial and 1.5 × the threshold, in steps of 5, 10 or 20 up to 160.
 // Above 160 the step is the smallest 1, 2 or 5 × a power of ten that keeps

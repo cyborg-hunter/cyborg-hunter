@@ -106,6 +106,17 @@ snapshotTest('session-timeline core draw log (enriched)', 'drawlog-session-timel
     // Unclosed trailing sidebar → its dashed white border (strokeStyle
     // '#fff'), which nothing else in the timeline draws.
     assert.ok(log.some(c => c[0] === 'set:strokeStyle' && c[1] === '#fff'), 'unclosed sidebar dashed border drawn');
+    // The title names the whole id, and both sidebar spans (fillRects 20 px
+    // tall) end inside their lane; the log rounds to 0.01 px.
+    assert.ok(log.some(c => c[0] === 'fillText' && c[1] === 'Session Timeline — DEMO-FIXT'), 'the title');
+    let fill = null;
+    const spans = [];
+    for (const c of log) {
+      if (c[0] === 'set:fillStyle') fill = c[1];
+      else if (c[0] === 'fillRect' && fill === '#8e24aa' && c[4] === 20) spans.push(c);
+    }
+    assert.equal(spans.length, 2, 'two sidebar spans');
+    assert.ok(spans.every(c => c[1] + c[3] <= CHART_RIGHT + 0.01), `spans end at ${spans.map(c => c[1] + c[3])}`);
   });
 
 test('session timeline: phases the experiment sets colour the Trials strip and draw a labelled line where they change', async () => {
@@ -393,34 +404,220 @@ test('session timeline: the title prints the whole participant id, cut with an e
   }
 });
 
-test('session timeline: a synthetic-insertion count sits on a patch drawn after the guides, and a copy under it stays on top', async () => {
-  // Three insertions near the end of act1-baseline, so act1-paste's start
-  // guide runs through the count; a copy right after them, under the count.
+// The Text input lane's "×N" counts in a draw log, each [text, x, baseline],
+// and the patches drawn under them (fillRects in the lane's colour after the
+// last dashed line), each [index, x, y, w, h]. A count is bold 9 px, about
+// 5.8 px a character and 7 px of ink over its baseline.
+const COUNT_RE = /^×\d+$/;
+function countsIn(log) {
+  return log.map((c, i) => [c, i]).filter(([c]) => c[0] === 'fillText' && COUNT_RE.test(c[1])).map(([c, i]) => ({ i, text: c[1], x: c[2], y: c[3] }));
+}
+function countPatchesIn(log) {
+  const lastDash = log.map((c) => c[0]).lastIndexOf('setLineDash');
+  let fill = null;
+  const out = [];
+  log.forEach((c, i) => {
+    if (c[0] === 'set:fillStyle') fill = c[1];
+    else if (i > lastDash && c[0] === 'fillRect' && fill === '#fafafa') out.push({ i, x: c[1], y: c[2], w: c[3], h: c[4] });
+  });
+  return out;
+}
+const countBox = (c) => ({ left: c.x, right: c.x + c.text.length * 5.8, top: c.y - 7, bottom: c.y });
+const boxesMeet = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+// The copy ▼, paste ▲ and drop ◆ boxes of a layout's marks in the Text
+// input lane at y (their centres as drawn: kept inside the lane).
+function markBoxes(L, y) {
+  const X = (sec) => Math.max(TIMELINE_GEOMETRY.left + 5, Math.min(xOf(sec, L.domainSec), CHART_RIGHT - 5));
+  return [
+    ...L.marks.copies.map((m) => ({ left: X(m.sec) - 5, right: X(m.sec) + 5, top: y + 6.5, bottom: y + 15 })),
+    ...L.marks.pastes.map((m) => ({ left: X(m.sec) - 5, right: X(m.sec) + 5, top: y + 17, bottom: y + 25.5 })),
+    ...L.marks.drops.map((m) => ({ left: X(m.sec) - 5, right: X(m.sec) + 5, top: y + 17, bottom: y + 27 })),
+  ];
+}
+const TEXT_INPUT_Y = timelineRows({ trialsStrip: true }).lanes[0].y;
+
+// A measure where W is 13 px, a zero-width space 0 and any other character
+// 8: the titles' head ("Session Timeline — ") is narrower than their tail.
+function unevenWidth(s) {
+  let w = 0;
+  for (const ch of s) w += ch === 'W' ? 13 : ch === '​' ? 0 : 8;
+  return w;
+}
+
+test('chart titles: an id of zero-width characters is cut in a few measures', async () => {
+  // A canvas that draws nothing and counts measureText calls.
+  const calls = { n: 0 };
+  const counting = (w, h) => {
+    const ctx = new Proxy({}, {
+      get(_, prop) {
+        if (prop === 'measureText') return (s) => { calls.n++; return { width: unevenWidth(String(s)) }; };
+        return () => ({ addColorStop() {} });
+      },
+      set() { return true; },
+    });
+    return { width: w, height: h, getContext: () => ctx };
+  };
+  const p = structuredClone(P);
+  p.participantId = 'W'.repeat(40) + '​'.repeat(16000);
+  const started = performance.now();
+  assert.ok(await drawSessionTimeline(p, { outputDir: '.' }, counting));
+  assert.ok(drawTypingProfile(p, { outputDir: '.' }, counting));
+  const ms = performance.now() - started;
+  assert.ok(ms < 1000, `both charts in ${ms.toFixed(0)} ms`);
+  // The legends' labels, and about log2(16040) measures for each title.
+  assert.ok(calls.n < 100, `${calls.n} measures`);
+});
+
+test('chart titles: with node-canvas, a 16000-character id of zero-width characters draws both charts in well under a second', async (t) => {
+  let canvas = null;
+  try { canvas = (await import('canvas')).default; } catch { /* optional dependency */ }
+  if (!canvas) { t.skip('canvas is not installed'); return; }
+  const p = structuredClone(P);
+  p.participantId = 'W'.repeat(40) + '​'.repeat(16000);
+  const started = performance.now();
+  assert.ok(await drawSessionTimeline(p, { outputDir: '.' }, canvas.createCanvas));
+  assert.ok(drawTypingProfile(p, { outputDir: '.' }, canvas.createCanvas));
+  const ms = performance.now() - started;
+  assert.ok(ms < 1000, `both charts in ${ms.toFixed(0)} ms`);
+});
+
+test('chart titles: a long id is cut to fill the title\'s room to within one character', async () => {
+  const p = structuredClone(P);
+  p.participantId = 'W'.repeat(300);
+  const log = [];
+  await drawSessionTimeline(p, { outputDir: '.' }, makeRecordingCanvasFactory(log, unevenWidth));
+  // The title is the text at (left, 22).
+  const title = log.find((c) => c[0] === 'fillText' && c[2] === TIMELINE_GEOMETRY.left && c[3] === 22)[1];
+  assert.ok(title.startsWith('Session Timeline — W') && title.endsWith('…'), title);
+  const legendLeft = Math.min(...log.filter((c) => c[0] === 'fillText' && (c[3] === 16 || c[3] === 28)).map((c) => c[2])) - 14;
+  const room = legendLeft - 16 - TIMELINE_GEOMETRY.left;
+  const width = unevenWidth(title);
+  assert.ok(width <= room && room - width < 13, `title ${width} px in a room of ${room}`);
+});
+
+test('session timeline: a synthetic-insertion count sits on a patch drawn after the guides, so a guide crossing it stops there', async () => {
+  // Three insertions near the end of act1-baseline: act1-paste's start guide
+  // runs through the count.
+  const PI = structuredClone(P);
+  const t0 = PI.trials[0].startTime;
+  PI.trials[0].syntheticInsertions = [{ t: t0 + 5340 }, { t: t0 + 5360 }, { t: t0 + 5380 }];
+  const L = sessionLayout(PI, { outputDir: '.' });
+  const log = [];
+  await drawSessionTimeline(PI, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const [count] = countsIn(log);
+  assert.equal(count.text, '×3');
+  const patch = countPatchesIn(log).find((q) => q.x < count.x && q.x + q.w >= count.x + count.text.length * 5.8
+    && q.y <= count.y - 9 && q.y + q.h >= count.y + 1);
+  assert.ok(patch && patch.i < count.i, 'the count on a patch of the lane\'s colour, drawn after the last dashed line');
+  const guideX = Math.round(xOf(L.spans[1].startSec, L.domainSec)) + 0.5;
+  assert.ok(guideX > patch.x && guideX < patch.x + patch.w, `act1-paste's guide (x ${guideX}) crosses the count's patch`);
+});
+
+test('session timeline: two insertion bursts 10 px apart print both counts in full, on two rows, every patch before every count', async () => {
+  // 44 insertions late in act1-baseline and 3 early in act1-paste: their last
+  // ticks are about 10 px apart, so the second count would cover the first.
+  const PI = structuredClone(P);
+  const t0 = PI.trials[0].startTime;
+  const t1 = PI.trials[1].startTime;
+  PI.trials[0].syntheticInsertions = Array.from({ length: 44 }, (_, i) => ({ t: t0 + 5000 + i * 10 }));
+  PI.trials[1].syntheticInsertions = [{ t: t1 + 50 }, { t: t1 + 80 }, { t: t1 + 110 }];
+  const L = sessionLayout(PI, { outputDir: '.' });
+  const log = [];
+  await drawSessionTimeline(PI, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const counts = countsIn(log);
+  assert.deepEqual(counts.map((c) => c.text), ['×44', '×3']);
+  assert.notEqual(counts[0].y, counts[1].y, 'on two rows');
+  assert.ok(!boxesMeet(countBox(counts[0]), countBox(counts[1])), 'the two counts apart');
+  for (const c of counts) {
+    for (const m of markBoxes(L, TEXT_INPUT_Y)) assert.ok(!boxesMeet(countBox(c), m), `${c.text} clear of a copy, paste or drop mark`);
+  }
+  const patches = countPatchesIn(log);
+  assert.equal(patches.length, 2);
+  assert.ok(Math.max(...patches.map((q) => q.i)) < Math.min(...counts.map((c) => c.i)), 'no patch drawn over a count');
+});
+
+test('session timeline: insertion bursts too crowded for the rows merge into one count with their total', async () => {
+  // Five trials 60 ms apart on a 20 s session (about 2.6 px apart), with 1 to
+  // 5 insertions each; a long last trial sets the domain.
+  const trials = [];
+  for (let k = 0; k < 5; k++) {
+    const start = 1000 + 60 * k;
+    trials.push({ trialId: 'b' + k, startTime: start, duration_ms: 50,
+      syntheticInsertions: Array.from({ length: k + 1 }, (_, i) => ({ t: start + 5 + i * 5 })) });
+  }
+  trials.push({ trialId: 'long', startTime: 2000, duration_ms: 18000 });
+  const log = [];
+  await drawSessionTimeline({ participantId: 'CROWD', session: {}, metadata: {}, trials }, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const counts = countsIn(log);
+  assert.deepEqual(counts.map((c) => c.text), ['×15'], 'one count, the five bursts\' total');
+});
+
+test('session timeline: a copy right after an insertion burst is not covered by its count', async () => {
   const PI = structuredClone(P);
   const t0 = PI.trials[0].startTime;
   PI.trials[0].syntheticInsertions = [{ t: t0 + 5340 }, { t: t0 + 5360 }, { t: t0 + 5380 }];
   PI.trials[0].copyEvents = [{ type: 'copy', t: t0 + 5480 }];
   const L = sessionLayout(PI, { outputDir: '.' });
-  const X = (sec) => xOf(sec, L.domainSec);
   const log = [];
   await drawSessionTimeline(PI, { outputDir: '.' }, makeRecordingCanvasFactory(log));
-  const i = log.findIndex((c) => c[0] === 'fillText' && c[1] === '×3');
-  assert.ok(i > log.map((c) => c[0]).lastIndexOf('setLineDash'), 'drawn after the last dashed line');
-  // The drawing call before it (property sets aside) is its patch, in the
-  // lane's colour, around the text.
-  let j = i - 1;
-  while (log[j][0].startsWith('set:')) j--;
-  assert.equal(log[j][0], 'fillRect', 'the count on a patch');
-  assert.equal(log.slice(0, j).reverse().find((d) => d[0] === 'set:fillStyle')[1], '#fafafa', 'in the lane\'s colour');
-  const [, px, py, pw, ph] = log[j];
-  const [, , tx, ty] = log[i];
-  assert.ok(px < tx && px + pw >= tx + '×3'.length * 5.8 && py <= ty - 9 && py + ph >= ty + 2, `patch ${[px, py, pw, ph]} around text at ${tx}, ${ty}`);
-  const guideX = Math.round(X(L.spans[1].startSec)) + 0.5;
-  assert.ok(guideX > px && guideX < px + pw, `act1-paste's guide (x ${guideX}) crosses the count's patch`);
-  // The copy's ▼ (its tip at lane y + 15) is drawn again after the patch.
-  const textInputY = timelineRows({ trialsStrip: true }).lanes[0].y;
-  const copyX = Math.round(X(L.marks.copies[0].sec) * 100) / 100;
-  assert.ok(log.slice(i).some((c) => c[0] === 'moveTo' && c[1] === copyX && c[2] === textInputY + 15), 'the copy over the patch');
+  const [count] = countsIn(log);
+  assert.equal(count.text, '×3');
+  const [copy] = markBoxes(L, TEXT_INPUT_Y);
+  assert.ok(!boxesMeet(countBox(count), copy), `count at ${count.x}, ${count.y}; copy from ${copy.left} to ${copy.right}`);
+});
+
+test('session timeline: marks at either end of the session stay inside their lanes', async () => {
+  // A copy at the session's start; at its end (the last trial's end, the
+  // domain's), one mark of every kind: insertions, a copy, a paste, a drop,
+  // a short tab-away, a guard-friction violation and a viewport shift.
+  const PE = structuredClone(P);
+  const last = PE.trials[PE.trials.length - 1];
+  const end = last.startTime + last.duration_ms;
+  PE.trials[0].copyEvents = [{ type: 'copy', t: 1 }];
+  last.syntheticInsertions = [{ t: end - 3 }, { t: end - 2 }, { t: end - 1 }];
+  last.copyEvents = [{ type: 'copy', t: end - 1 }];
+  last.pasteEvents = [{ type: 'paste', t: end - 1 }];
+  last.dropEvents = [{ t: end - 1 }];
+  PE.session.tabAwayEvents = [...PE.session.tabAwayEvents, { start: end - 6, duration_ms: 5, type: 'windowBlur' }];
+  PE.session.viewportWidthShifts = [{ t: end - 1, delta: 300 }];
+  PE.guardFriction = { violations: [{ t: end - 1, reason: 'devtools', phase: 'typing' }] };
+  assert.ok(sessionLayout(PE, { outputDir: '.' }).domainSec * 1000 >= end - 1, 'the marks are inside the domain');
+  const log = [];
+  await drawSessionTimeline(PE, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  // Every rectangle filled and every path filled or stroked in a mark's
+  // colour inside the lanes, with its extent (a stroke's half width added).
+  const rows = timelineRows({ trialsStrip: true });
+  const MARK = new Set(['#f57c00', '#d32f2f', '#7b1fa2', '#3949ab', '#bdbdbd', '#fb8c00', '#e53935', '#8e24aa', '#00897b', '#c62828']);
+  const inLanes = (y) => y >= rows.lanesTop && y <= rows.lanesBottom;
+  const drawn = [];
+  let fill = null, stroke = null, width = 1, path = [];
+  for (const c of log) {
+    if (c[0] === 'set:fillStyle') fill = c[1];
+    else if (c[0] === 'set:strokeStyle') stroke = c[1];
+    else if (c[0] === 'set:lineWidth') width = c[1];
+    else if (c[0] === 'beginPath') path = [];
+    else if (c[0] === 'moveTo' || c[0] === 'lineTo') path.push([c[1], c[2]]);
+    else if (c[0] === 'fillRect' && MARK.has(fill) && inLanes(c[2])) drawn.push({ what: fill, left: c[1], right: c[1] + c[3] });
+    else if ((c[0] === 'fill' && MARK.has(fill)) || (c[0] === 'stroke' && MARK.has(stroke))) {
+      if (!path.length || !inLanes(path[0][1])) continue;
+      const half = c[0] === 'stroke' ? width / 2 : 0;
+      drawn.push({ what: c[0] === 'fill' ? fill : stroke, left: Math.min(...path.map((q) => q[0])) - half, right: Math.max(...path.map((q) => q[0])) + half });
+    }
+  }
+  for (const kind of ['#f57c00', '#d32f2f', '#7b1fa2', '#3949ab', '#bdbdbd', '#00897b', '#c62828']) {
+    assert.ok(drawn.some((d) => d.what === kind), `a ${kind} mark drawn`);
+  }
+  for (const d of drawn) {
+    assert.ok(d.left >= TIMELINE_GEOMETRY.left - 1e-9 && d.right <= CHART_RIGHT + 1e-9, `${d.what} from ${d.left} to ${d.right}`);
+  }
+  // The count and its patch too, and the count clear of the marks there:
+  // kept inside the lane, it goes left of them.
+  const [count] = countsIn(log);
+  assert.ok(count && count.x + count.text.length * 5.8 <= CHART_RIGHT, `count ends at ${count && count.x + count.text.length * 5.8}`);
+  for (const m of markBoxes(sessionLayout(PE, { outputDir: '.' }), TEXT_INPUT_Y)) {
+    assert.ok(!boxesMeet(countBox(count), m), `count at ${count.x}, ${count.y}; a mark from ${m.left} to ${m.right}`);
+  }
+  for (const q of countPatchesIn(log).filter((r) => r.h < 20)) assert.ok(q.x + q.w <= CHART_RIGHT, `patch ends at ${q.x + q.w}`);
 });
 
 test('session timeline: a sidebar opened at the end of the session ends at the lane\'s right border', async () => {

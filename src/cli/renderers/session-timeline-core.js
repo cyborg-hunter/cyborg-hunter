@@ -67,7 +67,7 @@
 import { countSidebarOpenings } from '../analyzers/summary.js';
 import {
   TIMELINE_GEOMETRY, TIMELINE_ROW, NO_PHASE, trialSpans, inputMarks, guides, coverDomain,
-  typingThreshold, typingBars, timelineRows,
+  typingThreshold, typingBars, timelineRows, countLabelPlaces,
 } from './timeline-layout.js';
 
 // ── Layout constants ─────────────────────────────────────────────────────
@@ -79,6 +79,21 @@ const RIGHT_PAD = TIMELINE_GEOMETRY.right;
 const BOTTOM_PAD = TIMELINE_ROW.bottom;
 const LANE_HEIGHT = TIMELINE_ROW.lane;
 const PHASE_STRIP_H = TIMELINE_ROW.strip;
+// The lanes' right border.
+const LANE_RIGHT = CANVAS_W - RIGHT_PAD;
+
+// Every lane's marks stay between the lane's borders: a mark w px wide whose
+// time puts it past an edge is moved in to end at that edge (laneLeft, its
+// left edge), and one centred on its time keeps its centre `half` px inside
+// (laneCentre). A minimum width keeps a short mark visible; at the end of
+// the session it would otherwise reach into the margin. Away from the edges
+// neither moves anything.
+function laneLeft(x, w) {
+  return Math.max(LEFT_PAD, Math.min(x, LANE_RIGHT - w));
+}
+function laneCentre(x, half) {
+  return Math.max(LEFT_PAD + half, Math.min(x, LANE_RIGHT - half));
+}
 
 // ── Colors ───────────────────────────────────────────────────────────────
 const C = {
@@ -836,14 +851,25 @@ function drawTrialsStripNames(ctx, names, y) {
 
 // Text cut with an ellipsis to fit `room` px in the current font, as
 // measured: the charts' titles, whose participant id can be any length.
-// The cut starts from the share of the text that fits at its average width,
-// so a very long id costs a few measures, not one per character.
+// The cut is the longest head that fits with its ellipsis, found by
+// bisection: about log2(length) measures whatever the characters' widths (an
+// id of zero-width characters, or one wider at its tail than its head).
+// '…' alone when not even one character fits. Nothing longer than
+// FIT_MAX_CHARS is measured: a chart is 1000 px wide, so only characters of
+// no width make a longer head fit, and a canvas can take time that grows
+// with the square of a text's length to measure it (node-canvas: 0.45 s for
+// 16,000 zero-width characters). A longer text is cut.
+const FIT_MAX_CHARS = 1000;
 export function fitWidth(ctx, text, room) {
-  const full = ctx.measureText(text).width;
-  if (full <= room) return text;
-  let n = Math.min(text.length - 1, Math.floor((text.length * room) / full));
-  while (n > 0 && ctx.measureText(text.slice(0, n) + '…').width > room) n--;
-  return text.slice(0, n) + '…';
+  if (text.length <= FIT_MAX_CHARS && ctx.measureText(text).width <= room) return text;
+  let lo = 0;
+  let hi = Math.min(text.length - 1, FIT_MAX_CHARS);
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (ctx.measureText(text.slice(0, mid) + '…').width <= room) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + '…';
 }
 
 // Text cut with an ellipsis to fit `room` px at `perChar` px a character
@@ -873,11 +899,11 @@ export function hatch(ctx, x, y, w, h) {
   ctx.restore();
 }
 
-// Returns the Text input lane's "×N" counts (drawTextInput), which go on
-// after the guides.
+// Returns the Text input lane's "×N" counts and marks (drawTextInput),
+// for drawInsertionCounts after the guides.
 function drawLanes(ctx, L, rows, xScale, xDomain, chartW) {
   const events = L.events;
-  let counts = [];
+  let counts = { counts: [], marks: [] };
   for (const lane of rows.lanes) {
     drawLaneBackground(ctx, lane.y, chartW);
     drawLaneLabel(ctx, lane.y, lane.name);
@@ -926,9 +952,9 @@ function drawTabAways(ctx, y, list, xScale, xDomain, flickerCutoffMs = 3000) {
     if (endSec < 0 || e.t_sec > xDomain) continue;
     const clampedStart = Math.max(0, e.t_sec);
     const clampedEnd = Math.min(xDomain, endSec);
-    const x = LEFT_PAD + clampedStart * xScale;
     // Bar width = duration clipped to domain (min 2px for visibility)
     const w = Math.max(2, (clampedEnd - clampedStart) * xScale);
+    const x = laneLeft(LEFT_PAD + clampedStart * xScale, w);
     ctx.fillStyle = tabColor(e.duration_ms, flickerCutoffMs);
     ctx.fillRect(x, y + 4, w, LANE_HEIGHT - 8);
     ctx.strokeStyle = '#333';
@@ -937,18 +963,16 @@ function drawTabAways(ctx, y, list, xScale, xDomain, flickerCutoffMs = 3000) {
   }
 }
 
-// A span is at least 3 px wide, so a short one stays visible; one that
-// starts in the last 3 px of the chart is moved left to end at the lane's
-// right border, never past it.
+// A span is at least 3 px wide, so a short one stays visible, and inside
+// the lane (laneLeft).
 function drawSidebars(ctx, y, spans, xScale, xDomain) {
   if (!Array.isArray(spans)) return;
-  const right = LEFT_PAD + xDomain * xScale;
   for (const s of spans) {
     if (!Number.isFinite(s.start_sec)) continue;
     const startSec = clamp(s.start_sec, 0, xDomain);
     const endSec = clamp(s.end_sec, startSec, xDomain);
     const w = Math.max(3, (endSec - startSec) * xScale);
-    const x = Math.min(LEFT_PAD + startSec * xScale, right - w);
+    const x = laneLeft(LEFT_PAD + startSec * xScale, w);
     ctx.fillStyle = C.sidebarSpan;
     ctx.fillRect(x, y + 6, w, LANE_HEIGHT - 12);
     if (!s.closed) {
@@ -968,10 +992,11 @@ function drawLayoutShifts(ctx, y, list, xScale, xDomain) {
   for (const e of list) {
     if (!Number.isFinite(e.t_sec)) continue;
     if (e.t_sec < 0 || e.t_sec > xDomain) continue;
-    const x = LEFT_PAD + e.t_sec * xScale;
+    // A 1.2 px line centred half a pixel right of its time, inside the lane.
+    const cx = laneCentre(LEFT_PAD + e.t_sec * xScale + 0.5, 0.6);
     ctx.beginPath();
-    ctx.moveTo(x + 0.5, y + 4);
-    ctx.lineTo(x + 0.5, y + LANE_HEIGHT - 4);
+    ctx.moveTo(cx, y + 4);
+    ctx.lineTo(cx, y + LANE_HEIGHT - 4);
     ctx.stroke();
   }
 }
@@ -1001,7 +1026,7 @@ function drawGuardViolations(ctx, y, list, xScale, xDomain) {
     const x1 = LEFT_PAD + g.lastSec * xScale;
     const w = Math.max(2, x1 - x0);
     ctx.fillStyle = C.guardViolation;
-    ctx.fillRect(x0, y + 6, w, LANE_HEIGHT - 12);
+    ctx.fillRect(laneLeft(x0, w), y + 6, w, LANE_HEIGHT - 12);
   }
 }
 
@@ -1010,52 +1035,70 @@ function drawGuardViolations(ctx, y, list, xScale, xDomain) {
 // that appeared with no key press, usually a script or an autofill) as thin
 // indigo ticks with "×N" after a trial's last one. Marks outside the domain
 // (an offset that could not be derived) are not drawn.
-// The "×N" counts are returned, not drawn: drawInsertionCounts draws them
-// after the guides, each on a patch (from y + 3 to y + 15), so no line runs
-// through one. Each carries the copies whose ▼ (10 px wide, from y + 6.5 to
-// y + 15) its patch would cover, to be drawn again over it; pastes and
-// drops sit under the patch.
+// The "×N" counts are placed (timeline-layout.js countLabelPlaces: in two
+// rows, clear of the copy, paste and drop marks, merged when too crowded)
+// and returned with those marks, not drawn: drawInsertionCounts draws them
+// after the guides, each on a patch, so no line runs through one.
 function drawTextInput(ctx, y, marks, xScale, xDomain) {
   const inDomain = (sec) => Number.isFinite(sec) && sec >= 0 && sec <= xDomain;
   const X = (sec) => LEFT_PAD + sec * xScale;
-  const copies = marks.copies.filter((m) => inDomain(m.sec)).map((m) => X(m.sec));
-  const counts = [];
+  const bursts = [];
   for (const g of marks.synthetic) {
     const secs = g.secs.filter(inDomain);
     if (!secs.length) continue;
     ctx.strokeStyle = C.synthetic;
     ctx.lineWidth = 1;
     for (const sec of secs) {
+      // A 1 px tick centred half a pixel right of its time, inside the lane.
+      const tx = laneCentre(X(sec) + 0.5, 0.5);
       ctx.beginPath();
-      ctx.moveTo(X(sec) + 0.5, y + 4);
-      ctx.lineTo(X(sec) + 0.5, y + LANE_HEIGHT - 4);
+      ctx.moveTo(tx, y + 4);
+      ctx.lineTo(tx, y + LANE_HEIGHT - 4);
       ctx.stroke();
     }
-    const text = `×${secs.length}`;
-    const x = X(secs[secs.length - 1]) + 3;
-    const w = text.length * 5.8;
-    counts.push({ text, x, y, w, copies: copies.filter((cx) => cx + 5 > x - 1 && cx - 5 < x + w + 1) });
+    bursts.push({ count: secs.length, x: X(secs[secs.length - 1]) });
   }
-  for (const cx of copies) triangle(ctx, cx, y + 10, false, C.copy);
-  for (const m of marks.pastes) if (inDomain(m.sec)) triangle(ctx, X(m.sec), y + LANE_HEIGHT - 10, true, C.paste);
-  for (const m of marks.drops) if (inDomain(m.sec)) diamond(ctx, X(m.sec), y + LANE_HEIGHT - 10, C.drop);
-  return counts;
+  // The marks, each 10 px wide and centred on its time inside the lane: a
+  // copy's ▼ from y + 6.5 to y + 15, a paste's ▲ from y + 17 to y + 25.5, a
+  // drop's ◆ from y + 17 to y + 27.
+  const drawn = [];
+  const add = (list, kind, cy, top, bottom) => {
+    for (const m of list) {
+      if (!inDomain(m.sec)) continue;
+      const cx = laneCentre(X(m.sec), 5);
+      drawn.push({ kind, cx, cy, box: { left: cx - 5, right: cx + 5, top: y + top, bottom: y + bottom } });
+    }
+  };
+  add(marks.copies, 'copy', y + 10, 6.5, 15);
+  add(marks.pastes, 'paste', y + LANE_HEIGHT - 10, 17, 25.5);
+  add(marks.drops, 'drop', y + LANE_HEIGHT - 10, 17, 27);
+  for (const m of drawn) drawInputMark(ctx, m);
+  const counts = countLabelPlaces(bursts, drawn.map((m) => m.box), { left: LEFT_PAD, right: LANE_RIGHT, top: y, height: LANE_HEIGHT });
+  return { counts, marks: drawn };
 }
 
-// The "×N" counts drawTextInput placed (bold 9 px, about 5.8 px a
-// character, at y + 12 in the lane at y), each on a patch of the lane's
-// colour drawn after the guides, as the phase names in the Trials strip
-// are: a guide that crosses a count stops at its patch. A copy's ▼ the
-// patch covers is drawn again on top: a mark is evidence, and stays visible.
-function drawInsertionCounts(ctx, counts) {
-  for (const c of counts) {
-    ctx.fillStyle = C.laneBg;
-    ctx.fillRect(c.x - 1, c.y + 3, c.w + 2, 12);
-    ctx.fillStyle = C.synthetic;
-    ctx.font = 'bold 9px sans-serif';
-    ctx.fillText(c.text, c.x, c.y + 12);
-    for (const cx of c.copies) triangle(ctx, cx, c.y + 10, false, C.copy);
-  }
+function drawInputMark(ctx, m) {
+  if (m.kind === 'copy') triangle(ctx, m.cx, m.cy, false, C.copy);
+  else if (m.kind === 'paste') triangle(ctx, m.cx, m.cy, true, C.paste);
+  else diamond(ctx, m.cx, m.cy, C.drop);
+}
+
+// The "×N" counts drawTextInput placed, each on a patch of the lane's colour
+// drawn after the guides, as the phase names in the Trials strip are: a
+// guide that crosses a count stops at its patch. Every patch is drawn
+// before any count, so no patch covers a count's digits; a mark a patch
+// covers (a count kept inside the lane at its end, or a merged one, can
+// reach one) is drawn again before the counts: a mark is evidence, and
+// stays visible.
+function drawInsertionCounts(ctx, lane) {
+  if (!lane.counts.length) return;
+  const meets = (a, p) => a.left < p.x + p.w && p.x < a.right && a.top < p.y + p.h && p.y < a.bottom;
+  ctx.fillStyle = C.laneBg;
+  for (const c of lane.counts) ctx.fillRect(c.patch.x, c.patch.y, c.patch.w, c.patch.h);
+  for (const m of lane.marks) if (lane.counts.some((c) => meets(m.box, c.patch))) drawInputMark(ctx, m);
+  ctx.fillStyle = C.synthetic;
+  ctx.font = 'bold 9px sans-serif';
+  for (const c of lane.counts) ctx.fillText(c.text, c.x, c.y);
 }
 
 // A filled triangle centred on (x, y), pointing up or down.
