@@ -741,8 +741,9 @@ analyzer until the report is rebuilt (a settings change rebuilds it).
 **1:1** shows them at the size they were drawn.
 
 A dashed line marks each trial start. When the trial starts average under
-6 px apart in the image's own pixels (the report scales the image to the
-pane), those lines are left out and both images' legends say "trial lines
+6 px apart in the image's own pixels (the block shows the images at their
+own 1000 px when the pane has room, smaller in a narrower pane), those
+lines are left out and both images' legends say "trial lines
 hidden (N trials)"; the lines at phase changes stay.
 
 Copies, cuts, pastes and drops are logged by the monitor **inside its trials
