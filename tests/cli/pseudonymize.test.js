@@ -120,7 +120,7 @@ async function buildAll(participants, config, createCanvas) {
     replayClientSrc: '/* client */', fontFaceCss: '',
   };
   const built = await buildReport(participants, config, deps);
-  out['(in-page report)'] = await renderInPageHtml(built, participants, config, { replayClientSrc: '/* client */', fontFaceCss: '' });
+  out['(in-page report)'] = await renderInPageHtml(built, config, { replayClientSrc: '/* client */', fontFaceCss: '' });
   return { out, built };
 }
 

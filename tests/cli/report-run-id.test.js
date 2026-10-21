@@ -112,7 +112,7 @@ describe('the run id', () => {
     const line = ' &middot; run <code class="mono run-id">' + built.runId + '</code>' +
       ' &middot; <time class="run-time" datetime="2026-10-05T14:03:12.345Z">2026-10-05 14:03 UTC</time></span>';
     assert.ok(files.get('index.html').includes(line), 'the CLI report');
-    const inPage = await renderInPageHtml(built, participants, config, { replayClientSrc: '', fontFaceCss: '' });
+    const inPage = await renderInPageHtml(built, config, { replayClientSrc: '', fontFaceCss: '' });
     assert.ok(inPage.includes(line), 'the in-page report');
   });
 

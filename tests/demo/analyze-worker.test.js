@@ -427,7 +427,30 @@ function rereadCohort() {
   return [...session('SYN-U', false), ...session('SYN-L', true)];
 }
 
-test('a re-analysis under another weight reads a recording the replay pass could not load, as a fresh build does', async () => {
+// A run's or a re-analysis's report, as the page gets it: what done carries
+// and the zip. `secret`: the pseudonym key's, under config.pseudonymize.
+async function render(w, type, files, config, secret) {
+  w.send({ type, files, config, participantIdField: 'participantId', pseudonymSecret: secret });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  return { done, zip: zipOf(w) };
+}
+
+// Two reports are one: every file in the zip, the in-page report and what
+// the page lists beside them, but for the time each was built.
+function assertSameReport(a, b) {
+  assert.deepEqual(Object.keys(a.zip).sort(), Object.keys(b.zip).sort());
+  for (const name of Object.keys(b.zip)) {
+    if (name === 'index.html') assert.equal(withoutRunTime(strFromU8(a.zip[name])), withoutRunTime(strFromU8(b.zip[name])), name);
+    else assert.ok(Buffer.from(a.zip[name]).equals(Buffer.from(b.zip[name])), name);
+  }
+  assert.equal(withoutRunTime(a.done.html), withoutRunTime(b.done.html));
+  assert.deepEqual(a.done.participants, b.done.participants);
+  assert.deepEqual(a.done.reportWarnings, b.done.reportWarnings);
+  assert.equal(a.done.pseudonymKey, b.done.pseudonymKey);
+}
+
+test('a re-analysis under another weight, or pseudonymized, reads a recording the replay pass could not load, as a fresh build does', async () => {
   // A canvas that records what is drawn: the typing chart writes a bare R
   // over each trial whose analysis says the rhythm rule fired (byIndex), and
   // one in its legend.
@@ -440,12 +463,10 @@ test('a re-analysis under another weight reads a recording the replay pass could
   };
   try {
     const files = rereadCohort();
-    const build = async (w, type, config) => {
+    const build = async (w, type, config, secret) => {
       const from = log.length;
-      w.send({ type, files, config, participantIdField: 'participantId' });
-      const done = await w.next('done', 'error');
-      assert.equal(done.type, 'done', done.message);
-      return { done, zip: zipOf(w), rMarks: log.slice(from).filter((c) => c[0] === 'fillText' && c[1] === 'R').length };
+      const built = await render(w, type, files, config, secret);
+      return { ...built, rMarks: log.slice(from).filter((c) => c[0] === 'fillText' && c[1] === 'R').length };
     };
     const w = startWorker();
     w.send({ type: 'check', files });
@@ -478,18 +499,101 @@ test('a re-analysis under another weight reads a recording the replay pass could
     assert.equal(noteOf(second.zip), noteOf(first.zip));
 
     // And the re-analysis is the fresh build under the new weight, file for file.
-    assert.deepEqual(Object.keys(second.zip).sort(), Object.keys(fresh.zip).sort());
-    for (const name of Object.keys(fresh.zip)) {
-      if (name === 'index.html') assert.equal(withoutRunTime(strFromU8(second.zip[name])), withoutRunTime(strFromU8(fresh.zip[name])), name);
-      else assert.ok(Buffer.from(second.zip[name]).equals(Buffer.from(fresh.zip[name])), name);
-    }
-    assert.equal(withoutRunTime(second.done.html), withoutRunTime(fresh.done.html));
-    assert.deepEqual(second.done.participants, fresh.done.participants);
-    assert.deepEqual(second.done.reportWarnings, fresh.done.reportWarnings);
+    assertSameReport(second, fresh);
     assert.equal(second.rMarks, fresh.rMarks);
+
+    // A pseudonymized re-analysis of the same run is a fresh pseudonymized
+    // build: the coded copies are made from the run's participants, which
+    // still hold SYN-U's recording.
+    const coded = { ...checked.config, pseudonymize: true };
+    const third = await build(w, 'reanalyze', coded, SECRET);
+    const freshCoded = await build(startWorker(), 'run', coded, SECRET);
+    assertSameReport(third, freshCoded);
+    assert.equal(third.rMarks, freshCoded.rMarks);
+    assert.equal(third.rMarks, first.rMarks);
   } finally {
     delete globalThis.OffscreenCanvas;
   }
+});
+
+// The fixture's session and recording, with an external stylesheet the
+// dropped folder supplies (it imports another and draws an image) and an
+// image on the page: the matcher, the note and the rewrites all run.
+function styledCohort() {
+  const dir = 'tests/fixtures/demo';
+  const recName = readdirSync(dir).find((f) => /-replay-\d+\.json$/.test(f));
+  const rec = JSON.parse(readFileSync(dir + '/' + recName, 'utf8'));
+  rec.stylesheets.push({ id: 999, kind: 'link', href: 'https://exp.example.org/study/css/style.css', css: null, media: null });
+  rec.segments.find((s) => s.initial_dom).initial_dom.children.push(
+    { id: 900001, kind: 'element', tag: 'img', attrs: { src: 'https://exp.example.org/study/img/stim.png' }, children: [] });
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  return [
+    fileEntry(dir, 'DEMO-FIXT.json', 'study/data/DEMO-FIXT.json'),
+    { path: 'study/data/' + recName, file: new File([JSON.stringify(rec)], recName) },
+    { path: 'study/css/style.css', file: new File(['@import "theme.css";\n.stim{background:url("../img/bg.png")}'], 'style.css') },
+    { path: 'study/css/theme.css', file: new File(['.t{}'], 'theme.css') },
+    { path: 'study/img/bg.png', file: new File([png], 'bg.png') },
+    { path: 'study/img/stim.png', file: new File([png], 'stim.png') },
+  ];
+}
+
+// The worker after a check of the styled cohort, with the plain and the
+// pseudonymized config.
+async function styledWorker(files) {
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  return { w, plain: checked.config, coded: { ...checked.config, pseudonymize: true } };
+}
+const assetNoteOf = (r) => strFromU8(r.zip['index.html']).match(/Experiment assets: [^<]*/)[0];
+
+
+// The coded participants' replays are copies that share the run's
+// recordings, and the replay pass rewrites a recording's matched stylesheets
+// and images in place. The asset note in the zip's report must still be the
+// one a fresh build words, whichever report was rendered before: a note
+// counted over a recording another report had rewritten said fewer matched.
+test('a pseudonymized run, then a plain re-analysis: the asset note and the report are a fresh plain build\'s', async () => {
+  const files = styledCohort();
+  const { w, plain, coded } = await styledWorker(files);
+  await render(w, 'run', files, coded, SECRET);
+  const after = await render(w, 'reanalyze', files, plain);
+  const fresh = await render(startWorker(), 'run', files, plain);
+  assert.match(assetNoteOf(fresh), /^Experiment assets: 2 of 2 stylesheets matched; 2 of 2 images matched/);
+  assert.equal(assetNoteOf(after), assetNoteOf(fresh));
+  assertSameReport(after, fresh);
+});
+
+test('a pseudonymized run, then a re-analysis under another key: the asset note and the report are a fresh build\'s under that key', async () => {
+  const OTHER_SECRET = 'b'.repeat(64);
+  const files = styledCohort();
+  const { w, coded } = await styledWorker(files);
+  await render(w, 'run', files, coded, SECRET);
+  const after = await render(w, 'reanalyze', files, coded, OTHER_SECRET);
+  const fresh = await render(startWorker(), 'run', files, coded, OTHER_SECRET);
+  assert.match(assetNoteOf(fresh), /^Experiment assets: 2 of 2 stylesheets matched; 2 of 2 images matched/);
+  assert.equal(assetNoteOf(after), assetNoteOf(fresh));
+  assertSameReport(after, fresh);
+});
+
+// A settings change that reads the files again (another id or integrity
+// field) leaves the last report on screen until the new one is done, and the
+// page's replay card can still load a replay from it meanwhile.
+test('a run that reads the files again still serves the replays of the report on screen until it is done', async () => {
+  const files = styledCohort();
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  const first = await render(w, 'run', files, checked.config);
+  assert.deepEqual(first.done.participants.map((p) => [p.participantId, p.hasReplay]), [['DEMO-FIXT', true]]);
+  w.send({ type: 'run', files, config: checked.config, participantIdField: 'participantId' });
+  await w.next('zip');
+  w.send({ type: 'replay', participantId: 'DEMO-FIXT' });
+  const served = await w.next('replay-model', 'error');
+  assert.equal(served.type, 'replay-model', served.message);
+  assert.equal(served.participantId, 'DEMO-FIXT');
+  assert.equal((await w.next('done', 'error')).type, 'done');
 });
 
 // The run id names the cohort (report-core.js runIdOf): a re-analysis of the

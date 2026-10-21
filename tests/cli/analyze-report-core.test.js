@@ -11,6 +11,7 @@ import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
 import { makeRecordingCanvasFactory } from './recording-canvas.js';
 import { keyRecording, participantFromRecording, botGaps, humanGaps } from './typing-fixtures.js';
 import { mergeConfig } from '../../src/cli/config-core.js';
+import { buildAssetMap } from '../../src/cli/asset-match.js';
 
 function memorySink() {
   const files = new Map();
@@ -98,9 +99,9 @@ describe('buildReport', () => {
     const recordings = ps.map((p) => p.replay.recording);
     const deps = { sink: () => {}, replayClientSrc: '', fontFaceCss: '' };
     const first = await buildReport(ps, cfg({}), deps);
-    // The caller's participants keep their replays and recordings. The one
-    // thing the pass writes on them is on a replay object it wrote a file
-    // for: its assetPath (with an asset map, its asset note too).
+    // The caller's participants keep their replays and recordings. Without
+    // an asset map, the one thing the pass writes on them is the assetPath
+    // of a replay it wrote a file for (with one, see the next test).
     ps.forEach((p, i) => {
       assert.strictEqual(p.replay, replays[i], p.participantId);
       assert.strictEqual(p.replay.recording, recordings[i], p.participantId);
@@ -122,6 +123,53 @@ describe('buildReport', () => {
       assert.strictEqual(built.participants[0].replay.recording, undefined);
       assert.strictEqual(built.participants[1].replay, ps[1].replay);
     }
+  });
+
+  // With an asset map the pass also writes, through the replay object and
+  // the recording its model aliases: the replay's asset note, and
+  // asset-match.js's rewrites of the recording (a stylesheet's text, a
+  // stylesheet update's text, an image reference on the page). Each is
+  // written once: a second build over the same participants writes nothing.
+  it('with an asset map, writes on its participants only the asset note, the assetPath and the recording\'s rewrites, once', async () => {
+    const { participants: ps } = await ingest(DEMO);
+    const X = 'https://exp.example.org/study/';
+    const rec = ps[0].replay.recording;
+    rec.stylesheets.push({ id: 999, kind: 'link', href: X + 'css/style.css', css: null, media: null });
+    rec.stylesheet_events = [{ type: 'stylesheet.update', t: 5, id: 999, css: '.u{background:url(' + X + 'img/late.png)}' }];
+    rec.segments.find((s) => s.initial_dom).initial_dom.children.push(
+      { id: 900001, kind: 'element', tag: 'img', attrs: { src: X + 'img/stim.png' }, children: [] });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    const { assetMap } = await buildAssetMap([rec], [
+      { path: 'study/css/style.css', read: async () => new TextEncoder().encode('.s{background:url("../img/bg.png")}') },
+      { path: 'study/img/bg.png', read: async () => png },
+      { path: 'study/img/late.png', read: async () => png },
+      { path: 'study/img/stim.png', read: async () => png },
+    ]);
+    const before = structuredClone(ps);
+    const deps = { sink: () => {}, replayClientSrc: '', fontFaceCss: '', assetMap };
+    await buildReport(ps, cfg(DEMO), deps);
+    const after = structuredClone(ps);
+    // Each documented write was made.
+    const replay = after[0].replay;
+    const sheets = replay.recording.stylesheets, update = replay.recording.stylesheet_events[0];
+    const img = replay.recording.segments.find((s) => s.initial_dom).initial_dom.children.at(-1);
+    assert.match(replay.assetNote, /^Experiment assets: 1 of 1 stylesheets matched; 3 of 3 images matched/);
+    assert.strictEqual(replay.assetPath, 'replay/DEMO-FIXT.replay.js');
+    assert.match(sheets.at(-1).css, /^\.s\{background:url\("data:image\/png;base64,/);
+    assert.match(update.css, /data:image\/png;base64,/);
+    assert.strictEqual(img.attrs.src, 'ch-asset:' + X + 'img/stim.png');
+    // And nothing else: with what they replaced put back, the participants
+    // are the ones given.
+    const was = before[0].replay.recording;
+    delete replay.assetNote;
+    delete replay.assetPath;
+    sheets.forEach((s, i) => { s.css = was.stylesheets[i].css; });
+    update.css = was.stylesheet_events[0].css;
+    img.attrs.src = X + 'img/stim.png';
+    assert.deepStrictEqual(after, before);
+    const once = structuredClone(ps);
+    await buildReport(ps, cfg(DEMO), deps);
+    assert.deepStrictEqual(structuredClone(ps), once);
   });
 });
 
@@ -168,7 +216,7 @@ describe('renderInPageHtml', () => {
     const m = memorySink();
     const built = await buildReport(participants, cfg(DEMO),
       { sink: m.sink, createCanvas: makeRecordingCanvasFactory([]), encodePng: pngStub, keepImages: true, replayClientSrc: 'x', fontFaceCss: '' });
-    const html = await renderInPageHtml(built, participants, cfg(DEMO), { replayClientSrc: 'x', fontFaceCss: '@font-face{}' });
+    const html = await renderInPageHtml(built, cfg(DEMO), { replayClientSrc: 'x', fontFaceCss: '@font-face{}' });
     assert.ok(html.includes('data:image/png;base64,AQID'), 'bytes [1,2,3] → AQID');
     // The page's script always names .replay-block; the section itself must be absent.
     assert.ok(!html.includes('class="image-block replay-block"'), 'replay is shown outside the report');

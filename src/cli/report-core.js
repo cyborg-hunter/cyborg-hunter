@@ -298,16 +298,26 @@ export async function buildReport(participants, config, deps) {
 
   // Replay assets — per-participant JSONP models under replay/, lazy-loaded
   // by the HTML report. Size is printed because dom-tier models dominate
-  // the report's disk footprint. This pass stamps `assetPath` (and rewrites
-  // unloadable artifacts) on the participants, so it runs before the index.
-  // It runs over shallow copies (`shown`, returned as built.participants):
-  // an artifact it cannot load is taken out of the copy's replay slot, so
-  // the caller's participants keep their recordings, and a later build over
-  // them (the analyze page renders a run again under new settings) reads
-  // what this one read. The replay object is shared on purpose: the asset
-  // note it keeps from the first pass and the stylesheets asset-match.js
-  // rewrites once stay with it, so a later pass writes the same bytes. Only
-  // the top-level keys are copied: a recording can be tens of MB.
+  // the report's disk footprint. The pass settles the replay the index shows
+  // for each participant (`assetPath` stamped, or an unloadable artifact
+  // rewritten to the note that says why), so it runs before the index.
+  // It runs over shallow copies of the participants (`shown`, returned as
+  // built.participants), top-level keys only: a recording can be tens of
+  // MB. An artifact it cannot load is taken out of the copy's replay slot,
+  // so the caller's participants keep their recordings, and a later build
+  // over them (the analyze page renders a run again under new settings)
+  // reads what this one read. The replay object and its recording are
+  // shared on purpose, and the pass writes on them, so on the caller's:
+  //   - replay.assetNote (with an asset map, for a replay without one): the
+  //     note, worded before the replay is written, so a recording too deep
+  //     to write keeps it too; null when matching or applying fails;
+  //   - replay.assetPath, for a replay it wrote;
+  //   - through the model, which aliases the recording, the rewrites of
+  //     asset-match.js's applyAssetMap: a matched stylesheet's text, a
+  //     stylesheet update's text, and image references in the page (src,
+  //     srcset).
+  // Each is written once: a later pass writes the same bytes and nothing
+  // more (tests/cli/analyze-report-core.test.js).
   const shown = participants.map((p) => ({ ...p }));
   const replayAssets = buildReplayAssets(shown, { sink, assetMap: deps.assetMap || null });
   if (replayAssets.count > 0) {
@@ -344,13 +354,14 @@ export async function buildReport(participants, config, deps) {
 
 // The in-page report: the SAME summaries/triage and the SAME PNG bytes the zip
 // got (plots drawn once), as data URIs; replays are shown outside the report
-// (replayShownExternally), so this must run AFTER buildReport, over the
+// (replayShownExternally), so this runs AFTER buildReport, over the
 // participants it returns (built.participants), whose replay slots its
 // replay pass settled: `assetPath` stamped, an unloadable artifact rewritten.
 // The page keeps the report's annotations (annotationPostMessage): the report
 // runs in a sandboxed frame there, where storage throws.
 // deps = { replayClientSrc, fontFaceCss, timelineSrc?, bytesToBase64? }
-export async function renderInPageHtml(built, participants, config, deps) {
+export async function renderInPageHtml(built, config, deps) {
+  const participants = built.participants;
   const toB64 = deps.bytesToBase64 || bytesToBase64;
   const imageSources = {};
   for (const p of participants) {

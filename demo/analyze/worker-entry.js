@@ -201,13 +201,30 @@ async function run(msg) {
   // rewrites the recordings the models alias, after which matched sheets no
   // longer look external and the summary would undercount.
   // One recording the matcher cannot read loses its note, not the run.
+  // A worded note is also stamped on the run's replay, where the replay pass
+  // keeps it (replay-assets-core.js words a note only for a replay without
+  // one), and the coded copies (pseudonymize-core.js) copy it: no render
+  // counts again over a recording an earlier render rewrote, so every render
+  // words the note a fresh build words, whatever the pseudonymize setting or
+  // key. A null (the matcher threw, or the recording references no asset) is
+  // not stamped: the pass works it out, its warnings included, as the CLI's
+  // does.
   var assetNotes = {};
   participants.forEach(function (p) {
     if (!p.replay || !p.replay.recording) return;
-    try { assetNotes[p.participantId] = assetNoteText(assetMatchSummary(p.replay.recording, assets.assetMap)); } catch (_) { assetNotes[p.participantId] = null; }
+    var note;
+    try { note = assetNoteText(assetMatchSummary(p.replay.recording, assets.assetMap)); } catch (_) { note = null; }
+    assetNotes[p.participantId] = note;
+    if (typeof note === 'string') p.replay.assetNote = note;
   });
-  var state = lastRun = { participants: participants, assetMap: assets.assetMap, assetNotes: assetNotes,
-    warnings: ingested.warnings.concat(assets.report.warnings), assetReport: assets.report, config: config };
+  // shown: the last report's participants and the map that styled them,
+  // still on the page until this report is done (a settings change that
+  // reads the files again leaves it there), so its replays are still served
+  // meanwhile.
+  var state = { participants: participants, assetMap: assets.assetMap, assetNotes: assetNotes,
+    warnings: ingested.warnings.concat(assets.report.warnings), assetReport: assets.report, config: config,
+    shown: lastRun ? lastRun.shown : null, shownAssetMap: lastRun ? lastRun.shownAssetMap : null };
+  lastRun = state;
   await renderRun(state, config, msg.pseudonymSecret);
 }
 
@@ -230,15 +247,17 @@ async function reanalyze(msg) {
 
 // The report pass over a run's participants. `state` is the run's, passed in:
 // a reset during the pass lets go of lastRun without pulling it from under
-// this one. Every pass starts from every recording ingest attached: the
-// replay pass inside buildReport takes a recording it cannot load out of its
-// own copies (built.participants, the ones this report shows), never out of
-// the run's, so a re-analysis reads every recording the run read. It does
-// rewrite the recordings it styles, and a second pass over the same objects
-// writes what the first wrote because replay-assets-core.js keeps the first
-// note and asset-match.js rewrites each stylesheet once
-// (tests/demo/analyze-worker.test.js compares two zips file for file, with a
-// stylesheet two others import, and a re-analysis with a fresh build).
+// this one. Every pass reads what a fresh build reads. The replay pass
+// inside buildReport takes a recording it cannot load out of its own copies
+// (built.participants, the ones this report shows), never out of the run's,
+// so a re-analysis reads every recording the run read. It does rewrite the
+// stylesheets and image references of the recordings it styles, which the
+// coded copies share; a later pass rewrites them to what they already are
+// (asset-match.js) and words no note over them: run() stamps each note
+// before the first pass, from the recordings as ingest read them
+// (tests/demo/analyze-worker.test.js compares two zips file for file, with
+// a stylesheet two others import, and re-analyses under other weights,
+// pseudonymize settings and keys with fresh builds).
 // `secret`: the pseudonym key's, which the page sends with the message.
 async function renderRun(state, config, secret) {
   var raw = state.participants, assetNotes = state.assetNotes;
@@ -269,10 +288,11 @@ async function renderRun(state, config, secret) {
   });
   zip.end();
   // The participants this report shows (buildReport's copies, in the same
-  // order, whose replay slots its replay pass settled), for the replay
-  // requests that name them.
+  // order, whose replay slots its replay pass settled) and the map that
+  // styled them, for the replay requests that name them.
   var shown = state.shown = built.participants;
-  var html = await renderInPageHtml(built, shown, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, timelineSrc: timelineSrc, bytesToBase64: bytesToBase64 });
+  state.shownAssetMap = state.assetMap;
+  var html = await renderInPageHtml(built, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, timelineSrc: timelineSrc, bytesToBase64: bytesToBase64 });
   post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts, runId: built.runId, cursorLine: built.cursorLine,
     participants: shown.map(function (p, i) {
       var has = !!(p.replay && p.replay.recording);
@@ -290,8 +310,9 @@ async function renderRun(state, config, secret) {
 
 // The run's participants coded (pseudonymize-core.js), made once per run and
 // field settings and kept on its state: a re-analysis renders the same copies,
-// whose replays carry the asset note the first pass wrote
-// (replay-assets-core.js words it once), as the plain participants do.
+// whose replays carry the asset note run() stamped on the plain ones, or,
+// where it stamped none, the one their first pass worded
+// (replay-assets-core.js words a note once).
 // Another secret (the page loaded or forgot a key) codes them again.
 async function codedParticipants(state, config, secret) {
   var sig = JSON.stringify([secret, config.participantIdField, config.platformIdField]);
@@ -309,7 +330,7 @@ function replay(msg) {
   // holding every cohort model would defeat reading one artifact at a time.
   var model = buildViewerModel(p.replay.recording);
   // A recording the matcher cannot read is shown styled as far as the apply got.
-  try { applyAssetMap(model, lastRun.assetMap); } catch (_) { /* the model stays loadable */ }
+  try { applyAssetMap(model, lastRun.shownAssetMap); } catch (_) { /* the model stays loadable */ }
   post({ type: 'replay-model', participantId: msg.participantId, model: model });
 }
 
