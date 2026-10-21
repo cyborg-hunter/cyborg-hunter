@@ -95,11 +95,34 @@ test('the hover label names the trial under the pointer, in the header row above
   await expect(stage.locator('.tl-line')).toBeHidden();
 });
 
-// The block is not held to the pane's 800 px reading column: the charts
-// are drawn 1000 px wide, and at 1400 px the pane has room for that.
-test('in a 1400 px window the stage shows the charts at their own 1000 px', async ({ page }) => {
+// The block is not held to the pane's 800 px reading column: it grows with
+// the pane up to the charts' own 1000 px, and no further. The pane's room is
+// the participant section's width inside its padding, less any scrollbar.
+async function paneRoom(page) {
+  return page.locator('#p-DEMO-FIXT').evaluate((el) => {
+    const s = getComputedStyle(el);
+    return el.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+  });
+}
+
+// At 1400 px the pane's room is 1000 px less whatever the runner's scrollbar
+// takes: the stage fills it.
+test('in a 1400 px window the stage fills the pane, up to 1000 px', async ({ page }) => {
   const stage = await open(page, 1400);
-  expect((await stage.boundingBox()).width).toBe(1000);
+  const width = (await stage.boundingBox()).width;
+  expect(width).toBeLessThanOrEqual(1000);
+  expect(Math.abs(width - Math.min(1000, await paneRoom(page)))).toBeLessThanOrEqual(1);
+});
+
+// At 1800 px the pane has room to spare, and the cap holds the whole block
+// at 1000 px, its header row included: "enlarge" ends where the stage ends.
+test('in an 1800 px window the block stops at 1000 px, "enlarge" at the stage\'s right edge', async ({ page }) => {
+  const stage = await open(page, 1800);
+  expect(await paneRoom(page)).toBeGreaterThan(1100);
+  const box = await stage.boundingBox();
+  expect(box.width).toBe(1000);
+  const enlarge = await page.locator('#p-DEMO-FIXT .tl-enlarge').boundingBox();
+  expect(Math.abs(enlarge.x + enlarge.width - (box.x + box.width))).toBeLessThanOrEqual(1);
 });
 
 test('a click pins a dashed line and a second click on it removes it', async ({ page }) => {
