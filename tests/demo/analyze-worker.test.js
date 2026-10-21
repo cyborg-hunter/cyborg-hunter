@@ -525,10 +525,10 @@ test('a re-analysis under another weight, or pseudonymized, reads a recording th
 
     // summary.csv: the same rows but for the score and the tier (its 3rd and
     // 4th columns), and the run's rates and verdict for SYN-U come from its
-    // recording.
+    // recording (the rate source, then the report's tier, end the row).
     const rowOf = (done, pid) => done.files['summary.csv'].split('\n').find((l) => l.startsWith(pid + ','));
     const unweighted = (done) => done.files['summary.csv'].trim().split('\n').map((l) => l.replace(/^([^,]*,[^,]*),[^,]*,[^,]*,/, '$1,,,')).sort();
-    assert.match(rowOf(first.done, 'SYN-U'), /,highly suspicious,.*,recording$/);
+    assert.match(rowOf(first.done, 'SYN-U'), /,highly suspicious,.*,recording,clean$/);
     assert.notEqual(rowOf(second.done, 'SYN-U').split(',')[2], rowOf(first.done, 'SYN-U').split(',')[2], 'the paste weight moved the score');
     assert.deepEqual(unweighted(second.done), unweighted(first.done));
     // The typing analysis as the page shows it, and the chart's R marks.
@@ -671,7 +671,8 @@ test('done carries the run id, and a re-analysis keeps it', async () => {
 });
 
 // The page's annotation export writes each participant's tier and triage
-// score, in triage order: the same score summary.csv carries.
+// score, in triage order: the same score summary.csv carries. The tier is
+// the report's: config.hardAt's hard* sorts with hard.
 test('done lists each participant\'s tier and triage score, in triage order', async () => {
   const w = startWorker();
   const files = await sampleEntries(w);
@@ -683,6 +684,11 @@ test('done lists each participant\'s tier and triage score, in triage order', as
   assert.deepEqual(done.triageRows.map((r) => [r.participantId, r.tier]), [['DEMO-9mop', 'hard'], ['DEMO-bsq6', 'hard'], ['DEMO-681w', 'soft'], ['DEMO-a3f3', 'clean']]);
   const scores = Object.fromEntries(done.files['summary.csv'].trim().split('\n').slice(1).map((l) => l.split(',')).map((c) => [c[0], Number(c[2])]));
   for (const r of done.triageRows) assert.equal(r.triageScore, scores[r.participantId], r.participantId);
+  // DEMO-a3f3 has three tab-aways of 3 to 10 s (DEMO-9mop, hard already, one).
+  w.send({ type: 'reanalyze', config: { ...checked.config, hardAt: { tabawayMedium: 3 } }, participantIdField: 'participantId' });
+  const ruled = await w.next('done', 'error');
+  assert.equal(ruled.type, 'done', ruled.message);
+  assert.deepEqual(ruled.triageRows.map((r) => [r.participantId, r.tier]), [['DEMO-9mop', 'hard'], ['DEMO-bsq6', 'hard'], ['DEMO-a3f3', 'hard*'], ['DEMO-681w', 'soft']]);
 });
 
 test('a dropped file whose name differs from the recorded URL only in case still styles the replay', async () => {

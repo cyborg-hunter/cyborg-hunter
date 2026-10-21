@@ -108,6 +108,11 @@ const COLUMNS = [
   ['typingFastestMedianMs', (s) => leastOfFields(s, 'medianMs')],
   ['typingLowestCv', (s) => leastOfFields(s, 'cv')],
   ['typingRateSource', (s) => s.typingAnalysis?.rate?.source ?? ''],
+  // The report's tier (triage.js reportTier): hardTriggered's decision, or
+  // hard* when a count reached config.hardAt. Appended after every other
+  // block, so that no earlier column moves. A row built without it gets the
+  // library's tier.
+  ['reportTier', (s, t) => t.reportTier ?? (t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean')],
 ];
 
 export function buildSummaryCsv(summaries, triage) {

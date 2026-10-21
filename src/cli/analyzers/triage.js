@@ -4,7 +4,8 @@
 // reads the triage list top-to-bottom, inspecting the most suspicious first.
 //
 // Ranking has two parts (see rankTriage + decomposeScore below):
-//   - tier:  hard-triggered → soft-flagged → clean (primary sort key)
+//   - tier:  hard-triggered (and config.hardAt's hard*) → soft-flagged →
+//            clean (primary sort key)
 //   - score: by default 5×paste + 5×copy + 3×sidebar-open + 1×tab-away (within
 //            a tier), where a "tab-away" is one longer than the participant's
 //            tab-away threshold (3s by default, 5s for the strict preset).
@@ -15,12 +16,16 @@
 // disclosure are surfaced in the reason and detail panes but do not contribute
 // to the score.
 
-import { SCORE_SIGNALS, DEFAULT_RESOLVED_WEIGHTS, resolveScoreWeights } from './score-weights.js';
+import { SCORE_SIGNALS, DEFAULT_RESOLVED_WEIGHTS, resolveScoreWeights, resolveHardAt, reportTierFromCounts } from './score-weights.js';
 
 export function rankTriage(summaries, edgeExits, config) {
   // Resolved once per run. Warnings are not printed here: config.js
   // (cliConfigWarnings) is the single place they reach the console.
   const { weights } = resolveScoreWeights(config?.scoreWeights);
+  // The report's own hard-tier rule (config.hardAt), one entry per
+  // SCORE_SIGNALS key in table order; null where none is set.
+  const { hardAt } = resolveHardAt(config?.hardAt);
+  const hardAtList = SCORE_SIGNALS.map(sig => (Object.prototype.hasOwnProperty.call(hardAt, sig.key) ? hardAt[sig.key] : null));
   const triageList = summaries.map((s, i) => {
     const ee = edgeExits[i];
     const totalEdgeExits = ee.edgeExits.reduce((sum, t) => sum + t.edgeExitCount, 0);
@@ -28,6 +33,19 @@ export function rankTriage(summaries, edgeExits, config) {
     const terms = decomposeScore(s, totalEdgeExits, s.hardTriggered, weights);
     const score = sumTerms(terms);
     const reason = generateTriageReason(s, totalEdgeExits);
+    // Threshold precedence: an explicit analyst-side CLI override
+    // (config.scoring.softScoreThreshold) wins for deliberate re-screening;
+    // otherwise use the participant's OWN saved threshold (what the library
+    // screened them against — e.g. 4 for the strict preset); else default 6.
+    // Using a hardcoded 6 here would mislabel strict-preset participants clean.
+    const softFlagged = (s.authoritativeSoftScore ?? s.totalSoftScore) >=
+      (config.scoring?.softScoreThreshold ?? s.softScoreThreshold ?? 6);
+    // The tier reportTier starts from: 'hard' when the summary is
+    // hardTriggered (the library's decision, or its recount over the scoped
+    // trials under config.phaseScope); otherwise 'soft' or 'clean' from the
+    // soft score against the threshold above, which an analyst's
+    // config.scoring.softScoreThreshold re-screens.
+    const libTier = s.hardTriggered ? 'hard' : softFlagged ? 'soft' : 'clean';
 
     return {
       participantId: s.participantId,
@@ -37,26 +55,24 @@ export function rankTriage(summaries, edgeExits, config) {
       terms,
       reason,
       hardTriggered: s.hardTriggered,
-      // Threshold precedence: an explicit analyst-side CLI override
-      // (config.scoring.softScoreThreshold) wins for deliberate re-screening;
-      // otherwise use the participant's OWN saved threshold (what the library
-      // screened them against — e.g. 4 for the strict preset); else default 6.
-      // Using a hardcoded 6 here would mislabel strict-preset participants clean.
-      softFlagged: (s.authoritativeSoftScore ?? s.totalSoftScore) >=
-        (config.scoring?.softScoreThreshold ?? s.softScoreThreshold ?? 6),
+      softFlagged,
+      // The report's tier: the one above, or 'hard*' when a count reached
+      // its config.hardAt. summary.csv's reportTier, triage.md's Tier and the
+      // page's badges show it; hardTriggered stays the library's decision.
+      reportTier: reportTierFromCounts(libTier, SCORE_SIGNALS.map(sig => sig.count(s, totalEdgeExits)), hardAtList),
       summary: s,
       edgeExitCount: totalEdgeExits
     };
   });
 
-  // Sort tier-first (hard, then soft, then clean), and by score descending
-  // within a tier. A hard-triggered participant (paste/drop over its count
-  // threshold) is categorically more actionable than a high soft-signal count,
-  // so they must lead the "start here" triage.md even though the score (by
-  // default paste/copy/sidebar/tab-away) includes no hard-trigger term.
-  // This matches the HTML index's "Tier" sort (hard:0, soft:1, clean:2; score
-  // desc within tier).
-  const tierRank = (t) => (t.hardTriggered ? 0 : t.softFlagged ? 1 : 2);
+  // Sort tier-first (hard — hard* with it — then soft, then clean), and by
+  // score descending within a tier. A hard-triggered participant (paste/drop
+  // over its count threshold) is categorically more actionable than a high
+  // soft-signal count, so they must lead the "start here" triage.md even
+  // though the score (by default paste/copy/sidebar/tab-away) includes no
+  // hard-trigger term. This matches the HTML index's "Tier" sort (hard:0,
+  // soft:1, clean:2; score desc within tier).
+  const tierRank = (t) => (t.reportTier === 'hard' || t.reportTier === 'hard*' ? 0 : t.reportTier === 'soft' ? 1 : 2);
   triageList.sort((a, b) => {
     const dt = tierRank(a) - tierRank(b);
     if (dt !== 0) return dt;

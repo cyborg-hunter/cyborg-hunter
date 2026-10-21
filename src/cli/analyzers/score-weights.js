@@ -15,8 +15,10 @@
 // (resolveHardAt below) is the report's own tier rule: a count at or over
 // it adds `hard*` beside the library's own `hard` (triage.js reportTier).
 // "The library's tier", here and below, is the tier the report computed
-// from the data: the library's, or its phase-scoped recount under a phase
-// scope (config.phaseScope).
+// from the data (triage.js): 'hard' when the summary is hardTriggered (the
+// library's decision, or its phase-scoped recount under config.phaseScope),
+// else 'soft' or 'clean' from the soft score against its threshold, which an
+// analyst's config.scoring.softScoreThreshold re-screens.
 
 import { findClosestKey } from '../../shared/validation.js';
 
@@ -189,11 +191,12 @@ export function scoreFromCounts(counts, weights) {
   return score;
 }
 
-// The report's tier. `lib` is the library's tier (the tier the report
-// computed from the data: the library's, or its phase-scoped recount under a
-// phase scope). Its 'hard' stays 'hard'; otherwise 'hard*' when any count
-// reaches its hard-at count (SCORE_SIGNALS order, null for none), else the
-// library's 'soft' or 'clean'. It never lowers the tier it is given.
+// The report's tier. `lib` is the library's tier as the header defines it
+// (the library's hard or its phase-scoped recount; soft or clean against the
+// soft threshold, which config.scoring.softScoreThreshold re-screens). Its
+// 'hard' stays 'hard'; otherwise 'hard*' when any count reaches its hard-at
+// count (SCORE_SIGNALS order, null for none), else the library's 'soft' or
+// 'clean'. It never lowers the tier it is given.
 // Inlined like scoreFromCounts.
 export function reportTierFromCounts(lib, counts, hardAt) {
   if (lib === 'hard') return 'hard';

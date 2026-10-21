@@ -16,8 +16,9 @@ test('summary.csv, event-log.csv and extensions.csv put every cell through csvCe
   assert.ok(summaryRow.includes(",-1.00,"), 'a negative number as text stays a number: ' + summaryRow);
   // The twenty-one cursor columns, the device-masking column and the six
   // typing columns follow, empty without a cursor analysis, a device-masking
-  // result or a typing analysis.
-  assert.ok(summaryRow.endsWith(",'@ext,0,0,0,0,,YES,'+cmd" + ','.repeat(28)), summaryRow);
+  // result or a typing analysis; then the report's tier, clean for a row
+  // with no tier and no flags.
+  assert.ok(summaryRow.endsWith(",'@ext,0,0,0,0,,YES,'+cmd" + ','.repeat(29) + 'clean'), summaryRow);
 
   const participants = [{ participantId: pid, session: { aiExtensionsFound: ['-x'] },
     trials: [{ trialId: '@t', pasteEvents: [{ t: 10, text: '=HYPERLINK("x")' }] }] }];

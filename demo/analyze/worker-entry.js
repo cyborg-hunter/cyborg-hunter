@@ -304,7 +304,7 @@ async function renderRun(state, config, secret) {
     warnings: warnings, reportWarnings: built.warnings, assetReport: state.assetReport,
     files: fileTexts, configUsed: config, zipBytes: zip.bytes, pseudonymKey: pseudonymKey,
     triageRows: built.triage.map(function (t) {
-      return { participantId: t.participantId, tier: t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean', triageScore: t.score };
+      return { participantId: t.participantId, tier: t.reportTier || (t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean'), triageScore: t.score };
     }) });
 }
 

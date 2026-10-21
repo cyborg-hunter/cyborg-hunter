@@ -189,6 +189,10 @@ export async function buildReport(participants, config, deps) {
   log(`  Hard-flagged (hard signal crossed its count threshold): ${flaggedHard}`);
   log(`  Soft-flagged (library soft score >= its threshold):     ${flaggedSoft}`);
   log(`  Clean:                                                  ${clean}`);
+  // The report's own hard-tier rule (config.hardAt): the three counts above
+  // are the library's; these participants are shown as hard* beside them.
+  const movedHard = triage.filter(t => t.reportTier === 'hard*').length;
+  if (movedHard > 0) log(`  Moved to hard by hardAt (hard*):                        ${movedHard}`);
   log(`  Triage.md orders tier-first (hard > soft > clean), then by the CLI`);
   log(scoreWeights.isDefault
     ? `  triage score (5xpaste + 5xcopy + 3xsidebar + 1xtab-away) within a tier.`
