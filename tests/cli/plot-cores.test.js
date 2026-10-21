@@ -863,6 +863,17 @@ test('trajectories core: a cut id keeps at least 12 characters', () => {
   assert.ok(headerOf(short.log)[1].startsWith('ABCDEFGHIJKL — Score: 3 — rrr'), headerOf(short.log)[1]);
 });
 
+// The reason can name AI extensions the participant's browser reported, so
+// it is participant data and can be any length: no text longer than fitWidth
+// measures (1000 characters and an ellipsis) is measured.
+test('trajectories core: a 5000-character reason is never measured whole', () => {
+  const { log, canvasW } = drawTrajectories(P, { score: 3, reason: 'x'.repeat(5000) }, 1);
+  const longest = Math.max(...log.filter(c => c[0] === 'measureText').map(c => c[1].length));
+  assert.ok(longest <= 1001, `longest measured text: ${longest} characters`);
+  const [, text, x] = headerOf(log);
+  assert.ok(text.startsWith('DEMO-FIXT — Score: 3 — xxx') && x + text.length * 6 <= canvasW - x, text.slice(0, 40));
+});
+
 // The legend's lines: the 11 px texts drawn after the header and before the
 // first panel's border.
 function legendOf(log) {

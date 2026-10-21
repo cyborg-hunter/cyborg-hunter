@@ -177,12 +177,15 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   // canvas less its margins. The id is participant data and can be any
   // length, so it is the part cut first, with an ellipsis, to the room the
   // rest leaves, but never below its first ID_MIN_CHARS characters; past
-  // that the line is cut at its end.
+  // that the line is cut at its end. The reason can carry the names of AI
+  // extensions the participant's browser reported, so it too can be any
+  // length: like fitWidth, the header measures no more than 1000 characters
+  // of it (a longer rest leaves the id its minimum anyway).
   const id = String(p.participantId);
   const rest = `${shown} — Score: ${formatScore(triageEntry?.score ?? '?')} — ${triageEntry?.reason ?? ''}`;
   ctx.fillStyle = COLORS.headerText;
   ctx.font = 'bold 16px sans-serif';
-  const idRoom = Math.max(room - ctx.measureText(rest).width, ctx.measureText(id.slice(0, ID_MIN_CHARS) + '…').width);
+  const idRoom = Math.max(room - ctx.measureText(rest.slice(0, 1000)).width, ctx.measureText(id.slice(0, ID_MIN_CHARS) + '…').width);
   ctx.fillText(fitWidth(ctx, fitWidth(ctx, id, idRoom) + rest, room), PANEL_PAD, 30);
 
   ctx.font = LEGEND_FONT;
