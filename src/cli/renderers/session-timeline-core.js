@@ -67,7 +67,7 @@
 import { countSidebarOpenings } from '../analyzers/summary.js';
 import {
   TIMELINE_GEOMETRY, TIMELINE_ROW, NO_PHASE, trialSpans, inputMarks, guides, coverDomain,
-  typingThreshold, typingBars, timelineRows, countLabelPlaces,
+  typingThreshold, typingBars, timelineRows, countLabelPlaces, barRect,
 } from './timeline-layout.js';
 
 // ── Layout constants ─────────────────────────────────────────────────────
@@ -735,8 +735,10 @@ function phaseColor(type) {
 // The Trials strip: one band per trial from its start to its end, coloured by
 // the trial's phase when the experiment sets phases (the jsPsych extension's
 // `phase` parameter; "default" counts as unset; KNOWN_PHASE_FILL), else in
-// alternating greys so neighbouring trials stay apart. A trial whose events
-// a trimmed Qualtrics payload did not keep is hatched. A trial's id is
+// alternating greys so neighbouring trials stay apart. A band spans the x of
+// the trial's bar on the typing chart above (timeline-layout.js barRect). A
+// trial whose events a trimmed Qualtrics payload did not keep is hatched. A
+// trial's id is
 // written in its band when it fits; each phase's name above the strip where
 // the phase begins, or, when the Phases strip sits right above
 // (namesInside), in the strip itself, where it takes the place of the ids it
@@ -756,11 +758,10 @@ function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
     fillOf.set(run.label, KNOWN_PHASE_FILL.get(run.label) ?? PHASE_FILL[next++ % PHASE_FILL.length]);
   }
   L.spans.forEach((s, i) => {
-    const x0 = X(s.startSec);
-    const w = Math.max(1.5, X(s.endSec) - x0 - 0.5);
+    const { x, w } = barRect(s, xDomain);
     ctx.fillStyle = runs.length ? fillOf.get(s.phase === null ? NO_PHASE : s.phase) : (i % 2 ? C.trialB : C.trialA);
-    ctx.fillRect(x0, y + 1, w, PHASE_STRIP_H - 2);
-    if (s.truncated) hatch(ctx, x0, y + 1, w, PHASE_STRIP_H - 2);
+    ctx.fillRect(x, y + 1, w, PHASE_STRIP_H - 2);
+    if (s.truncated) hatch(ctx, x, y + 1, w, PHASE_STRIP_H - 2);
   });
   // Phase names inside the strip (phaseNamesInBands), each with its phase's
   // fill for the patch drawTrialsStripNames puts under it.

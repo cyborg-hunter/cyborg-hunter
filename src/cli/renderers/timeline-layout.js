@@ -52,10 +52,14 @@ export function xOf(sec, domainSec) {
 }
 
 // A trial's bar: from its start to its end, at least 2 px wide, with a 1 px
-// gap before the next trial's.
+// gap before the next trial's. The one rectangle for a trial on both images
+// (the Trials strip's band, the typing chart's column and bar). A bar the
+// minimum width would carry past the chart's right edge (a short trial at
+// the end of the session) is moved left to end at that edge.
 export function barRect(span, domainSec) {
-  const x = xOf(span.startSec, domainSec);
-  return { x, w: Math.max(2, xOf(span.endSec, domainSec) - x - 1) };
+  const start = xOf(span.startSec, domainSec);
+  const w = Math.max(2, xOf(span.endSec, domainSec) - start - 1);
+  return { x: Math.min(start, TIMELINE_GEOMETRY.left + CHART_W - w), w };
 }
 
 // The name a chart prints for a trial: its id, else the legacy rule id, else

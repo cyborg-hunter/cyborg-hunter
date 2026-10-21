@@ -34,6 +34,18 @@ describe('the time axis', () => {
     assert.deepEqual(barRect({ startSec: 10, endSec: 10.01 }, 100), { x: 178, w: 2 });
     assert.deepEqual(barRect({ startSec: 0, endSec: 50 }, 100), { x: 90, w: 439 });
   });
+
+  it('a bar at the end of the session ends at the chart\'s right edge, not in the margin', () => {
+    // A trial ending on the last pixel, too short for 2 px: moved left to end
+    // at the edge. Its x would be 969.12, its end 971.12.
+    const right = TIMELINE_GEOMETRY.left + CHART_W;
+    for (const span of [{ startSec: 99.9, endSec: 100 }, { startSec: 100, endSec: 100 }, { startSec: 99.99, endSec: 120 }]) {
+      const { x, w } = barRect(span, 100);
+      assert.equal(w, 2, JSON.stringify(span));
+      assert.ok(x + w <= right, `${JSON.stringify(span)}: ends at ${x + w}`);
+      assert.equal(x + w, right, 'and reaches it');
+    }
+  });
 });
 
 describe('trial spans', () => {

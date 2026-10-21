@@ -47,6 +47,13 @@ snapshotTest('session-timeline core draw log', 'drawlog-session-timeline.json',
     assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 6, 'one guide per trial start');
     // The title names the whole participant id.
     assert.ok(texts.includes('Session Timeline — DEMO-FIXT'), 'the title');
+    // A band per trial, each inside the chart: the last two trials, at the
+    // session's end, are narrower than the 2 px minimum, so they end at the
+    // chart's right edge.
+    const bandY = timelineRows({ trialsStrip: true }).trialsY + 1;
+    const bands = log.filter(c => c[0] === 'fillRect' && c[2] === bandY && c[4] === TIMELINE_ROW.strip - 2);
+    assert.equal(bands.length, 6, 'a band per trial');
+    assert.ok(bands.every(c => c[1] + c[3] <= CHART_RIGHT), `bands end at ${bands.map(c => c[1] + c[3])}`);
   });
 
 // Enriched variant: DEMO-FIXT records no sidebar / viewport-shift / guard
@@ -827,6 +834,11 @@ snapshotTest('typing-profile core draw log', 'drawlog-typing-profile.json',
     assert.equal(texts.filter(t => t === 'P').length, 1);
     assert.equal(texts.filter(t => t === 'C').length, 1);
     assert.equal(texts.filter(t => t === 'R').length, 1);
+    // A column per trial, each inside the chart (the last two end the
+    // session at its right edge, as on the Trials strip below).
+    const columns = log.filter(c => c[0] === 'fillRect' && c[2] === TYPING_ROW.top && c[4] === TYPING_ROW.chart);
+    assert.equal(columns.length, 6, 'a column per trial');
+    assert.ok(columns.every(c => c[1] + c[3] <= CHART_RIGHT), `columns end at ${columns.map(c => c[1] + c[3])}`);
   });
 
 // Enriched: a no-data trial (act1-tabaway) boosted to 15 cps, over the
@@ -978,6 +990,31 @@ test('typing-profile core: a negative rate or threshold draws nothing under the 
   assert.ok(above(perTrial, 250), JSON.stringify(perTrial.filter(c => c[0] === 'fillRect')));
   assert.ok(perTrial.some(c => c[0] === 'fillRect' && c[1] === 60 && c[2] === 250 && c[4] === 0), 'act1-baseline, no height');
   assert.equal(styleSets(perTrial, 'strokeStyle', '#ff0000'), 0, 'no threshold line');
+});
+
+// A trial too short for its 2 px minimum that ends the session ends on the
+// chart's last pixel: its band on the Trials strip and its column and bar on
+// the typing chart are one rectangle (timeline-layout.js barRect), moved left
+// to end at the chart's right edge rather than in the margin.
+test('a short trial at the end of the session stays inside the plot, on the Trials strip and the typing chart', async () => {
+  const p = { participantId: 'EDGE', session: {}, metadata: {}, trials: [
+    { trialId: 'long', startTime: 0, duration_ms: 50000, charsPerSec: 4 },
+    { trialId: 'last', startTime: 50000, duration_ms: 20, charsPerSec: 5 },
+  ] };
+  const L = sessionLayout(p, { outputDir: '.' });
+  assert.equal(L.domainSec, 50.02, 'the last trial ends the domain');
+  const ends = (rects) => rects.map((c) => c[1] + c[3]);
+  const timeline = [];
+  await drawSessionTimeline(p, { outputDir: '.' }, makeRecordingCanvasFactory(timeline));
+  const y = timelineRows({ trialsStrip: true }).trialsY + 1;
+  const bands = timeline.filter((c) => c[0] === 'fillRect' && c[2] === y && c[4] === TIMELINE_ROW.strip - 2);
+  assert.equal(bands.length, 2, 'a band per trial');
+  assert.ok(ends(bands).every((e) => e <= CHART_RIGHT), `Trials-strip bands end at ${ends(bands)}`);
+  const typing = [];
+  drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(typing));
+  const columns = typing.filter((c) => c[0] === 'fillRect' && c[2] === TYPING_ROW.top && c[4] === TYPING_ROW.chart);
+  assert.equal(columns.length, 2, 'a column per trial');
+  assert.ok(ends(columns).every((e) => e <= CHART_RIGHT), `typing columns end at ${ends(columns)}`);
 });
 
 // The threshold is participant data: printed short (0.1 + 0.2 reads 0.3, a
