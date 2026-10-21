@@ -25,6 +25,8 @@
 // other functions timelineScript lists, nothing else from this module), and
 // written in ES5 like the report's other inline code.
 
+import { inlineSrcHazards } from '../../shared/inline-safe.js';
+
 // Seconds as m:ss.
 export function chClock(sec) {
   var m = Math.floor(sec / 60);
@@ -119,7 +121,18 @@ export function chWireTimelineStage(stage) {
 // time (tools/build-analyze.mjs), so its report is the CLI's byte for byte.
 // The call names the function by its `.name`, so a text built from renamed
 // functions would still call the one it defines.
+// inlineSafeSrc cannot neutralise a sequence that opens the HTML parser's
+// escaped state (src/shared/inline-safe.js): the page's own closing tag
+// would no longer close the script and the hover would silently never run.
+// So the text is checked here, where every report and the analyzer's build
+// take it, as readReplayClientSrc checks the replay viewer's.
 export function timelineScript() {
-  return [chClock, chTimelineLabel, chWireTimelineStage].map(String).join('\n') +
+  const src = [chClock, chTimelineLabel, chWireTimelineStage].map(String).join('\n') +
     '\ndocument.querySelectorAll(".tl-stage").forEach(function (stage) { ' + chWireTimelineStage.name + '(stage); });\n';
+  const hazards = inlineSrcHazards(src);
+  if (hazards.length) {
+    throw new Error('timeline-client: the hover script cannot be inlined into the report: it ' + hazards.join('; and it ') +
+      '. Reword the source (a comment that mentions HTML is the usual cause); do not widen the escape.');
+  }
+  return src;
 }

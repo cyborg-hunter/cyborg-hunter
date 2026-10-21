@@ -78,6 +78,23 @@ describe('the inline script', () => {
     assert.equal(/<\/script/i.test(src), false);
   });
 
+  // timelineScript checks its own text, so a hazard typed into an inlined
+  // function (a comment that mentions HTML is the usual one) fails the
+  // report's build and the analyzer's, not only this test. A function's
+  // text is what String gives it: the test gives one function its own
+  // toString, then takes it away.
+  it('refuses to build when an inlined function holds a hazard', () => {
+    for (const hazard of ['/* <!-- */', 'var s = "<script>";']) {
+      chClock.toString = () => 'function chClock(sec) { ' + hazard + ' return ""; }';
+      try {
+        assert.throws(() => timelineScript(), /cannot be inlined/, hazard);
+      } finally {
+        delete chClock.toString;
+      }
+    }
+    assert.deepEqual(inlineSrcHazards(timelineScript()), [], 'the functions\' own text again');
+  });
+
   // The report's markup for DEMO-FIXT (its trials carry start times, so the
   // charts align), with the script run from its source text in a fresh
   // context: a function that used anything from its module would throw.
