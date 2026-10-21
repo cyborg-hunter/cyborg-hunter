@@ -1036,7 +1036,8 @@ function drawGuardViolations(ctx, y, list, xScale, xDomain) {
 // indigo ticks with "×N" after a trial's last one. Marks outside the domain
 // (an offset that could not be derived) are not drawn.
 // The "×N" counts are placed (timeline-layout.js countLabelPlaces: in two
-// rows, clear of the copy, paste and drop marks, merged when too crowded)
+// rows, slid clear of the copy, paste and drop marks when a clear spot is
+// near, else over them; merged when too crowded)
 // and returned with those marks, not drawn: drawInsertionCounts draws them
 // after the guides, each on a patch, so no line runs through one.
 function drawTextInput(ctx, y, marks, xScale, xDomain) {

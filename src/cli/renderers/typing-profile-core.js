@@ -172,7 +172,7 @@ function drawPerTrial(p, L, createCanvas) {
   const G = PER_TRIAL;
   const bars = L.bars.slice(0, MAX_BARS);
   const shown = bars.length < L.bars.length ? ` (first ${bars.length} of ${L.bars.length} trials)` : '';
-  // At least 600 px, so the legend fits beside the threshold's label, and
+  // At least 600 px, so the legend fits on its line under the title, and
   // 700 when it also names the trimmed pages' hatch.
   const trimmed = bars.some((b) => b.truncated);
   const canvasW = Math.max(trimmed ? 700 : 600, G.left + bars.length * (G.barWidth + G.barGap) + 20);

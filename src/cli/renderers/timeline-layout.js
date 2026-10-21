@@ -287,8 +287,9 @@ export function glyphPlaces(glyphs, bar, plotTop) {
 // clear of its bottom border. A 32 px lane holds two (patches at y + 3 and
 // y + 13); a third would end on the border. The marks fill the lane's height
 // (copies' ▼ from y + 6.5 to y + 15, pastes and drops from y + 17 to y + 27,
-// ticks from y + 4 to y + 28), so no row is free of them: a count keeps clear
-// of the marks at its own x.
+// ticks from y + 4 to y + 28), so no row is free of them: a count slides
+// clear of the marks near it when it can, else sits over them, outlined
+// (countLabelPlaces).
 export const COUNT_LABEL = Object.freeze({ charW: 5.8, rowH: 10, top: 3, edge: 2 });
 
 // Where each burst's count goes in the Text input lane: [{ text, x, y,
@@ -310,6 +311,10 @@ export const COUNT_LABEL = Object.freeze({ charW: 5.8, rowH: 10, top: 3, edge: 2
 // it stays visible): a count stays beside its own ticks.
 // Each row's marks are kept apart and sorted, so a look-up is a bisection
 // and the marks of the other row are never walked.
+// A count that sits at its place takes the row with the fewest marks under
+// it, counted up to MARKS_UNDER_CAP so a dense lane is not walked mark by
+// mark under every count: rows with that many or more tie, and the first is
+// taken.
 const MARKS_UNDER_CAP = 8;
 export function countLabelPlaces(bursts, marks, lane) {
   const { charW, rowH, top, edge } = COUNT_LABEL;
