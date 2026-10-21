@@ -340,8 +340,11 @@ function editTimesOf(t) {
 }
 
 // The typing-speed cutoff the library screened this participant with (saved
-// in the session report), else the CLI's, else 10: summary.js's order.
-function cutoffOf(p, config) {
+// in the session report), else the CLI's, else 10, each only when it is a
+// number. The summary's fast-typing count reads it here too (summary.js),
+// and the typing chart by the same rule (timeline-layout.js
+// typingThreshold), so a trial is fast alike in all three.
+export function cutoffOf(p, config) {
   const session = isObj(p.session) ? p.session : {};
   const saved = isObj(session.config) ? session.config.thresholds : null;
   if (isObj(saved) && isNum(saved.typingSpeedCps)) return saved.typingSpeedCps;

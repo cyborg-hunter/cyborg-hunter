@@ -3,6 +3,8 @@
 // Produces one summary object per participant with columns for each signal category.
 // These summaries feed into triage ranking and the summary CSV renderer.
 
+import { cutoffOf } from './typing.js';
+
 export function computeSummary(participants, config) {
   return participants.map(p => computeParticipantSummary(p, config));
 }
@@ -60,8 +62,10 @@ export function computeParticipantSummary(participant, config) {
   const scoringCutoff_ms =
     savedThresholds.tabAwayDurationMs ?? config?.thresholds?.tabAwayDurationMs ?? 3000;
   const longCutoff_ms = 10000;
-  const typingCutoff_cps =
-    savedThresholds.typingSpeedCps ?? config.typingSpeedThreshold_cps ?? 10;
+  // The typing cutoff in the same order, read as the typing analysis and the
+  // chart read it: a saved value that is not a number (text in a hand-edited
+  // file) is skipped, not compared as text.
+  const typingCutoff_cps = cutoffOf(participant, config);
 
   const summary = {
     participantId: participant.participantId,

@@ -10,6 +10,7 @@ import { drawTypingProfile } from '../../src/cli/renderers/typing-profile-core.j
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { buildReport } from '../../src/cli/report-core.js';
 import { analyzeTyping } from '../../src/cli/analyzers/typing.js';
+import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { hoverData } from '../../src/cli/renderers/timeline-layout.js';
 import { makeRecordingCanvasFactory } from './recording-canvas.js';
 import { keyRecording, participantFromRecording, botGaps, humanGaps } from './typing-fixtures.js';
@@ -115,6 +116,25 @@ describe('sessionLayout', () => {
     assert.ok(L.domainSec > 17, `the domain covers the last trial (${L.domainSec})`);
     const open = L.events.sidebarSpans.find((s) => !s.closed);
     assert.equal(open.end_sec, L.domainSec);
+  });
+});
+
+// The summary's fast-typing count, the typing analysis and the chart read the
+// saved typing threshold by one rule: only a real number counts. A threshold
+// saved as text is skipped by all three (the CLI's is taken, else 10), so the
+// summary counts the trials the chart draws red.
+describe('the typing threshold', () => {
+  it('a saved threshold that is not a number gives the summary the chart\'s threshold', () => {
+    for (const saved of ['5', null, true, { cps: 5 }]) {
+      const p = { participantId: 'TXT', session: { config: { thresholds: { typingSpeedCps: saved } } }, metadata: {},
+        trials: [3, 7, 12].map((cps, i) => ({ trialId: 't' + i, startTime: i * 10000, duration_ms: 9000, charsPerSec: cps })) };
+      const L = sessionLayout(p, {});
+      assert.equal(L.threshold, 10, `${JSON.stringify(saved)}: the chart takes the default`);
+      const red = L.bars.filter((b) => b.fast).length;
+      assert.equal(red, 1, 'one red bar, the 12 chars/sec trial');
+      const [summary] = computeSummary([p], {});
+      assert.equal(summary.trialsWithFastTyping, red, `${JSON.stringify(saved)}: the summary counts the chart's red bars`);
+    }
   });
 });
 
