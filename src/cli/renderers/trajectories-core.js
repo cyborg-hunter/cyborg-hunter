@@ -34,8 +34,15 @@ const PANEL_W = 400;
 const PANEL_H = 300;
 const PANEL_PAD = 40;
 const TITLE_HEIGHT = 40;
-const HEADER_HEIGHT = 96;   // accommodates 3-line legend
+// The header: the title's baseline at 30, then the legend's lines from
+// LEGEND_TOP, one every LEGEND_LINE px; the header ends LEGEND_LINE below the
+// last line (96 px for three lines).
+const LEGEND_TOP = 48;
+const LEGEND_LINE = 16;
 const PANEL_MARGIN = 15;    // inset between panel border and content area
+// A long participant id is cut to make room for the score and the reason,
+// but keeps at least this many characters.
+const ID_MIN_CHARS = 12;
 // At most this many panels, the first trials in display order: the canvas
 // grows by a row per five trials, and node-canvas and browsers refuse a side
 // longer than 32767 pixels (86 rows). The header says when trials are left out.
@@ -78,6 +85,38 @@ const PHASE_TINTS = {
   end_requery: '#eceff1',         // bluish grey — matches C.phasePre/Post
 };
 
+// The legend: three lines of entries, each line joined by its own separator.
+// Three lines keep the panel-frame and tint meanings visible rather than
+// buried at the end of one long line. On a narrow grid (one panel is 480 px)
+// a line is wrapped between entries (wrapLegend).
+const LEGEND = [
+  { sep: '  ', entries: ['Blue●=start', 'Red■=end', 'Green▼=mousedown', 'Magenta▲=mouseup',
+    'Yellow◆=tab-away (left)', 'Cyan◆=tab-away (returned)', 'Grey○=pause'] },
+  { sep: '  ', entries: ['Teal outer rect=screen', 'Purple dashed rect=browser window',
+    'Red panel frame=hard signal triggered on this trial'] },
+  { sep: ' ', entries: ['Panel tint=phase: peach gallery,', 'purple typing/query,', 'blue classification,',
+    'grey re-query (neutral = unphased)', '— matches the session-timeline strip'] },
+];
+const LEGEND_FONT = '11px sans-serif';
+
+// The legend's lines for `room` px: a line whole when it fits, else its
+// entries packed in order, starting a new line where the next entry would run
+// past the room. Every entry fits alone in the narrowest grid's room (400 px).
+function wrapLegend(ctx, room) {
+  const lines = [];
+  for (const { sep, entries } of LEGEND) {
+    const whole = entries.join(sep);
+    if (ctx.measureText(whole).width <= room) { lines.push(whole); continue; }
+    let line = entries[0];
+    for (const entry of entries.slice(1)) {
+      if (ctx.measureText(line + sep + entry).width <= room) line += sep + entry;
+      else { lines.push(line); line = entry; }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 // Orders a participant's trials for the panel grid (0.6.1, retro item 3).
 // config.trajectoryDisplayOrder:
 //   'rule'      (default) chronological by rule — (rulePosition, phase-rank,
@@ -119,7 +158,14 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   const rows = Math.ceil(trials.length / cols);
 
   const canvasW = cols * (PANEL_W + PANEL_PAD) + PANEL_PAD;
-  const canvasH = HEADER_HEIGHT + rows * (PANEL_H + TITLE_HEIGHT + PANEL_PAD) + PANEL_PAD;
+  const room = canvasW - 2 * PANEL_PAD;
+  // The legend's line count sets the header's height, so the legend is
+  // wrapped before the canvas is made, measured on a 1×1 canvas.
+  const probe = createCanvas(1, 1).getContext('2d');
+  probe.font = LEGEND_FONT;
+  const legend = wrapLegend(probe, room);
+  const headerH = LEGEND_TOP + legend.length * LEGEND_LINE;
+  const canvasH = headerH + rows * (PANEL_H + TITLE_HEIGHT + PANEL_PAD) + PANEL_PAD;
   const canvas = createCanvas(canvasW, canvasH);
   const ctx = canvas.getContext('2d');
 
@@ -127,29 +173,21 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   ctx.fillStyle = COLORS.bg;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  // Header, cut with an ellipsis to the canvas less its margins: the
-  // participant id can be any length (as the timeline's title is cut).
-  const headerText = `${p.participantId}${shown} — Score: ${formatScore(triageEntry?.score ?? '?')} — ${triageEntry?.reason ?? ''}`;
+  // Header: the participant id, then the score and the reason, within the
+  // canvas less its margins. The id is participant data and can be any
+  // length, so it is the part cut first, with an ellipsis, to the room the
+  // rest leaves, but never below its first ID_MIN_CHARS characters; past
+  // that the line is cut at its end.
+  const id = String(p.participantId);
+  const rest = `${shown} — Score: ${formatScore(triageEntry?.score ?? '?')} — ${triageEntry?.reason ?? ''}`;
   ctx.fillStyle = COLORS.headerText;
   ctx.font = 'bold 16px sans-serif';
-  ctx.fillText(fitWidth(ctx, headerText, canvasW - 2 * PANEL_PAD), PANEL_PAD, 30);
+  const idRoom = Math.max(room - ctx.measureText(rest).width, ctx.measureText(id.slice(0, ID_MIN_CHARS) + '…').width);
+  ctx.fillText(fitWidth(ctx, fitWidth(ctx, id, idRoom) + rest, room), PANEL_PAD, 30);
 
-  // Two-line legend — splitting keeps the panel-frame meaning visible rather
-  // than buried at the end of a wrap.
-  ctx.font = '11px sans-serif';
+  ctx.font = LEGEND_FONT;
   ctx.fillStyle = COLORS.legendText;
-  ctx.fillText(
-    'Blue●=start  Red■=end  Green▼=mousedown  Magenta▲=mouseup  Yellow◆=tab-away (left)  Cyan◆=tab-away (returned)  Grey○=pause',
-    PANEL_PAD, 48
-  );
-  ctx.fillText(
-    'Teal outer rect=screen  Purple dashed rect=browser window  Red panel frame=hard signal triggered on this trial',
-    PANEL_PAD, 64
-  );
-  ctx.fillText(
-    'Panel tint=phase: peach gallery, purple typing/query, blue classification, grey re-query (neutral = unphased) — matches the session-timeline strip',
-    PANEL_PAD, 80
-  );
+  legend.forEach((line, i) => ctx.fillText(line, PANEL_PAD, LEGEND_TOP + i * LEGEND_LINE));
 
   // session.windowPositions is the window/screen record from
   // core/signals/browser.js (a row per change; older data: every 2 s). Per-trial geometry uses the sample whose
@@ -162,7 +200,7 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x0 = PANEL_PAD + col * (PANEL_W + PANEL_PAD);
-    const y0 = HEADER_HEIGHT + PANEL_PAD + row * (PANEL_H + TITLE_HEIGHT + PANEL_PAD);
+    const y0 = headerH + PANEL_PAD + row * (PANEL_H + TITLE_HEIGHT + PANEL_PAD);
 
     // Geometry resolution priority: explicit per-trial > session-end > polled.
     // Per-trial wins because it was captured AT trial render time and can't

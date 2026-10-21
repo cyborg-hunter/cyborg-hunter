@@ -821,28 +821,72 @@ snapshotTest('trajectories core draw log (enriched)', 'drawlog-trajectories-enri
   (log) => {
     const fillSets = (color) => log.filter(c => c[0] === 'set:fillStyle' && c[1] === color);
     const strokeSets = (color) => log.filter(c => c[0] === 'set:strokeStyle' && c[1] === color);
-    assert.ok(log.length > 284, `enriched log has ${log.length} calls (baseline: 284)`);
+    assert.ok(log.length > 292, `enriched log has ${log.length} calls (baseline: 292)`);
     assert.equal(fillSets('#ccc').length, 1, 'the injected non-overlapping gap draws exactly one bare pause circle');
     assert.equal(strokeSets('#26a69a').length, 6,
       'screen outline now drawn for all 6 trials once the window/screen paradox is fixed');
   });
 
-// The header names the participant, and the id is participant data: a long
-// one is cut with an ellipsis to the canvas's width less its margins, as the
-// timeline's and the typing chart's titles are. One trial makes the canvas
-// one panel wide (480 px); the recording canvas measures 6 px a character.
-test('trajectories core: a 200-character id is cut with an ellipsis and stays on the canvas', () => {
-  const p = structuredClone(P);
-  p.trials = p.trials.slice(0, 1);
-  p.participantId = 'W'.repeat(200);
+// One trial makes the canvas one panel wide (480 px); the recording canvas
+// measures 6 px a character.
+function drawTrajectories(p, triage, trials) {
+  const q = structuredClone(p);
+  if (trials) q.trials = q.trials.slice(0, trials);
   const log = [];
-  drawTrajectoryGrid(p, { hardTriggered: false, score: 3, reason: 'paste' }, { outputDir: '.' }, makeRecordingCanvasFactory(log));
-  const canvasW = log[0][1];
-  const header = log.find(c => c[0] === 'fillText' && c[3] === 30);
+  const canvas = drawTrajectoryGrid(q, { hardTriggered: false, ...triage }, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  return { log, canvasW: canvas.width };
+}
+const headerOf = (log) => log.find(c => c[0] === 'fillText' && c[3] === 30);
+
+// The header names the participant, then its score and the reason. The id
+// is participant data and can be any length: a long one is cut first, with
+// an ellipsis, so the score and the reason stay whole and on the canvas.
+test('trajectories core: a 200-character id is cut first, and the score and reason stay on the canvas', () => {
+  const { log, canvasW } = drawTrajectories({ ...P, participantId: 'W'.repeat(200) }, { score: 3, reason: 'paste' }, 1);
+  const header = headerOf(log);
   assert.ok(header, 'the header');
   const [, text, x] = header;
-  assert.ok(text.startsWith('WWW') && text.endsWith('…'), text.slice(0, 40) + ' … ' + text.slice(-20));
+  assert.match(text, /^W+… — Score: 3 — paste$/, text);
   assert.ok(x >= 0 && x + text.length * 6 <= canvasW - x, `header from ${x} to ${x + text.length * 6} on ${canvasW} px`);
+});
+
+// When the score and the reason leave the id less room than that, the id
+// keeps its first 12 characters and the line is cut at its end instead; an
+// id of 12 characters or fewer is never cut.
+test('trajectories core: a cut id keeps at least 12 characters', () => {
+  const reason = 'r'.repeat(100);
+  const long = drawTrajectories({ ...P, participantId: 'W'.repeat(200) }, { score: 3, reason }, 1);
+  const [, text, x] = headerOf(long.log);
+  assert.ok(text.startsWith('W'.repeat(12) + '… — Score: 3 — rrr') && text.endsWith('r…'), text);
+  assert.ok(x + text.length * 6 <= long.canvasW - x, `header from ${x} to ${x + text.length * 6} on ${long.canvasW} px`);
+  const short = drawTrajectories({ ...P, participantId: 'ABCDEFGHIJKL' }, { score: 3, reason }, 1);
+  assert.ok(headerOf(short.log)[1].startsWith('ABCDEFGHIJKL — Score: 3 — rrr'), headerOf(short.log)[1]);
+});
+
+// The legend's lines: the 11 px texts drawn after the header and before the
+// first panel's border.
+function legendOf(log) {
+  const start = log.findIndex(c => c[0] === 'set:fillStyle' && c[1] === '#666');
+  const end = log.findIndex((c, i) => i > start && c[0] === 'strokeRect');
+  return { lines: log.slice(start, end).filter(c => c[0] === 'fillText'), rest: log.slice(end) };
+}
+
+// The legend's three lines are drawn whole on a wide grid and wrapped between
+// their entries on a narrow one: on one panel (480 px) every line ends inside
+// the canvas, no word is lost, and the panels move down below the last line.
+test('trajectories core: on a one-panel grid the legend wraps inside the canvas', () => {
+  const wide = legendOf(drawTrajectories(P, { score: 3, reason: 'paste' }).log).lines;
+  assert.equal(wide.length, 3, 'a five-panel grid keeps the three lines');
+  const { log, canvasW } = drawTrajectories(P, { score: 3, reason: 'paste' }, 1);
+  const { lines, rest } = legendOf(log);
+  for (const [, text, x] of lines) {
+    assert.ok(x + text.length * 6 <= canvasW - x, `"${text}" ends at ${x + text.length * 6} on ${canvasW} px`);
+  }
+  const words = (cs) => cs.map(c => c[1]).join(' ').split(/\s+/);
+  assert.deepEqual(words(lines), words(wide), 'every word of the legend, in order');
+  lines.forEach((c, i) => { if (i > 0) assert.equal(c[3], lines[i - 1][3] + 16, 'one line every 16 px'); });
+  const title = rest.find(c => c[0] === 'fillText');
+  assert.ok(lines.at(-1)[3] + 16 <= title[3] - 11, `last legend line at ${lines.at(-1)[3]}, first panel title at ${title[3]}`);
 });
 
 // ── Typing-profile core ──────────────────────────────────────────────────

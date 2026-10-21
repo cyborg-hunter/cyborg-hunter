@@ -1,6 +1,27 @@
 {
- "calls": 324,
+ "calls": 332,
  "log": [
+  [
+   "createCanvas",
+   1,
+   1
+  ],
+  [
+   "set:font",
+   "11px sans-serif"
+  ],
+  [
+   "measureText",
+   "Blue●=start  Red■=end  Green▼=mousedown  Magenta▲=mouseup  Yellow◆=tab-away (left)  Cyan◆=tab-away (returned)  Grey○=pause"
+  ],
+  [
+   "measureText",
+   "Teal outer rect=screen  Purple dashed rect=browser window  Red panel frame=hard signal triggered on this trial"
+  ],
+  [
+   "measureText",
+   "Panel tint=phase: peach gallery, purple typing/query, blue classification, grey re-query (neutral = unphased) — matches the session-timeline strip"
+  ],
   [
    "createCanvas",
    2240,
@@ -24,6 +45,18 @@
   [
    "set:font",
    "bold 16px sans-serif"
+  ],
+  [
+   "measureText",
+   " — Score: ? — "
+  ],
+  [
+   "measureText",
+   "DEMO-FIXT…"
+  ],
+  [
+   "measureText",
+   "DEMO-FIXT"
   ],
   [
    "measureText",
