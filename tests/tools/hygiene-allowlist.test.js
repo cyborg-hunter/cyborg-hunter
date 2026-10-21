@@ -17,8 +17,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const LITERAL = 'PROLIFIC' + '_PID';
 
 // Exit status of the gate in a fresh repo holding `tracked` (path → text,
-// git-added) and, optionally, a scan dir `site/` holding `scanned`.
-function gate(tracked, scanned) {
+// git-added), optionally a scan dir `site/` holding `scanned`, and, given a
+// `message`, a commit with that message, scanned as GATE_COMMIT=HEAD.
+function gate(tracked, scanned, message) {
   const repo = mkdtempSync(join(tmpdir(), 'ch-hygiene-'));
   try {
     execFileSync('git', ['init', '-q'], { cwd: repo });
@@ -38,6 +39,12 @@ function gate(tracked, scanned) {
         writeFileSync(join(repo, 'site', p), text + '\n');
       }
       env.GATE_SCAN_DIR = 'site';
+    }
+    if (message !== undefined) {
+      execFileSync('git', ['-c', 'user.name=gate-test', '-c', 'user.email=gate-test@example.invalid',
+        '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null',
+        'commit', '-q', '--allow-empty', '--no-verify', '-m', message], { cwd: repo });
+      env.GATE_COMMIT = 'HEAD';
     }
     return spawnSync('bash', ['scripts/check-public-hygiene.sh'], { cwd: repo, env, encoding: 'utf8' }).status;
   } finally {
@@ -204,3 +211,19 @@ describe('hygiene gate: process labels', () => {
   });
 });
 
+
+// Commit messages carry no process labels either: GATE_COMMIT runs the label
+// checks, the split one included, over the message.
+describe('hygiene gate: commit messages', () => {
+  it('fails on a process label in the message, on one line or split', () => {
+    assert.strictEqual(gate({}, null, 'fix: a comment\n\nAs ' + W + ' 10(b) decided.'), 1);
+    assert.strictEqual(gate({}, null, 'fix: a comment\n\nCarried by ' + W + '\n' + '10(b) here.'), 1);
+    assert.strictEqual(gate({}, null, 'test: the cases ' + w + '-3-review asked for'), 1);
+    assert.strictEqual(gate({}, null, 'fix: as in ' + label.review), 1);
+  });
+
+  it('passes an ordinary message', () => {
+    assert.strictEqual(gate({}, null, 'docs: the task list\n\nEach task\nlist grows by one.\n\n'
+      + 'Claude-Session: https://claude.ai/code/session_01ABCDEF'), 0);
+  });
+});
