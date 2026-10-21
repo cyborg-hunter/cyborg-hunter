@@ -5,11 +5,11 @@
 // string as a virtual module, so the page creates its worker from a blob URL
 // and never loads a second file. The replay viewer client, the report fonts,
 // the scripts the report inlines by their source text and the bundled
-// sessions' trackers
-// (examples/demo-sessions) are baked in the same way, so the offline file
-// carries them too; the sessions' replay recordings are not: the site serves
-// them and the page fetches them on Load sample data. platform 'browser' is
-// the gate against a Node-only import creeping into a core.
+// sessions' trackers (examples/demo-sessions) are baked in the same way, so
+// the offline file carries them too; the sessions' replay recordings are not:
+// the site serves them and the page fetches them on Load sample data.
+// platform 'browser' is the gate against a Node-only import creeping into a
+// core.
 // Run via `npm run demo:analyze`; ANALYZE_OUTDIR redirects the output (tests).
 import esbuild from 'esbuild';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -73,10 +73,15 @@ function virtual(modules) {
 // gives them (the functions as written): in the bundle a function's toString
 // is esbuild's reprint, and the analyzer's report must be the CLI's byte for
 // byte. The worker passes this map to both reports as `inlineSrc`, and
-// renderIndexHtml takes each text from it. To add a script: one line here,
-// `name: itsScript(),`, and at its use site in renderIndexHtml
-// `inlineSafeSrc(inlineSrc.name ?? itsScript())`. The analyzer's worker test
-// checks every entry in both reports.
+// renderIndexHtml takes each text from it. To add a script:
+// `import { itsScript } from '../src/cli/renderers/its-file.js';` at the
+// top of this file; `name: itsScript(),` here; and at its use site in
+// renderIndexHtml, `inlineSafeSrc(inlineSrc.name ?? itsScript())`. The
+// text carries its own boot call, as timelineScript's does: a call the
+// template emits as `${fn.name}(...)` is evaluated in the analyzer's bundle,
+// where esbuild may have renamed fn, while the baked text defines node's
+// name. The analyzer's worker tests check every entry in both reports, and
+// both reports against node's byte for byte.
 export function inlineSources() {
   const sources = {
     timeline: timelineScript(),

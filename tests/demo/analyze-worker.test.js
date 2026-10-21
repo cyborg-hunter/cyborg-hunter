@@ -10,7 +10,10 @@ import { File } from 'node:buffer';
 import { createRequire } from 'node:module';
 import { unzipSync, strFromU8 } from 'fflate';
 import { buildWorkerSrc, inlineSources } from '../../tools/build-analyze.mjs';
-import { REPORT_FILES } from '../../src/cli/report-core.js';
+import { REPORT_FILES, buildReport, renderInPageHtml } from '../../src/cli/report-core.js';
+import { ingestFiles } from '../../src/cli/ingest-core.js';
+import { readReplayClientSrc } from '../../src/cli/renderers/replay-client-source.js';
+import { buildFontFaceCss } from '../../src/cli/renderers/report-fonts.js';
 import { TESTED_PARTICIPANTS, TESTED_FIXTURE } from '../../demo/analyze/limits.js';
 import { NODE_IMPORT } from '../cli/node-import-pattern.js';
 import { nodeDeps } from '../../src/cli/ingest.js';
@@ -200,6 +203,44 @@ test('both reports carry every script inlined by its source text as node writes 
     assert.ok(downloaded.includes(script), name + ': the downloaded report');
     assert.ok(done.html.includes(script), name + ': the in-page report');
   }
+});
+
+// Two pages the same; on a difference, where they part and the text around
+// it on each side, not two whole pages.
+function assertSamePage(actual, expected, what) {
+  if (actual === expected) return;
+  let i = 0;
+  while (i < actual.length && i < expected.length && actual[i] === expected[i]) i++;
+  const around = (s) => JSON.stringify(s.slice(Math.max(0, i - 60), i + 60));
+  assert.fail(what + ' differs at offset ' + i + ' (lengths ' + actual.length + ' and ' + expected.length + ')\n' +
+    '  analyzer: ' + around(actual) + '\n  node:     ' + around(expected));
+}
+
+// The node twin of the e2e test that compares the analyzer's downloaded
+// report with the CLI's, for both reports: the JSON texts the worker read,
+// through ingest, buildReport and renderInPageHtml unbundled, with no canvas
+// on either side (no recordings: the sample's are served apart). It needs no
+// map key, so it also sees a script inlined by its source text that the map
+// above does not carry, and the analyzer then emits its bundle's reprint.
+test('both reports are the ones report-core writes in node, byte for byte', async () => {
+  const w = startWorker();
+  const entries = await sampleEntries(w);
+  const texts = entries.filter((f) => f.path !== 'cyborg-hunter.config.json').map((f) => ({ path: f.path, bytes: new Uint8Array(f.bytes.slice(0)) }));
+  w.send({ type: 'check', files: entries });
+  const checked = await w.next('checked');
+  w.send({ type: 'run', files: await sampleEntries(w), config: checked.config, participantIdField: 'participantId' });
+  const done = await w.next('done', 'error');
+  assert.equal(done.type, 'done', done.message);
+  const downloaded = strFromU8(unzipSync(concat(w.messages.filter((m) => m.type === 'zip').map((m) => m.chunk)))['index.html']);
+  const readers = texts.map((f) => ({ name: f.path, path: f.path, size: f.bytes.length, read: async () => f.bytes }));
+  const { participants } = await ingestFiles({ participantFiles: readers, replayFiles: [] }, done.configUsed, { ...nodeDeps, shellHints: false });
+  let page;
+  const assets = { replayClientSrc: readReplayClientSrc(), fontFaceCss: buildFontFaceCss() };
+  const built = await buildReport(participants, done.configUsed, { ...assets, sink: (path, data) => { if (path === 'index.html') page = data; },
+    keepImages: true, sha256: nodeDeps.sha256 });
+  assert.match(page, /<code class="mono run-id">[0-9a-f]{16}<\/code>/, 'the page carries its run id');
+  assertSamePage(withoutRunTime(downloaded), withoutRunTime(page), 'the downloaded report');
+  assertSamePage(withoutRunTime(done.html), withoutRunTime(await renderInPageHtml(built, done.configUsed, assets)), 'the in-page report');
 });
 
 // The sample added to a cohort already listed, as the page adds it: without
