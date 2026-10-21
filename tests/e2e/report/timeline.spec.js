@@ -106,12 +106,15 @@ async function paneRoom(page) {
 }
 
 // At 1400 px the pane's room is 1000 px less whatever the runner's scrollbar
-// takes: the stage fills it.
+// takes: the stage fills it. The room is past the 800 px reading column, so
+// a block held to that column would fail here.
 test('in a 1400 px window the stage fills the pane, up to 1000 px', async ({ page }) => {
   const stage = await open(page, 1400);
+  const room = await paneRoom(page);
+  expect(room).toBeGreaterThan(900);
   const width = (await stage.boundingBox()).width;
   expect(width).toBeLessThanOrEqual(1000);
-  expect(Math.abs(width - Math.min(1000, await paneRoom(page)))).toBeLessThanOrEqual(1);
+  expect(Math.abs(width - Math.min(1000, room))).toBeLessThanOrEqual(1);
 });
 
 // At 1800 px the pane has room to spare, and the cap holds the whole block
@@ -119,6 +122,7 @@ test('in a 1400 px window the stage fills the pane, up to 1000 px', async ({ pag
 test('in an 1800 px window the block stops at 1000 px, "enlarge" at the stage\'s right edge', async ({ page }) => {
   const stage = await open(page, 1800);
   expect(await paneRoom(page)).toBeGreaterThan(1100);
+  expect((await page.locator('#p-DEMO-FIXT .tl-block').boundingBox()).width).toBe(1000);
   const box = await stage.boundingBox();
   expect(box.width).toBe(1000);
   const enlarge = await page.locator('#p-DEMO-FIXT .tl-enlarge').boundingBox();
