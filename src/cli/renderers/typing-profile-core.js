@@ -25,7 +25,7 @@
 // createCanvas is injected so this module never imports the `canvas`
 // package directly.
 
-import { sessionLayout, drawGuideLines, phaseNamePlaces, hatch } from './session-timeline-core.js';
+import { sessionLayout, drawGuideLines, phaseNamePlaces, phaseNamesInBands, hatch, fitWidth } from './session-timeline-core.js';
 import {
   TIMELINE_GEOMETRY, CHART_W, TYPING_ROW, xOf, barRect, typingAxis, trialLabel, glyphPlaces,
 } from './timeline-layout.js';
@@ -149,13 +149,19 @@ function drawAligned(p, L, createCanvas) {
 
   // The timeline's guides, over the chart, and each phase's name under the
   // baseline where the phase begins (inside the chart a name would run into
-  // a tall bar and its glyphs), placed by the Trials strip's rule
-  // (phaseNamePlaces), so the stacked images' names line up.
+  // a tall bar and its glyphs): the names the timeline below writes, with
+  // its text and x, so the stacked images name the same phases. With the
+  // gallery phase bands its Phases strip sits right above its Trials strip,
+  // and the names go inside that strip, each cut to its own band
+  // (phaseNamesInBands); else above it (phaseNamePlaces). This chart is on
+  // the time axis only when the trials align, which is when the timeline
+  // draws its Trials strip, so L.galleryPhases alone decides as it does.
   const X = (sec) => xOf(sec, L.domainSec);
   drawGuideLines(ctx, L.guides, X, L.domainSec, T, T + CH);
   ctx.font = 'bold 9px sans-serif';
   ctx.fillStyle = COLOR.phaseLabel;
-  for (const n of phaseNamePlaces(L.guides.runs, X)) ctx.fillText(n.text, n.x, T + CH + 13);
+  const names = L.galleryPhases ? phaseNamesInBands(L.guides.runs, L.spans, X) : phaseNamePlaces(L.guides.runs, X);
+  for (const n of names) ctx.fillText(n.text, n.x, T + CH + 13);
 
   drawGlyphs(ctx, glyphs);
   return canvas;
@@ -311,17 +317,6 @@ function drawThreshold(ctx, y, x0, x1) {
   ctx.lineTo(x1, y);
   ctx.stroke();
   ctx.setLineDash([]);
-}
-
-// Text cut with an ellipsis to fit `room` px in the current font. The cut
-// starts from the share of the text that fits at its average width, so a
-// very long id costs a few measures, not one per character.
-function fitWidth(ctx, text, room) {
-  const full = ctx.measureText(text).width;
-  if (full <= room) return text;
-  let n = Math.min(text.length - 1, Math.floor((text.length * room) / full));
-  while (n > 0 && ctx.measureText(text.slice(0, n) + '…').width > room) n--;
-  return text.slice(0, n) + '…';
 }
 
 // The C, P and R glyphs at their places (glyphPlaces), each in its colour;

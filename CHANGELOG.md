@@ -94,6 +94,9 @@ onto the session timeline's time axis, in one Session timeline block.
   threshold after the title, with the legend on the line below; and is at
   least 600 px wide (700 when a reduced Qualtrics payload kept a page
   without its events), so a short session no longer cuts its legend.
+- The session timeline's title prints the whole participant id, cut with an
+  ellipsis before the legend as the typing chart's title is. It printed the
+  first 8 characters.
 
 ## [0.16.0] — 2026-10-15
 

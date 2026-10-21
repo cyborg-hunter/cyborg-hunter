@@ -45,6 +45,8 @@ snapshotTest('session-timeline core draw log', 'drawlog-session-timeline.json',
     assert.ok(texts.includes('Text input'), 'Text input lane label');
     assert.ok(!texts.includes('Phases'), 'no Phases strip without gallery bands');
     assert.equal(log.filter(c => c[0] === 'setLineDash' && c[1].join() === '3,3').length, 6, 'one guide per trial start');
+    // The title names the whole participant id.
+    assert.ok(texts.includes('Session Timeline — DEMO-FIXT'), 'the title');
   });
 
 // Enriched variant: DEMO-FIXT records no sidebar / viewport-shift / guard
@@ -198,22 +200,25 @@ const CHART_RIGHT = TIMELINE_GEOMETRY.width - TIMELINE_GEOMETRY.right;
 
 // A session with the gallery phase bands and trials that set phases: two
 // rules, each a gallery trial then four classification trials, so both
-// strips are drawn. `lead` trials come first.
-function gallerySession(lead = []) {
+// strips are drawn. `lead` trials come first. galleryMs and classMs set the
+// gallery's and each classification trial's length; with `typed`, the
+// classification trials carry typing rates, so the typing chart is drawn.
+function gallerySession(lead = [], { galleryMs = 60000, classMs = 10000, typed = false } = {}) {
   const start = Date.parse('2026-01-01T00:00:00.000Z');
   const iso = (ms) => new Date(start + ms).toISOString();
   const trials = lead.slice();
   let at = 30000;
   for (let r = 0; r < 2; r++) {
-    trials.push({ trialId: `gallery-${r + 1}`, phase: 'gallery', startTime: 5000 + at, duration_ms: 60000 });
-    at += 60000;
+    trials.push({ trialId: `gallery-${r + 1}`, phase: 'gallery', startTime: 5000 + at, duration_ms: galleryMs });
+    at += galleryMs;
     for (let k = 0; k < 4; k++) {
       trials.push({ trialId: `r${r + 1}-c${k + 1}`, phase: 'classification', rulePosition: r, ruleId: `rule-${r + 1}`,
-        startTime: 5000 + at, duration_ms: 10000, rt: 10000, timestamp: iso(at + 10000) });
-      at += 10000;
+        startTime: 5000 + at, duration_ms: classMs, rt: classMs, timestamp: iso(at + classMs),
+        ...(typed ? { charsPerSec: 3 + k } : {}) });
+      at += classMs;
     }
   }
-  return { participantId: 'G-2', session: {}, galleryStudyMs: [60000, 60000],
+  return { participantId: 'G-2', session: {}, galleryStudyMs: [galleryMs, galleryMs],
     metadata: { startTime: iso(0), endTime: iso(at + 30000) }, trials };
 }
 
@@ -334,6 +339,109 @@ test('session timeline: the header\'s offset note clears the phase names above t
   assert.ok(clearance >= 3, `note to phase name: ${clearance.toFixed(2)} px`);
   // And the note does not reach up into the subtitle.
   assert.ok((note.y - ASCENT * note.size) - (subtitle.y + DESCENT * subtitle.size) > 0, 'note clear of the subtitle');
+});
+
+// The phase names in a draw log: the bold 9 px texts at y, as [text, x].
+function phaseNamesAt(log, y) {
+  let font = null;
+  const out = [];
+  for (const c of log) {
+    if (c[0] === 'set:font') font = c[1];
+    else if (c[0] === 'fillText' && c[3] === y && font === 'bold 9px sans-serif') out.push([c[1], c[2]]);
+  }
+  return out;
+}
+
+test('typing chart: under its baseline, the same phase names at the same x as the timeline below it', async () => {
+  // Names above the Trials strip (phases the experiment sets), and names
+  // inside it under the Phases strip: a gallery session whose classification
+  // phases are narrower than their name, so each name is cut to its band.
+  const PH = structuredClone(P);
+  ['tutorial', 'tutorial', 'main', 'main', 'main', 'main'].forEach((ph, i) => { PH.trials[i].phase = ph; });
+  const G = gallerySession([], { galleryMs: 20000, classMs: 2500, typed: true });
+  const typingNameY = TYPING_ROW.top + TYPING_ROW.chart + 13;
+  for (const [p, timelineNameY, expected] of [
+    [PH, TIMELINE_ROW.top - 3, ['tutorial', 'main']],
+    [G, BOTH.trialsY + 15, ['gallery', 'classifica…', 'gallery', 'classifica…']],
+  ]) {
+    const timeline = [];
+    await drawSessionTimeline(p, { outputDir: '.' }, makeRecordingCanvasFactory(timeline));
+    const typing = [];
+    assert.ok(drawTypingProfile(p, { outputDir: '.' }, makeRecordingCanvasFactory(typing)), 'a typing chart');
+    const names = phaseNamesAt(timeline, timelineNameY);
+    assert.deepEqual(names.map((n) => n[0]), expected, 'the timeline names every band that has room');
+    assert.deepEqual(phaseNamesAt(typing, typingNameY), names, `${p.participantId}: the typing chart's (text, x)`);
+  }
+});
+
+test('session timeline: the title prints the whole participant id, cut with an ellipsis before the legend', async () => {
+  const titleOf = (log) => log.find((c) => c[0] === 'fillText' && String(c[1]).startsWith('Session Timeline'));
+  const plain = [];
+  await drawSessionTimeline(P, { outputDir: '.' }, makeRecordingCanvasFactory(plain));
+  assert.equal(titleOf(plain)[1], 'Session Timeline — DEMO-FIXT');
+  // A hostile id, with two and with three legend rows. The recording canvas
+  // measures 6 px a character; the legend rows beside the title's line are
+  // at y 16 and 28, each item's swatch 14 px left of its label.
+  for (const p of [structuredClone(P), gallerySession()]) {
+    p.participantId = 'W'.repeat(5000);
+    const log = [];
+    await drawSessionTimeline(p, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+    const [, text, x] = titleOf(log);
+    assert.ok(text.endsWith('…') && text.startsWith('Session Timeline — WWW'), text.slice(0, 40));
+    const legendLeft = Math.min(...log.filter((c) => c[0] === 'fillText' && (c[3] === 16 || c[3] === 28)).map((c) => c[2])) - 14;
+    assert.ok(x + text.length * 6 + 16 <= legendLeft, `title ends at ${x + text.length * 6}, legend from ${legendLeft}`);
+  }
+});
+
+test('session timeline: a synthetic-insertion count sits on a patch drawn after the guides, and a copy under it stays on top', async () => {
+  // Three insertions near the end of act1-baseline, so act1-paste's start
+  // guide runs through the count; a copy right after them, under the count.
+  const PI = structuredClone(P);
+  const t0 = PI.trials[0].startTime;
+  PI.trials[0].syntheticInsertions = [{ t: t0 + 5340 }, { t: t0 + 5360 }, { t: t0 + 5380 }];
+  PI.trials[0].copyEvents = [{ type: 'copy', t: t0 + 5480 }];
+  const L = sessionLayout(PI, { outputDir: '.' });
+  const X = (sec) => xOf(sec, L.domainSec);
+  const log = [];
+  await drawSessionTimeline(PI, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const i = log.findIndex((c) => c[0] === 'fillText' && c[1] === '×3');
+  assert.ok(i > log.map((c) => c[0]).lastIndexOf('setLineDash'), 'drawn after the last dashed line');
+  // The drawing call before it (property sets aside) is its patch, in the
+  // lane's colour, around the text.
+  let j = i - 1;
+  while (log[j][0].startsWith('set:')) j--;
+  assert.equal(log[j][0], 'fillRect', 'the count on a patch');
+  assert.equal(log.slice(0, j).reverse().find((d) => d[0] === 'set:fillStyle')[1], '#fafafa', 'in the lane\'s colour');
+  const [, px, py, pw, ph] = log[j];
+  const [, , tx, ty] = log[i];
+  assert.ok(px < tx && px + pw >= tx + '×3'.length * 5.8 && py <= ty - 9 && py + ph >= ty + 2, `patch ${[px, py, pw, ph]} around text at ${tx}, ${ty}`);
+  const guideX = Math.round(X(L.spans[1].startSec)) + 0.5;
+  assert.ok(guideX > px && guideX < px + pw, `act1-paste's guide (x ${guideX}) crosses the count's patch`);
+  // The copy's ▼ (its tip at lane y + 15) is drawn again after the patch.
+  const textInputY = timelineRows({ trialsStrip: true }).lanes[0].y;
+  const copyX = Math.round(X(L.marks.copies[0].sec) * 100) / 100;
+  assert.ok(log.slice(i).some((c) => c[0] === 'moveTo' && c[1] === copyX && c[2] === textInputY + 15), 'the copy over the patch');
+});
+
+test('session timeline: a sidebar opened at the end of the session ends at the lane\'s right border', async () => {
+  // Opened about 1 px before the end of the domain and never closed: drawn
+  // at least 3 px wide, and still inside the lane.
+  const PS = structuredClone(P);
+  const domain = sessionLayout(P, { outputDir: '.' }).domainSec;
+  PS.session.sidebarEvents = [{ type: 'opened', t: Math.round((domain - domain / 880) * 1000) }];
+  const L = sessionLayout(PS, { outputDir: '.' });
+  assert.ok((L.domainSec - L.events.sidebarSpans[0].start_sec) / L.domainSec * 880 < 3, 'opened in the last 3 px');
+  const log = [];
+  await drawSessionTimeline(PS, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  let fill = null;
+  const spans = [];
+  for (const c of log) {
+    if (c[0] === 'set:fillStyle') fill = c[1];
+    else if (c[0] === 'fillRect' && fill === '#8e24aa' && c[4] === TIMELINE_ROW.lane - 12) spans.push(c);
+  }
+  assert.equal(spans.length, 1, 'one sidebar span');
+  const [, x, , w] = spans[0];
+  assert.ok(w >= 3 && x + w <= CHART_RIGHT, `span from ${x}, ${w} px wide`);
 });
 
 // ── Trajectories core ────────────────────────────────────────────────────

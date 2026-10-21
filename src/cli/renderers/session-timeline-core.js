@@ -164,7 +164,10 @@ async function renderOne(p, config, createCanvas) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, CANVAS_W, canvasH);
 
-  drawHeader(ctx, p, L.events);
+  // The legend's rows are placed first: the title is cut to end clear of
+  // the two rows beside its line.
+  const legend = placeLegend(ctx, L);
+  drawHeader(ctx, p, L.events, Math.min(...legend.slice(0, 2).map((row) => row.left)));
 
   const chartW = CANVAS_W - LEFT_PAD - RIGHT_PAD;
   const xScale = chartW / xDomainSec;
@@ -174,14 +177,15 @@ async function renderOne(p, config, createCanvas) {
   // for the phase names: they go inside it, drawn after the guides.
   const stripNames = rows.trialsY !== null
     ? drawTrialsStrip(ctx, L, xScale, xDomainSec, chartW, rows.trialsY, rows.phasesY !== null) : [];
-  drawLanes(ctx, L, rows, xScale, xDomainSec, chartW);
+  const counts = drawLanes(ctx, L, rows, xScale, xDomainSec, chartW);
   // Guides go on after the lanes so they sit on top of the event marks:
   // follow a line down to see which trial or phase an event fell in.
   drawGuideLines(ctx, L.guides, (sec) => LEFT_PAD + sec * xScale, xDomainSec, rows.guidesTop, rows.lanesBottom);
   drawPhaseGuides(ctx, L.phases, xScale, xDomainSec, rows.guidesTop, rows.lanesBottom, rows.phasesY);
   drawTrialsStripNames(ctx, stripNames, rows.trialsY);
+  drawInsertionCounts(ctx, counts);
   drawXAxis(ctx, xDomainSec, chartW, canvasH);
-  drawLegendAndFooter(ctx, p, L, canvasH);
+  drawLegendAndFooter(ctx, p, L, canvasH, legend);
 
   return canvas;
 }
@@ -650,10 +654,13 @@ export function deriveSessionOffset(p, events) {
 }
 
 // ── Drawing primitives ───────────────────────────────────────────────────
-function drawHeader(ctx, p, events) {
+// The title names the whole participant id, cut with an ellipsis to end 16 px
+// left of legendLeft (the legend rows beside its line), as the typing chart's
+// title is cut before its legend: a long id never runs under the legend.
+function drawHeader(ctx, p, events, legendLeft) {
   ctx.fillStyle = C.title;
   ctx.font = 'bold 14px sans-serif';
-  ctx.fillText(`Session Timeline — ${shortId(p.participantId)}`, LEFT_PAD, 22);
+  ctx.fillText(fitWidth(ctx, `Session Timeline — ${p.participantId}`, legendLeft - 16 - LEFT_PAD), LEFT_PAD, 22);
 
   ctx.fillStyle = C.subtitle;
   ctx.font = '11px sans-serif';
@@ -740,18 +747,10 @@ function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
     ctx.fillRect(x0, y + 1, w, PHASE_STRIP_H - 2);
     if (s.truncated) hatch(ctx, x0, y + 1, w, PHASE_STRIP_H - 2);
   });
-  // Phase names inside the strip: each in the room its phase has up to the
-  // next one, with its x, estimated width and phase fill.
-  const names = [];
-  if (namesInside && runs.length) {
-    let lastEnd = 0;
-    for (const s of L.spans) if (s.endSec > lastEnd) lastEnd = s.endSec;
-    runs.forEach((run, k) => {
-      const x0 = X(run.sec);
-      const text = fitText(run.label, X(k + 1 < runs.length ? runs[k + 1].sec : lastEnd) - x0 - 6, 5.8);
-      if (text) names.push({ text, x0, w: text.length * 5.8, fill: fillOf.get(run.label) });
-    });
-  }
+  // Phase names inside the strip (phaseNamesInBands), each with its phase's
+  // fill for the patch drawTrialsStripNames puts under it.
+  const names = namesInside
+    ? phaseNamesInBands(runs, L.spans, X).map((n) => ({ ...n, fill: fillOf.get(n.label) })) : [];
   ctx.font = '9px sans-serif';
   ctx.fillStyle = C.trialText;
   for (const s of L.spans) {
@@ -784,6 +783,7 @@ function drawTrialsStrip(ctx, L, xScale, xDomain, chartW, y, namesInside) {
 // seconds to x. The Trials strip writes them above itself and the typing
 // chart under its baseline, from this one rule, so the names of the stacked
 // images line up. Widths are estimated, 5.8 px a character in bold 9 px.
+// With the Phases strip drawn, both charts use phaseNamesInBands instead.
 export function phaseNamePlaces(runs, X) {
   const chartW = CANVAS_W - LEFT_PAD - RIGHT_PAD;
   const chartRight = CANVAS_W - RIGHT_PAD;
@@ -799,6 +799,27 @@ export function phaseNamePlaces(runs, X) {
   return out;
 }
 
+// The phase names written inside the Trials strip when the Phases strip sits
+// right above it (no room over the strip): each phase's name in its own band,
+// from its line to the next phase's (the last one to the last trial's end),
+// cut with an ellipsis to that room, so every band with room for two
+// characters is named. Each is { text, x, x0, w, label }: the text's x (3 px
+// right of the line at x0), its estimated width (5.8 px a character in bold
+// 9 px) and the phase. The timeline writes them in its strip and the typing
+// chart under its baseline, so the stacked images name the same phases at
+// the same x. X maps seconds to x.
+export function phaseNamesInBands(runs, spans, X) {
+  let lastEnd = 0;
+  for (const s of spans) if (s.endSec > lastEnd) lastEnd = s.endSec;
+  const names = [];
+  runs.forEach((run, k) => {
+    const x0 = X(run.sec);
+    const text = fitText(run.label, X(k + 1 < runs.length ? runs[k + 1].sec : lastEnd) - x0 - 6, 5.8);
+    if (text) names.push({ text, x: x0 + 3, x0, w: text.length * 5.8, label: run.label });
+  });
+  return names;
+}
+
 // The phase names drawTrialsStrip placed inside the strip at y, each on a
 // patch of its phase's fill: drawn after the guides, so the patch hides the
 // dashed lines under the name.
@@ -809,8 +830,20 @@ function drawTrialsStripNames(ctx, names, y) {
     ctx.fillStyle = n.fill;
     ctx.fillRect(n.x0 + 2, y + 6, n.w + 2, 12);
     ctx.fillStyle = C.phaseLabel;
-    ctx.fillText(n.text, n.x0 + 3, y + 15);
+    ctx.fillText(n.text, n.x, y + 15);
   }
+}
+
+// Text cut with an ellipsis to fit `room` px in the current font, as
+// measured: the charts' titles, whose participant id can be any length.
+// The cut starts from the share of the text that fits at its average width,
+// so a very long id costs a few measures, not one per character.
+export function fitWidth(ctx, text, room) {
+  const full = ctx.measureText(text).width;
+  if (full <= room) return text;
+  let n = Math.min(text.length - 1, Math.floor((text.length * room) / full));
+  while (n > 0 && ctx.measureText(text.slice(0, n) + '…').width > room) n--;
+  return text.slice(0, n) + '…';
 }
 
 // Text cut with an ellipsis to fit `room` px at `perChar` px a character
@@ -840,19 +873,23 @@ export function hatch(ctx, x, y, w, h) {
   ctx.restore();
 }
 
+// Returns the Text input lane's "×N" counts (drawTextInput), which go on
+// after the guides.
 function drawLanes(ctx, L, rows, xScale, xDomain, chartW) {
   const events = L.events;
+  let counts = [];
   for (const lane of rows.lanes) {
     drawLaneBackground(ctx, lane.y, chartW);
     drawLaneLabel(ctx, lane.y, lane.name);
     switch (lane.name) {
-      case 'Text input':      drawTextInput(ctx, lane.y, L.marks, xScale, xDomain); break;
+      case 'Text input':      counts = drawTextInput(ctx, lane.y, L.marks, xScale, xDomain); break;
       case 'Tab-aways':       drawTabAways(ctx, lane.y, events.tabAways, xScale, xDomain, events.tabFlickerCutoffMs); break;
       case 'Sidebars':        drawSidebars(ctx, lane.y, events.sidebarSpans, xScale, xDomain); break;
       case 'Viewport shifts': drawLayoutShifts(ctx, lane.y, events.layoutShifts, xScale, xDomain); break;
       case 'Guard-friction':  drawGuardViolations(ctx, lane.y, events.guardViolations, xScale, xDomain); break;
     }
   }
+  return counts;
 }
 
 function drawLaneBackground(ctx, y, chartW) {
@@ -900,14 +937,18 @@ function drawTabAways(ctx, y, list, xScale, xDomain, flickerCutoffMs = 3000) {
   }
 }
 
+// A span is at least 3 px wide, so a short one stays visible; one that
+// starts in the last 3 px of the chart is moved left to end at the lane's
+// right border, never past it.
 function drawSidebars(ctx, y, spans, xScale, xDomain) {
   if (!Array.isArray(spans)) return;
+  const right = LEFT_PAD + xDomain * xScale;
   for (const s of spans) {
     if (!Number.isFinite(s.start_sec)) continue;
     const startSec = clamp(s.start_sec, 0, xDomain);
     const endSec = clamp(s.end_sec, startSec, xDomain);
-    const x = LEFT_PAD + startSec * xScale;
     const w = Math.max(3, (endSec - startSec) * xScale);
+    const x = Math.min(LEFT_PAD + startSec * xScale, right - w);
     ctx.fillStyle = C.sidebarSpan;
     ctx.fillRect(x, y + 6, w, LANE_HEIGHT - 12);
     if (!s.closed) {
@@ -969,9 +1010,16 @@ function drawGuardViolations(ctx, y, list, xScale, xDomain) {
 // that appeared with no key press, usually a script or an autofill) as thin
 // indigo ticks with "×N" after a trial's last one. Marks outside the domain
 // (an offset that could not be derived) are not drawn.
+// The "×N" counts are returned, not drawn: drawInsertionCounts draws them
+// after the guides, each on a patch (from y + 3 to y + 15), so no line runs
+// through one. Each carries the copies whose ▼ (10 px wide, from y + 6.5 to
+// y + 15) its patch would cover, to be drawn again over it; pastes and
+// drops sit under the patch.
 function drawTextInput(ctx, y, marks, xScale, xDomain) {
   const inDomain = (sec) => Number.isFinite(sec) && sec >= 0 && sec <= xDomain;
   const X = (sec) => LEFT_PAD + sec * xScale;
+  const copies = marks.copies.filter((m) => inDomain(m.sec)).map((m) => X(m.sec));
+  const counts = [];
   for (const g of marks.synthetic) {
     const secs = g.secs.filter(inDomain);
     if (!secs.length) continue;
@@ -983,13 +1031,31 @@ function drawTextInput(ctx, y, marks, xScale, xDomain) {
       ctx.lineTo(X(sec) + 0.5, y + LANE_HEIGHT - 4);
       ctx.stroke();
     }
-    ctx.fillStyle = C.synthetic;
-    ctx.font = 'bold 9px sans-serif';
-    ctx.fillText(`×${secs.length}`, X(secs[secs.length - 1]) + 3, y + 12);
+    const text = `×${secs.length}`;
+    const x = X(secs[secs.length - 1]) + 3;
+    const w = text.length * 5.8;
+    counts.push({ text, x, y, w, copies: copies.filter((cx) => cx + 5 > x - 1 && cx - 5 < x + w + 1) });
   }
-  for (const m of marks.copies) if (inDomain(m.sec)) triangle(ctx, X(m.sec), y + 10, false, C.copy);
+  for (const cx of copies) triangle(ctx, cx, y + 10, false, C.copy);
   for (const m of marks.pastes) if (inDomain(m.sec)) triangle(ctx, X(m.sec), y + LANE_HEIGHT - 10, true, C.paste);
   for (const m of marks.drops) if (inDomain(m.sec)) diamond(ctx, X(m.sec), y + LANE_HEIGHT - 10, C.drop);
+  return counts;
+}
+
+// The "×N" counts drawTextInput placed (bold 9 px, about 5.8 px a
+// character, at y + 12 in the lane at y), each on a patch of the lane's
+// colour drawn after the guides, as the phase names in the Trials strip
+// are: a guide that crosses a count stops at its patch. A copy's ▼ the
+// patch covers is drawn again on top: a mark is evidence, and stays visible.
+function drawInsertionCounts(ctx, counts) {
+  for (const c of counts) {
+    ctx.fillStyle = C.laneBg;
+    ctx.fillRect(c.x - 1, c.y + 3, c.w + 2, 12);
+    ctx.fillStyle = C.synthetic;
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(c.text, c.x, c.y + 12);
+    for (const cx of c.copies) triangle(ctx, cx, c.y + 10, false, C.copy);
+  }
 }
 
 // A filled triangle centred on (x, y), pointing up or down.
@@ -1102,7 +1168,11 @@ function formatSec(sec) {
   return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
 }
 
-function drawLegendAndFooter(ctx, p, L, canvasH) {
+// The legend's rows, right-aligned at y 16, 28 and 40 (9 px): each item's
+// label x, and the row's left edge, its first item's swatch (or its label
+// when it has no colour). The title, bold 14 px at y 22, shares its line
+// with the first two rows.
+function placeLegend(ctx, L) {
   const events = L.events;
   // Right-aligned legend rows: the phase bands (only with the Phases strip),
   // the lanes' event types, then the Text input marks. One row per group
@@ -1138,7 +1208,13 @@ function drawLegendAndFooter(ctx, p, L, canvasH) {
   if (hidden > 0) inputItems.push({ label: `trial lines hidden (${hidden} trials)` });
   ctx.font = '9px sans-serif';
   const legendRows = (L.galleryPhases ? [phaseItems] : []).concat([eventItems, inputItems]);
-  legendRows.forEach((items, i) => drawLegendRow(ctx, items, 16 + 12 * i));
+  return legendRows.map((items, i) => placeLegendRow(ctx, items, 16 + 12 * i));
+}
+
+function drawLegendAndFooter(ctx, p, L, canvasH, legend) {
+  const events = L.events;
+  ctx.font = '9px sans-serif';
+  for (const row of legend) drawLegendRow(ctx, row);
 
   // Footer summary
   const fY = canvasH - BOTTOM_PAD + 38;
@@ -1190,22 +1266,28 @@ function drawLegendAndFooter(ctx, p, L, canvasH) {
 
 // Right-aligned legend row. Never truncates; if items overflow, they extend
 // leftward past the chart midpoint rather than being silently dropped. An
-// item without a colour is text only.
-function drawLegendRow(ctx, items, yText) {
+// item without a colour is text only; one with a colour has its 9 px swatch
+// 5 px left of its label, and 12 px more to the next item.
+function placeLegendRow(ctx, items, yText) {
   let lx = CANVAS_W - RIGHT_PAD;
+  const places = [];
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
-    const w = ctx.measureText(it.label).width;
-    lx -= w;
+    lx -= ctx.measureText(it.label).width;
+    places.push({ it, x: lx });
+    lx -= it.color ? 17 : 14;
+  }
+  const first = places[places.length - 1];
+  const left = first ? first.x - (first.it.color ? 14 : 0) : CANVAS_W - RIGHT_PAD;
+  return { yText, places, left };
+}
+
+// A placed row (placeLegendRow), drawn right to left.
+function drawLegendRow(ctx, row) {
+  for (const { it, x } of row.places) {
     ctx.fillStyle = '#333';
-    ctx.fillText(it.label, lx, yText);
-    if (it.color) {
-      lx -= 5;
-      drawSwatch(ctx, it, lx - 9, yText - 7);
-      lx -= 12;
-    } else {
-      lx -= 14;
-    }
+    ctx.fillText(it.label, x, row.yText);
+    if (it.color) drawSwatch(ctx, it, x - 14, row.yText - 7);
   }
 }
 

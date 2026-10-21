@@ -1,5 +1,5 @@
 {
- "calls": 335,
+ "calls": 337,
  "log": [
   [
    "createCanvas",
@@ -18,6 +18,50 @@
    395
   ],
   [
+   "set:font",
+   "9px sans-serif"
+  ],
+  [
+   "measureText",
+   "guard-friction"
+  ],
+  [
+   "measureText",
+   "viewport shift"
+  ],
+  [
+   "measureText",
+   "sidebar (open span)"
+  ],
+  [
+   "measureText",
+   "tab ≥10s"
+  ],
+  [
+   "measureText",
+   "tab 3–10s"
+  ],
+  [
+   "measureText",
+   "tab ≤3s"
+  ],
+  [
+   "measureText",
+   "synthetic insertion"
+  ],
+  [
+   "measureText",
+   "drop"
+  ],
+  [
+   "measureText",
+   "paste"
+  ],
+  [
+   "measureText",
+   "copy / cut"
+  ],
+  [
    "set:fillStyle",
    "#222"
   ],
@@ -26,8 +70,12 @@
    "bold 14px sans-serif"
   ],
   [
+   "measureText",
+   "Session Timeline — DEMO-FIXT"
+  ],
+  [
    "fillText",
-   "Session Timeline — DEMO-FIX",
+   "Session Timeline — DEMO-FIXT",
    90,
    22
   ],
@@ -1110,10 +1158,6 @@
    "9px sans-serif"
   ],
   [
-   "measureText",
-   "guard-friction"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1148,10 +1192,6 @@
    9,
    9,
    8
-  ],
-  [
-   "measureText",
-   "viewport shift"
   ],
   [
    "set:fillStyle",
@@ -1190,10 +1230,6 @@
    8
   ],
   [
-   "measureText",
-   "sidebar (open span)"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1228,10 +1264,6 @@
    9,
    9,
    8
-  ],
-  [
-   "measureText",
-   "tab ≥10s"
   ],
   [
    "set:fillStyle",
@@ -1270,10 +1302,6 @@
    8
   ],
   [
-   "measureText",
-   "tab 3–10s"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1308,10 +1336,6 @@
    9,
    9,
    8
-  ],
-  [
-   "measureText",
-   "tab ≤3s"
   ],
   [
    "set:fillStyle",
@@ -1350,10 +1374,6 @@
    8
   ],
   [
-   "measureText",
-   "synthetic insertion"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1386,10 +1406,6 @@
   ],
   [
    "stroke"
-  ],
-  [
-   "measureText",
-   "drop"
   ],
   [
    "set:fillStyle",
@@ -1435,10 +1451,6 @@
    "fill"
   ],
   [
-   "measureText",
-   "paste"
-  ],
-  [
    "set:fillStyle",
    "#333"
   ],
@@ -1475,10 +1487,6 @@
   ],
   [
    "fill"
-  ],
-  [
-   "measureText",
-   "copy / cut"
   ],
   [
    "set:fillStyle",
