@@ -786,11 +786,29 @@ snapshotTest('trajectories core draw log (enriched)', 'drawlog-trajectories-enri
   (log) => {
     const fillSets = (color) => log.filter(c => c[0] === 'set:fillStyle' && c[1] === color);
     const strokeSets = (color) => log.filter(c => c[0] === 'set:strokeStyle' && c[1] === color);
-    assert.ok(log.length > 283, `enriched log has ${log.length} calls (baseline: 283)`);
+    assert.ok(log.length > 284, `enriched log has ${log.length} calls (baseline: 284)`);
     assert.equal(fillSets('#ccc').length, 1, 'the injected non-overlapping gap draws exactly one bare pause circle');
     assert.equal(strokeSets('#26a69a').length, 6,
       'screen outline now drawn for all 6 trials once the window/screen paradox is fixed');
   });
+
+// The header names the participant, and the id is participant data: a long
+// one is cut with an ellipsis to the canvas's width less its margins, as the
+// timeline's and the typing chart's titles are. One trial makes the canvas
+// one panel wide (480 px); the recording canvas measures 6 px a character.
+test('trajectories core: a 200-character id is cut with an ellipsis and stays on the canvas', () => {
+  const p = structuredClone(P);
+  p.trials = p.trials.slice(0, 1);
+  p.participantId = 'W'.repeat(200);
+  const log = [];
+  drawTrajectoryGrid(p, { hardTriggered: false, score: 3, reason: 'paste' }, { outputDir: '.' }, makeRecordingCanvasFactory(log));
+  const canvasW = log[0][1];
+  const header = log.find(c => c[0] === 'fillText' && c[3] === 30);
+  assert.ok(header, 'the header');
+  const [, text, x] = header;
+  assert.ok(text.startsWith('WWW') && text.endsWith('…'), text.slice(0, 40) + ' … ' + text.slice(-20));
+  assert.ok(x >= 0 && x + text.length * 6 <= canvasW - x, `header from ${x} to ${x + text.length * 6} on ${canvasW} px`);
+});
 
 // ── Typing-profile core ──────────────────────────────────────────────────
 import { drawTypingProfile } from '../../src/cli/renderers/typing-profile-core.js';

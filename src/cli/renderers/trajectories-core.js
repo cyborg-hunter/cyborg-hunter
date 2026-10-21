@@ -27,6 +27,7 @@
 
 import { ruleChronologicalCompare } from '../extract-core.js';
 import { formatScore } from '../analyzers/score-weights.js';
+import { fitWidth } from './session-timeline-core.js';
 
 // Panel dimensions (pixels).
 const PANEL_W = 400;
@@ -126,11 +127,12 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   ctx.fillStyle = COLORS.bg;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
-  // Header
+  // Header, cut with an ellipsis to the canvas less its margins: the
+  // participant id can be any length (as the timeline's title is cut).
   const headerText = `${p.participantId}${shown} — Score: ${formatScore(triageEntry?.score ?? '?')} — ${triageEntry?.reason ?? ''}`;
   ctx.fillStyle = COLORS.headerText;
   ctx.font = 'bold 16px sans-serif';
-  ctx.fillText(headerText, PANEL_PAD, 30);
+  ctx.fillText(fitWidth(ctx, headerText, canvasW - 2 * PANEL_PAD), PANEL_PAD, 30);
 
   // Two-line legend — splitting keeps the panel-frame meaning visible rather
   // than buried at the end of a wrap.

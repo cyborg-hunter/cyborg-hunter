@@ -1,5 +1,5 @@
 {
- "calls": 283,
+ "calls": 284,
  "log": [
   [
    "createCanvas",
@@ -24,6 +24,10 @@
   [
    "set:font",
    "bold 16px sans-serif"
+  ],
+  [
+   "measureText",
+   "DEMO-FIXT — Score: ? — "
   ],
   [
    "fillText",
