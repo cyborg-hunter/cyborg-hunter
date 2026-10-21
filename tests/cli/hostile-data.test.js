@@ -173,9 +173,12 @@ describe('a recording whose page nests elements very deeply', () => {
     assert.ok(files.has('index.html'));
     assert.ok(files.has('replay/OTHER.replay.js'), 'the other participant keeps their replay');
     assert.ok(!files.has('replay/DEMO-FIXT.replay.js'));
-    const deep = participants.find((p) => p.participantId === 'DEMO-FIXT');
+    // The report shows the pass's copy (built.participants); the participant
+    // the report was given keeps its recording.
+    const deep = built.participants.find((p) => p.participantId === 'DEMO-FIXT');
     assert.strictEqual(deep.replay.error, 'unloadable');
     assert.match(deep.replay.reason, /could not be written/);
+    assert.ok(participants.find((p) => p.participantId === 'DEMO-FIXT').replay.recording);
     assert.ok(built.replayAssets.skipped.some((s) => s.participantId === 'DEMO-FIXT'));
     assert.ok(built.warnings.some((w) => w.includes('DEMO-FIXT') && w.includes('could not be written')), built.warnings.join(' / '));
   });

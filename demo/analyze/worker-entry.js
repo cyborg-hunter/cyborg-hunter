@@ -230,11 +230,15 @@ async function reanalyze(msg) {
 
 // The report pass over a run's participants. `state` is the run's, passed in:
 // a reset during the pass lets go of lastRun without pulling it from under
-// this one. The replay pass inside buildReport rewrites the recordings it
-// styles, and a second pass over the same objects writes what the first
-// wrote because replay-assets-core.js keeps the first note and asset-match.js
-// rewrites each stylesheet once (tests/demo/analyze-worker.test.js compares
-// two zips file for file, with a stylesheet two others import).
+// this one. Every pass starts from every recording ingest attached: the
+// replay pass inside buildReport takes a recording it cannot load out of its
+// own copies (built.participants, the ones this report shows), never out of
+// the run's, so a re-analysis reads every recording the run read. It does
+// rewrite the recordings it styles, and a second pass over the same objects
+// writes what the first wrote because replay-assets-core.js keeps the first
+// note and asset-match.js rewrites each stylesheet once
+// (tests/demo/analyze-worker.test.js compares two zips file for file, with a
+// stylesheet two others import, and a re-analysis with a fresh build).
 // `secret`: the pseudonym key's, which the page sends with the message.
 async function renderRun(state, config, secret) {
   var raw = state.participants, assetNotes = state.assetNotes;
@@ -249,8 +253,6 @@ async function renderRun(state, config, secret) {
     // The page lists ingest's warnings beside the report: codes there too.
     warnings = pseudonymizeWarnings(state.warnings, raw, coded.codes);
   }
-  // The participants this report shows, for the replay requests that name them.
-  state.shown = participants;
   // Copied before transfer: a pass-through chunk aliases the bytes the sink
   // was given, and keepImages still needs those for the in-page data URIs.
   var zip = createZipSink(function (chunk) { var copy = chunk.slice(); post({ type: 'zip', chunk: copy }, [copy.buffer]); });
@@ -266,9 +268,13 @@ async function renderRun(state, config, secret) {
     replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, timelineSrc: timelineSrc, sha256: webSha256,
   });
   zip.end();
-  var html = await renderInPageHtml(built, participants, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, timelineSrc: timelineSrc, bytesToBase64: bytesToBase64 });
+  // The participants this report shows (buildReport's copies, in the same
+  // order, whose replay slots its replay pass settled), for the replay
+  // requests that name them.
+  var shown = state.shown = built.participants;
+  var html = await renderInPageHtml(built, shown, config, { replayClientSrc: replayClientSrc, fontFaceCss: fontFaceCss, timelineSrc: timelineSrc, bytesToBase64: bytesToBase64 });
   post({ type: 'done', html: html, triageOrder: built.triageOrder, counts: built.counts, runId: built.runId, cursorLine: built.cursorLine,
-    participants: participants.map(function (p, i) {
+    participants: shown.map(function (p, i) {
       var has = !!(p.replay && p.replay.recording);
       // assetNotes is keyed by the id the files gave (run); raw[i] is p's own.
       return { participantId: p.participantId, hasReplay: has,

@@ -163,9 +163,10 @@ export async function buildReport(participants, config, deps) {
     // a phase scope the summary's analysis judged the scoped trials only,
     // while the charts draw every trial, so the charts' is taken over the
     // whole participant (analyzeTyping never throws). Taken here, once, and
-    // read by both: the replay pass below rewrites a recording it cannot
-    // load out of the participant, and an analysis taken after it would no
-    // longer see that recording's keys.
+    // read by both: the page is rendered from the replay pass's copies of
+    // the participants (below), which lack a recording the pass could not
+    // load, and an analysis taken from them would not see that recording's
+    // keys.
     if (config.phaseScope) s.chartTypingAnalysis = analyzeTyping(participants[i], config);
   });
   const edgeExits = detectEdgeExits(scoredParticipants, config);
@@ -299,7 +300,16 @@ export async function buildReport(participants, config, deps) {
   // by the HTML report. Size is printed because dom-tier models dominate
   // the report's disk footprint. This pass stamps `assetPath` (and rewrites
   // unloadable artifacts) on the participants, so it runs before the index.
-  const replayAssets = buildReplayAssets(participants, { sink, assetMap: deps.assetMap || null });
+  // It runs over shallow copies (`shown`, returned as built.participants):
+  // an artifact it cannot load is taken out of the copy's replay slot, so
+  // the caller's participants keep their recordings, and a later build over
+  // them (the analyze page renders a run again under new settings) reads
+  // what this one read. The replay object is shared on purpose: the asset
+  // note it keeps from the first pass and the stylesheets asset-match.js
+  // rewrites once stay with it, so a later pass writes the same bytes. Only
+  // the top-level keys are copied: a recording can be tens of MB.
+  const shown = participants.map((p) => ({ ...p }));
+  const replayAssets = buildReplayAssets(shown, { sink, assetMap: deps.assetMap || null });
   if (replayAssets.count > 0) {
     log(`  replay/ — ${replayAssets.count} session replays (${(replayAssets.totalBytes / 1024 / 1024).toFixed(1)} MB)`);
   }
@@ -320,19 +330,23 @@ export async function buildReport(participants, config, deps) {
   const generatedAt = runId ? (deps.now ? deps.now() : new Date().toISOString()) : null;
 
   // HTML index page — references images/ and replay/ by path (not embedded).
-  const html = await renderIndexHtml(summaries, triage, participants, config, visualsRendered,
+  const html = await renderIndexHtml(summaries, triage, shown, config, visualsRendered,
     { replayClientSrc: deps.replayClientSrc, fontFaceCss: deps.fontFaceCss, timelineSrc: deps.timelineSrc, runId, generatedAt });
   sink('index.html', html);
   log('  index.html — report page');
 
+  // participants: the ones the report shows (`shown`, above), in the
+  // input's order.
   return { summaries, triage, triageOrder: triage.map(t => t.participantId),
-    counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images, runId, generatedAt, cursorLine };
+    counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images, runId, generatedAt, cursorLine,
+    participants: shown };
 }
 
 // The in-page report: the SAME summaries/triage and the SAME PNG bytes the zip
 // got (plots drawn once), as data URIs; replays are shown outside the report
-// (replayShownExternally), so this must run AFTER buildReport, whose replay
-// pass stamps `assetPath` and rewrites unloadable artifacts on the participants.
+// (replayShownExternally), so this must run AFTER buildReport, over the
+// participants it returns (built.participants), whose replay slots its
+// replay pass settled: `assetPath` stamped, an unloadable artifact rewritten.
 // The page keeps the report's annotations (annotationPostMessage): the report
 // runs in a sandboxed frame there, where storage throws.
 // deps = { replayClientSrc, fontFaceCss, timelineSrc?, bytesToBase64? }

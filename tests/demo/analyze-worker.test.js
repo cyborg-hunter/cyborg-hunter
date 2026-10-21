@@ -17,6 +17,8 @@ import { nodeDeps } from '../../src/cli/ingest.js';
 import { KEY_FILE_BANNER, assignCodes, keyFileUpdate, pseudonymCode } from '../../src/cli/pseudonymize-core.js';
 import { timelineScript } from '../../src/cli/renderers/timeline-client.js';
 import { inlineSafeSrc } from '../../src/shared/inline-safe.js';
+import { keyRecording, botGaps, humanGaps } from '../cli/typing-fixtures.js';
+import { makeRecordingCanvasFactory } from '../cli/recording-canvas.js';
 
 if (!globalThis.crypto) globalThis.crypto = (await import('node:crypto')).webcrypto;
 
@@ -394,6 +396,100 @@ test('reanalyze under the same config gives the first report again, file for fil
   assert.deepEqual(second.participants, first.participants);
   assert.deepEqual(second.triageOrder, first.triageOrder);
   assert.deepEqual(second.files, first.files);
+});
+
+// The settings panel re-renders the last run on every change, from the
+// participants the run read. The replay pass takes a recording it cannot
+// load out of the participants the report shows; a re-render that started
+// from those lost all the analysis had read from that recording. Two
+// synthetic sessions (typing-fixtures.js keys): each types a tutorial field
+// at a person's pace and its main field at software speed, in a recorded
+// text field. SYN-U's recording names no recorder version, so ingest
+// attaches it and the replay pass cannot load it; SYN-L's loads. SYN-U
+// pastes once, so a paste weight moves its score.
+function rereadCohort() {
+  const session = (pid, loadable) => {
+    const rec = keyRecording([['tutorial', 10, humanGaps(40, 1)], ['main', 60010, botGaps(30)]]);
+    rec.participant_id = pid;
+    rec.recorder = loadable ? { name: 'synthetic', version: '1.0.0' } : { name: 'synthetic' };
+    rec.extensions = { 'cyborg-hunter': { tier: 'dom' } };
+    const trials = rec.segments.map((s) => {
+      const startTime = rec.recording_started_at_perf + s.t_load;
+      const pasteEvents = !loadable && s.label === 'tutorial' ? [{ type: 'paste', t: startTime + 500, text: '' }] : [];
+      return { trialId: s.label, integrity: { trialId: s.label, participantId: pid, phase: s.label, startTime, duration_ms: 5000,
+        libraryVersion: '0.16.0', pasteEvents, copyEvents: [], dropEvents: [], tabAwayEvents: [], trialSoftScore: 0, trialSignals: {} } };
+    });
+    return [
+      { path: 'data/' + pid + '.json', file: new File([JSON.stringify({ participantId: pid, trials })], pid + '.json') },
+      { path: 'data/' + pid + '-replay-1000.json', file: new File([JSON.stringify(rec)], pid + '-replay-1000.json') },
+    ];
+  };
+  return [...session('SYN-U', false), ...session('SYN-L', true)];
+}
+
+test('a re-analysis under another weight reads a recording the replay pass could not load, as a fresh build does', async () => {
+  // A canvas that records what is drawn: the typing chart writes a bare R
+  // over each trial whose analysis says the rhythm rule fired (byIndex), and
+  // one in its legend.
+  const log = [];
+  const record = makeRecordingCanvasFactory(log);
+  globalThis.OffscreenCanvas = function (wd, ht) {
+    const c = record(wd, ht);
+    c.convertToBlob = async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+    return c;
+  };
+  try {
+    const files = rereadCohort();
+    const build = async (w, type, config) => {
+      const from = log.length;
+      w.send({ type, files, config, participantIdField: 'participantId' });
+      const done = await w.next('done', 'error');
+      assert.equal(done.type, 'done', done.message);
+      return { done, zip: zipOf(w), rMarks: log.slice(from).filter((c) => c[0] === 'fillText' && c[1] === 'R').length };
+    };
+    const w = startWorker();
+    w.send({ type: 'check', files });
+    const checked = await w.next('checked', 'error');
+    assert.equal(checked.type, 'checked', checked.message);
+    const weighted = { ...checked.config, scoreWeights: { paste: 1 } };
+    const first = await build(w, 'run', checked.config);
+    const second = await build(w, 'reanalyze', weighted);
+    const fresh = await build(startWorker(), 'run', weighted);
+
+    // summary.csv: the same rows but for the score and the tier (its 3rd and
+    // 4th columns), and the run's rates and verdict for SYN-U come from its
+    // recording.
+    const rowOf = (done, pid) => done.files['summary.csv'].split('\n').find((l) => l.startsWith(pid + ','));
+    const unweighted = (done) => done.files['summary.csv'].trim().split('\n').map((l) => l.replace(/^([^,]*,[^,]*),[^,]*,[^,]*,/, '$1,,,')).sort();
+    assert.match(rowOf(first.done, 'SYN-U'), /,highly suspicious,.*,recording$/);
+    assert.notEqual(rowOf(second.done, 'SYN-U').split(',')[2], rowOf(first.done, 'SYN-U').split(',')[2], 'the paste weight moved the score');
+    assert.deepEqual(unweighted(second.done), unweighted(first.done));
+    // The typing analysis as the page shows it, and the chart's R marks.
+    const typingOf = (html) => html.match(/<section class="participant" id="p-SYN-U"[\s\S]*?(<div class="typing-section">[\s\S]*?<\/div>)/)[1];
+    assert.match(typingOf(first.done.html), /Computed from the session recording/);
+    assert.equal(typingOf(second.done.html), typingOf(first.done.html));
+    assert.equal(typingOf(strFromU8(second.zip['index.html'])), typingOf(strFromU8(first.zip['index.html'])));
+    assert.ok(first.rMarks > 0, 'the run drew R marks');
+    assert.equal(second.rMarks, first.rMarks);
+    // The replay note: the page's, and the zip report's replay section.
+    assert.match(first.done.participants.find((p) => p.participantId === 'SYN-U').replayError, /recorder \{name, version\}/);
+    assert.deepEqual(second.done.participants, first.done.participants);
+    const noteOf = (zip) => strFromU8(zip['index.html']).match(/<p class="replay-note replay-warn">[^\n]*SYN-U-replay-1000\.json<\/p>/)[0];
+    assert.equal(noteOf(second.zip), noteOf(first.zip));
+
+    // And the re-analysis is the fresh build under the new weight, file for file.
+    assert.deepEqual(Object.keys(second.zip).sort(), Object.keys(fresh.zip).sort());
+    for (const name of Object.keys(fresh.zip)) {
+      if (name === 'index.html') assert.equal(withoutRunTime(strFromU8(second.zip[name])), withoutRunTime(strFromU8(fresh.zip[name])), name);
+      else assert.ok(Buffer.from(second.zip[name]).equals(Buffer.from(fresh.zip[name])), name);
+    }
+    assert.equal(withoutRunTime(second.done.html), withoutRunTime(fresh.done.html));
+    assert.deepEqual(second.done.participants, fresh.done.participants);
+    assert.deepEqual(second.done.reportWarnings, fresh.done.reportWarnings);
+    assert.equal(second.rMarks, fresh.rMarks);
+  } finally {
+    delete globalThis.OffscreenCanvas;
+  }
 });
 
 // The run id names the cohort (report-core.js runIdOf): a re-analysis of the

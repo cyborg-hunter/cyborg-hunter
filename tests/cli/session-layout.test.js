@@ -171,16 +171,18 @@ describe('under a phase scope', () => {
     assert.equal(hoverData(sessionLayout(p, config, summaryAnalysis)).trials[1][4], null);
   });
 
-  // The page is built after the replay pass, which takes a recording it
-  // cannot load (this synthetic one) out of the participant: an analysis
-  // taken then would see no keys. The page reads the one the chart drew.
+  // The page is built from the replay pass's copies of the participants
+  // (built.participants), which lack a recording the pass cannot load (this
+  // synthetic one): an analysis taken from them would see no keys. The page
+  // reads the one the chart drew.
   it('the page\'s hover numbers come from the same full analysis as the chart', async () => {
     let html = '';
     const p = scoped();
-    await buildReport([p], config, {
+    const built = await buildReport([p], config, {
       sink: (name, body) => { if (name === 'index.html') html = body; },
       createCanvas: makeRecordingCanvasFactory([]), encodePng: async () => new Uint8Array(0) });
-    assert.equal(p.replay.recording, undefined, 'the replay pass took the recording out');
+    assert.equal(built.participants[0].replay.recording, undefined, 'the replay pass took the recording out of the page\'s copy');
+    assert.ok(p.replay.recording, 'the participant given keeps it');
     const attr = html.match(/<div class="tl-stage" data-timeline="([^"]*)">/);
     assert.ok(attr, 'the block carries its hover numbers');
     const data = JSON.parse(attr[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));

@@ -9,6 +9,7 @@ import { ingest } from '../../src/cli/ingest.js';
 import { buildReport, renderInPageHtml, REPORT_FILES } from '../../src/cli/report-core.js';
 import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
 import { makeRecordingCanvasFactory } from './recording-canvas.js';
+import { keyRecording, participantFromRecording, botGaps, humanGaps } from './typing-fixtures.js';
 import { mergeConfig } from '../../src/cli/config-core.js';
 
 function memorySink() {
@@ -78,6 +79,49 @@ describe('buildReport', () => {
     assert.ok(m.files.has('replay/DEMO-FIXT.replay.js'));
     assert.ok(m.files.get('index.html').includes('data-replay-src="replay/DEMO-FIXT.replay.js"'));
     assert.ok(m.order.indexOf('replay/DEMO-FIXT.replay.js') < m.order.indexOf('index.html'));
+  });
+
+  // The analyze page renders one run again under new settings, from the same
+  // participant objects. Two synthetic sessions (typing-fixtures.js keys)
+  // typed in a recorded text field: SYN-U's recording names no recorder
+  // version, so the replay pass cannot load it; SYN-L's loads.
+  it('leaves its participants their recordings: a second build over them reads what the first read', async () => {
+    const session = (pid, loadable) => {
+      const rec = keyRecording([['tutorial', 10, humanGaps(40, 1)], ['main', 60010, botGaps(30)]]);
+      rec.participant_id = pid;
+      rec.recorder = loadable ? { name: 'synthetic', version: '1.0.0' } : { name: 'synthetic' };
+      return participantFromRecording(pid, rec);
+    };
+    const ps = [session('SYN-U', false), session('SYN-L', true)];
+    const before = structuredClone(ps);
+    const replays = ps.map((p) => p.replay);
+    const recordings = ps.map((p) => p.replay.recording);
+    const deps = { sink: () => {}, replayClientSrc: '', fontFaceCss: '' };
+    const first = await buildReport(ps, cfg({}), deps);
+    // The caller's participants keep their replays and recordings. The one
+    // thing the pass writes on them is on a replay object it wrote a file
+    // for: its assetPath (with an asset map, its asset note too).
+    ps.forEach((p, i) => {
+      assert.strictEqual(p.replay, replays[i], p.participantId);
+      assert.strictEqual(p.replay.recording, recordings[i], p.participantId);
+    });
+    const { assetPath, ...written } = ps[1].replay;
+    assert.strictEqual(assetPath, 'replay/SYN-L.replay.js');
+    assert.deepStrictEqual([ps[0], { ...ps[1], replay: written }], before);
+    // A second build under another weight reads the same recordings.
+    const second = await buildReport(ps, cfg({ scoreWeights: { paste: 1 } }), deps);
+    assert.strictEqual(first.summaries[0].typingAnalysis.source, 'recording');
+    assert.deepStrictEqual(second.summaries.map((s) => s.typingAnalysis), first.summaries.map((s) => s.typingAnalysis));
+    assert.deepStrictEqual(second.warnings, first.warnings);
+    // The report shows the pass's view (built.participants): SYN-U's replay
+    // is the unloadable note, SYN-L's the file it wrote.
+    for (const built of [first, second]) {
+      assert.deepStrictEqual(built.participants.map((p) => p.participantId), ['SYN-U', 'SYN-L']);
+      assert.strictEqual(built.participants[0].replay.error, 'unloadable');
+      assert.match(built.participants[0].replay.reason, /recorder \{name, version\}/);
+      assert.strictEqual(built.participants[0].replay.recording, undefined);
+      assert.strictEqual(built.participants[1].replay, ps[1].replay);
+    }
   });
 });
 
