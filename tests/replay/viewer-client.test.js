@@ -643,12 +643,13 @@ describe('counters, chips and defects', () => {
 });
 
 describe('the alignment check is wired to §6, not dead', () => {
-  // TASK 6 owns the five predicates, the client-box chain and the three
-  // anchor outcomes. What this pins is only that the re-point is LIVE: the
-  // walk still offers anchored events to the check, the check still resolves
-  // `anchor.node` through the span id map, and an event carrying no §6 blocks
-  // still produces no check at all. Without it the whole surface could go
-  // quiet between here and the alignment suite and nothing would notice.
+  // alignment-viewer-model.test.js owns the five predicates, the client-box
+  // chain and the three anchor outcomes. What this pins is only that the
+  // re-point is LIVE: the walk still offers anchored events to the check, the
+  // check still resolves `anchor.node` through the span id map, and an event
+  // carrying no §6 blocks still produces no check at all. Without it the whole
+  // surface could go quiet between here and the alignment suite and nothing
+  // would notice.
   it('checks an anchored event and skips an unanchored one', () => {
     const v = boot(fixture('canonical-core'));
     v.dbg.seek(1000);

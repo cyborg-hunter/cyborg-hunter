@@ -110,6 +110,7 @@ const label = {
   sol: 'Sol ' + 'round-1'
 };
 const W = 'Task';
+const w = W.toLowerCase();
 
 describe('hygiene gate: process labels', () => {
   it('fails on a label in source, tests, tools and packages', () => {
@@ -133,6 +134,30 @@ describe('hygiene gate: process labels', () => {
     assert.strictEqual(gate({ 'src/a.js': '// T-shirt sizes, ST5 and ' + T + 'x are not labels' }), 0);
   });
 
+  // The word in any case, then a number after a space, a hyphen or '#'. A
+  // numeral straight after the word reads as a label, so the word and then
+  // "3D" fails too: prose puts the number first ("a 3D task") or spells it
+  // out. The word glued to a digit is an identifier and passes.
+  it('fails on a task label in any case, hyphenated or with #', () => {
+    for (const text of [
+      '// carried from ' + w + ' 3',
+      '// (' + w + '-3-review item 1)',
+      '// ' + W.toUpperCase() + ' 6 owns the predicates',
+      '// fix to ' + w + ' #25',
+      '// see ' + W + '-#4 and ' + W + '#5',
+      '// ' + w + 's 4-7',
+      '// the ' + w + ' 3D',
+    ]) assert.strictEqual(gate({ 'tests/a.test.js': text }), 1, text);
+  });
+
+  it('passes the word in ordinary prose and code', () => {
+    assert.strictEqual(gate({ 'src/a.js': [
+      '// this ' + w + '; a ' + w + ' list; the ' + w + "'s 3 phases; " + w + 's: 3 of them',
+      '// a 3D ' + w + ', three ' + w + 's, ' + w + ' three, the ' + w + 'bar 2, multi' + w + ' 3',
+      "const t = { name: '" + w + "', n: 3 }, " + w + "1 = t, " + W + "2 = t;",
+    ].join('\n') }), 0);
+  });
+
   it('does not scan docs', () => {
     assert.strictEqual(gate({ 'docs/guide.md': label.task }), 0);
     assert.strictEqual(gate({ 'README.md': label.round }), 0);
@@ -149,6 +174,8 @@ describe('hygiene gate: process labels', () => {
     assert.strictEqual(gate({ 'tools/a.sh': '# done in ' + W + '  \n#   ' + '3, then' }), 1);
     assert.strictEqual(gate({ 'demo/a.html': '<p>see ' + W + '\n<!-- ' + '12 -->' }), 1);
     assert.strictEqual(gate({ 'src/a.js': 'const a = 1; // ' + W + '\n' + '9 more' }), 1);
+    assert.strictEqual(gate({ 'src/a.js': '// carried by ' + W.toUpperCase() + '\n// ' + '3 below' }), 1, 'any case');
+    assert.strictEqual(gate({ 'src/a.js': '// carried by ' + w + '\n// ' + '3 below' }), 1, 'any case');
   });
 
   it('passes ordinary prose and code that wraps after the word', () => {
@@ -167,3 +194,4 @@ describe('hygiene gate: process labels', () => {
     assert.strictEqual(gate({}, { 'dist/ch.js': '// see ' + W + '\n// list' }), 0);
   });
 });
+

@@ -121,8 +121,8 @@ const kinds = (patches) => patches.map((p) => p.type);
 const of = (patches, type) => patches.filter((p) => p.type === type);
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EXCLUSION + BATCHING (task-3-review's eight required cases, plus the raw
-// oldValue probe that explains why they cannot live in the unit suite)
+// EXCLUSION + BATCHING (the eight cases that need a real Chromium, plus the
+// raw oldValue probe that explains why they cannot live in the unit suite)
 // ═══════════════════════════════════════════════════════════════════════════
 
 // 1. Exclusion toggle both directions with an EMPTY-VALUED attribute.
@@ -306,7 +306,7 @@ const formOf = (seed) => (seed && seed.form) || [];
 
 // 10. defaultSelected semantics: an option carrying the `selected` ATTRIBUTE is
 //     the default, so an untouched select seeds nothing; changing away from it
-//     does. happy-dom cannot express this (task-4-review scrutiny 3).
+//     does. happy-dom cannot express this, so it runs here.
 await withPage('defaultSelected: attribute-selected option is the default', async (page) => {
   await start(page,
     '<select id="s"><option value="a">a</option><option value="b" selected>b</option></select>',

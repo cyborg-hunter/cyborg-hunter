@@ -150,7 +150,9 @@ done
 Q="'\""
 label_patterns=(
   "(^|[^A-Za-z0-9_/+=.$Q-])T[0-9]+(\\.[0-9]+)?([^A-Za-z0-9_/+=$Q-]|$)"  # T5, T5.9
-  '(^|[^A-Za-z0-9_])Tasks?[ -][0-9]'    # Task 10, Task-3, Tasks 4-7
+  # task 10, Task-3, TASK 6, task #25, Tasks 4-7: the word in any case, then
+  # a space, a hyphen or '#' before the number (task1 is an identifier)
+  '(^|[^A-Za-z0-9_])[Tt][Aa][Ss][Kk][Ss]?([ -]#?|#)[0-9]'
   'fix round'                           # "fix round 3"
   '[Ff]inding [0-9]'                    # "finding 2"
   'review [A-Z]-[0-9]'                  # "review M-4"
@@ -177,15 +179,16 @@ done
 
 # A label split across a line break: a wrapped comment can end one line with
 # "Task" and start the next with the number, and the line-by-line greps above
-# see neither half. The files with a line ending in "Task" or "Tasks" are read
-# again with awk, which flags such a line when the next one starts, after
-# comment markers (//, *, #, <!--, --), with a digit. "Task" and then a word
-# on the next line is ordinary prose and passes. FNR == 1 resets each file.
-split_end_re='(^|[^A-Za-z0-9_])Tasks?[[:space:]]*$'
+# see neither half. The files with a line ending in "task" or "tasks", in any
+# case, are read again with awk, which flags such a line when the next one
+# starts, after comment markers (//, *, #, <!--, --), with a digit. The word
+# and then a word on the next line is ordinary prose and passes. FNR == 1
+# resets each file.
+split_end_re='(^|[^A-Za-z0-9_])[Tt][Aa][Ss][Kk][Ss]?[[:space:]]*$'
 split_label_hits() {
   awk 'FNR == 1 { prev = 0 }
        prev && /^[ \t]*(\/\/+|\*+|#+|<!--|--)?[ \t]*[0-9]/ { print FILENAME ":" (FNR - 1) ": " prevline " / " $0 }
-       { prev = ($0 ~ /^Tasks?[ \t]*$/ || $0 ~ /[^A-Za-z0-9_]Tasks?[ \t]*$/); prevline = $0 }' "$@"
+       { t = tolower($0); prev = (t ~ /^tasks?[ \t]*$/ || t ~ /[^a-z0-9_]tasks?[ \t]*$/); prevline = $0 }' "$@"
 }
 split_files=()
 while IFS= read -r -d '' f; do split_files+=("$f"); done < <(git grep -I -l -z -E "$split_end_re" -- "${label_paths[@]}" ":(exclude)$self" 2>/dev/null || true)

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { pickWindowGeometryForTrial, chooseScreenFrame, computeZoomScale } from '../../src/cli/renderers/trajectories-core.js';
 
-// Companion fix to task #25 (window-vs-viewport nested rectangles).
+// Companion to the window-vs-viewport nested rectangles fix.
 // trajectories-core.js already had chooseScreenFrame() that knows how to draw
 // nested rectangles when given metadata.{screenWidth,screenHeight,windowX,Y,W,H}.
 // What was missing: a step that translates session.windowPositions[] (the

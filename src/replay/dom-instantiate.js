@@ -669,10 +669,10 @@ function instantiateTree(domNode, doc) {
  * frame itself survives — `srcdoc` is written once per mount (design §4), so
  * no `onload` round trip stands between a backward seek and a readable DOM.
  *
- * CARRY FOR TASK 3: on the body-root path the root id is bound to the frame's
- * OWN `<body>`. A `dom.remove` naming that id must skip and count rather than
- * call `.remove()`, which would detach the element every later mount and patch
- * depends on and leave the reconstruction nowhere to go.
+ * On the body-root path the root id is bound to the frame's OWN `<body>`. A
+ * `dom.remove` naming that id is skipped and counted (applyRemove) rather than
+ * calling `.remove()`, which would detach the element every later mount and
+ * patch depends on and leave the reconstruction nowhere to go.
  *
  * @param {object|null} domNode  the span keyframe's `initial_dom`; null clears
  *   the body and mounts nothing, which is the trace-tier and the
