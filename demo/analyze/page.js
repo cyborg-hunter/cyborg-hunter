@@ -528,7 +528,7 @@ export function createPage(root, worker, opts) {
     if (config.pseudonymize) msg.pseudonymSecret = runSecret();
     sendWithFiles(msg);
     var done = await reply;
-    state.ranWith = { config: config, idField: state.idField };
+    state.ranWith = { config: config, idField: state.idField, secret: msg.pseudonymSecret || null };
     showResults(done);
   }
 
@@ -536,14 +536,26 @@ export function createPage(root, worker, opts) {
   // re-analyse the participants already read (`reanalyze`); a change to the
   // id, integrity or session-report field reads the files again (`run`,
   // with the same files). Either way the page stays on its results and
-  // swaps the report and the downloads in place.
+  // swaps the report and the downloads in place. A change that leaves the
+  // report as it is (Reset to defaults with the weights at them already)
+  // runs nothing.
   function onSettingsChange() {
     if (!state.result || busy() || state.step !== 'results') return;
     var config = effectiveConfig();
+    if (sameAsShown(config)) return;
     var reread = state.idField !== state.ranWith.idField || REINGEST_KEYS.some(function (k) {
       return k !== 'participantIdField' && config[k] !== state.ranWith.config[k];
     });
     rerun(reread ? 'run' : 'reanalyze', config).catch(onFailure(reread ? 'run' : 'reanalyze'));
+  }
+
+  // Whether the report on screen was built from `config` with the id field in
+  // use and, under pseudonymize, the key in use: a key file loaded over a
+  // pseudonymized report changes its codes though the config is the same.
+  function sameAsShown(config) {
+    var ran = state.ranWith;
+    return state.idField === ran.idField && JSON.stringify(config) === JSON.stringify(ran.config) &&
+      (!config.pseudonymize || keySecret === ran.secret);
   }
 
   // One at a time, like a run: the awaited 'done' keeps the page busy, which
@@ -564,7 +576,7 @@ export function createPage(root, worker, opts) {
     if (type === 'run') sendWithFiles(msg); else send(msg);
     var done = await reply;
     status.hidden = true;
-    state.ranWith = { config: config, idField: state.idField };
+    state.ranWith = { config: config, idField: state.idField, secret: msg.pseudonymSecret || null };
     showResults(done);
   }
 

@@ -110,3 +110,15 @@ test('Hard at: through the panel into the run and the export; a change in it cou
   assert.deepEqual(exportConfig(configFromSettings(merged(undefined), { ...none, hardAt: { paste: 3 } }), { participantIdField: 'p' }),
     { hardAt: { paste: 3 }, participantIdField: 'p' });
 });
+
+// The panel shows a config's weights as the CLI resolves them
+// (resolveScoreWeights): an entry the CLI ignores, with a warning, shows the
+// default the run then uses, so it puts the same values in the panel as no
+// entry at all.
+test('settingsKey reads a weight or a cap the CLI ignores as the default the run uses', () => {
+  const key = (file) => settingsKey(settingsFromConfig(merged(file)));
+  assert.equal(key({ scoreWeights: { paste: -3 } }), key({}), 'a negative weight');
+  assert.equal(key({ scoreWeights: { paste: '7' } }), key({}), 'a weight written as text');
+  assert.equal(key({ scoreWeights: { paste: { weight: 5, max: 2.5 } } }), key({}), 'a cap that is not a whole number');
+  assert.notEqual(key({ scoreWeights: { paste: 7 } }), key({}), 'a valid weight still differs');
+});

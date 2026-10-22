@@ -14,7 +14,7 @@
 // The phase scope and the trajectory order are left to the CLI: the panel
 // neither shows nor edits them, and a dropped config that sets them keeps
 // them, in every run and in the export (configFromSettings).
-import { SCORE_SIGNALS } from '../../src/cli/analyzers/score-weights.js';
+import { SCORE_SIGNALS, resolveScoreWeights } from '../../src/cli/analyzers/score-weights.js';
 import { panelSignals, weightsPanelHtml, wireWeightsPanel, weightsConfig, WEIGHTS_PANEL_CSS } from '../../src/cli/renderers/weights-panel.js';
 
 // The keys whose change needs the files read again; the panel's others
@@ -47,14 +47,14 @@ export function settingsFromConfig(config) {
   };
 }
 
-// One signal's weight and cap as the panel shows them, from a config's
-// scoreWeights entry: a bare number is the weight, an object may give the
-// weight and a cap, and no entry is the signal's default weight, uncapped.
-function resolveWeight(user, sig) {
-  var u = user[sig.key];
-  var weight = u == null ? sig.weight : (typeof u === 'object' ? (u.weight != null ? u.weight : sig.weight) : u);
-  var max = u != null && typeof u === 'object' && u.max != null ? u.max : null;
-  return [weight, max];
+// Each signal's weight and cap as the panel shows them, in SCORE_SIGNALS
+// order, from a config's scoreWeights resolved as the CLI resolves it
+// (resolveScoreWeights): an entry the CLI ignores with a warning (a weight
+// that is not a number ≥ 0, a cap that is not a whole number ≥ 0) shows the
+// default the run then uses, so the box, the slider and the run agree.
+function panelWeights(scoreWeights) {
+  var resolved = resolveScoreWeights(scoreWeights).weights;
+  return SCORE_SIGNALS.map(function (sig) { return { weight: resolved[sig.key].weight, max: resolved[sig.key].max }; });
 }
 
 // One signal's Hard at count as the panel shows it, from a config's hardAt:
@@ -67,16 +67,15 @@ function resolveHardAtCount(hardAt, sig) {
 /**
  * The settings as the panel shows them, as a string two configs can be
  * compared by: the weights and the Hard at counts resolved per signal in
- * SCORE_SIGNALS order, so key order, a bare number against { weight }, and an
- * explicit default against no entry all compare equal. The phase scope and
- * the trajectory order are not in it: two configs that differ only in them
- * put the same values in the panel, so the page does not count the second as
- * a change (the run still takes the newer config's, through
- * configFromSettings).
+ * SCORE_SIGNALS order, so key order, a bare number against { weight }, an
+ * explicit default against no entry, and an entry the CLI ignores against no
+ * entry all compare equal. The phase scope and the trajectory order are not
+ * in it: two configs that differ only in them put the same values in the
+ * panel, so the page does not count the second as a change (the run still
+ * takes the newer config's, through configFromSettings).
  */
 export function settingsKey(s) {
-  var user = s.scoreWeights || {};
-  return JSON.stringify([SCORE_SIGNALS.map(function (sig) { return resolveWeight(user, sig); }),
+  return JSON.stringify([panelWeights(s.scoreWeights),
     SCORE_SIGNALS.map(function (sig) { return resolveHardAtCount(s.hardAt, sig); }),
     s.softScoreThreshold, s.integrityField, s.sessionIntegrityPath, s.platformIdField, s.showPlatformId, s.pseudonymize]);
 }
@@ -141,6 +140,11 @@ export function createSettingsPanel(container, onChange) {
   var form = container.querySelector('form');
   var field = function (name) { return form.elements.namedItem(name); };
   var weights = wireWeightsPanel(form.querySelector('.wp'), { signals: SIGNALS, onInput: null });
+  // The panel's Copy config gives the scoreWeights and hardAt entries only;
+  // Export config, below, writes the whole file with them, so the settings
+  // offer that one. The shared panel keeps the button for the CLI report's
+  // dialog, which has no Export config; here it goes once the panel is wired.
+  form.querySelector('[data-action="weights-copy"]').remove();
   form.addEventListener('submit', function (e) { e.preventDefault(); });
   // A key file picked is not a settings change (the page handles it).
   form.addEventListener('change', function (e) { if (!(e.target && e.target.dataset && e.target.dataset.role === 'key-input')) onChange(); });
@@ -152,9 +156,8 @@ export function createSettingsPanel(container, onChange) {
       field('platformIdField').value = s.platformIdField || '';
       field('showPlatformId').checked = !!s.showPlatformId;
       field('pseudonymize').checked = !!s.pseudonymize;
-      var user = s.scoreWeights || {};
       weights.write({
-        weights: SCORE_SIGNALS.map(function (sig) { var r = resolveWeight(user, sig); return { weight: r[0], max: r[1] }; }),
+        weights: panelWeights(s.scoreWeights),
         hardAt: SCORE_SIGNALS.map(function (sig) { return resolveHardAtCount(s.hardAt, sig); }),
       });
     },

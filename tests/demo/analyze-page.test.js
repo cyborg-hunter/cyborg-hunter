@@ -6,6 +6,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
+import { mergeConfig } from '../../src/cli/config-core.js';
 
 const PAGE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; " +
   "img-src blob: data:; font-src data:; frame-src blob:; worker-src blob:; connect-src 'self'; " +
@@ -1416,11 +1417,17 @@ test('the weights panel: a slider moves its number box, and the weights and Hard
 
 // Hard at is a post-hoc key, like the weights: a change once a report is on
 // screen re-analyses the participants the run read. Reset to defaults fires
-// one change for the whole panel, so it re-analyses once.
-test('a Hard at count set on the results re-analyses with it, and Reset to defaults re-analyses at the defaults', async () => {
+// one change for the whole panel: it re-analyses once when the panel was off
+// the defaults, and not at all when the report on screen is already theirs.
+test('a Hard at count set on the results re-analyses with it; Reset to defaults re-analyses only when the panel was off them', async () => {
   const t = boot();
   await toResults(t);
   const form = role('settings-form');
+  const reset = form.querySelector('[data-action="weights-reset"]');
+  const atResults = t.sent.length;
+  reset.click();
+  await tick();
+  assert.equal(t.sent.length, atResults, 'Reset at the defaults: nothing to re-analyse');
   form.querySelector('[data-hard="paste"]').value = '2';
   form.dispatchEvent(new win.Event('change', { bubbles: true }));
   await tick();
@@ -1429,11 +1436,29 @@ test('a Hard at count set on the results re-analyses with it, and Reset to defau
   t.emit(DONE);
   await tick();
   const sentBefore = t.sent.length;
-  form.querySelector('[data-action="weights-reset"]').click();
+  reset.click();
   await tick();
   assert.equal(t.sent.length, sentBefore + 1, 'one re-analysis');
   assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID', config: PANEL_DEFAULTS });
   assert.equal(form.querySelector('[data-hard="paste"]').value, '');
+  t.emit({ type: 'zip', chunk: new Uint8Array([4]) });
+  t.emit(DONE);
+  await tick();
+  reset.click();
+  await tick();
+  assert.equal(t.sent.length, sentBefore + 1, 'a second Reset: nothing more');
+});
+
+// The panel's Copy config gives only the scoreWeights and hardAt entries;
+// the page's Export config writes the whole file, them included, so the
+// settings offer that one only. The CLI report's dialog keeps Copy config.
+test('the settings\' weights panel has Reset to defaults and no Copy config: Export config writes the file', async () => {
+  const t = boot();
+  await toCheck(t);
+  const form = role('settings-form');
+  // Counts, not elements: a failing assert would print a whole DOM node.
+  assert.deepEqual(['.wp [data-action="weights-reset"]', '[data-action="weights-copy"]', '[data-action="export-config"]']
+    .map((sel) => form.querySelectorAll(sel).length), [1, 0, 1]);
 });
 
 // The phase scope and the trajectory order are the CLI's: a dropped config
@@ -1467,6 +1492,33 @@ test('a dropped config\'s phase scope and trajectory order reach the run and the
 // ones it was last written from, so a drop of more data keeps what the
 // analyst set. A replacement after the first check says so under the list.
 const checkNotes = () => [...role('check-warnings').children].map((li) => li.textContent);
+
+// A dropped config's weight or cap that the CLI ignores, with a warning,
+// shows in the panel as the default the CLI then uses, and the run uses it
+// too: the box, the slider and the run agree with the warning. The check's
+// config and warnings here are the CLI's own (mergeConfig), as the worker's are.
+for (const [entry, what, warning] of [
+  [-3, 'a negative weight', /^scoreWeights\.paste: .*using the default 5\.$/],
+  ['7', 'a weight written as text', /^scoreWeights\.paste: .*using the default 5\.$/],
+  [{ weight: 5, max: 2.5 }, 'a cap that is not a whole number', /^scoreWeights\.paste\.max .*no cap is applied\.$/],
+]) {
+  test('a dropped config\'s ' + what + ': the box, the slider and the run take what the CLI uses, beside its warning', async () => {
+    const t = boot();
+    await loadSample(t);
+    const { config, warnings } = mergeConfig({ participantIdField: 'participantId', scoreWeights: { paste: entry } });
+    t.emit({ ...CHECKED, config, configWarnings: warnings });
+    await tick();
+    assert.deepEqual(checkNotes(), warnings);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], warning);
+    const form = role('settings-form');
+    assert.deepEqual([weightInput('paste').value, form.querySelector('[data-slider="paste"]').value, form.querySelector('[data-max="paste"]').value],
+      ['5', '5', '']);
+    action('run').click();
+    await tick();
+    assert.equal(t.sent.at(-1).config.scoreWeights, null, 'the run weighs paste at its default, uncapped, as the CLI does');
+  });
+}
 
 test('a drop keeps the analyst\'s settings unless its config differs, and a replacement says so', async () => {
   const t = boot();

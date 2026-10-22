@@ -185,6 +185,26 @@ test('a setting on the results re-analyses in place: no file is read again, and 
   await assertOnlyAllowed(page, seen, allow);
 });
 
+// The weights panel is the CLI report's too, in that report's dress; in the
+// settings it wears the page's own: Reset to defaults as Export config, the
+// number boxes with the page's field corners. Export config writes the whole
+// file, so the panel's Copy config is not offered here.
+test('the settings\' weights panel wears the page\'s buttons and field corners, and offers no Copy config', async ({ page, baseURL }) => {
+  const allow = siteAllowlist(baseURL);
+  const seen = await guardNetwork(page, allow);
+  await page.goto('/analyze/');
+  await waitReady(page);
+  await loadSample(page);
+  const form = page.locator('[data-role="settings-form"]');
+  const style = (locator, props) => locator.evaluate((el, ps) => ps.map((p) => getComputedStyle(el).getPropertyValue(p)), props);
+  const BUTTON = ['font-family', 'font-size', 'font-weight', 'line-height', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left'];
+  expect(await style(form.locator('[data-action="weights-reset"]'), BUTTON)).toEqual(await style(form.locator('[data-action="export-config"]'), BUTTON));
+  expect(await style(form.locator('[data-weight="paste"]'), ['border-top-left-radius', 'border-bottom-right-radius']))
+    .toEqual(await style(form.locator('[name="softScoreThreshold"]'), ['border-top-left-radius', 'border-bottom-right-radius']));
+  await expect(form.locator('[data-action="weights-copy"]')).toHaveCount(0);
+  await assertOnlyAllowed(page, seen, allow);
+});
+
 // The demo's last step stores the visitor's files in this browser's
 // IndexedDB and opens analyze/#from-demo (demo/handoff.js). The record is
 // written here with the plain IndexedDB API, so the page is held to the
