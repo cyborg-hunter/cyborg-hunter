@@ -302,6 +302,11 @@ describe('the rail markup', () => {
     const rules = parseRules(css(html));
     assert.deepEqual(['position', 'top', 'background'].map((p) => lastProp(rules, '.wd-head', p)), ['sticky', '0', 'var(--surface)']);
     assert.equal(lastProp(rules, '#weights-dialog', 'background'), 'var(--surface)');
+    // A hairline in the report's border colour under it, and the dialog
+    // scrolls a focused control into view below it (the row is 52 to 54 px
+    // tall in the three engines).
+    assert.equal(lastProp(rules, '.wd-head', 'border-bottom'), '1px solid var(--line)');
+    assert.equal(lastProp(rules, '#weights-dialog', 'scroll-padding-top'), '60px');
     const inPage = css(await renderIndexHtml(SUMMARIES, triage, [], {}, false, { imageSources: {} }));
     assert.doesNotMatch(inPage, /\.wd-head|position: sticky/);
     assert.doesNotMatch(WEIGHTS_PANEL_CSS, /\.wd-head|position: sticky/);

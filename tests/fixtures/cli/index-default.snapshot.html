@@ -614,18 +614,22 @@
       margin: auto; border: 1px solid var(--ink); border-radius: 0; padding: 0;
       background: var(--surface); color: var(--ink);
       width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+      /* A control the keyboard focuses scrolls into view below the sticky
+         heading row (.wd-head, 52 to 54 px tall), never under it. */
+      scroll-padding-top: 60px;
     }
     #weights-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
     .wd { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; font-family: var(--ff-recursive); }
     /* The dialog scrolls when its rows pass the window's height (max-height);
        the heading row, the title and Close, sticks to the top of that
        scrolling area. It reaches over .wd's padding (the negative margins,
-       the same padding inside), so it sits where it would and, stuck,
-       covers the rows scrolled under it from edge to edge, on the dialog's
-       own background. */
+       the same padding inside), so, stuck, it covers the rows scrolled under
+       it from edge to edge, on the dialog's own background; the hairline
+       under it, in the report's border colour, shows where they scroll
+       away. */
     .wd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
       position: sticky; top: 0; z-index: 1; background: var(--surface);
-      margin: -16px -20px -10px; padding: 16px 20px 10px; }
+      margin: -16px -20px 0; padding: 16px 20px 10px; border-bottom: 1px solid var(--line); }
     .wd-head h3 { font-family: var(--ff-space); font-size: 16px; }
     .wd-lede { color: var(--dim); font-size: 13px; line-height: 1.45; }
     .wd-close { padding: 4px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--surface);

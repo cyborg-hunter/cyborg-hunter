@@ -12,7 +12,8 @@
 // to the button); the button says when the values differ from the run's;
 // the annotations CSV keeps the run's tier and score; the top bar and the
 // dialog lay out cleanly from a phone to a desktop; scrolled to its foot,
-// the dialog keeps its title and Close in view. The report is built by
+// the dialog keeps its title and Close in view, and no control the
+// keyboard focuses hides under them. The report is built by
 // bin/cyborg-hunter.js from the bundled sessions (examples/demo-sessions)
 // with hardAt { tabawayMedium: 3 }: DEMO-a3f3's three medium tab-aways move
 // it from clean to hard*. Scores: 9mop 45, bsq6 21, 681w 13, a3f3 11.
@@ -496,5 +497,41 @@ for (const [width, height] of [[1400, 900], [375, 812]]) {
     await page.mouse.click(m.close.x, m.close.y);
     await expect(dialog).toBeHidden();
     await expect(weightsButton(page)).toBeFocused();
+  });
+}
+
+// Shift+Tab from the dialog's foot walks up through every control of the
+// panel to Close. The dialog scrolls each focused control into view, below
+// the heading row (its scroll-padding-top): none may sit, even in part,
+// under the heading row's bottom edge, where it would be hidden while it
+// has the focus. The walk must reach every control, so the check cannot
+// pass on a short one.
+for (const [width, height] of [[1400, 900], [375, 812]]) {
+  test('Shift+Tab up from the dialog\'s foot at ' + width + 'px: no focused control hides under the heading row', async ({ page, browserName }) => {
+    test.skip(browserName === 'webkit', 'WebKit does not scroll this modal dialog to keep the focused control in view, with or without the sticky heading');
+    await page.setViewportSize({ width, height });
+    await openReport(page);
+    const dialog = await openDialog(page);
+    await page.evaluate(() => document.fonts.ready);
+    await dialog.evaluate((d) => { d.scrollTop = d.scrollHeight; });
+    await dialog.getByRole('button', { name: 'Copy config' }).focus();
+    const controls = await dialog.evaluate((d) => d.querySelectorAll('.wp input, .wp button').length - 1);
+    const hidden = [];
+    let steps = 0;
+    for (; steps <= controls; steps++) {
+      await page.keyboard.press('Shift+Tab');
+      const at = await dialog.evaluate((d) => {
+        const el = document.activeElement;
+        if (!d.contains(el) || el.closest('.wd-head')) return null;
+        const attr = ['data-weight', 'data-slider', 'data-max', 'data-hard'].find((a) => el.hasAttribute(a));
+        return { control: attr ? attr.slice(5) + ' ' + el.getAttribute(attr) : el.textContent,
+          top: el.getBoundingClientRect().top, headBottom: d.querySelector('.wd-head').getBoundingClientRect().bottom };
+      });
+      if (!at) break;
+      if (at.top < at.headBottom - 0.5) hidden.push(at);
+    }
+    expect(steps, 'the walk reached every control').toBe(controls);
+    await expect(dialog.locator('.wd-close')).toBeFocused();
+    expect(hidden, 'focused controls under the heading row').toEqual([]);
   });
 }
