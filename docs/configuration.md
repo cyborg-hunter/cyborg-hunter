@@ -191,7 +191,10 @@ library's own `HARD`, so you can tell the two apart:
   `Moved to hard by hardAt (hard*): N` when N is above 0.
 - Values must be whole numbers ≥ 1; any other value is ignored with a
   warning. An unknown key is ignored with a "did you mean" warning, like
-  `scoreWeights`; `null` for a key means no rule.
+  `scoreWeights`; `null` for a key means no rule. A value above a signal's
+  highest possible count is accepted without a warning and never matches:
+  the highest is 2 for `cursor` and `typingRhythm` (the verdict's level)
+  and 1 for `softwareRenderer` and `deviceMasking`.
 - The rule is yours, not the one in force while the data were collected:
   if a pre-registration names the library's preset, report both tiers.
 - The analyzer's settings and the CLI report's **Weights…** dialog show a
