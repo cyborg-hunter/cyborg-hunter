@@ -87,12 +87,15 @@ describe('HTML score display', () => {
     assert.match(b, /Total: 1.5/);
   });
 
+  // data-run-score keeps it too: the annotation export writes the run's
+  // exact score, as summary.csv does.
   it('floating-point noise never reaches visible text; data-score keeps the exact sum for sorting', async () => {
     const page = await html([summary('P1', { totalSyntheticInsertions: 3 })], { scoreWeights: { synthetic: 0.1 } });
-    const visible = page.replace(/data-score="[^"]*"/g, '');
+    const visible = page.replace(/data-(?:run-)?score="[^"]*"/g, '');
     assert.doesNotMatch(visible, /0\.30000000000000004/);
     assert.match(page, /<span class="mono score-big">0.3<\/span>/);
     assert.match(page, /data-score="0.30000000000000004"/);
+    assert.match(page, /data-run-score="0.30000000000000004"/);
   });
 });
 

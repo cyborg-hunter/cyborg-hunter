@@ -13,6 +13,7 @@
 //   - Two-column grid: 360px sidebar rail + flexible detail pane
 //   - Both columns scroll independently; full-viewport height
 //   - Topbar carries title, "{N} participants · v{VERSION}" metadata, Legend button
+//     (and in the CLI report a Weights… button, which opens the weights dialog)
 //   - Left rail: search, filter chips, sort selector, scrolling cohort rows,
 //     sticky totals footer (interactivity is wired in the client script)
 //   - Empty placeholders for: legend modal, lightbox, IIFE script
@@ -34,7 +35,7 @@ import { sanitize, fileIds } from './report-id.js';
 import { sessionLayout } from './session-timeline-core.js';
 import { hoverData } from './timeline-layout.js';
 import { timelineScript } from './timeline-client.js';
-import { railData } from './weights-panel.js';
+import { railData, panelSignals, weightsPanelHtml, weightsPanelScript, WEIGHTS_PANEL_CSS } from './weights-panel.js';
 import { railFunctionsSrc } from './rail-client.js';
 
 /**
@@ -117,6 +118,21 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // emitted only when the report has one. opts.annotationPostMessage: the
   // report runs in the analyze page's sandboxed frame, and the page keeps them.
   const annotationHtml = opts.runId ? annotationBlock({ runId: opts.runId, parent: !!opts.annotationPostMessage }) : '';
+  // The Weights… dialog (weights-panel.js) is the CLI report's: the analyzer
+  // shows the same panel in its settings and re-runs the report, so its
+  // in-page report has neither the button nor the dialog. Its script is
+  // inlined by its source text, from the analyzer's baked map when given.
+  const weightsButton = inPage ? ''
+    : '\n    <button class="weights-btn" type="button" aria-haspopup="dialog" aria-controls="weights-dialog">Weights&hellip;</button>';
+  const weightsDialog = inPage ? '' : weightsDialogHtml(config, !!opts.runId);
+  const weightsCss = inPage ? '' : WEIGHTS_DIALOG_CSS;
+  const weightsScript = inPage ? '' : `
+  <script>
+    // The Weights… dialog: the shared panel and the live re-score (weights-panel.js).
+    (function () {
+${inlineSafeSrc(inlineSrc.weightsPanel ?? weightsPanelScript())}
+    })();
+  </script>`;
 
   // Cohort counts for filter chips and totals footer, by the report's tier
   // (triage.js reportTier): a hard* row counts as hard. The triage array is
@@ -736,13 +752,13 @@ ${fontFaceCss}    :root {
       .cohort-row-bot { flex-wrap: wrap; row-gap: 4px; align-items: center; }
       .reason-excerpt { flex-basis: 100%; }
       .cursor-cell { margin-left: auto; }
-    }
+    }${weightsCss}
   </style>
 </head>
 <body data-filter="all">
   <header class="topbar">
     <h1>Cyborg Hunter Report</h1>
-    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${hardAtNote(config)}${pseudonymNote(config)}${runLine}</span>
+    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${hardAtNote(config)}${pseudonymNote(config)}${runLine}</span>${weightsButton}
     <button class="legend-btn" type="button" aria-haspopup="dialog" aria-controls="legend-modal">Legend &#9432;</button>
   </header>
   <div class="layout">
@@ -787,7 +803,7 @@ ${fontFaceCss}    :root {
     <span class="lightbox-close" aria-label="Close">&times;</span>
     <img id="lightbox-img" alt="">
     <div id="lightbox-stack" class="lightbox-stack" hidden></div>
-  </div>
+  </div>${weightsDialog}
 
   <script type="application/json" id="ch-rail-data">${inlineSafeJson(railData(triage, config))}</script>
   <script>
@@ -1038,6 +1054,68 @@ ${railSrc}
       }
       sortEl.addEventListener('change', () => { applySort(); reconcileSelection(); });
 
+      // --- Live re-score (the Weights… dialog; CLI report only) ---
+      // weights-panel.js hands every row's score, report tier and breakdown
+      // terms under the dialog's weights, in triage order (data-index). The
+      // row, its pane and the tier counts follow, and the rail sorts again.
+      const fmtScore = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+      const tierWord = (rt) => (rt === 'clean' ? 'clean' : rt.toUpperCase());
+      function renderBreakdown(box, terms, total) {
+        box.textContent = '';
+        const scale = Math.max(total, 1);
+        for (const [label, n] of terms) {
+          const term = document.createElement('span');
+          term.className = 'score-term';
+          const name = document.createElement('span');
+          name.className = 'label';
+          name.textContent = label;
+          const contrib = document.createElement('span');
+          contrib.className = 'mono contrib';
+          contrib.textContent = '+' + fmtScore(n);
+          const bar = document.createElement('span');
+          bar.className = 'bar';
+          bar.style.width = Math.max(2, Math.round((n / scale) * 100)) + 'px';
+          term.append(name, contrib, bar);
+          box.appendChild(term);
+        }
+        const totalEl = document.createElement('span');
+        totalEl.className = 'score-total mono';
+        totalEl.textContent = 'Total: ' + fmtScore(total);
+        box.appendChild(totalEl);
+      }
+      function updateTierCounts() {
+        const n = { all: rows.length, hard: 0, soft: 0, clean: 0 };
+        for (const r of rows) n[r.dataset.tier]++;
+        document.querySelectorAll('.filter-chip[data-filter] .chip-n').forEach(el => { el.textContent = String(n[el.closest('.filter-chip').dataset.filter]); });
+        document.querySelectorAll('.totals-row[data-tier] .count').forEach(el => { el.textContent = String(n[el.closest('.totals-row').dataset.tier]); });
+      }
+      document.addEventListener('ch:rescore', e => {
+        const out = e.detail.rows;
+        for (const r of rows) {
+          const x = out[+r.dataset.index];
+          if (!x) continue;
+          const tier = x.reportTier === 'hard*' ? 'hard' : x.reportTier;
+          r.dataset.score = String(x.score);
+          r.dataset.tier = tier;
+          r.dataset.reportTier = x.reportTier;
+          r.querySelector('.cohort-row-top .score').textContent = fmtScore(x.score);
+          const badge = r.querySelector('.tier-badge');
+          badge.dataset.tier = tier;
+          badge.textContent = tierWord(x.reportTier);
+          const pane = panes[+r.dataset.index];
+          if (!pane) continue;
+          const big = pane.querySelector('.score-big');
+          if (big) big.textContent = fmtScore(x.score);
+          const pill = pane.querySelector('.tier-pill');
+          if (pill) { pill.dataset.tier = tier; pill.textContent = tierWord(x.reportTier); }
+          const box = pane.querySelector('.score-breakdown');
+          if (box) renderBreakdown(box, x.terms, x.score);
+        }
+        updateTierCounts();
+        applySort();
+        reconcileSelection();
+      });
+
       // Initial order and selection on page load: the rail sorted by its
       // select's value (Score unless the browser restored another), then
       //   1. URL hash matches a participant — restore it.
@@ -1072,7 +1150,8 @@ ${railSrc}
         // The enlarged figure covers the report, and so does anything in
         // fullscreen (a replay viewer): the keys below act on the report
         // behind it, so they wait until it closes.
-        if (overlay.classList.contains('open') || document.fullscreenElement) return;
+        // The Weights… dialog is modal too: its own inputs take the keys.
+        if (overlay.classList.contains('open') || document.fullscreenElement || document.querySelector('dialog[open]')) return;
 
         const inInput = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
 
@@ -1117,7 +1196,7 @@ ${railSrc}
     (function () {
 ${timelineSrc}
     })();
-  </script>
+  </script>${weightsScript}
   <style>
 ${REPLAY_STYLES_CSS}
   </style>
@@ -1328,6 +1407,11 @@ function renderCohortList(triage, cohortCounts, opts = {}) {
 //                   order, and the rail may be sorted otherwise
 //   data-report-tier: 'hard' | 'hard*' | 'soft' | 'clean' (triage.js reportTier)
 //   data-score:     numeric score (defaulted to 0 if null/undefined)
+//   data-run-tier, data-run-score: the report tier and the score as the run
+//                   gave them; the Weights… dialog rewrites data-tier,
+//                   data-report-tier and data-score, never these, and the
+//                   annotation export writes these (the report's files keep
+//                   the run's values too)
 //   data-reason:    pre-lowercased reason string (search reads this so the
 //                   handler doesn't need to lowercase per keystroke)
 //   data-cursor:    the pointer verdict's level, 2…0; -1 when not assessed
@@ -1360,6 +1444,8 @@ function renderCohortRow(t, i) {
        data-tier="${tier}"
        data-report-tier="${reportTier}"
        data-score="${score}"
+       data-run-tier="${reportTier}"
+       data-run-score="${score}"
        data-cursor="${cursorLevel}"
        data-typing="${typingLevel}"
        data-reason="${esc(reasonLower)}">
@@ -2041,6 +2127,49 @@ function hardAtNote(config) {
   const { hardAt } = resolveHardAt(config?.hardAt);
   const keys = Object.keys(hardAt);
   return keys.length ? ` &middot; hard at: ${esc(keys.map(k => `${k} ${hardAt[k]}`).join(', '))}` : '';
+}
+
+// The Weights… dialog's styles: the panel's (weights-panel.js) and the
+// dialog's own. margin: auto centres the modal: the page's reset zeroes
+// every margin.
+const WEIGHTS_DIALOG_CSS = WEIGHTS_PANEL_CSS + `
+    #weights-dialog {
+      margin: auto; border: 1px solid var(--ink); border-radius: 0; padding: 0;
+      background: var(--surface); color: var(--ink);
+      width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+    }
+    #weights-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+    .wd { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; font-family: var(--ff-recursive); }
+    .wd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .wd-head h3 { font-family: var(--ff-space); font-size: 16px; }
+    .wd-lede { color: var(--dim); font-size: 13px; line-height: 1.45; }
+    .wd-close { padding: 4px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--surface);
+      color: var(--ink); cursor: pointer; font-family: var(--ff-recursive); font-size: 13px; }
+    /* The top bar holds two buttons here, Weights… and Legend: one height for
+       both (a set line box: the ⓘ comes from a fallback face, which stood the
+       Legend 5px taller), a label on one line (squeezed, "Legend ⓘ" broke in
+       two), and on a narrow window the run line takes a row of its own, the
+       buttons the next. */
+    .topbar button { white-space: nowrap; line-height: 24px; }
+    @media (max-width: 720px) { .topbar .meta { flex-basis: 100%; } }
+`;
+
+// The Weights… dialog: the shared panel at this report's weights and Hard at
+// counts. Its edits re-score, re-tier and re-sort the rail at once
+// (weights-panel.js chBootWeightsDialog, and the 'ch:rescore' listener in the
+// page's script); the report's files, and its annotation exports when it has
+// annotation controls (`annotations`), keep the weights it was built with.
+function weightsDialogHtml(config, annotations) {
+  const signals = panelSignals(resolveScoreWeights(config?.scoreWeights).weights, resolveHardAt(config?.hardAt).hardAt);
+  const kept = annotations ? 'This report\'s files and its annotation exports keep' : 'This report\'s files keep';
+  return `
+  <dialog id="weights-dialog" aria-labelledby="weights-title">
+    <form method="dialog" class="wd">
+      <div class="wd-head"><h3 id="weights-title">Score weights</h3><button type="submit" class="wd-close">Close</button></div>
+      <p class="wd-lede">Points per event: a participant's score is the sum, over the signals, of points × events (up to the cap). A weight of 0 leaves a signal out. <b>Hard at</b> moves anyone with that many events or more into the hard tier, shown as HARD*. The list re-scores and re-sorts as you change them. ${kept} the weights it was built with; <b>Copy config</b> gives the lines for cyborg-hunter.config.json, so the next CLI run builds the same list.</p>
+      ${weightsPanelHtml(signals)}
+    </form>
+  </dialog>`;
 }
 
 // config.pseudonymize: the ids shown are codes (pseudonymize-core.js), and

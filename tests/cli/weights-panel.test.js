@@ -144,6 +144,13 @@ describe('the rows', () => {
     assert.equal(lastProp(parseRules(narrow), '.wp-colhead', 'display'), 'none');
   });
 
+  // A range input has a margin of its own in the browsers (2 px in
+  // Chromium); at full width it would push the slider's track past the
+  // boxes' right edge in the stacked layout.
+  it('the slider takes no margin of its own, so its track ends where the boxes do', () => {
+    assert.equal(lastProp(parseRules(WEIGHTS_PANEL_CSS), '.wp-row input[type=range]', 'margin'), '0');
+  });
+
   it('a signal outside the groups lands under "Other signals" by its own name', () => {
     const html = weightsPanelHtml([{ key: 'later', name: 'later', hint: '', group: OTHER_GROUP, def: 0, weight: 0, max: null, hardAt: null, words: ['later'] }]);
     assert.match(html, />Other signals</);

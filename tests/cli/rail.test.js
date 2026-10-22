@@ -1,8 +1,9 @@
 // tests/cli/rail.test.js
 // The report's rail: the search and sort functions the page inlines
 // (rail-client.js), the rail's markup (hard* badges, the rows' data, the tier
-// and label blocks, the sorts), and the annotation script pairing rows with
-// panes when the rail is sorted.
+// and label blocks, the sorts), the annotation script pairing rows with
+// panes when the rail is sorted, and the CLI report's Weights… dialog, which
+// re-scores, re-tiers and re-sorts the rail in the page.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
@@ -12,11 +13,14 @@ import { transformSync } from 'esbuild';
 import { chSearchTokens, chRowMatches, chCompareRows, railFunctionsSrc } from '../../src/cli/renderers/rail-client.js';
 import { inlineSrcHazards, inlineSafeSrc } from '../../src/shared/inline-safe.js';
 import { rankTriage } from '../../src/cli/analyzers/triage.js';
+import { scoreFromCounts, reportTierFromCounts, formatScore } from '../../src/cli/analyzers/score-weights.js';
+import { railData, weightsPanelScript } from '../../src/cli/renderers/weights-panel.js';
 import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { computeSummary } from '../../src/cli/analyzers/summary.js';
 import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
 import { ANNOTATION_BUILDERS_JS, ANNOTATION_UI_JS } from '../../src/cli/renderers/annotation-client.js';
+import { parseRules, lastProp } from './report-css-helpers.js';
 import { inlineSources } from '../../tools/build-analyze.mjs';
 
 describe('search', () => {
@@ -121,6 +125,27 @@ describe('the inlined source', () => {
     const template = readFileSync(new URL('../../src/cli/renderers/html-index-core.js', import.meta.url), 'utf8');
     assert.doesNotMatch(template, /\$\{ch[A-Z]\w*\.name\}/);
   });
+
+  // The Weights… dialog's script (weights-panel.js) boots itself and talks
+  // to the page through the 'ch:rescore' event: the block the page wraps it
+  // in calls nothing of it, and the text, node's and the one the analyzer
+  // bakes, ends with the call to the function it defines.
+  it('the Weights… dialog\'s script: the page calls nothing in it; node\'s text and the analyzer\'s baked one boot themselves', async () => {
+    const triage = rankTriage([{ participantId: 'P-1', trialCount: 1, hardTriggered: false, totalSoftScore: 0, softScoreThreshold: 6 }],
+      [{ edgeExits: [] }], {});
+    const html = await renderIndexHtml(triage.map((t) => t.summary), triage, [], {}, false, {});
+    const src = inlineSafeSrc(weightsPanelScript());
+    const at = html.indexOf(src);
+    assert.ok(at > 0, 'the page inlines the dialog script');
+    const block = html.slice(html.lastIndexOf('<script>', at), html.indexOf('</script>', at)).replace(src, '');
+    assert.deepEqual([...block.matchAll(/\b(ch[A-Z]\w*)\s*\(/g)].map((m) => m[1]), [], 'calls outside the inlined text');
+    const baked = inlineSources().weightsPanel;
+    assert.equal(baked, weightsPanelScript(), 'the analyzer bakes node\'s text');
+    for (const [what, text] of [['node\'s text', weightsPanelScript()], ['the analyzer\'s baked text', baked]]) {
+      assert.match(text, /^function chBootWeightsDialog\(doc\) \{/m, what);
+      assert.ok(text.endsWith('\nchBootWeightsDialog(document);\n'), what);
+    }
+  });
 });
 
 describe('the rail markup', () => {
@@ -169,9 +194,12 @@ describe('the rail markup', () => {
     assert.deepEqual(counts((await page({ hardAt: { sidebar: 2 } })).html), ['2', '1', '0']);
   });
 
+  // (The Weights… dialog explains HARD* whatever the config: it is left out.)
   it('without a Hard at rule: no hard*, and nothing about it in the top bar', async () => {
     const { html } = await page({});
-    assert.doesNotMatch(html, /HARD\*|hard at:/);
+    const rest = html.replace(/<dialog id="weights-dialog"[\s\S]*?<\/dialog>/, '');
+    assert.ok(rest.length < html.length, 'the dialog was cut');
+    assert.doesNotMatch(rest, /HARD\*|hard at:/);
   });
 
   it('the sort opens on Score, with Tier, Pointer, Typing and ID', async () => {
@@ -206,6 +234,69 @@ describe('the rail markup', () => {
     assert.ok(rail.includes('data-pid="x&quot;&gt;&lt;img src=x onerror=alert(1)&gt;"'));
     assert.ok(rail.includes('data-reason="&lt;/script&gt;&lt;b&gt;pasted&lt;/b&gt;"'));
     assert.doesNotMatch(rail, /<img|<b>|<\/script/);
+  });
+
+  it('the CLI report has the Weights… button, the dialog with the panel at the report\'s values, and its script', async () => {
+    const { html } = await page({ scoreWeights: { sidebar: 7 }, hardAt: { paste: 3 } });
+    assert.match(html, /<button class="weights-btn" type="button" aria-haspopup="dialog" aria-controls="weights-dialog">Weights&hellip;<\/button>/);
+    assert.match(html, /<dialog id="weights-dialog" aria-labelledby="weights-title">[\s\S]*?class="wp"/);
+    assert.match(html, /chBootWeightsDialog\(document\);/);
+    const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
+    win.document.write(html);
+    assert.equal(win.document.querySelector('#weights-dialog [data-weight="sidebar"]').getAttribute('data-weight'), 'sidebar');
+  });
+
+  it('the in-page report (the analyzer) has none of it: its settings hold the panel', async () => {
+    const { triage } = await page({});
+    const html = await renderIndexHtml(SUMMARIES, triage, [], {}, false, { imageSources: {} });
+    assert.doesNotMatch(html, /weights-btn|weights-dialog|chBootWeightsDialog/);
+  });
+
+  // With the Weights… button the CLI report's top bar holds two buttons:
+  // one height (the Legend's ⓘ comes from a fallback face with a taller
+  // line), each label on one line, and on a narrow window the run line on a
+  // row of its own with the buttons under it. The in-page report keeps its
+  // one button's top bar as it was.
+  it('the CLI report\'s top bar: two buttons of one height, labels on one line, the run line on its own row on a phone', async () => {
+    const css = (html) => [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+    const { triage, html } = await page({});
+    const cli = css(html);
+    assert.deepEqual(['white-space', 'line-height'].map((p) => lastProp(parseRules(cli), '.topbar button', p)), ['nowrap', '24px']);
+    assert.match(cli, /@media \(max-width: 720px\) \{ \.topbar \.meta \{ flex-basis: 100%; \} \}/);
+    const inPage = css(await renderIndexHtml(SUMMARIES, triage, [], {}, false, { imageSources: {} }));
+    assert.deepEqual(['white-space', 'line-height'].map((p) => lastProp(parseRules(inPage), '.topbar button', p)), [null, null]);
+    assert.doesNotMatch(inPage, /\.topbar \.meta \{ flex-basis/);
+  });
+
+  // The dialog changes the page only: its text says that the report's files
+  // (and, with annotation controls, the annotation exports) keep the run's
+  // weights, and it keeps Copy config (the analyzer's settings hide theirs:
+  // they have Export config).
+  it('the dialog says the files and the exports keep the run\'s weights, and offers Reset and Copy config', async () => {
+    const lede = (html) => html.match(/<p class="wd-lede">([\s\S]*?)<\/p>/)[1];
+    const withRun = (await page({}, { runId: '0123456789abcdef' })).html;
+    assert.match(lede(withRun), /This report's files and its annotation exports keep the weights it was built with/);
+    assert.match(lede(withRun), /<b>Copy config<\/b> gives the lines for cyborg-hunter\.config\.json/);
+    assert.match(lede((await page({})).html), /This report's files keep the weights it was built with/);
+    const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
+    win.document.write(withRun);
+    assert.deepEqual([...win.document.querySelectorAll('#weights-dialog .wp-foot button')].map((b) => b.textContent),
+      ['Reset to defaults', 'Copy config']);
+  });
+
+  // The dialog shows the panel's own words and nothing from the data: a
+  // config key it does not know is dropped (with the CLI's warning), and an
+  // id stays in the rail, escaped.
+  it('the dialog and the top bar hold no markup from the config or the participants', async () => {
+    const id = 'x"><img src=x onerror=alert(1)>';
+    const sums = [summary(id, { totalSoftScore: 7, sidebarEventCount: 1 })];
+    const config = { scoreWeights: { '<img src=x>': 2 }, hardAt: { '"><b>x</b>': 1, sidebar: 1 } };
+    const triage = rankTriage(sums, [{ edgeExits: [] }], config);
+    const html = await renderIndexHtml(sums, triage, [], config, false, { runId: 'r' });
+    const dialogHtml = html.slice(html.indexOf('<dialog id="weights-dialog"'), html.indexOf('</dialog>'));
+    const topbar = html.slice(html.indexOf('<header class="topbar">'), html.indexOf('</header>'));
+    assert.ok(dialogHtml.length > 0 && topbar.includes('hard at: sidebar 1'));
+    for (const part of [dialogHtml, topbar]) assert.doesNotMatch(part, /<img|<b>x|onerror|x&quot;/);
   });
 });
 
@@ -259,5 +350,183 @@ describe('annotations on a sorted rail', () => {
     [...doc.querySelectorAll('.annot-bar button')].find((b) => b.textContent === 'Export CSV').click();
     const lines = blobs[0].text.trim().split('\n').slice(1).map((l) => l.split(',').slice(0, 3));
     assert.deepEqual(lines, [['H-1', 'hard', '10'], ['C-1', 'hard*', '6'], ['S-1', 'soft', '3']]);
+  });
+});
+
+// The Weights… dialog in the CLI report, with the page's own scripts run as
+// a browser runs them, in page order: the main script (the rail, the panes
+// and the 'ch:rescore' listener), the dialog's, and the annotation controls'
+// with a run id. happy-dom applies no stylesheet rule to getComputedStyle,
+// so every row reads as shown: these tests are about scores, tiers, order
+// and the exports, not the filters.
+describe('the Weights… dialog re-scores, re-tiers and re-sorts the rail', () => {
+  const summary = (id, over) => ({ participantId: id, trialCount: 1, hardTriggered: false, totalSoftScore: 0, softScoreThreshold: 6,
+    meanTypingSpeed: 0, meanMouseEvents: 0, meanPathEfficiency: 0, ...over });
+  // Every tier: the library's hard, soft and clean, and hard* from a pointer
+  // verdict level and from a tab-away count. The run's weights hold a cap, a
+  // fractional weight (S-1 scores 4.5) and a weighted verdict.
+  const SUMMARIES = [
+    summary('H-1', { hardTriggered: true, totalPasteEvents: 2, totalCopyEvents: 4 }),
+    summary('S-1', { totalSoftScore: 7, sidebarEventCount: 1, totalSyntheticInsertions: 3 }),
+    summary('P-1', { cursorAnalysis: { level: 2, verdict: 'highly suspicious', tells: [] }, totalCopyEvents: 1 }),
+    summary('T-1', { tabAwayMediumCount: 2, tabAwayLongCount: 1, sidebarEventCount: 2 }),
+    summary('C-1', { zoomChangeCount: 4 }),
+  ];
+  const EDGE = SUMMARIES.map((s, i) => ({ edgeExits: i === 4 ? [{ edgeExitCount: 2 }] : [] }));
+  const RUN = {
+    scoreWeights: { copy: { weight: 2, max: 3 }, synthetic: 0.5, cursor: 4, edgeExits: 1 },
+    hardAt: { cursor: 2, tabaway: 3 },
+  };
+
+  async function runPage(sums, edge, config, opts = {}) {
+    const triage = rankTriage(sums, edge, config);
+    const html = await renderIndexHtml(sums, triage, [], config, false, opts);
+    const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
+    const doc = win.document;
+    doc.write(html);
+    const scripts = [...doc.querySelectorAll('script:not([type])')].map((s) => s.textContent);
+    const blobs = [];
+    class CaughtBlob { constructor(parts) { this.text = parts.join(''); blobs.push(this); } }
+    const globals = {
+      window: win, document: doc, location: win.location, history: win.history, getComputedStyle: (el) => win.getComputedStyle(el),
+      navigator: {}, localStorage: { getItem: () => null, setItem: () => {} }, setTimeout: () => 0, clearTimeout,
+      URL: { createObjectURL: () => 'about:blank', revokeObjectURL: () => {} }, Blob: CaughtBlob,
+    };
+    for (const mark of ['// Wires interactivity', 'chBootWeightsDialog(document);', 'ch-annot:']) {
+      const src = scripts.find((s) => s.includes(mark));
+      if (src) runInNewContext(src, globals);
+    }
+    let rescores = 0;
+    doc.addEventListener('ch:rescore', () => { rescores++; });
+    // A box in the dialog given a value, as typing it fires its input event.
+    const edit = (sel, value) => {
+      const box = doc.querySelector('#weights-dialog ' + sel);
+      box.value = value;
+      box.dispatchEvent(new win.Event('input', { bubbles: true }));
+    };
+    return { triage, html, win, doc, edit, blobs, rescores: () => rescores };
+  }
+
+  // What the rail and the panes show: each row (in the rail's order) with
+  // its data and texts, each pane's score, pill and breakdown, and the tier
+  // counts on the chips and in the totals.
+  const shown = (doc) => ({
+    rail: [...doc.querySelectorAll('.cohort-row')].map((r) => [r.dataset.pid, r.dataset.score, r.dataset.tier, r.dataset.reportTier,
+      r.querySelector('.cohort-row-top .score').textContent, r.querySelector('.tier-badge').textContent, r.querySelector('.tier-badge').dataset.tier]),
+    panes: [...doc.querySelectorAll('.participant')].map((p) => [p.id, p.querySelector('.score-big').textContent,
+      p.querySelector('.tier-pill').textContent, p.querySelector('.tier-pill').dataset.tier,
+      [...p.querySelectorAll('.score-term')].map((t) => [t.querySelector('.label').textContent, t.querySelector('.contrib').textContent,
+        t.querySelector('.bar').style.width]),
+      p.querySelector('.score-total').textContent]),
+    counts: [...doc.querySelectorAll('.filter-chip[data-filter] .chip-n, .totals-row .count')].map((el) => el.textContent),
+  });
+
+  it('at the run\'s own values the dialog changes nothing on the page', async () => {
+    const { doc, edit, rescores } = await runPage(SUMMARIES, EDGE, RUN);
+    const before = shown(doc);
+    assert.equal(doc.querySelector('#weights-dialog [data-hard="cursor"]').value, '2');
+    edit('[data-hard="cursor"]', '2');
+    assert.equal(rescores(), 1, 'the dialog re-scored');
+    assert.deepEqual(shown(doc), before);
+    // Not vacuous: the page holds a fractional score, hard*, a cap and terms.
+    assert.ok(before.rail.some((r) => r[4] === '4.5') && before.rail.some((r) => r[5] === 'HARD*'));
+  });
+
+  // After an edit, each row's score and report tier are scoreFromCounts and
+  // reportTierFromCounts over its counts at the dialog's values, which are
+  // what a CLI run with the copied config ranks (rankTriage); the rail is
+  // sorted by score again and the counts follow.
+  it('after an edit the rail\'s scores and tiers are the functions\' at the new values, sorted, and counted', async () => {
+    const { triage, doc, edit } = await runPage(SUMMARIES, EDGE, RUN);
+    edit('[data-weight="sidebar"]', '20');
+    edit('[data-hard="sidebar"]', '1');
+    const data = railData(triage, RUN);
+    const weights = data.signals.map((s) => (s.key === 'sidebar' ? { weight: 20, max: null } : { weight: s.weight, max: s.max }));
+    const hardAt = data.signals.map((s) => (s.key === 'sidebar' ? 1 : s.hardAt));
+    const next = rankTriage(SUMMARIES, EDGE, { scoreWeights: { ...RUN.scoreWeights, sidebar: 20 }, hardAt: { ...RUN.hardAt, sidebar: 1 } });
+    const panes = [...doc.querySelectorAll('.participant')];
+    for (const row of doc.querySelectorAll('.cohort-row')) {
+      const i = +row.dataset.index;
+      const score = scoreFromCounts(data.rows[i].counts, weights);
+      const tier = reportTierFromCounts(data.rows[i].lib, data.rows[i].counts, hardAt);
+      const cli = next.find((t) => t.participantId === row.dataset.pid);
+      assert.deepEqual([score, tier], [cli.score, cli.reportTier], row.dataset.pid + ': the functions and the CLI agree');
+      const text = String(formatScore(score));
+      const word = tier === 'clean' ? 'clean' : tier.toUpperCase();
+      assert.deepEqual([row.dataset.score, row.dataset.reportTier, row.dataset.tier, row.querySelector('.score').textContent,
+        row.querySelector('.tier-badge').textContent], [String(score), tier, tier === 'hard*' ? 'hard' : tier, text, word], row.dataset.pid);
+      assert.deepEqual([panes[i].querySelector('.score-big').textContent, panes[i].querySelector('.tier-pill').textContent,
+        panes[i].querySelector('.score-total').textContent], [text, word, 'Total: ' + text], row.dataset.pid + ': its pane');
+    }
+    assert.deepEqual(shown(doc).rail.map((r) => [r[0], r[4], r[5]]),
+      [['T-1', '43', 'HARD*'], ['S-1', '21.5', 'HARD*'], ['H-1', '16', 'HARD'], ['P-1', '10', 'HARD*'], ['C-1', '2', 'clean']]);
+    assert.deepEqual(shown(doc).counts, ['5', '4', '0', '1', '4', '0', '1']);
+    assert.deepEqual(shown(doc).panes.find((p) => p[0] === 'p-S-1')[4],
+      [['sidebar', '+20', '93px'], ['synthetic', '+1.5', '7px']]);
+  });
+
+  // A damaged file can make a count infinite (a keyboardShortcuts list whose
+  // length reads as 1e400). Weighted, the files' score is Infinity at any
+  // weight, and NaN where an infinite and a minus-infinite count meet:
+  // summary.csv writes the number as is and triage.md through formatScore.
+  // The page must print the same, at a weight under 1 too.
+  it('a score a damaged file makes infinite, or not a number, reads as the files print it', async () => {
+    const sums = [summary('K-1', { keyboardShortcutCount: Infinity }),
+      summary('N-1', { keyboardShortcutCount: Infinity, layoutShiftCount: -Infinity }), summary('C-1', { totalCopyEvents: 1 })];
+    const edge = sums.map(() => ({ edgeExits: [] }));
+    const { doc, edit } = await runPage(sums, edge, {});
+    edit('[data-weight="kbShortcuts"]', '0.5');
+    edit('[data-weight="viewportShifts"]', '0.5');
+    const files = rankTriage(sums, edge, { scoreWeights: { kbShortcuts: 0.5, viewportShifts: 0.5 } });
+    const text = (pid) => doc.querySelector(`.cohort-row[data-pid="${pid}"] .score`).textContent;
+    assert.deepEqual(files.map((t) => [t.participantId, String(t.score), String(formatScore(t.score))]).sort(),
+      [['C-1', '5', '5'], ['K-1', 'Infinity', 'Infinity'], ['N-1', 'NaN', 'NaN']]);
+    for (const t of files) assert.equal(text(t.participantId), String(formatScore(t.score)), t.participantId);
+    const k = shown(doc).panes.find((p) => p[0] === 'p-K-1');
+    assert.deepEqual([k[1], k[4].map((t) => t.slice(0, 2)), k[5]], ['Infinity', [['kbShortcuts', '+Infinity']], 'Total: Infinity']);
+  });
+
+  // The exports keep the run's values: the dialog changes the page only,
+  // like the report's files. The annotations CSV writes each participant's
+  // tier and score as the run gave them, in triage order, whatever the rail
+  // shows; the JSON export holds no tier or score at all.
+  it('after a change in the dialog the annotation exports keep the run\'s tier and score; the rail shows the new ones', async () => {
+    const { triage, doc, edit, blobs } = await runPage(SUMMARIES, EDGE, RUN, { runId: 'run-1' });
+    edit('[data-weight="sidebar"]', '20');
+    edit('[data-hard="sidebar"]', '1');
+    const row = doc.querySelector('.cohort-row[data-pid="S-1"]');
+    assert.deepEqual([row.querySelector('.score').textContent, row.querySelector('.tier-badge').textContent], ['21.5', 'HARD*']);
+    assert.deepEqual([row.dataset.runTier, row.dataset.runScore], ['soft', '4.5'], 'the row keeps the run\'s values beside');
+    const button = (text) => [...doc.querySelectorAll('.annot-bar button')].find((b) => b.textContent === text);
+    button('Export CSV').click();
+    const lines = blobs[0].text.trim().split('\n').slice(1).map((l) => l.split(',').slice(0, 3));
+    assert.deepEqual(lines, triage.map((t) => [t.participantId, t.reportTier, String(t.score)]));
+    assert.ok(lines.some(([id, tier, score]) => id === 'S-1' && tier === 'soft' && score === '4.5'));
+    button('Export JSON').click();
+    assert.deepEqual(Object.keys(JSON.parse(blobs[1].text)), ['format', 'runId', 'exportedAt', 'annotations']);
+  });
+
+  // The dialog is modal: while it is open the keys belong to it. With the
+  // focus on one of its buttons, the arrows do not walk the rail behind it
+  // and i, e and f do not label the selected participant.
+  it('while the dialog is open the rail\'s arrow keys and the label keys leave the report alone', async () => {
+    const { win, doc } = await runPage(SUMMARIES, EDGE, RUN, { runId: 'run-1' });
+    const dialogEl = doc.getElementById('weights-dialog');
+    const reset = dialogEl.querySelector('[data-action="weights-reset"]');
+    const key = (k) => reset.dispatchEvent(new win.KeyboardEvent('keydown', { key: k, bubbles: true }));
+    const selected = () => doc.querySelector('.cohort-row.selected');
+    const first = selected().dataset.pid;
+    doc.querySelector('.weights-btn').click();
+    assert.ok(dialogEl.hasAttribute('open'), 'the button opens the dialog');
+    key('ArrowDown');
+    key('e');
+    assert.equal(selected().dataset.pid, first, 'the selection stays');
+    assert.equal(selected().querySelector('.annot-mark').dataset.label, '', 'no label');
+    // Closed again, the same keys act on the report.
+    dialogEl.removeAttribute('open');
+    key('e');
+    assert.equal(selected().querySelector('.annot-mark').dataset.label, 'exclude');
+    key('ArrowDown');
+    assert.notEqual(selected().dataset.pid, first);
   });
 });

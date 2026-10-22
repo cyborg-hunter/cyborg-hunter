@@ -271,7 +271,8 @@ export const ANNOTATION_UI_JS = String.raw`
         unreviewed.type = 'checkbox';
         tool('Export CSV', function () {
           // In triage order, whatever the rail's sort. The tier is the report's: hard* for a row Hard at moved.
-          var exportRows = rows.map(function (r) { return { participantId: r.dataset.pid, tier: r.dataset.reportTier || r.dataset.tier, triageScore: r.dataset.score }; });
+          // Tier and score are the run's (data-run-*), as in the report's files, whatever the Weights… dialog shows.
+          var exportRows = rows.map(function (r) { return { participantId: r.dataset.pid, tier: r.dataset.runTier, triageScore: r.dataset.runScore }; });
           download('annotations-' + RUN_ID + '.csv', annotationsCsv(exportRows, state, RUN_ID, unreviewed.checked), 'text/csv');
         });
         tool('Export JSON', function () {
@@ -324,9 +325,10 @@ export const ANNOTATION_UI_JS = String.raw`
       // selected row, which is the one participant the keys can mean even
       // when more than one pane shows (reports built before ids that clean
       // up alike got distinct pane ids, report-id.js, still have such pairs). Not while typing in a field, not with a modifier
-      // key, not for a held key's repeats, and not while the legend or an
-      // enlarged image is open or anything is in fullscreen (a replay viewer
-      // covers the report, as the report's navigation keys allow for).
+      // key, not for a held key's repeats, and not while the legend, an
+      // enlarged image or the Weights… dialog is open or anything is in
+      // fullscreen (a replay viewer covers the report, as the report's
+      // navigation keys allow for).
       document.addEventListener('keydown', function (e) {
         var label = e.key === 'i' ? 'include' : e.key === 'e' ? 'exclude' : e.key === 'f' ? 'flag' : null;
         if (!label || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -334,7 +336,7 @@ export const ANNOTATION_UI_JS = String.raw`
         var legend = document.getElementById('legend-modal');
         var lightbox = document.getElementById('lightbox');
         if ((legend && !legend.hasAttribute('hidden')) || (lightbox && lightbox.classList.contains('open')) ||
-          document.fullscreenElement) return;
+          document.fullscreenElement || document.querySelector('dialog[open]')) return;
         var row = document.querySelector('.cohort-row.selected');
         if (!row) return;
         var id = row.dataset.pid;

@@ -6,7 +6,9 @@
 // browser and device), each with a slider from 0 to 20, a number box (any
 // value ≥ 0; the slider stops at 20), a cap, and a "Hard at" count. Under
 // them, Reset to defaults and Copy config (the scoreWeights and hardAt
-// entries for cyborg-hunter.config.json).
+// entries for cyborg-hunter.config.json). The CLI report's dialog shows both
+// buttons; the analyzer's settings show Reset to defaults only: they remove
+// Copy config once the panel is wired, beside their own Export config.
 //
 // The score stays additive: points × events up to the cap, summed over the
 // signals with no ceiling (score-weights.js). Hard at moves a participant
@@ -134,7 +136,7 @@ export const WEIGHTS_PANEL_CSS = `
 .wp-group-name { margin: 10px 0 2px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
 .wp-row { padding: 3px 0; }
 .wp-name small { display: block; color: var(--dim); font-size: 12px; text-wrap: balance; }
-.wp-row input[type=range] { width: 100%; accent-color: var(--ink); }
+.wp-row input[type=range] { width: 100%; margin: 0; accent-color: var(--ink); }
 .wp-box { display: block; min-width: 0; }
 .wp-cap { display: none; }
 .wp-row input[type=number] { width: 100%; box-sizing: border-box; font: inherit; padding: 3px 5px; border: 1px solid var(--line); border-radius: 0; background: var(--bg); color: var(--ink); }
@@ -283,6 +285,15 @@ export function chBootWeightsDialog(doc) {
   if (!dataEl || !dialog || !button) return;
   var data = JSON.parse(dataEl.textContent);
   var signals = data.signals;
+  // The rail data holds an infinite count (a damaged file's) as the largest
+  // finite number of its sign, since JSON has no Infinity (railData). Scored
+  // as that, a weight of 1 or less would give a finite score where the files
+  // print Infinity, so each such count is infinite again here.
+  var counts = data.rows.map(function (r) {
+    return r.counts.map(function (n) {
+      return n === Number.MAX_VALUE ? Infinity : n === -Number.MAX_VALUE ? -Infinity : n;
+    });
+  });
   var panel = wireWeightsPanel(dialog.querySelector('.wp'), { signals: signals, onInput: rescore });
   button.addEventListener('click', function () {
     if (typeof dialog.showModal === 'function') dialog.showModal();
@@ -290,15 +301,16 @@ export function chBootWeightsDialog(doc) {
   });
   function rescore() {
     var st = panel.read();
-    var rows = data.rows.map(function (r) {
+    var rows = data.rows.map(function (r, j) {
+      var c = counts[j];
       var terms = [];
       for (var i = 0; i < signals.length; i++) {
         var w = st.weights[i];
         if (w.weight === 0) continue;
-        var n = (w.max == null ? r.counts[i] : Math.min(r.counts[i], w.max)) * w.weight;
+        var n = (w.max == null ? c[i] : Math.min(c[i], w.max)) * w.weight;
         if (n > 0) terms.push([signals[i].label, n]);
       }
-      return { score: scoreFromCounts(r.counts, st.weights), reportTier: reportTierFromCounts(r.lib, r.counts, st.hardAt), terms: terms };
+      return { score: scoreFromCounts(c, st.weights), reportTier: reportTierFromCounts(r.lib, c, st.hardAt), terms: terms };
     });
     doc.dispatchEvent(new doc.defaultView.CustomEvent('ch:rescore', { detail: { rows: rows } }));
   }
@@ -333,7 +345,8 @@ export function weightsPanelScript() {
 // counts in SCORE_SIGNALS order. A count that is not a number is 0. An
 // infinite one (a damaged file's: a list whose length reads as 1e400) is the
 // largest finite number of its sign: JSON would write Infinity as null, and
-// the page must put the row in the hard-at tier the files put it in.
+// the page must put the row in the hard-at tier the files put it in (the
+// dialog makes it infinite again before it scores, chBootWeightsDialog).
 export function railData(triage, config) {
   const signals = panelSignals(resolveScoreWeights(config?.scoreWeights).weights, resolveHardAt(config?.hardAt).hardAt);
   return {

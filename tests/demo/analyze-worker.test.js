@@ -186,10 +186,14 @@ test('run on the sample streams a zip of the full report and returns the in-page
 // blocks' script among them). In the bundle a function's toString is
 // esbuild's reprint of it, so the analyzer takes the texts node gives, baked
 // at build time (inlineSources): its downloaded report is the CLI's byte for
-// byte. Every entry of the map, in both reports.
+// byte. Every entry of the map, in both reports, but the Weights… dialog's:
+// that dialog is the CLI report's (and so the downloaded copy's), and the
+// in-page report has none, since the analyzer's settings hold the panel.
 test('both reports carry every script inlined by its source text as node writes it, not the bundle\'s reprint', async () => {
   const sources = inlineSources();
   assert.ok('timeline' in sources, 'the map holds the timeline script');
+  assert.ok('weightsPanel' in sources, 'the map holds the Weights… dialog\'s script');
+  const downloadedOnly = new Set(['weightsPanel']);
   const w = startWorker();
   w.send({ type: 'check', files: await sampleEntries(w) });
   const checked = await w.next('checked');
@@ -201,7 +205,7 @@ test('both reports carry every script inlined by its source text as node writes 
   for (const [name, src] of Object.entries(sources)) {
     const script = inlineSafeSrc(src);
     assert.ok(downloaded.includes(script), name + ': the downloaded report');
-    assert.ok(done.html.includes(script), name + ': the in-page report');
+    assert.equal(done.html.includes(script), !downloadedOnly.has(name), name + ': the in-page report');
   }
 });
 
