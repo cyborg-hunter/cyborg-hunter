@@ -11,18 +11,51 @@ import { transformSync } from 'esbuild';
 import {
   SCORE_SIGNALS, SIGNAL_LABELS, resolveScoreWeights, resolveHardAt, scoreFromCounts, reportTierFromCounts,
 } from '../../src/cli/analyzers/score-weights.js';
+import { readFileSync } from 'node:fs';
 import { rankTriage } from '../../src/cli/analyzers/triage.js';
+import { computeSummary } from '../../src/cli/analyzers/summary.js';
+import { detectEdgeExits } from '../../src/cli/analyzers/edge-exit.js';
+import { extractIntegrityData } from '../../src/cli/extract-core.js';
+import { buildSummaryCsv } from '../../src/cli/renderers/summary-csv-core.js';
 import {
-  WEIGHT_GROUPS, OTHER_GROUP, panelSignals, weightsPanelHtml, weightsConfig, wireWeightsPanel, chBootWeightsDialog,
+  WEIGHT_GROUPS, OTHER_GROUP, panelSignals, weightsPanelHtml, WEIGHTS_PANEL_CSS, weightsConfig, wireWeightsPanel, chBootWeightsDialog,
   weightsPanelScript, railData,
 } from '../../src/cli/renderers/weights-panel.js';
 import { inlineSrcHazards } from '../../src/shared/inline-safe.js';
+import { parseRules, lastProp } from './report-css-helpers.js';
 
 const dom = (html) => {
   const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
   win.document.body.innerHTML = html;
   return win;
 };
+
+// Script text with every comment blanked and every string literal emptied,
+// so what is left is code. (The inlined text holds no regular expression
+// literal, which this would misread.)
+const blankStringsAndComments = (src) =>
+  src.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\/|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g, (m) => (m[0] === '/' ? ' ' : '""'));
+
+// The shorthand properties in code: an object literal is a brace that opens
+// where an expression starts (after ( , = : ? [ or return), and each of its
+// own entries must be more than a bare name.
+function shorthandProps(code) {
+  const found = [];
+  const check = (entry) => { if (/^[A-Za-z_$][\w$]*$/.test(entry.trim())) found.push(entry.trim()); };
+  const opens = /(?:[(,=:?[]|\breturn)\s*\{/g;
+  for (let m; (m = opens.exec(code));) {
+    let depth = 0;
+    let entry = '';
+    for (let i = m.index + m[0].length; i < code.length; i++) {
+      const c = code[i];
+      if ('([{'.includes(c)) depth++;
+      if (')]}'.includes(c)) { if (depth === 0) break; depth--; }
+      if (depth === 0 && c === ',') { check(entry); entry = ''; } else entry += c;
+    }
+    check(entry);
+  }
+  return found;
+}
 
 describe('the rows', () => {
   it('every report-score signal has a group row with a name, a hint and lower-case search words', () => {
@@ -58,12 +91,54 @@ describe('the rows', () => {
   });
 
   // Not SCORE_SIGNALS order (sidebar before tabaway, edgeExits before
-  // cursor): the hints point at rows by place ("the row above", "the first
-  // row"), and the markup's order is all the reader sees.
-  it('each group shows its rows in the group\'s own order, which its hints count on', () => {
+  // cursor): the tab-away rows read together, the pointer verdict first.
+  it('each group shows its rows in the group\'s own order', () => {
     const d = dom(weightsPanelHtml(panelSignals())).document;
     assert.deepEqual([...d.querySelectorAll('.wp-group')].map((g) => [...g.querySelectorAll('[data-slider]')].map((e) => e.getAttribute('data-slider'))),
       WEIGHT_GROUPS.map((g) => g.rows.map((r) => r.key)));
+  });
+
+  // A hint that pointed at a row by place ("the row above") would turn false
+  // when the rows move; the two tab-away splits name the row they add to.
+  it('the tab-away hints name the row they count on top of; no hint points at a row by place', () => {
+    const s = panelSignals();
+    const over = s.find((x) => x.key === 'tabaway').name;
+    for (const key of ['tabawayLong', 'tabawayMedium']) assert.ok(s.find((x) => x.key === key).hint.endsWith('on top of ' + over), key);
+    for (const x of s) assert.doesNotMatch(x.hint, /row above|first row/, x.key);
+  });
+
+  // A no-break space keeps each verdict level's number on the line of its
+  // word when the hint wraps ("suspicious 1," never ends a line at the word).
+  it('the verdict hints keep each level with its number', () => {
+    for (const key of ['cursor', 'typingRhythm']) {
+      assert.equal(panelSignals().find((x) => x.key === key).hint, 'Points × level: suspicious 1, highly suspicious 2', key);
+    }
+  });
+
+  // The column heads label the boxes; the stacked layout hides them, so
+  // there each box shows a caption of its own. The screen-reader labels are
+  // the inputs' own, so the captions are hidden from them.
+  it('each box carries a caption (Weight, Cap, Hard at) beside its own screen-reader label', () => {
+    const d = dom(weightsPanelHtml(panelSignals())).document;
+    for (const sig of SCORE_SIGNALS) {
+      const boxes = [...d.querySelector(`[data-slider="${sig.key}"]`).closest('.wp-row').querySelectorAll('.wp-box')];
+      assert.deepEqual(boxes.map((b) => b.querySelector('.wp-cap').textContent), ['Weight', 'Cap', 'Hard at'], sig.key);
+      assert.deepEqual(boxes.map((b) => ['data-weight', 'data-max', 'data-hard'].find((a) => b.querySelector('input').hasAttribute(a))),
+        ['data-weight', 'data-max', 'data-hard'], sig.key);
+      for (const b of boxes) {
+        assert.equal(b.querySelector('.wp-cap').getAttribute('aria-hidden'), 'true', sig.key);
+        assert.ok(b.querySelector('input').getAttribute('aria-label'), sig.key);
+      }
+    }
+  });
+
+  it('the captions show only in the stacked layout (560 px or narrower), where the column heads are hidden', () => {
+    const [wide, narrow] = WEIGHTS_PANEL_CSS.split('@media (max-width: 560px)');
+    assert.ok(narrow, 'the stacked layout\'s media query');
+    assert.equal(lastProp(parseRules(wide), '.wp-cap', 'display'), 'none');
+    assert.equal(lastProp(parseRules(wide), '.wp-colhead', 'display'), 'grid');
+    assert.equal(lastProp(parseRules(narrow), '.wp-cap', 'display'), 'block');
+    assert.equal(lastProp(parseRules(narrow), '.wp-colhead', 'display'), 'none');
   });
 
   it('a signal outside the groups lands under "Other signals" by its own name', () => {
@@ -108,9 +183,15 @@ describe('the rail data', () => {
     assert.equal(d.signals.find((s) => s.key === 'sidebar').hardAt, 2);
   });
 
-  it('a count that is not a finite number is 0', () => {
-    const d = railData([{ summary: { totalPasteEvents: 'x' }, edgeExitCount: NaN }], {});
+  // JSON has no Infinity (it writes null), and a damaged file can make a
+  // count infinite (a keyboardShortcuts list whose length is 1e400): the
+  // largest finite number keeps every comparison with a hard-at count.
+  it('a count that is not a number is 0; an infinite one is the largest finite number of its sign', () => {
+    const d = railData([{ summary: { totalPasteEvents: 'x', keyboardShortcutCount: Infinity, zoomChangeCount: -Infinity }, edgeExitCount: NaN }], {});
+    const at = (k) => d.rows[0].counts[SCORE_SIGNALS.findIndex((s) => s.key === k)];
     assert.ok(d.rows[0].counts.every((n) => Number.isFinite(n)));
+    assert.deepEqual([at('paste'), at('edgeExits'), at('kbShortcuts'), at('zoom')], [0, 0, Number.MAX_VALUE, -Number.MAX_VALUE]);
+    assert.deepEqual(JSON.parse(JSON.stringify(d)).rows[0].counts, d.rows[0].counts);
   });
 });
 
@@ -118,8 +199,11 @@ describe('the rail data', () => {
 // triage ranks with, so at the run's own weights it must give every row the
 // score and tier the files carry (summary.csv, triage.md). The summaries
 // cover every tier: the library's hard, soft, clean, and hard* from a verdict
-// level and from a tab-away count; the weights hold a cap, a fractional
-// weight and weighted verdicts.
+// level, from a tab-away count and from an infinite count (a damaged file's);
+// a count of minus infinity stays under its hard-at count. The weights hold
+// a cap, a fractional weight and weighted verdicts. The infinite counts are
+// unweighted: weighted, the files' score is Infinity and the page's the
+// largest finite number times the weight (both rank first in the tier).
 const summary = (id, over) => ({ participantId: id, hardTriggered: false, totalSoftScore: 0, softScoreThreshold: 6, ...over });
 const SUMMARIES = [
   summary('H-1', { hardTriggered: true, totalPasteEvents: 2, totalCopyEvents: 4 }),
@@ -127,18 +211,20 @@ const SUMMARIES = [
   summary('P-1', { cursorAnalysis: { level: 2, verdict: 'highly suspicious', tells: [] }, totalCopyEvents: 1 }),
   summary('T-1', { typingAnalysis: { level: 1, verdict: 'suspicious', tells: [] }, tabAwayMediumCount: 2, tabAwayLongCount: 1 }),
   summary('C-1', { zoomChangeCount: 4 }),
+  summary('K-1', { keyboardShortcutCount: Infinity }),
+  summary('N-1', { layoutShiftCount: -Infinity }),
 ];
 const EDGE = SUMMARIES.map((s, i) => ({ edgeExits: i === 4 ? [{ edgeExitCount: 2 }] : [] }));
 const RUN_CONFIG = {
   scoreWeights: { copy: { weight: 2, max: 3 }, synthetic: 0.5, cursor: 4, typingRhythm: 3, edgeExits: 1 },
-  hardAt: { cursor: 2, tabaway: 3 },
+  hardAt: { cursor: 2, tabaway: 3, kbShortcuts: 1, viewportShifts: 1 },
 };
 
 describe('the rail data agrees with the run', () => {
   it('each row\'s counts give the triage row\'s score and reportTier', () => {
     const triage = rankTriage(SUMMARIES, EDGE, RUN_CONFIG);
     assert.deepEqual(triage.map((t) => [t.participantId, t.reportTier]),
-      [['H-1', 'hard'], ['P-1', 'hard*'], ['T-1', 'hard*'], ['S-1', 'soft'], ['C-1', 'clean']]);
+      [['H-1', 'hard'], ['P-1', 'hard*'], ['T-1', 'hard*'], ['K-1', 'hard*'], ['S-1', 'soft'], ['C-1', 'clean'], ['N-1', 'clean']]);
     const d = railData(triage, RUN_CONFIG);
     const weights = d.signals.map((s) => ({ weight: s.weight, max: s.max }));
     const hardAt = d.signals.map((s) => s.hardAt);
@@ -174,13 +260,18 @@ describe('the panel, run from the source the report inlines', () => {
 
   // Lowering ES5 code to ES5 changes nothing: an arrow, a template literal,
   // a spread, `?.` or `??` would be rewritten, and let, const, class or a
-  // default argument refused. Both sides print { a: a } in full, since
-  // esnext would shorten it to { a }; so a shorthand property is the one
-  // form this cannot see.
+  // default argument refused. Two forms esbuild prints the same either way
+  // (both sides write { a: a } in full and drop a trailing comma), so they
+  // are looked for in the text itself, its strings and comments blanked: a
+  // shorthand property ({ a } or { a: 1, b }) and a trailing comma before a
+  // closing parenthesis (ES2017).
   it('is ES5', () => {
     const src = weightsPanelScript();
     assert.equal(transformSync(src, { target: 'es5' }).code,
       transformSync(src, { target: 'esnext', supported: { 'object-extensions': false } }).code);
+    const code = blankStringsAndComments(src);
+    assert.deepEqual(shorthandProps(code), [], 'shorthand properties');
+    assert.doesNotMatch(code, /,\s*\)/, 'a trailing comma in a call or a parameter list');
   });
 
   // The page calls into the inlined text by the names written in it (the
@@ -306,6 +397,36 @@ describe('the panel, run from the source the report inlines', () => {
     assert.deepEqual(rows.map((r) => [r.score, r.reportTier]), triage.map((t) => [t.score, t.reportTier]));
     assert.deepEqual(rows.map((r) => r.terms),
       triage.map((t) => t.terms.filter(([, n]) => n > 0).map(([key, n]) => [SIGNAL_LABELS[key] || key, n])));
+  });
+
+  // A damaged session file through the real summary path: a keyboardShortcuts
+  // list whose length JSON reads as Infinity. The files put the participant
+  // in hard* by hardAt.kbShortcuts; the page, after any edit, must too.
+  it('a count a damaged file makes infinite: the files say hard*, and so does the page after an edit', () => {
+    const config = { outputDir: '.', participantIdField: 'participantId', hardAt: { kbShortcuts: 1 } };
+    const p = extractIntegrityData(JSON.parse(readFileSync('examples/demo-sessions/data/DEMO-a3f3.json', 'utf8')), config);
+    p.session.keyboardShortcuts = JSON.parse('{ "length": 1e400 }');
+    const summaries = computeSummary([p], config);
+    const triage = rankTriage(summaries, detectEdgeExits([p], config), config);
+    assert.deepEqual([triage[0].hardTriggered, triage[0].softFlagged, triage[0].reportTier], [false, false, 'hard*']);
+    assert.ok(buildSummaryCsv(summaries, triage).trim().split('\n')[1].endsWith(',hard*'), 'summary.csv');
+    const rows = dialog(triage, config, (win) => edit(win, '[data-weight="paste"]', '6'));
+    assert.equal(rows[0].reportTier, 'hard*');
+  });
+
+  // An empty or invalid weight box scores at the signal's default, so its
+  // slider shows that default (up to the slider's 20), not 0.
+  it('a cleared or invalid weight box: the slider shows the default the score uses', () => {
+    const triage = [{ participantId: 'S-1', hardTriggered: false, softFlagged: true, edgeExitCount: 0, summary: { totalPasteEvents: 2 } }];
+    for (const value of ['', '-3', 'x']) {
+      let slider;
+      const rows = dialog(triage, {}, (win) => {
+        edit(win, '[data-weight="paste"]', value);
+        slider = win.document.querySelector('[data-slider="paste"]').value;
+      });
+      assert.equal(slider, '5', JSON.stringify(value));
+      assert.deepEqual(rows[0].terms, [['paste', 2 * Number(slider)]], JSON.stringify(value));
+    }
   });
 
   it('the analyzer imports the same functions: the module\'s own wireWeightsPanel starts at the defaults', () => {

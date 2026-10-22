@@ -39,17 +39,17 @@ export const WEIGHT_GROUPS = [
   ] },
   { name: 'Leaving the page', rows: [
     { key: 'tabaway', name: 'Tab-away over threshold', hint: 'Longer than the participant’s tab-away threshold (3 s by default)', words: ['tab', 'tab-away', 'tabaway', 'away'] },
-    { key: 'tabawayLong', name: 'Long tab-away (10 s or more)', hint: 'Counted again on top of the row above', words: ['long', 'tab', 'tab-away', 'tabaway', 'away'] },
-    { key: 'tabawayMedium', name: 'Medium tab-away', hint: 'From the threshold to 10 s; counted again on top of the first row', words: ['medium', 'tab', 'tab-away', 'tabaway', 'away'] },
+    { key: 'tabawayLong', name: 'Long tab-away (10 s or more)', hint: 'Counted again on top of Tab-away over threshold', words: ['long', 'tab', 'tab-away', 'tabaway', 'away'] },
+    { key: 'tabawayMedium', name: 'Medium tab-away', hint: 'From the threshold to 10 s; counted again on top of Tab-away over threshold', words: ['medium', 'tab', 'tab-away', 'tabaway', 'away'] },
     { key: 'flicker', name: 'Flicker', hint: 'Tab-aways at or under the threshold', words: ['flicker'] },
     { key: 'sidebar', name: 'Sidebar opened', hint: 'The page narrowed as a side panel opened', words: ['sidebar', 'side', 'panel'] },
   ] },
   { name: 'Typing', rows: [
     { key: 'fastTyping', name: 'Fast typing (trials)', hint: 'Trials typed faster than the threshold', words: ['fast', 'typing', 'speed'] },
-    { key: 'typingRhythm', name: 'Typing verdict', hint: 'Points × level: suspicious 1, highly suspicious 2', words: ['typing', 'rhythm', 'regular', 'verdict'] },
+    { key: 'typingRhythm', name: 'Typing verdict', hint: 'Points × level: suspicious\u00a01, highly suspicious\u00a02', words: ['typing', 'rhythm', 'regular', 'verdict'] },
   ] },
   { name: 'Pointer', rows: [
-    { key: 'cursor', name: 'Pointer verdict', hint: 'Points × level: suspicious 1, highly suspicious 2', words: ['pointer', 'cursor', 'mouse', 'verdict'] },
+    { key: 'cursor', name: 'Pointer verdict', hint: 'Points × level: suspicious\u00a01, highly suspicious\u00a02', words: ['pointer', 'cursor', 'mouse', 'verdict'] },
     { key: 'edgeExits', name: 'Edge exits', hint: 'The pointer left the window through a screen edge', words: ['edge', 'exits', 'pointer'] },
   ] },
   { name: 'Browser and device', rows: [
@@ -89,9 +89,11 @@ export function panelSignals(weights = DEFAULT_RESOLVED_WEIGHTS, hardAt = {}) {
 
 // The panel's markup: column heads, the groups with their rows, the buttons,
 // a status line and the copied config (hidden until Copy config). A group's
-// rows come in WEIGHT_GROUPS order, not SCORE_SIGNALS order: the hints point
-// at rows by place ("the row above"). Only the markup is reordered; the
-// panel's states stay in signals order.
+// rows come in WEIGHT_GROUPS order, not SCORE_SIGNALS order, so the
+// tab-away rows read together. Only the markup is reordered; the panel's
+// states stay in signals order. Each number box sits under a caption
+// (Weight, Cap, Hard at) that only the stacked layout shows, where the
+// column heads are hidden; screen readers take the box's own aria-label.
 export function weightsPanelHtml(signals) {
   const place = new Map(WEIGHT_GROUPS.flatMap((g) => g.rows.map((r, i) => [r.key, i])));
   const byGroup = new Map();
@@ -102,11 +104,12 @@ export function weightsPanelHtml(signals) {
   // Stable: rows with no place (under "Other signals") keep signals order.
   for (const rows of byGroup.values()) rows.sort((a, b) => (place.get(a.key) ?? 0) - (place.get(b.key) ?? 0));
   const order = WEIGHT_GROUPS.map((g) => g.name).concat([OTHER_GROUP]).filter((name) => byGroup.has(name));
+  const box = (caption, input) => `<span class="wp-box"><span class="wp-cap" aria-hidden="true">${caption}</span>${input}</span>`;
   const row = (s) => `<div class="wp-row"><span class="wp-name">${esc(s.name)}<small>${esc(s.hint)}</small></span>` +
     `<input type="range" min="0" max="20" step="1" data-slider="${esc(s.key)}" aria-label="${esc(s.name)}: points per event">` +
-    `<input type="number" min="0" step="any" data-weight="${esc(s.key)}" aria-label="${esc(s.name)}: points per event (number)">` +
-    `<input type="number" min="0" step="1" data-max="${esc(s.key)}" placeholder="none" aria-label="${esc(s.name)}: cap">` +
-    `<input type="number" min="1" step="1" data-hard="${esc(s.key)}" placeholder="—" aria-label="${esc(s.name)}: hard at"></div>`;
+    box('Weight', `<input type="number" min="0" step="any" data-weight="${esc(s.key)}" aria-label="${esc(s.name)}: points per event (number)">`) +
+    box('Cap', `<input type="number" min="0" step="1" data-max="${esc(s.key)}" placeholder="none" aria-label="${esc(s.name)}: cap">`) +
+    box('Hard at', `<input type="number" min="1" step="1" data-hard="${esc(s.key)}" placeholder="—" aria-label="${esc(s.name)}: hard at">`) + '</div>';
   return '<div class="wp" data-role="weights-panel">' +
     '<div class="wp-colhead"><span>Signal</span><span>Points per event</span><span>Points</span>' +
     `<span title="${CAP_TITLE}">Cap</span><span title="${HARD_TITLE}">Hard at</span></div>` +
@@ -120,15 +123,19 @@ export function weightsPanelHtml(signals) {
 // The panel's styles, scoped to .wp; both pages define the colour variables
 // (--ink, --dim, --line, --bg, --surface) and --ff-sora, the report's face
 // for data (its typography test allows only the embedded faces). On a narrow screen each row
-// stacks: the name, the slider, then the three boxes.
+// stacks: the name, the slider, then the three boxes, each under its caption.
+// A hint that runs to two lines is balanced, so no word is left alone on the
+// second.
 export const WEIGHTS_PANEL_CSS = `
 .wp { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .wp-colhead, .wp-row { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.2fr) 64px 64px 64px; gap: 10px; align-items: center; }
 .wp-colhead { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 2px; border-bottom: 1px solid var(--line); }
 .wp-group-name { margin: 10px 0 2px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
 .wp-row { padding: 3px 0; }
-.wp-name small { display: block; color: var(--dim); font-size: 12px; }
+.wp-name small { display: block; color: var(--dim); font-size: 12px; text-wrap: balance; }
 .wp-row input[type=range] { width: 100%; accent-color: var(--ink); }
+.wp-box { display: block; min-width: 0; }
+.wp-cap { display: none; }
 .wp-row input[type=number] { width: 100%; box-sizing: border-box; font: inherit; padding: 3px 5px; border: 1px solid var(--line); border-radius: 0; background: var(--bg); color: var(--ink); }
 .wp-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
 .wp-foot button { font: inherit; padding: 4px 12px; border: 1px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink); cursor: pointer; }
@@ -139,6 +146,7 @@ export const WEIGHTS_PANEL_CSS = `
   .wp-colhead { display: none; }
   .wp-row { grid-template-columns: 1fr 1fr 1fr; }
   .wp-row .wp-name, .wp-row input[type=range] { grid-column: 1 / -1; }
+  .wp-cap { display: block; margin-bottom: 2px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
 }
 `;
 
@@ -209,6 +217,12 @@ export function wireWeightsPanel(root, cfg) {
     status.textContent = '';
     if (cfg.onInput) cfg.onInput();
   }
+  function defaultOf(key) {
+    for (var i = 0; i < signals.length; i++) if (signals[i].key === key) return signals[i].def;
+    return 0;
+  }
+  // The slider follows its number box. An empty or invalid box scores at
+  // the signal's default (read), so the slider shows that default.
   root.addEventListener('input', function (e) {
     var t = e.target;
     var slider = t.getAttribute('data-slider');
@@ -216,7 +230,7 @@ export function wireWeightsPanel(root, cfg) {
     if (slider) field('data-weight', slider).value = t.value;
     else if (weight) {
       var v = number(t.value, 0);
-      field('data-slider', weight).value = String(Math.min(20, v == null ? 0 : v));
+      field('data-slider', weight).value = String(Math.min(20, v == null ? defaultOf(weight) : v));
     }
     edited();
   });
@@ -315,7 +329,10 @@ export function weightsPanelScript() {
 // What the report page embeds for its rail (#ch-rail-data): the signals at
 // this report's values (weights, caps, hard-at counts) with their breakdown
 // labels and search words, and per triage row the library's tier and the
-// counts in SCORE_SIGNALS order. A count that is not a finite number is 0.
+// counts in SCORE_SIGNALS order. A count that is not a number is 0. An
+// infinite one (a damaged file's: a list whose length reads as 1e400) is the
+// largest finite number of its sign: JSON would write Infinity as null, and
+// the page must put the row in the hard-at tier the files put it in.
 export function railData(triage, config) {
   const signals = panelSignals(resolveScoreWeights(config?.scoreWeights).weights, resolveHardAt(config?.hardAt).hardAt);
   return {
@@ -324,6 +341,8 @@ export function railData(triage, config) {
       lib: t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean',
       counts: SCORE_SIGNALS.map((sig) => {
         const n = Number(sig.count(t.summary || {}, t.edgeExitCount));
+        if (n === Infinity) return Number.MAX_VALUE;
+        if (n === -Infinity) return -Number.MAX_VALUE;
         return Number.isFinite(n) ? n : 0;
       }),
     })),
