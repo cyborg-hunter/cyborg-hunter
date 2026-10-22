@@ -200,6 +200,7 @@
     body[data-filter="soft"]  .cohort-row:not([data-tier="soft"])  { display: none; }
     body[data-filter="clean"] .cohort-row:not([data-tier="clean"]) { display: none; }
     .cohort-row.search-hidden { display: none; }
+    .cohort-row.label-hidden { display: none; }
 
     /* Header strip */
     .detail-header {
@@ -587,31 +588,89 @@
       .reason-excerpt { flex-basis: 100%; }
       .cursor-cell { margin-left: auto; }
     }
+.wp { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.wp-colhead, .wp-row { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.2fr) 64px 64px 64px; gap: 10px; align-items: center; }
+.wp-colhead { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 2px; border-bottom: 1px solid var(--line); }
+.wp-group-name { margin: 10px 0 2px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.wp-row { padding: 3px 0; }
+.wp-name small { display: block; color: var(--dim); font-size: 12px; text-wrap: balance; }
+.wp-row input[type=range] { width: 100%; margin: 0; accent-color: var(--ink); }
+.wp-box { display: block; min-width: 0; }
+.wp-cap { display: none; }
+.wp-row input[type=number] { width: 100%; box-sizing: border-box; font: inherit; padding: 3px 5px; border: 1px solid var(--line); border-radius: 0; background: var(--bg); color: var(--ink); }
+.wp-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.wp-foot button { font: inherit; padding: 4px 12px; border: 1px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink); cursor: pointer; }
+.wp-foot button:focus-visible, .wp-row input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.wp-status { color: var(--dim); }
+.wp-config { margin: 8px 0 0; padding: 8px; border: 1px solid var(--line); background: var(--bg); font: 12px/1.4 var(--ff-sora); white-space: pre; overflow-x: auto; }
+@media (max-width: 560px) {
+  .wp-colhead { display: none; }
+  .wp-row { grid-template-columns: 1fr 1fr 1fr; }
+  .wp-row .wp-name, .wp-row input[type=range] { grid-column: 1 / -1; }
+  .wp-cap { display: block; margin-bottom: 2px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+}
+
+    #weights-dialog {
+      margin: auto; border: 1px solid var(--ink); border-radius: 0; padding: 0;
+      background: var(--surface); color: var(--ink);
+      width: min(780px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+    }
+    #weights-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+    .wd { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; font-family: var(--ff-recursive); }
+    .wd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .wd-head h3 { font-family: var(--ff-space); font-size: 16px; }
+    .wd-lede { color: var(--dim); font-size: 13px; line-height: 1.45; }
+    .wd-close { padding: 4px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--surface);
+      color: var(--ink); cursor: pointer; font-family: var(--ff-recursive); font-size: 13px; }
+    /* The top bar holds two buttons here, Weights… and Legend: one height for
+       both (a set line box: the ⓘ comes from a fallback face, which stood the
+       Legend 5px taller) and a label on one line (squeezed, "Legend ⓘ" broke
+       in two). Below 1100px the run line takes a row of its own: under the
+       title and the buttons, or on a phone between them. From 1100px a run
+       line with a Hard at rule keeps to two lines beside "Weights… (edited)",
+       with some 20px to spare (narrower, beside the buttons, it ran to
+       seven). On a phone the buttons' padding and gap are smaller, so both
+       fit on one row at 360px, the edited label included. */
+    .topbar button { white-space: nowrap; line-height: 24px; }
+    @media (min-width: 721px) and (max-width: 1099px) {
+      .topbar { flex-wrap: wrap; row-gap: 8px; }
+      .topbar h1 { flex: 1 1 0; }
+      .topbar .meta { order: 1; flex-basis: 100%; }
+    }
+    @media (max-width: 720px) {
+      .topbar { column-gap: 8px; }
+      .topbar .meta { flex-basis: 100%; }
+      .topbar button { padding: 6px 8px; }
+    }
+
   </style>
 </head>
 <body data-filter="all">
   <header class="topbar">
     <h1>Cyborg Hunter Report</h1>
     <span class="meta">1 participants &middot; v0.16.0</span>
+    <button class="weights-btn" type="button" aria-haspopup="dialog" aria-controls="weights-dialog">Weights&hellip;</button>
     <button class="legend-btn" type="button" aria-haspopup="dialog" aria-controls="legend-modal">Legend &#9432;</button>
   </header>
   <div class="layout">
     <aside class="rail"><div class="rail-top">
   <div class="search-wrap">
-    <input type="search" placeholder="Search (press / to focus)" aria-label="Search participants">
+    <input type="search" placeholder="Search ids or signals (press /)" aria-label="Search participants by id or signal"
+           title="Every word must match: part of an id, or a signal the participant has, such as copy, paste, sidebar, tab, zoom, synthetic or pointer">
   </div>
-  <div class="filter-chips">
-    <button class="filter-chip active" data-filter="all">All 1</button>
-    <button class="filter-chip" data-filter="hard">Hard 1</button>
-    <button class="filter-chip" data-filter="soft">Soft 0</button>
-    <button class="filter-chip" data-filter="clean">Clean 0</button>
+  <div class="filter-chips" role="group" aria-label="Tier">
+    <button class="filter-chip active" data-filter="all">All <span class="chip-n">1</span></button>
+    <button class="filter-chip" data-filter="hard">Hard <span class="chip-n">1</span></button>
+    <button class="filter-chip" data-filter="soft">Soft <span class="chip-n">0</span></button>
+    <button class="filter-chip" data-filter="clean">Clean <span class="chip-n">0</span></button>
   </div>
   <div class="sort-wrap">
     <label>Sort:
       <select name="sort">
-        <option value="tier" selected>Tier (hard first)</option>
-        <option value="score">Score &darr;</option>
+        <option value="score" selected>Score &darr;</option>
+        <option value="tier">Tier, then score</option>
         <option value="cursor">Pointer verdict &darr;</option>
+        <option value="typing">Typing verdict &darr;</option>
         <option value="id">ID</option>
       </select>
     </label>
@@ -620,10 +679,15 @@
 
 <div class="rail-list">
   <div class="cohort-row" data-pid="DEMO-FIXT"
+       data-index="0"
        data-sanitized="DEMO-FIXT"
        data-tier="hard"
+       data-report-tier="hard"
        data-score="11"
+       data-run-tier="hard"
+       data-run-score="11"
        data-cursor="-1"
+       data-typing="-1"
        data-reason="2 paste events; 1 tab-away ≥10s">
     <div class="cohort-row-top">
       <span class="annot-mark" data-label=""></span>
@@ -902,7 +966,15 @@
     <img id="lightbox-img" alt="">
     <div id="lightbox-stack" class="lightbox-stack" hidden></div>
   </div>
+  <dialog id="weights-dialog" aria-labelledby="weights-title">
+    <div class="wd">
+      <div class="wd-head"><h3 id="weights-title">Score weights</h3><button type="button" class="wd-close">Close</button></div>
+      <p class="wd-lede">Points per event: a participant's score is the sum, over the signals, of points × events (up to the cap). A weight of 0 leaves a signal out. <b>Hard at</b> moves anyone with that many events or more into the hard tier, shown as HARD*. The list re-scores and re-sorts as you change them. This report's files keep the weights it was built with; <b>Copy config</b> gives the lines for cyborg-hunter.config.json, so the next CLI run builds the same list.</p>
+      <div class="wp" data-role="weights-panel"><div class="wp-colhead"><span>Signal</span><span>Points per event</span><span>Points</span><span title="the most events of one kind that count toward the ranking score">Cap</span><span title="a count at or above which the report moves the participant into the hard tier, shown as HARD*">Hard at</span></div><div class="wp-group"><div class="wp-group-name">Clipboard and text</div><div class="wp-row"><span class="wp-name">Paste<small>Each paste into a text field</small></span><input type="range" min="0" max="20" step="1" data-slider="paste" aria-label="Paste: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="paste" aria-label="Paste: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="paste" placeholder="none" aria-label="Paste: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="paste" placeholder="—" aria-label="Paste: hard at"></span></div><div class="wp-row"><span class="wp-name">Copy or cut<small>Each copy or cut of the page’s text</small></span><input type="range" min="0" max="20" step="1" data-slider="copy" aria-label="Copy or cut: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="copy" aria-label="Copy or cut: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="copy" placeholder="none" aria-label="Copy or cut: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="copy" placeholder="—" aria-label="Copy or cut: hard at"></span></div><div class="wp-row"><span class="wp-name">Drop<small>Text dragged and dropped into a field</small></span><input type="range" min="0" max="20" step="1" data-slider="drop" aria-label="Drop: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="drop" aria-label="Drop: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="drop" placeholder="none" aria-label="Drop: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="drop" placeholder="—" aria-label="Drop: hard at"></span></div><div class="wp-row"><span class="wp-name">Synthetic insertion<small>Text that appeared with no key press</small></span><input type="range" min="0" max="20" step="1" data-slider="synthetic" aria-label="Synthetic insertion: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="synthetic" aria-label="Synthetic insertion: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="synthetic" placeholder="none" aria-label="Synthetic insertion: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="synthetic" placeholder="—" aria-label="Synthetic insertion: hard at"></span></div><div class="wp-row"><span class="wp-name">Foreign input<small>Typing that landed outside the experiment</small></span><input type="range" min="0" max="20" step="1" data-slider="foreignInput" aria-label="Foreign input: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="foreignInput" aria-label="Foreign input: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="foreignInput" placeholder="none" aria-label="Foreign input: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="foreignInput" placeholder="—" aria-label="Foreign input: hard at"></span></div></div><div class="wp-group"><div class="wp-group-name">Leaving the page</div><div class="wp-row"><span class="wp-name">Tab-away over threshold<small>Longer than the participant’s tab-away threshold (3 s by default)</small></span><input type="range" min="0" max="20" step="1" data-slider="tabaway" aria-label="Tab-away over threshold: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="tabaway" aria-label="Tab-away over threshold: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="tabaway" placeholder="none" aria-label="Tab-away over threshold: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="tabaway" placeholder="—" aria-label="Tab-away over threshold: hard at"></span></div><div class="wp-row"><span class="wp-name">Long tab-away (10 s or more)<small>Counted again on top of Tab-away over threshold</small></span><input type="range" min="0" max="20" step="1" data-slider="tabawayLong" aria-label="Long tab-away (10 s or more): points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="tabawayLong" aria-label="Long tab-away (10 s or more): points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="tabawayLong" placeholder="none" aria-label="Long tab-away (10 s or more): cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="tabawayLong" placeholder="—" aria-label="Long tab-away (10 s or more): hard at"></span></div><div class="wp-row"><span class="wp-name">Medium tab-away<small>From the threshold to 10 s; counted again on top of Tab-away over threshold</small></span><input type="range" min="0" max="20" step="1" data-slider="tabawayMedium" aria-label="Medium tab-away: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="tabawayMedium" aria-label="Medium tab-away: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="tabawayMedium" placeholder="none" aria-label="Medium tab-away: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="tabawayMedium" placeholder="—" aria-label="Medium tab-away: hard at"></span></div><div class="wp-row"><span class="wp-name">Flicker<small>Tab-aways at or under the threshold</small></span><input type="range" min="0" max="20" step="1" data-slider="flicker" aria-label="Flicker: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="flicker" aria-label="Flicker: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="flicker" placeholder="none" aria-label="Flicker: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="flicker" placeholder="—" aria-label="Flicker: hard at"></span></div><div class="wp-row"><span class="wp-name">Sidebar opened<small>The page narrowed as a side panel opened</small></span><input type="range" min="0" max="20" step="1" data-slider="sidebar" aria-label="Sidebar opened: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="sidebar" aria-label="Sidebar opened: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="sidebar" placeholder="none" aria-label="Sidebar opened: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="sidebar" placeholder="—" aria-label="Sidebar opened: hard at"></span></div></div><div class="wp-group"><div class="wp-group-name">Typing</div><div class="wp-row"><span class="wp-name">Fast typing (trials)<small>Trials typed faster than the threshold</small></span><input type="range" min="0" max="20" step="1" data-slider="fastTyping" aria-label="Fast typing (trials): points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="fastTyping" aria-label="Fast typing (trials): points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="fastTyping" placeholder="none" aria-label="Fast typing (trials): cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="fastTyping" placeholder="—" aria-label="Fast typing (trials): hard at"></span></div><div class="wp-row"><span class="wp-name">Typing verdict<small>Points × level: suspicious 1, highly suspicious 2</small></span><input type="range" min="0" max="20" step="1" data-slider="typingRhythm" aria-label="Typing verdict: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="typingRhythm" aria-label="Typing verdict: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="typingRhythm" placeholder="none" aria-label="Typing verdict: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="typingRhythm" placeholder="—" aria-label="Typing verdict: hard at"></span></div></div><div class="wp-group"><div class="wp-group-name">Pointer</div><div class="wp-row"><span class="wp-name">Pointer verdict<small>Points × level: suspicious 1, highly suspicious 2</small></span><input type="range" min="0" max="20" step="1" data-slider="cursor" aria-label="Pointer verdict: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="cursor" aria-label="Pointer verdict: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="cursor" placeholder="none" aria-label="Pointer verdict: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="cursor" placeholder="—" aria-label="Pointer verdict: hard at"></span></div><div class="wp-row"><span class="wp-name">Edge exits<small>The pointer left the window through a screen edge</small></span><input type="range" min="0" max="20" step="1" data-slider="edgeExits" aria-label="Edge exits: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="edgeExits" aria-label="Edge exits: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="edgeExits" placeholder="none" aria-label="Edge exits: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="edgeExits" placeholder="—" aria-label="Edge exits: hard at"></span></div></div><div class="wp-group"><div class="wp-group-name">Browser and device</div><div class="wp-row"><span class="wp-name">AI extensions<small>A known AI extension found in the page</small></span><input type="range" min="0" max="20" step="1" data-slider="aiExtensions" aria-label="AI extensions: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="aiExtensions" aria-label="AI extensions: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="aiExtensions" placeholder="none" aria-label="AI extensions: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="aiExtensions" placeholder="—" aria-label="AI extensions: hard at"></span></div><div class="wp-row"><span class="wp-name">DevTools shortcuts<small>Ctrl/Cmd+Shift+I/J/C, F12</small></span><input type="range" min="0" max="20" step="1" data-slider="kbShortcuts" aria-label="DevTools shortcuts: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="kbShortcuts" aria-label="DevTools shortcuts: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="kbShortcuts" placeholder="none" aria-label="DevTools shortcuts: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="kbShortcuts" placeholder="—" aria-label="DevTools shortcuts: hard at"></span></div><div class="wp-row"><span class="wp-name">Viewport shifts<small>The page’s width changed</small></span><input type="range" min="0" max="20" step="1" data-slider="viewportShifts" aria-label="Viewport shifts: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="viewportShifts" aria-label="Viewport shifts: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="viewportShifts" placeholder="none" aria-label="Viewport shifts: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="viewportShifts" placeholder="—" aria-label="Viewport shifts: hard at"></span></div><div class="wp-row"><span class="wp-name">Zoom changes<small>The browser’s zoom changed</small></span><input type="range" min="0" max="20" step="1" data-slider="zoom" aria-label="Zoom changes: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="zoom" aria-label="Zoom changes: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="zoom" placeholder="none" aria-label="Zoom changes: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="zoom" placeholder="—" aria-label="Zoom changes: hard at"></span></div><div class="wp-row"><span class="wp-name">Software renderer<small>The browser drew without a graphics card (a device fact)</small></span><input type="range" min="0" max="20" step="1" data-slider="softwareRenderer" aria-label="Software renderer: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="softwareRenderer" aria-label="Software renderer: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="softwareRenderer" placeholder="none" aria-label="Software renderer: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="softwareRenderer" placeholder="—" aria-label="Software renderer: hard at"></span></div><div class="wp-row"><span class="wp-name">Device masking<small>Screen facts that contradict each other (a device fact)</small></span><input type="range" min="0" max="20" step="1" data-slider="deviceMasking" aria-label="Device masking: points per event"><span class="wp-box"><span class="wp-cap" aria-hidden="true">Points</span><input type="number" min="0" step="any" data-weight="deviceMasking" aria-label="Device masking: points per event (number)"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Cap</span><input type="number" min="0" step="1" data-max="deviceMasking" placeholder="none" aria-label="Device masking: cap"></span><span class="wp-box"><span class="wp-cap" aria-hidden="true">Hard at</span><input type="number" min="1" step="1" data-hard="deviceMasking" placeholder="—" aria-label="Device masking: hard at"></span></div></div><div class="wp-foot"><button type="button" data-action="weights-reset">Reset to defaults</button><button type="button" data-action="weights-copy">Copy config</button><span class="wp-status" role="status"></span></div><pre class="wp-config" hidden></pre></div>
+    </div>
+  </dialog>
 
+  <script type="application/json" id="ch-rail-data">{"signals":[{"key":"paste","label":"paste","words":["paste"],"def":5,"weight":5,"max":null,"hardAt":null},{"key":"copy","label":"copy","words":["copy","cut"],"def":5,"weight":5,"max":null,"hardAt":null},{"key":"sidebar","label":"sidebar","words":["sidebar","side","panel"],"def":3,"weight":3,"max":null,"hardAt":null},{"key":"tabaway","label":"tabaway","words":["tab","tab-away","tabaway","away"],"def":1,"weight":1,"max":null,"hardAt":null},{"key":"tabawayLong","label":"tabawayLong","words":["long","tab","tab-away","tabaway","away"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"tabawayMedium","label":"tabawayMedium","words":["medium","tab","tab-away","tabaway","away"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"flicker","label":"flicker","words":["flicker"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"drop","label":"drop","words":["drop","drag"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"fastTyping","label":"fastTyping","words":["fast","typing","speed"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"synthetic","label":"synthetic","words":["synthetic","insertion","autofill"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"foreignInput","label":"foreignInput","words":["foreign","input"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"aiExtensions","label":"aiExtensions","words":["ai","extension","extensions"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"kbShortcuts","label":"kbShortcuts","words":["devtools","shortcut","shortcuts","keyboard"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"viewportShifts","label":"viewportShifts","words":["viewport","shift","shifts","width"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"zoom","label":"zoom","words":["zoom"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"edgeExits","label":"edgeExits","words":["edge","exits","pointer"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"cursor","label":"pointer verdict (cursor)","words":["pointer","cursor","mouse","verdict"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"softwareRenderer","label":"software renderer (softwareRenderer)","words":["software","renderer","device"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"deviceMasking","label":"device masking (deviceMasking)","words":["device","masking","screen"],"def":0,"weight":0,"max":null,"hardAt":null},{"key":"typingRhythm","label":"typing verdict (typingRhythm)","words":["typing","rhythm","regular","verdict"],"def":0,"weight":0,"max":null,"hardAt":null}],"rows":[{"lib":"hard","counts":[2,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]}</script>
   <script>
     // Wires interactivity (cohort selection, lightbox, legend modal).
     (function() {
@@ -928,16 +1000,21 @@
       let currentId = null;
 
       function isVisible(row) {
-        // CSS hides via either:
+        // CSS hides via any of:
         //   - data-filter rule (display: none from body[data-filter] not matching tier)
         //   - .search-hidden class (display: none from CSS)
-        // Both resolve to display: none, so getComputedStyle catches the union.
-        return !row.classList.contains('search-hidden')
-            && getComputedStyle(row).display !== 'none';
+        //   - .label-hidden class (the label filter; display: none from CSS)
+        // All resolve to display: none, so getComputedStyle catches the union.
+        return getComputedStyle(row).display !== 'none';
+      }
+
+      // The rows as the rail shows them now: in its sort order, filtered.
+      function shownRows() {
+        return [...rail.querySelectorAll('.cohort-row')].filter(isVisible);
       }
 
       function reconcileSelection() {
-        const visible = rows.filter(isVisible);
+        const visible = shownRows();
         if (visible.length === 0) {
           // No matches — clear panes and show empty-state hint in the detail column.
           for (const p of panes) p.setAttribute('hidden', '');
@@ -1071,10 +1148,169 @@
         if (row) selectById(row.dataset.pid);
       });
 
-      // Initial selection on page load. Priority:
+      // The rail's search and sort functions (rail-client.js), inlined by
+      // their source text; the calls below name them as that text does.
+function chSearchTokens(q) {
+  return String(q || '').toLowerCase().split(/\s+/).filter(function (w) { return w !== ''; });
+}
+function chRowMatches(tokens, row) {
+  return tokens.every(function (tok) {
+    if (row.id.indexOf(tok) >= 0 || row.reason.indexOf(tok) >= 0) return true;
+    return row.words.some(function (w) { return w.indexOf(tok) === 0; });
+  });
+}
+function chCompareRows(key) {
+  var rank = { hard: 0, soft: 1, clean: 2 };
+  return function (a, b) {
+    var d = 0;
+    if (key === 'id') d = a.id.localeCompare(b.id);
+    else if (key === 'tier') d = rank[a.tier] - rank[b.tier];
+    else if (key === 'cursor') d = b.cursor - a.cursor;
+    else if (key === 'typing') d = b.typing - a.typing;
+    if (d === 0 && key !== 'id') d = b.score - a.score;
+    return d || a.index - b.index;
+  };
+}
+
+      // --- Tier and label filters ---
+      // Tier: CSS does the hiding (body[data-filter]); a hard* row carries
+      // data-tier="hard", so the Hard chip shows it. Label: each row's
+      // annotation mark (annotation-client.js sets its data-label), read
+      // again whenever the annotations change ('ch:annotations').
+      const tierChips = [...document.querySelectorAll('.filter-chip[data-filter]')];
+      tierChips.forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.body.dataset.filter = chip.dataset.filter;
+          tierChips.forEach(c => c.classList.toggle('active', c === chip));
+          reconcileSelection();
+        });
+      });
+      const labelChips = [...document.querySelectorAll('.filter-chip[data-label-filter]')];
+      let labelFilter = 'all';
+      function applyLabelFilter() {
+        for (const r of rows) {
+          const mark = r.querySelector('.annot-mark');
+          const label = (mark && mark.dataset.label) || '';
+          const hit = labelFilter === 'all' || (labelFilter === 'none' ? label === '' : label === labelFilter);
+          r.classList.toggle('label-hidden', !hit);
+        }
+      }
+      labelChips.forEach(chip => {
+        chip.addEventListener('click', () => {
+          labelFilter = chip.dataset.labelFilter;
+          labelChips.forEach(c => c.classList.toggle('active', c === chip));
+          applyLabelFilter();
+          reconcileSelection();
+        });
+      });
+      document.addEventListener('ch:annotations', () => {
+        if (labelFilter === 'all') return;
+        applyLabelFilter();
+        reconcileSelection();
+      });
+
+      // --- Search ---
+      // Every word must match: the id, the triage reason, or the start of a
+      // search word of a signal this participant has a count above zero for
+      // (the rail data's counts, by data-index).
+      const railData = JSON.parse(document.getElementById('ch-rail-data').textContent);
+      const rowInfo = rows.map(r => {
+        const d = railData.rows[+r.dataset.index];
+        const words = [];
+        railData.signals.forEach((s, i) => { if (d && d.counts[i] > 0) words.push(...s.words); });
+        return { id: r.dataset.pid.toLowerCase(), reason: r.dataset.reason, words };
+      });
+      const searchEl = document.querySelector('.search-wrap input');
+      searchEl.addEventListener('input', () => {
+        const tokens = chSearchTokens(searchEl.value);
+        rows.forEach((r, i) => r.classList.toggle('search-hidden', !chRowMatches(tokens, rowInfo[i])));
+        reconcileSelection();
+      });
+
+      // --- Sort ---
+      // rail-client.js chCompareRows: 'score' (the default), 'tier' (then
+      // score), 'cursor' and 'typing' (the verdict's level, then score), 'id'.
+      // The page opens sorted (below), so the rail's order is not the panes':
+      // rows and panes pair by data-index.
+      const sortEl = document.querySelector('.sort-wrap select');
+      const sortKeys = (r) => ({ index: +r.dataset.index, id: r.dataset.pid, tier: r.dataset.tier,
+        score: parseFloat(r.dataset.score), cursor: +r.dataset.cursor, typing: +r.dataset.typing });
+      function applySort() {
+        const parent = rows[0] && rows[0].parentNode;
+        if (!parent) return;
+        const cmp = chCompareRows(sortEl.value);
+        rows.slice().sort((a, b) => cmp(sortKeys(a), sortKeys(b))).forEach(r => parent.appendChild(r));
+      }
+      sortEl.addEventListener('change', () => { applySort(); reconcileSelection(); });
+
+      // --- Live re-score (the Weights… dialog; CLI report only) ---
+      // weights-panel.js hands every row's score, report tier and breakdown
+      // terms under the dialog's weights, in triage order (data-index). The
+      // row, its pane and the tier counts follow, and the rail sorts again.
+      const fmtScore = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+      const tierWord = (rt) => (rt === 'clean' ? 'clean' : rt.toUpperCase());
+      function renderBreakdown(box, terms, total) {
+        box.textContent = '';
+        const scale = Math.max(total, 1);
+        for (const [label, n] of terms) {
+          const term = document.createElement('span');
+          term.className = 'score-term';
+          const name = document.createElement('span');
+          name.className = 'label';
+          name.textContent = label;
+          const contrib = document.createElement('span');
+          contrib.className = 'mono contrib';
+          contrib.textContent = '+' + fmtScore(n);
+          const bar = document.createElement('span');
+          bar.className = 'bar';
+          bar.style.width = Math.max(2, Math.round((n / scale) * 100)) + 'px';
+          term.append(name, contrib, bar);
+          box.appendChild(term);
+        }
+        const totalEl = document.createElement('span');
+        totalEl.className = 'score-total mono';
+        totalEl.textContent = 'Total: ' + fmtScore(total);
+        box.appendChild(totalEl);
+      }
+      function updateTierCounts() {
+        const n = { all: rows.length, hard: 0, soft: 0, clean: 0 };
+        for (const r of rows) n[r.dataset.tier]++;
+        document.querySelectorAll('.filter-chip[data-filter] .chip-n').forEach(el => { el.textContent = String(n[el.closest('.filter-chip').dataset.filter]); });
+        document.querySelectorAll('.totals-row[data-tier] .count').forEach(el => { el.textContent = String(n[el.closest('.totals-row').dataset.tier]); });
+      }
+      document.addEventListener('ch:rescore', e => {
+        const out = e.detail.rows;
+        for (const r of rows) {
+          const x = out[+r.dataset.index];
+          if (!x) continue;
+          const tier = x.reportTier === 'hard*' ? 'hard' : x.reportTier;
+          r.dataset.score = String(x.score);
+          r.dataset.tier = tier;
+          r.dataset.reportTier = x.reportTier;
+          r.querySelector('.cohort-row-top .score').textContent = fmtScore(x.score);
+          const badge = r.querySelector('.tier-badge');
+          badge.dataset.tier = tier;
+          badge.textContent = tierWord(x.reportTier);
+          const pane = panes[+r.dataset.index];
+          if (!pane) continue;
+          const big = pane.querySelector('.score-big');
+          if (big) big.textContent = fmtScore(x.score);
+          const pill = pane.querySelector('.tier-pill');
+          if (pill) { pill.dataset.tier = tier; pill.textContent = tierWord(x.reportTier); }
+          const box = pane.querySelector('.score-breakdown');
+          if (box) renderBreakdown(box, x.terms, x.score);
+        }
+        updateTierCounts();
+        applySort();
+        reconcileSelection();
+      });
+
+      // Initial order and selection on page load: the rail sorted by its
+      // select's value (Score unless the browser restored another), then
       //   1. URL hash matches a participant — restore it.
-      //   2. Default to first row (most-suspicious, since triage is sorted desc).
+      //   2. Default to the top row as sorted.
       //   3. No rows at all — do nothing (defensive).
+      applySort();
       (function initSelection() {
         const match = location.hash.match(/^#p-(.+)$/);
         if (match) {
@@ -1084,61 +1320,9 @@
             return;
           }
         }
-        if (rows[0]) selectById(rows[0].dataset.pid, { skipHash: true });
+        const first = shownRows()[0];
+        if (first) selectById(first.dataset.pid, { skipHash: true });
       })();
-
-      // --- Filter chips ---
-      // CSS does the actual hiding via body[data-filter] selectors. JS just sets
-      // the data attribute and updates which chip is .active.
-      const chips = [...document.querySelectorAll('.filter-chip')];
-      chips.forEach(chip => {
-        chip.addEventListener('click', () => {
-          document.body.dataset.filter = chip.dataset.filter;
-          chips.forEach(c => c.classList.toggle('active', c === chip));
-          reconcileSelection();
-        });
-      });
-
-      // --- Search ---
-      const searchEl = document.querySelector('.search-wrap input');
-      searchEl.addEventListener('input', () => {
-        const q = searchEl.value.trim().toLowerCase();
-        for (const r of rows) {
-          // data-pid is mixed case; data-reason is pre-lowercased server-side.
-          const hit = !q
-            || r.dataset.pid.toLowerCase().includes(q)
-            || r.dataset.reason.includes(q);
-          r.classList.toggle('search-hidden', !hit);
-        }
-        reconcileSelection();
-      });
-
-      // --- Sort ---
-      const sortEl = document.querySelector('.sort-wrap select');
-      sortEl.addEventListener('change', () => {
-        const key = sortEl.value;  // 'score' | 'cursor' | 'id' | 'tier'
-        const tierRank = { hard: 0, soft: 1, clean: 2 };
-        const parent = rows[0]?.parentNode;
-        if (!parent) return;
-        const sorted = [...rows].sort((a, b) => {
-          if (key === 'score') return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
-          // 'cursor': verdict level desc (not assessed = -1 last), then score desc.
-          if (key === 'cursor') {
-            const dc = parseInt(b.dataset.cursor, 10) - parseInt(a.dataset.cursor, 10);
-            if (dc !== 0) return dc;
-            return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
-          }
-          if (key === 'id')    return a.dataset.pid.localeCompare(b.dataset.pid);
-          // 'tier': hard first, then soft, then clean; within tier, score desc.
-          const dt = tierRank[a.dataset.tier] - tierRank[b.dataset.tier];
-          if (dt !== 0) return dt;
-          return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
-        });
-        for (const r of sorted) parent.appendChild(r);
-        // Sort doesn't change visibility, but the call is cheap and protects against
-        // future filter+sort interactions from getting out of sync.
-        reconcileSelection();
-      });
 
       // --- Keyboard nav ---
       // Single document.keydown listener handles ESC (close overlays), '/' (focus
@@ -1155,7 +1339,8 @@
         // The enlarged figure covers the report, and so does anything in
         // fullscreen (a replay viewer): the keys below act on the report
         // behind it, so they wait until it closes.
-        if (overlay.classList.contains('open') || document.fullscreenElement) return;
+        // The Weights… dialog is modal too: its own inputs take the keys.
+        if (overlay.classList.contains('open') || document.fullscreenElement || document.querySelector('dialog[open]')) return;
 
         const inInput = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
 
@@ -1166,7 +1351,7 @@
         }
 
         if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !inInput) {
-          const visible = rows.filter(isVisible);
+          const visible = shownRows();
           if (visible.length === 0) return;
 
           const currentIdx = visible.findIndex(r => r.classList.contains('selected'));
@@ -1273,6 +1458,192 @@ function chWireTimelineStage(stage) {
   });
 }
 document.querySelectorAll(".tl-stage").forEach(function (stage) { chWireTimelineStage(stage); });
+
+    })();
+  </script>
+  <script>
+    // The Weights… dialog: the shared panel and the live re-score (weights-panel.js).
+    (function () {
+function scoreFromCounts(counts, weights) {
+  var score = 0;
+  for (var i = 0; i < counts.length; i++) {
+    var w = weights[i];
+    if (w.weight === 0) continue;
+    score += (w.max == null ? counts[i] : Math.min(counts[i], w.max)) * w.weight;
+  }
+  return score;
+}
+function reportTierFromCounts(lib, counts, hardAt) {
+  if (lib === 'hard') return 'hard';
+  for (var i = 0; i < counts.length; i++) {
+    if (hardAt[i] != null && counts[i] >= hardAt[i]) return 'hard*';
+  }
+  return lib;
+}
+function weightsConfig(signals, state) {
+  var scoreWeights = {};
+  var hardAt = {};
+  var out = {};
+  for (var i = 0; i < signals.length; i++) {
+    var s = signals[i];
+    var w = state.weights[i];
+    if (w.weight !== s.def || w.max != null) scoreWeights[s.key] = w.max == null ? w.weight : { weight: w.weight, max: w.max };
+    if (state.hardAt[i] != null) hardAt[s.key] = state.hardAt[i];
+  }
+  if (Object.keys(scoreWeights).length) out.scoreWeights = scoreWeights;
+  if (Object.keys(hardAt).length) out.hardAt = hardAt;
+  return out;
+}
+function wireWeightsPanel(root, cfg) {
+  var signals = cfg.signals;
+  var status = root.querySelector('.wp-status');
+  var pre = root.querySelector('.wp-config');
+  function field(attr, key) { return root.querySelector('[' + attr + '="' + key + '"]'); }
+  // A box's number, or null when it is empty or under min.
+  function number(text, min) {
+    if (String(text).trim() === '') return null;
+    var n = Number(text);
+    return isFinite(n) && n >= min ? n : null;
+  }
+  function write(state) {
+    for (var i = 0; i < signals.length; i++) {
+      var key = signals[i].key;
+      var w = state.weights[i];
+      field('data-weight', key).value = String(w.weight);
+      field('data-slider', key).value = String(Math.min(20, w.weight));
+      field('data-max', key).value = w.max == null ? '' : String(w.max);
+      field('data-hard', key).value = state.hardAt[i] == null ? '' : String(state.hardAt[i]);
+    }
+  }
+  // An empty or invalid weight box is the signal's default; caps and hard-at
+  // counts are whole numbers (a cap from 0, a hard-at count from 1).
+  function read() {
+    return {
+      weights: signals.map(function (s) {
+        var w = number(field('data-weight', s.key).value, 0);
+        var m = number(field('data-max', s.key).value, 0);
+        return { weight: w == null ? s.def : w, max: m == null ? null : Math.floor(m) };
+      }),
+      hardAt: signals.map(function (s) {
+        var h = number(field('data-hard', s.key).value, 1);
+        return h == null ? null : Math.floor(h);
+      }),
+    };
+  }
+  function edited() {
+    pre.hidden = true;
+    status.textContent = '';
+    if (cfg.onInput) cfg.onInput();
+  }
+  function defaultOf(key) {
+    for (var i = 0; i < signals.length; i++) if (signals[i].key === key) return signals[i].def;
+    return 0;
+  }
+  // The slider follows its number box. An empty or invalid box scores at
+  // the signal's default (read), so the slider shows that default.
+  root.addEventListener('input', function (e) {
+    var t = e.target;
+    var slider = t.getAttribute('data-slider');
+    var weight = t.getAttribute('data-weight');
+    if (slider) field('data-weight', slider).value = t.value;
+    else if (weight) {
+      var v = number(t.value, 0);
+      field('data-slider', weight).value = String(Math.min(20, v == null ? defaultOf(weight) : v));
+    }
+    edited();
+  });
+  root.querySelector('[data-action="weights-reset"]').addEventListener('click', function () {
+    write({
+      weights: signals.map(function (s) { return { weight: s.def, max: null }; }),
+      hardAt: signals.map(function () { return null; }),
+    });
+    edited();
+    root.dispatchEvent(new root.ownerDocument.defaultView.Event('change', { bubbles: true }));
+  });
+  root.querySelector('[data-action="weights-copy"]').addEventListener('click', function () {
+    var text = JSON.stringify(weightsConfig(signals, read()), null, 2);
+    pre.textContent = text;
+    pre.hidden = false;
+    // Where the clipboard is refused (a sandboxed frame, no permission), the
+    // text is selected for the analyst to copy.
+    function done(ok) {
+      status.textContent = ok ? 'Copied.' : 'Select the text below and copy it.';
+      if (ok) return;
+      var doc = root.ownerDocument;
+      var range = doc.createRange();
+      range.selectNodeContents(pre);
+      var sel = doc.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } catch (e) {
+      done(false);
+    }
+  });
+  write({
+    weights: signals.map(function (s) { return { weight: s.weight, max: s.max }; }),
+    hardAt: signals.map(function (s) { return s.hardAt; }),
+  });
+  return { read: read, write: write };
+}
+function chBootWeightsDialog(doc) {
+  var dataEl = doc.getElementById('ch-rail-data');
+  var dialog = doc.getElementById('weights-dialog');
+  var button = doc.querySelector('.weights-btn');
+  if (!dataEl || !dialog || !button) return;
+  var data = JSON.parse(dataEl.textContent);
+  var signals = data.signals;
+  // The rail data holds an infinite count (a damaged file's) as the largest
+  // finite number of its sign, since JSON has no Infinity (railData). Scored
+  // as that, a weight of 1 or less would give a finite score where the files
+  // print Infinity, so each such count is infinite again here.
+  var counts = data.rows.map(function (r) {
+    return r.counts.map(function (n) {
+      return n === Number.MAX_VALUE ? Infinity : n === -Number.MAX_VALUE ? -Infinity : n;
+    });
+  });
+  var panel = wireWeightsPanel(dialog.querySelector('.wp'), { signals: signals, onInput: rescore });
+  button.addEventListener('click', function () {
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+  });
+  dialog.querySelector('.wd-close').addEventListener('click', function () {
+    if (typeof dialog.close === 'function') dialog.close();
+    else dialog.removeAttribute('open');
+  });
+  // WebKit leaves the focus on the closed dialog; the other engines already
+  // put it back on the button.
+  dialog.addEventListener('close', function () { button.focus(); });
+  // Whether a state differs from the report's values: a weight, a cap or a
+  // Hard at count, each read as the score reads it (a box's number, not its
+  // text), as Copy config would write it.
+  function edited(st) {
+    for (var i = 0; i < signals.length; i++) {
+      var s = signals[i];
+      var w = st.weights[i];
+      if (w.weight !== s.weight || w.max !== s.max || st.hardAt[i] !== s.hardAt) return true;
+    }
+    return false;
+  }
+  function rescore() {
+    var st = panel.read();
+    var rows = data.rows.map(function (r, j) {
+      var c = counts[j];
+      var terms = [];
+      for (var i = 0; i < signals.length; i++) {
+        var w = st.weights[i];
+        if (w.weight === 0) continue;
+        var n = (w.max == null ? c[i] : Math.min(c[i], w.max)) * w.weight;
+        if (n > 0) terms.push([signals[i].label, n]);
+      }
+      return { score: scoreFromCounts(c, st.weights), reportTier: reportTierFromCounts(r.lib, c, st.hardAt), terms: terms };
+    });
+    button.textContent = edited(st) ? 'Weights\u2026 (edited)' : 'Weights\u2026';
+    doc.dispatchEvent(new doc.defaultView.CustomEvent('ch:rescore', { detail: { rows: rows } }));
+  }
+}
+chBootWeightsDialog(document);
 
     })();
   </script>
