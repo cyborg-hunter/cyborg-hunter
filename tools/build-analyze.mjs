@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { readReplayClientSrc } from '../src/cli/renderers/replay-client-source.js';
 import { buildFontFaceCss } from '../src/cli/renderers/report-fonts.js';
 import { timelineScript } from '../src/cli/renderers/timeline-client.js';
+import { railFunctionsSrc } from '../src/cli/renderers/rail-client.js';
 import { inlineSafeJson, inlineSrcHazards } from '../src/shared/inline-safe.js';
 import { VERSION } from '../src/shared/constants.js';
 import { sampleRecordingNames } from './sample-recordings.mjs';
@@ -80,11 +81,14 @@ function virtual(modules) {
 // text carries its own boot call, as timelineScript's does: a call the
 // template emits as `${fn.name}(...)` is evaluated in the analyzer's bundle,
 // where esbuild may have renamed fn, while the baked text defines node's
-// name. The analyzer's worker tests check every entry in both reports, and
+// name. A text of definitions only (the rail's) is called by the page's own
+// script under the names the text writes, spelled out in the template. The
+// analyzer's worker tests check every entry in both reports, and
 // both reports against node's byte for byte.
 export function inlineSources() {
   const sources = {
     timeline: timelineScript(),
+    rail: railFunctionsSrc(),
   };
   // inlineSafeSrc cannot neutralise these (src/shared/inline-safe.js), and
   // the bundle's own check below cannot see them: fill() writes each text

@@ -24,16 +24,18 @@
 import { VERSION, sanitizeId } from '../../shared/constants.js';
 import { decomposeScore } from '../analyzers/triage.js';
 import { listSidebarOpenings } from '../analyzers/summary.js';
-import { resolveScoreWeights, customWeightsText, formatScore, SIGNAL_LABELS } from '../analyzers/score-weights.js';
+import { resolveScoreWeights, resolveHardAt, customWeightsText, formatScore, SIGNAL_LABELS } from '../analyzers/score-weights.js';
 import { REPLAY_STYLES_CSS } from './replay-styles.js';
 import { getByPath } from '../../shared/paths.js';
 import { inferTier } from '../../replay/viewer-model.js';
-import { inlineSafeSrc } from '../../shared/inline-safe.js';
+import { inlineSafeSrc, inlineSafeJson } from '../../shared/inline-safe.js';
 import { annotationBlock } from './annotation-client.js';
 import { sanitize, fileIds } from './report-id.js';
 import { sessionLayout } from './session-timeline-core.js';
 import { hoverData } from './timeline-layout.js';
 import { timelineScript } from './timeline-client.js';
+import { railData } from './weights-panel.js';
+import { railFunctionsSrc } from './rail-client.js';
 
 /**
  * Renders the report's index.html as a string. `opts.replayClientSrc` is the
@@ -60,6 +62,9 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   const inlineSrc = opts.inlineSrc ?? {};
   // The Session timeline blocks' script (timeline-client.js).
   const timelineSrc = inlineSafeSrc(inlineSrc.timeline ?? timelineScript());
+  // The rail's search and sort functions (rail-client.js); the main script
+  // below calls them by the names their text defines.
+  const railSrc = inlineSafeSrc(inlineSrc.rail ?? railFunctionsSrc());
   // @font-face rules for the report's typefaces, as base64 data URIs
   // (report-fonts.js builds them for the CLI, and tools/build-analyze.mjs
   // bakes the same rules into the analyze bundle). Absent → no faces, and
@@ -113,14 +118,18 @@ export async function renderIndexHtml(summaries, triage, participants, config, v
   // report runs in the analyze page's sandboxed frame, and the page keeps them.
   const annotationHtml = opts.runId ? annotationBlock({ runId: opts.runId, parent: !!opts.annotationPostMessage }) : '';
 
-  // Cohort counts for filter chips and totals footer. The triage array is
-  // already sorted tier-first (hard → soft → clean, score-desc within tier) by
-  // triage.js — we don't re-sort here; the default "Tier" sort matches it.
-  const hard  = triage.filter(t => t.hardTriggered).length;
-  const soft  = triage.filter(t => !t.hardTriggered && t.softFlagged).length;
+  // Cohort counts for filter chips and totals footer, by the report's tier
+  // (triage.js reportTier): a hard* row counts as hard. The triage array is
+  // sorted tier-first (hard → soft → clean, score-desc within tier) by
+  // triage.js, and the rows and panes are emitted in that order; the rail
+  // opens sorted by score (the client script's applySort).
+  const hard  = triage.filter(t => tierOf(t) === 'hard').length;
+  const soft  = triage.filter(t => tierOf(t) === 'soft').length;
   const clean = triage.length - hard - soft;
   const cohortCounts = { hard, soft, clean };
-  const railHtml = renderCohortList(triage, cohortCounts);
+  // The label block filters by the annotation controls' labels, which a
+  // report has only with a run id.
+  const railHtml = renderCohortList(triage, cohortCounts, { labels: !!opts.runId });
 
   // Detail panes: one <section class="participant"> per triage entry. Only the
   // first is visible by default; the client script wires row clicks to toggle the
@@ -241,6 +250,14 @@ ${fontFaceCss}    :root {
       outline: 2px solid var(--ink); outline-offset: 2px;
     }
     .filter-chip:focus-visible { position: relative; z-index: 2; }
+    /* The count in a tier chip, updated when a weight change re-tiers: the
+       chip's own face with tabular figures (Sora's wider digits would push
+       four 3-digit counts past the rail's width). */
+    .filter-chip .chip-n { font-variant-numeric: tabular-nums; }
+    /* The label block's five buttons measure 369px at the tier chips' size,
+       over the 335px the rail leaves them: at 13px with 6px sides they
+       measure 312px and keep one line, in the rail and on a phone. */
+    .filter-chip[data-label-filter] { font-size: 13px; padding: 4px 6px; }
 
     /* Sort selector */
     .sort-wrap { font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
@@ -340,6 +357,7 @@ ${fontFaceCss}    :root {
     body[data-filter="soft"]  .cohort-row:not([data-tier="soft"])  { display: none; }
     body[data-filter="clean"] .cohort-row:not([data-tier="clean"]) { display: none; }
     .cohort-row.search-hidden { display: none; }
+    .cohort-row.label-hidden { display: none; }
 
     /* Header strip */
     .detail-header {
@@ -732,7 +750,7 @@ ${fontFaceCss}    :root {
 <body data-filter="all">
   <header class="topbar">
     <h1>Cyborg Hunter Report</h1>
-    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${pseudonymNote(config)}${runLine}</span>
+    <span class="meta">${triage.length} participants &middot; v${VERSION}${scoreWeightsNote(config)}${hardAtNote(config)}${pseudonymNote(config)}${runLine}</span>
     <button class="legend-btn" type="button" aria-haspopup="dialog" aria-controls="legend-modal">Legend &#9432;</button>
   </header>
   <div class="layout">
@@ -779,6 +797,7 @@ ${fontFaceCss}    :root {
     <div id="lightbox-stack" class="lightbox-stack" hidden></div>
   </div>
 
+  <script type="application/json" id="ch-rail-data">${inlineSafeJson(railData(triage, config))}</script>
   <script>
     // Wires interactivity (cohort selection, lightbox, legend modal).
     (function() {
@@ -804,16 +823,22 @@ ${fontFaceCss}    :root {
       let currentId = null;
 
       function isVisible(row) {
-        // CSS hides via either:
+        // CSS hides via any of:
         //   - data-filter rule (display: none from body[data-filter] not matching tier)
         //   - .search-hidden class (display: none from CSS)
-        // Both resolve to display: none, so getComputedStyle catches the union.
+        //   - .label-hidden class (the label filter; display: none from CSS)
+        // All resolve to display: none, so getComputedStyle catches the union.
         return !row.classList.contains('search-hidden')
             && getComputedStyle(row).display !== 'none';
       }
 
+      // The rows as the rail shows them now: in its sort order, filtered.
+      function shownRows() {
+        return [...rail.querySelectorAll('.cohort-row')].filter(isVisible);
+      }
+
       function reconcileSelection() {
-        const visible = rows.filter(isVisible);
+        const visible = shownRows();
         if (visible.length === 0) {
           // No matches — clear panes and show empty-state hint in the detail column.
           for (const p of panes) p.setAttribute('hidden', '');
@@ -947,10 +972,87 @@ ${fontFaceCss}    :root {
         if (row) selectById(row.dataset.pid);
       });
 
-      // Initial selection on page load. Priority:
+      // The rail's search and sort functions (rail-client.js), inlined by
+      // their source text; the calls below name them as that text does.
+${railSrc}
+
+      // --- Tier and label filters ---
+      // Tier: CSS does the hiding (body[data-filter]); a hard* row carries
+      // data-tier="hard", so the Hard chip shows it. Label: each row's
+      // annotation mark (annotation-client.js sets its data-label), read
+      // again whenever the annotations change ('ch:annotations').
+      const tierChips = [...document.querySelectorAll('.filter-chip[data-filter]')];
+      tierChips.forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.body.dataset.filter = chip.dataset.filter;
+          tierChips.forEach(c => c.classList.toggle('active', c === chip));
+          reconcileSelection();
+        });
+      });
+      const labelChips = [...document.querySelectorAll('.filter-chip[data-label-filter]')];
+      let labelFilter = 'all';
+      function applyLabelFilter() {
+        for (const r of rows) {
+          const mark = r.querySelector('.annot-mark');
+          const label = (mark && mark.dataset.label) || '';
+          const hit = labelFilter === 'all' || (labelFilter === 'none' ? label === '' : label === labelFilter);
+          r.classList.toggle('label-hidden', !hit);
+        }
+      }
+      labelChips.forEach(chip => {
+        chip.addEventListener('click', () => {
+          labelFilter = chip.dataset.labelFilter;
+          labelChips.forEach(c => c.classList.toggle('active', c === chip));
+          applyLabelFilter();
+          reconcileSelection();
+        });
+      });
+      document.addEventListener('ch:annotations', () => {
+        if (labelFilter === 'all') return;
+        applyLabelFilter();
+        reconcileSelection();
+      });
+
+      // --- Search ---
+      // Every word must match: the id, the triage reason, or the start of a
+      // search word of a signal this participant has a count above zero for
+      // (the rail data's counts, by data-index).
+      const railData = JSON.parse(document.getElementById('ch-rail-data').textContent);
+      const rowInfo = rows.map(r => {
+        const d = railData.rows[+r.dataset.index];
+        const words = [];
+        railData.signals.forEach((s, i) => { if (d && d.counts[i] > 0) words.push(...s.words); });
+        return { id: r.dataset.pid.toLowerCase(), reason: r.dataset.reason, words };
+      });
+      const searchEl = document.querySelector('.search-wrap input');
+      searchEl.addEventListener('input', () => {
+        const tokens = chSearchTokens(searchEl.value);
+        rows.forEach((r, i) => r.classList.toggle('search-hidden', !chRowMatches(tokens, rowInfo[i])));
+        reconcileSelection();
+      });
+
+      // --- Sort ---
+      // rail-client.js chCompareRows: 'score' (the default), 'tier' (then
+      // score), 'cursor' and 'typing' (the verdict's level, then score), 'id'.
+      // The page opens sorted (below), so the rail's order is not the panes':
+      // rows and panes pair by data-index.
+      const sortEl = document.querySelector('.sort-wrap select');
+      const sortKeys = (r) => ({ index: +r.dataset.index, id: r.dataset.pid, tier: r.dataset.tier,
+        score: parseFloat(r.dataset.score), cursor: +r.dataset.cursor, typing: +r.dataset.typing });
+      function applySort() {
+        const parent = rows[0] && rows[0].parentNode;
+        if (!parent) return;
+        const cmp = chCompareRows(sortEl.value);
+        rows.slice().sort((a, b) => cmp(sortKeys(a), sortKeys(b))).forEach(r => parent.appendChild(r));
+      }
+      sortEl.addEventListener('change', () => { applySort(); reconcileSelection(); });
+
+      // Initial order and selection on page load: the rail sorted by its
+      // select's value (Score unless the browser restored another), then
       //   1. URL hash matches a participant — restore it.
-      //   2. Default to first row (most-suspicious, since triage is sorted desc).
+      //   2. Default to the top row as sorted.
       //   3. No rows at all — do nothing (defensive).
+      applySort();
       (function initSelection() {
         const match = location.hash.match(/^#p-(.+)$/);
         if (match) {
@@ -960,61 +1062,9 @@ ${fontFaceCss}    :root {
             return;
           }
         }
-        if (rows[0]) selectById(rows[0].dataset.pid, { skipHash: true });
+        const first = shownRows()[0];
+        if (first) selectById(first.dataset.pid, { skipHash: true });
       })();
-
-      // --- Filter chips ---
-      // CSS does the actual hiding via body[data-filter] selectors. JS just sets
-      // the data attribute and updates which chip is .active.
-      const chips = [...document.querySelectorAll('.filter-chip')];
-      chips.forEach(chip => {
-        chip.addEventListener('click', () => {
-          document.body.dataset.filter = chip.dataset.filter;
-          chips.forEach(c => c.classList.toggle('active', c === chip));
-          reconcileSelection();
-        });
-      });
-
-      // --- Search ---
-      const searchEl = document.querySelector('.search-wrap input');
-      searchEl.addEventListener('input', () => {
-        const q = searchEl.value.trim().toLowerCase();
-        for (const r of rows) {
-          // data-pid is mixed case; data-reason is pre-lowercased server-side.
-          const hit = !q
-            || r.dataset.pid.toLowerCase().includes(q)
-            || r.dataset.reason.includes(q);
-          r.classList.toggle('search-hidden', !hit);
-        }
-        reconcileSelection();
-      });
-
-      // --- Sort ---
-      const sortEl = document.querySelector('.sort-wrap select');
-      sortEl.addEventListener('change', () => {
-        const key = sortEl.value;  // 'score' | 'cursor' | 'id' | 'tier'
-        const tierRank = { hard: 0, soft: 1, clean: 2 };
-        const parent = rows[0]?.parentNode;
-        if (!parent) return;
-        const sorted = [...rows].sort((a, b) => {
-          if (key === 'score') return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
-          // 'cursor': verdict level desc (not assessed = -1 last), then score desc.
-          if (key === 'cursor') {
-            const dc = parseInt(b.dataset.cursor, 10) - parseInt(a.dataset.cursor, 10);
-            if (dc !== 0) return dc;
-            return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
-          }
-          if (key === 'id')    return a.dataset.pid.localeCompare(b.dataset.pid);
-          // 'tier': hard first, then soft, then clean; within tier, score desc.
-          const dt = tierRank[a.dataset.tier] - tierRank[b.dataset.tier];
-          if (dt !== 0) return dt;
-          return parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
-        });
-        for (const r of sorted) parent.appendChild(r);
-        // Sort doesn't change visibility, but the call is cheap and protects against
-        // future filter+sort interactions from getting out of sync.
-        reconcileSelection();
-      });
 
       // --- Keyboard nav ---
       // Single document.keydown listener handles ESC (close overlays), '/' (focus
@@ -1042,7 +1092,7 @@ ${fontFaceCss}    :root {
         }
 
         if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !inInput) {
-          const visible = rows.filter(isVisible);
+          const visible = shownRows();
           if (visible.length === 0) return;
 
           const currentIdx = visible.findIndex(r => r.classList.contains('selected'));
@@ -1136,10 +1186,23 @@ ${replayClientSrc}
   return html;
 }
 
-// Tier classification used by the rail rows, totals, and (later) the detail pane.
-// Hard takes precedence over soft; anything else is clean.
+// The report's tier (triage.js reportTier): the library's, or 'hard*' when a
+// count reached config.hardAt. A row built without it (a hand-built caller)
+// gets the library's.
+function reportTierOf(t) {
+  return t.reportTier || (t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean');
+}
+
+// Tier classification used by the rail rows, totals, filters and the detail
+// pane's colours: hard (hard* with it), soft or clean.
 function tierOf(t) {
-  return t.hardTriggered ? 'hard' : t.softFlagged ? 'soft' : 'clean';
+  const rt = reportTierOf(t);
+  return rt === 'hard*' ? 'hard' : rt;
+}
+
+// The tier as the badge and the pill write it: HARD, HARD*, SOFT, clean.
+function tierText(reportTier) {
+  return reportTier === 'clean' ? 'clean' : reportTier.toUpperCase();
 }
 
 // Canonical signal taxonomy for the detail-pane "signal grid" section.
@@ -1209,28 +1272,39 @@ function renderSignalGrid(summary, triageRow) {
   </div>`;
 }
 
-// Build the entire left rail HTML: top band (search/filters/sort), scrolling
-// list of cohort rows, and the sticky cohort totals footer. Rendering is
-// pure HTML — no client-side handlers here; the client script wires up interactivity.
-function renderCohortList(triage, cohortCounts) {
+// Build the entire left rail HTML: top band (search, the tier block, the
+// label block when the report has annotation controls, sort), scrolling list
+// of cohort rows, and the sticky cohort totals footer. Rendering is pure
+// HTML — the client script wires up interactivity.
+function renderCohortList(triage, cohortCounts, opts = {}) {
   const rowsHtml = triage.map(renderCohortRow).join('');
+  const labelChips = opts.labels ? `
+  <div class="filter-chips" role="group" aria-label="Your label">
+    <button class="filter-chip active" data-label-filter="all">All</button>
+    <button class="filter-chip" data-label-filter="none">Unmarked</button>
+    <button class="filter-chip" data-label-filter="include">Included</button>
+    <button class="filter-chip" data-label-filter="exclude">Excluded</button>
+    <button class="filter-chip" data-label-filter="flag">Flagged</button>
+  </div>` : '';
 
   return `<div class="rail-top">
   <div class="search-wrap">
-    <input type="search" placeholder="Search (press / to focus)" aria-label="Search participants">
+    <input type="search" placeholder="Search ids or signals (press /)" aria-label="Search participants by id or signal"
+           title="Every word must match: part of an id, or a signal the participant has, such as copy, paste, sidebar, tab, zoom, synthetic or pointer">
   </div>
-  <div class="filter-chips">
-    <button class="filter-chip active" data-filter="all">All ${triage.length}</button>
-    <button class="filter-chip" data-filter="hard">Hard ${cohortCounts.hard}</button>
-    <button class="filter-chip" data-filter="soft">Soft ${cohortCounts.soft}</button>
-    <button class="filter-chip" data-filter="clean">Clean ${cohortCounts.clean}</button>
-  </div>
+  <div class="filter-chips" role="group" aria-label="Tier">
+    <button class="filter-chip active" data-filter="all">All <span class="chip-n">${triage.length}</span></button>
+    <button class="filter-chip" data-filter="hard">Hard <span class="chip-n">${cohortCounts.hard}</span></button>
+    <button class="filter-chip" data-filter="soft">Soft <span class="chip-n">${cohortCounts.soft}</span></button>
+    <button class="filter-chip" data-filter="clean">Clean <span class="chip-n">${cohortCounts.clean}</span></button>
+  </div>${labelChips}
   <div class="sort-wrap">
     <label>Sort:
       <select name="sort">
-        <option value="tier" selected>Tier (hard first)</option>
-        <option value="score">Score &darr;</option>
+        <option value="score" selected>Score &darr;</option>
+        <option value="tier">Tier, then score</option>
         <option value="cursor">Pointer verdict &darr;</option>
+        <option value="typing">Typing verdict &darr;</option>
         <option value="id">ID</option>
       </select>
     </label>
@@ -1254,16 +1328,23 @@ function renderCohortList(triage, cohortCounts) {
 //   data-pid:       full participant id (raw, esc'd for HTML)
 //   data-sanitized: filename-safe id (used to look up image filenames)
 //   data-tier:      'hard' | 'soft' | 'clean'
+//                   (hard* rows are 'hard': the filter and the counts)
+//   data-index:     the row's place in triage order; the panes are in that
+//                   order, and the rail may be sorted otherwise
+//   data-report-tier: 'hard' | 'hard*' | 'soft' | 'clean' (triage.js reportTier)
 //   data-score:     numeric score (defaulted to 0 if null/undefined)
 //   data-reason:    pre-lowercased reason string (search reads this so the
 //                   handler doesn't need to lowercase per keystroke)
 //   data-cursor:    the pointer verdict's level, 2…0; -1 when not assessed
 //                   (the 'cursor' sort puts those rows last)
+//   data-typing:    the typing verdict's level, 2…0; -1 when not assessed
+//                   or not analysed (the 'typing' sort puts those rows last)
 // The row's first span is the annotation mark, empty until the report's
 // annotation script (annotation-client.js) sets its label; the tier is read
 // from the badge at the right of the row.
-function renderCohortRow(t) {
+function renderCohortRow(t, i) {
   const tier = tierOf(t);
+  const reportTier = reportTierOf(t);
   const pid = String(t.participantId || '');
   const sanitized = sanitize(pid);
   const score = t.score ?? 0;
@@ -1274,13 +1355,18 @@ function renderCohortRow(t) {
   const ca = t.summary && t.summary.cursorAnalysis;
   // data-cursor: the verdict's level; -1 when not assessed (sorts last).
   const cursorLevel = pointerLevel(ca);
+  const ta = t.summary && t.summary.typingAnalysis;
+  const typingLevel = ta && typeof ta.level === 'number' ? ta.level : -1;
   // The cell: "pointer: " and the verdict; empty without an analysis.
   const cursorCell = !ca ? '' : `pointer: ${esc(ca.verdict)}`;
   return `<div class="cohort-row" data-pid="${esc(pid)}"
+       data-index="${i}"
        data-sanitized="${esc(sanitized)}"
        data-tier="${tier}"
+       data-report-tier="${reportTier}"
        data-score="${score}"
        data-cursor="${cursorLevel}"
+       data-typing="${typingLevel}"
        data-reason="${esc(reasonLower)}">
     <div class="cohort-row-top">
       <span class="annot-mark" data-label=""></span>
@@ -1290,7 +1376,7 @@ function renderCohortRow(t) {
     <div class="cohort-row-bot">
       <span class="reason-excerpt">${esc(reason)}</span>
       <span class="cursor-cell" data-level="${cursorLevel}">${cursorCell}</span>
-      <span class="tier-badge" data-tier="${tier}">${tier === 'clean' ? 'clean' : tier.toUpperCase()}</span>
+      <span class="tier-badge" data-tier="${tier}">${tierText(reportTier)}</span>
     </div>
   </div>`;
 }
@@ -1897,7 +1983,7 @@ function renderDetailHeader(t, tier, participant, config) {
   const s = t.summary || {};
   const cps = (s.meanTypingSpeed || 0).toFixed(1);
   const offTask = formatDuration(s.totalTabAwayDuration_ms || 0);
-  const tierLabel = tier === 'clean' ? 'clean' : tier.toUpperCase();
+  const tierLabel = tierText(reportTierOf(t));
   let platformLine = '';
   if (config?.showPlatformId && config?.platformIdField) {
     const value = getByPath(participant?.metadata, config.platformIdField)
@@ -1952,6 +2038,14 @@ function renderScoreBreakdown(t, config) {
 function scoreWeightsNote(config) {
   const { weights, isDefault } = resolveScoreWeights(config?.scoreWeights);
   return isDefault ? '' : ` &middot; custom score weights: ${esc(customWeightsText(weights))}`;
+}
+
+// Top-bar note, present only when config.hardAt sets a rule: " · hard at:
+// sidebar 2, paste 3" (the report's own hard tier, shown as HARD*).
+function hardAtNote(config) {
+  const { hardAt } = resolveHardAt(config?.hardAt);
+  const keys = Object.keys(hardAt);
+  return keys.length ? ` &middot; hard at: ${esc(keys.map(k => `${k} ${hardAt[k]}`).join(', '))}` : '';
 }
 
 // config.pseudonymize: the ids shown are codes (pseudonymize-core.js), and

@@ -124,7 +124,9 @@ export const ANNOTATION_UI_JS = String.raw`
       var NOTE_SAVE_MS = 400;
       // Rail rows and detail panes are emitted in the same (triage) order, so
       // the i-th pane belongs to the i-th row, whose data-pid is the raw id.
-      var rows = [].slice.call(document.querySelectorAll('.cohort-row'));
+      // The rail may already show another order (it opens sorted by score):
+      // the rows are put back in triage order by their data-index.
+      var rows = [].slice.call(document.querySelectorAll('.cohort-row')).sort(function (a, b) { return a.dataset.index - b.dataset.index; });
       var panes = [].slice.call(document.querySelectorAll('.participant'));
       var ids = rows.map(function (r) { return r.dataset.pid; });
 
@@ -268,8 +270,8 @@ export const ANNOTATION_UI_JS = String.raw`
         var unreviewed = document.createElement('input');
         unreviewed.type = 'checkbox';
         tool('Export CSV', function () {
-          // In triage order, whatever the rail's sort.
-          var exportRows = rows.map(function (r) { return { participantId: r.dataset.pid, tier: r.dataset.tier, triageScore: r.dataset.score }; });
+          // In triage order, whatever the rail's sort. The tier is the report's: hard* for a row Hard at moved.
+          var exportRows = rows.map(function (r) { return { participantId: r.dataset.pid, tier: r.dataset.reportTier || r.dataset.tier, triageScore: r.dataset.score }; });
           download('annotations-' + RUN_ID + '.csv', annotationsCsv(exportRows, state, RUN_ID, unreviewed.checked), 'text/csv');
         });
         tool('Export JSON', function () {
@@ -358,6 +360,8 @@ export const ANNOTATION_UI_JS = String.raw`
           if (document.activeElement !== c.note) c.note.value = a ? a.note : '';
         });
         count.textContent = reviewed + ' of ' + ids.length + ' reviewed';
+        // The rail's label filter reads the marks: tell it they changed.
+        document.dispatchEvent(new window.Event('ch:annotations'));
       }
       render();
 `;
