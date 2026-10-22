@@ -147,16 +147,18 @@ test('the Typing and ID sorts', async ({ page }) => {
   expect(await order(page)).toEqual(['DEMO-681w', 'DEMO-9mop', 'DEMO-a3f3', 'DEMO-bsq6']);
 });
 
-// Words only a signal gives, which no triage reason holds: "mouse" is the
-// pointer verdict's (bsq6 is at level 2; 681w's clean verdict is level 0),
-// "cut" a copy's and "panel" a sidebar event's.
-test('the search finds participants by a signal word no triage reason holds', async ({ page }) => {
+// Words only a signal gives, which no triage reason or id holds, matched by
+// their start: "mous" begins "mouse", the pointer verdict's (bsq6 is at
+// level 2; 681w's clean verdict is level 0), "cut" is a copy's and "pan"
+// begins "panel", a sidebar event's.
+test('the search finds participants by the start of a signal word no triage reason holds', async ({ page }) => {
   await openReport(page);
-  expect(await page.locator('.cohort-row').evaluateAll((rs) => rs.filter((r) => /mouse|cut|panel/.test(r.dataset.reason)).length)).toBe(0);
+  expect(await page.locator('.cohort-row').evaluateAll((rs) => rs.filter((r) =>
+    /mous|cut|pan/.test(r.dataset.reason + ' ' + r.dataset.pid.toLowerCase())).length)).toBe(0);
   const search = page.locator('.search-wrap input');
-  await search.fill('mouse');
+  await search.fill('mous');
   expect(await shown(page)).toEqual(['DEMO-bsq6']);
-  await search.fill('cut panel');
+  await search.fill('cut pan');
   expect(await shown(page)).toEqual(['DEMO-681w']);
 });
 
@@ -412,9 +414,10 @@ for (const width of [1280, 1100, 1099, 721, 720, 375]) {
 }
 
 // At 375px each panel row stacks (the name, the slider, then the three
-// boxes under their captions): the slider's track ends where the boxes do,
-// nothing in a row overlaps, no name is cut, and the dialog does not scroll
-// sideways or pass the window.
+// boxes under their captions): the slider's track ends where the boxes do
+// (neither past their right edge nor short of it), nothing in a row
+// overlaps, no name is cut, and the dialog does not scroll sideways or pass
+// the window.
 test('the dialog at 375px: each slider ends where its boxes do; nothing overlaps, is cut or passes the dialog', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await openReport(page);
@@ -422,7 +425,7 @@ test('the dialog at 375px: each slider ends where its boxes do; nothing overlaps
   await page.evaluate(() => document.fonts.ready);
   const rows = await panelRows(dialog.locator('.wp-row'));
   expect(rows.length).toBe(20);
-  expect(rows.filter((r) => r.pastBoxes > 0.5 || r.pastLeft > 0.5 || r.overlaps || r.cut)).toEqual([]);
+  expect(rows.filter((r) => Math.abs(r.pastBoxes) > 0.5 || r.pastLeft > 0.5 || r.overlaps || r.cut)).toEqual([]);
   expect(await dialog.evaluate((d) => {
     const r = d.getBoundingClientRect();
     return [d.scrollWidth <= d.clientWidth, r.left >= 0 && r.right <= window.innerWidth];

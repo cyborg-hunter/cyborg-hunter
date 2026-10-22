@@ -195,7 +195,8 @@ export async function railOrder(page) {
 }
 // The weights panel's rows (src/cli/renderers/weights-panel.js) as laid
 // out: for each, how far its slider passes its boxes' right edge (the Hard
-// at box is the last) or the row's left edge, how many pairs of its parts
+// at box is the last; negative when it stops short of it) or the row's left
+// edge (negative when it starts inside the row), how many pairs of its parts
 // (name, slider, the three boxes) overlap, and whether the name's text is
 // cut. Await document.fonts.ready first. Used by the CLI report's dialog
 // and the analyzer's settings, which hold the same panel.

@@ -57,14 +57,15 @@ test('Hard at in the settings moves participants into HARD* in the report frame,
   await assertOnlyAllowed(page, seen, allow);
 });
 
-// "cut" (a copy) and "panel" (a sidebar event) are words only a signal
-// gives: no participant's triage reason holds them.
-test('the report frame\'s search finds participants by a signal word', async ({ page, baseURL }) => {
+// "cut" (a copy) and "pan", the start of "panel" (a sidebar event), are
+// found only through the signals' words, matched by their start: no
+// participant's triage reason or id holds them.
+test('the report frame\'s search finds participants by the start of a signal word', async ({ page, baseURL }) => {
   const { allow, seen } = await ready(page, baseURL);
   const frame = reportFrame(page);
   const rows = frame.locator('.cohort-row');
-  expect(await rows.evaluateAll((rs) => rs.filter((r) => /cut|panel/.test(r.dataset.reason)).length)).toBe(0);
-  await frame.locator('.search-wrap input').fill('cut panel');
+  expect(await rows.evaluateAll((rs) => rs.filter((r) => /cut|pan/.test(r.dataset.reason + ' ' + r.dataset.pid.toLowerCase())).length)).toBe(0);
+  await frame.locator('.search-wrap input').fill('cut pan');
   await expect.poll(() => rows.evaluateAll((rs) => rs.filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.pid)))
     .toEqual(['DEMO-681w']);
   await assertOnlyAllowed(page, seen, allow);
@@ -72,8 +73,9 @@ test('the report frame\'s search finds participants by a signal word', async ({ 
 
 // The settings show from the first check on. At 375px each panel row
 // stacks (the name, the slider, then the three boxes under their captions):
-// the slider's track ends where the boxes do, nothing in a row overlaps, no
-// name is cut, and the page does not scroll sideways.
+// the slider's track ends where the boxes do (neither past their right edge
+// nor short of it), nothing in a row overlaps, no name is cut, and the page
+// does not scroll sideways.
 test('the settings at 375px: each slider ends where its boxes do; nothing overlaps or is cut', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
   const seen = await guardNetwork(page, allow);
@@ -84,7 +86,7 @@ test('the settings at 375px: each slider ends where its boxes do; nothing overla
   await page.evaluate(() => document.fonts.ready);
   const rows = await panelRows(page.locator('[data-role="settings-form"] .wp-row'));
   expect(rows.length).toBe(20);
-  expect(rows.filter((r) => r.pastBoxes > 0.5 || r.pastLeft > 0.5 || r.overlaps || r.cut)).toEqual([]);
+  expect(rows.filter((r) => Math.abs(r.pastBoxes) > 0.5 || r.pastLeft > 0.5 || r.overlaps || r.cut)).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   await assertOnlyAllowed(page, seen, allow);
 });
