@@ -274,10 +274,12 @@ export function wireWeightsPanel(root, cfg) {
 }
 
 // The CLI report's "Weights…" dialog: the panel at the report's values (the
-// rail data, #ch-rail-data), opened by the top bar's button. Every edit
+// rail data, #ch-rail-data), opened by the top bar's button and closed by its
+// Close button or Escape, which hands focus back to the button. Every edit
 // re-scores and re-tiers each row from its counts with the functions the CLI
 // ranked with (scoreFromCounts, reportTierFromCounts) and hands the rows, in
-// triage order, to the rail (html-index-core.js listens for ch:rescore).
+// triage order, to the rail (html-index-core.js listens for ch:rescore). While
+// the values differ from the report's, the button reads "Weights… (edited)".
 export function chBootWeightsDialog(doc) {
   var dataEl = doc.getElementById('ch-rail-data');
   var dialog = doc.getElementById('weights-dialog');
@@ -299,6 +301,24 @@ export function chBootWeightsDialog(doc) {
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
   });
+  dialog.querySelector('.wd-close').addEventListener('click', function () {
+    if (typeof dialog.close === 'function') dialog.close();
+    else dialog.removeAttribute('open');
+  });
+  // WebKit leaves the focus on the closed dialog; the other engines already
+  // put it back on the button.
+  dialog.addEventListener('close', function () { button.focus(); });
+  // Whether a state differs from the report's values as the score reads
+  // them: a weight, a cap on a signal that has points, or a Hard at count.
+  function edited(st) {
+    for (var i = 0; i < signals.length; i++) {
+      var s = signals[i];
+      var w = st.weights[i];
+      if (w.weight !== s.weight || st.hardAt[i] !== s.hardAt) return true;
+      if (w.weight !== 0 && w.max !== s.max) return true;
+    }
+    return false;
+  }
   function rescore() {
     var st = panel.read();
     var rows = data.rows.map(function (r, j) {
@@ -312,6 +332,7 @@ export function chBootWeightsDialog(doc) {
       }
       return { score: scoreFromCounts(c, st.weights), reportTier: reportTierFromCounts(r.lib, c, st.hardAt), terms: terms };
     });
+    button.textContent = edited(st) ? 'Weights\u2026 (edited)' : 'Weights\u2026';
     doc.dispatchEvent(new doc.defaultView.CustomEvent('ch:rescore', { detail: { rows: rows } }));
   }
 }

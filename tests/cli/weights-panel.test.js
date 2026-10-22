@@ -365,13 +365,15 @@ describe('the panel, run from the source the report inlines', () => {
     assert.equal(q('.wp-status').textContent, 'Copied.');
   });
 
-  // The report's dialog over a page's rail data, with the inlined script run
-  // as the page runs it (its boot call included); `edit` is called with the
-  // window once the script is wired. Returns the rows of the last ch:rescore.
+  // The report's dialog over a page's rail data (its Close button and the
+  // panel), with the inlined script run as the page runs it (its boot call
+  // included); `edit` is called with the window once the script is wired.
+  // Returns the rows of the last ch:rescore.
   function dialog(triage, config, edit) {
     const data = railData(triage, config);
     const signals = panelSignals(resolveScoreWeights(config.scoreWeights).weights, resolveHardAt(config.hardAt).hardAt);
-    const win = dom(`<button class="weights-btn">Weights…</button><dialog id="weights-dialog">${weightsPanelHtml(signals)}</dialog>` +
+    const win = dom(`<button class="weights-btn">Weights…</button><dialog id="weights-dialog">` +
+      `<button type="button" class="wd-close">Close</button>${weightsPanelHtml(signals)}</dialog>` +
       `<script type="application/json" id="ch-rail-data">${JSON.stringify(data)}</script>`);
     const got = [];
     win.document.addEventListener('ch:rescore', (e) => got.push(e.detail.rows));

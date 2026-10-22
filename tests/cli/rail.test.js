@@ -254,18 +254,29 @@ describe('the rail markup', () => {
 
   // With the Weights… button the CLI report's top bar holds two buttons:
   // one height (the Legend's ⓘ comes from a fallback face with a taller
-  // line), each label on one line, and on a narrow window the run line on a
-  // row of its own with the buttons under it. The in-page report keeps its
-  // one button's top bar as it was.
-  it('the CLI report\'s top bar: two buttons of one height, labels on one line, the run line on its own row on a phone', async () => {
+  // line) and each label on one line. Below 1100 px the run line takes a row
+  // of its own: under the title and the buttons on a tablet, between them on
+  // a phone (720 px and under), where the buttons' padding and gap shrink so
+  // both share a row. From 1100 px a sample run line with a Hard at rule
+  // holds two lines beside "Weights… (edited)" in all three engines. The
+  // in-page report keeps its one button's top bar as it was.
+  it('the CLI report\'s top bar: two buttons of one height, labels on one line, the run line on its own row below 1100 px', async () => {
     const css = (html) => [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+    // The rules inside every block of one media query, in order.
+    const media = (text, query) => [...text.matchAll(new RegExp(query.replace(/[()]/g, '\\$&') + ' \\{([\\s\\S]*?\\})\\s*\\}', 'g'))]
+      .flatMap((m) => parseRules(m[1]));
     const { triage, html } = await page({});
     const cli = css(html);
     assert.deepEqual(['white-space', 'line-height'].map((p) => lastProp(parseRules(cli), '.topbar button', p)), ['nowrap', '24px']);
-    assert.match(cli, /@media \(max-width: 720px\) \{ \.topbar \.meta \{ flex-basis: 100%; \} \}/);
+    const phone = media(cli, '@media (max-width: 720px)');
+    assert.deepEqual([lastProp(phone, '.topbar .meta', 'flex-basis'), lastProp(phone, '.topbar', 'column-gap'),
+      lastProp(phone, '.topbar button', 'padding')], ['100%', '8px', '6px 8px']);
+    const tablet = media(cli, '@media (min-width: 721px) and (max-width: 1099px)');
+    assert.deepEqual([lastProp(tablet, '.topbar', 'flex-wrap'), lastProp(tablet, '.topbar h1', 'flex'),
+      lastProp(tablet, '.topbar .meta', 'order'), lastProp(tablet, '.topbar .meta', 'flex-basis')], ['wrap', '1 1 0', '1', '100%']);
     const inPage = css(await renderIndexHtml(SUMMARIES, triage, [], {}, false, { imageSources: {} }));
     assert.deepEqual(['white-space', 'line-height'].map((p) => lastProp(parseRules(inPage), '.topbar button', p)), [null, null]);
-    assert.doesNotMatch(inPage, /\.topbar \.meta \{ flex-basis/);
+    assert.doesNotMatch(inPage, /\.topbar \.meta \{ (flex-basis|order)|max-width: 1099px|column-gap/);
   });
 
   // The dialog changes the page only: its text says that the report's files
@@ -434,8 +445,9 @@ describe('the Weights… dialog re-scores, re-tiers and re-sorts the rail', () =
 
   // After an edit, each row's score and report tier are scoreFromCounts and
   // reportTierFromCounts over its counts at the dialog's values, which are
-  // what a CLI run with the copied config ranks (rankTriage); the rail is
-  // sorted by score again and the counts follow.
+  // what a CLI run ranks (rankTriage) with the lines the dialog's Copy config
+  // gives (here the clipboard is refused, so they are read from the box it
+  // fills); the rail is sorted by score again and the counts follow.
   it('after an edit the rail\'s scores and tiers are the functions\' at the new values, sorted, and counted', async () => {
     const { triage, doc, edit } = await runPage(SUMMARIES, EDGE, RUN);
     edit('[data-weight="sidebar"]', '20');
@@ -443,7 +455,10 @@ describe('the Weights… dialog re-scores, re-tiers and re-sorts the rail', () =
     const data = railData(triage, RUN);
     const weights = data.signals.map((s) => (s.key === 'sidebar' ? { weight: 20, max: null } : { weight: s.weight, max: s.max }));
     const hardAt = data.signals.map((s) => (s.key === 'sidebar' ? 1 : s.hardAt));
-    const next = rankTriage(SUMMARIES, EDGE, { scoreWeights: { ...RUN.scoreWeights, sidebar: 20 }, hardAt: { ...RUN.hardAt, sidebar: 1 } });
+    doc.querySelector('#weights-dialog [data-action="weights-copy"]').click();
+    const copied = JSON.parse(doc.querySelector('#weights-dialog .wp-config').textContent);
+    assert.deepEqual(copied.hardAt, { ...RUN.hardAt, sidebar: 1 }, 'the copied lines hold the edit');
+    const next = rankTriage(SUMMARIES, EDGE, copied);
     const panes = [...doc.querySelectorAll('.participant')];
     for (const row of doc.querySelectorAll('.cohort-row')) {
       const i = +row.dataset.index;
@@ -504,6 +519,69 @@ describe('the Weights… dialog re-scores, re-tiers and re-sorts the rail', () =
     assert.ok(lines.some(([id, tier, score]) => id === 'S-1' && tier === 'soft' && score === '4.5'));
     button('Export JSON').click();
     assert.deepEqual(Object.keys(JSON.parse(blobs[1].text)), ['format', 'runId', 'exportedAt', 'annotations']);
+  });
+
+  // Close closes the dialog whatever its boxes hold. The panel reads a box
+  // more leniently than the browser's own checks of its min and step (a cap
+  // of 2.5 is 2, Hard at 0 is none, points under 0 are the default), and
+  // those checks run when a form is submitted: so nothing in the dialog
+  // submits. Enter in a box does nothing, and the values it holds stay
+  // applied. Focus goes back to the Weights… button (WebKit leaves it on the
+  // closed dialog otherwise).
+  it('Close closes the dialog whatever a box holds; Enter leaves it open with the values applied; focus returns to the button', async () => {
+    const { win, doc, edit } = await runPage(SUMMARIES, EDGE, RUN);
+    const dialogEl = doc.getElementById('weights-dialog');
+    assert.equal(dialogEl.querySelectorAll('form, button[type="submit"], button:not([type]), input[type="submit"]').length, 0,
+      'nothing in the dialog submits');
+    const opener = doc.querySelector('.weights-btn');
+    opener.click();
+    assert.ok(dialogEl.open, 'the button opens it');
+    edit('[data-max="copy"]', '2.5');
+    edit('[data-hard="sidebar"]', '0');
+    edit('[data-weight="paste"]', '-1');
+    const box = dialogEl.querySelector('[data-max="copy"]');
+    box.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    assert.ok(dialogEl.open, 'Enter leaves it open');
+    // H-1: 2 pastes at the default 5, and 4 copies capped at 2, at 2 points.
+    assert.equal(doc.querySelector('.cohort-row[data-pid="H-1"] .score').textContent, '14');
+    dialogEl.querySelector('.wd-close').click();
+    assert.equal(dialogEl.open, false, 'Close closes it');
+    // (A boolean: a failing equal on two elements prints both whole.)
+    assert.ok(doc.activeElement === opener, 'focus is back on the button');
+    assert.equal(doc.querySelector('.cohort-row[data-pid="H-1"] .score').textContent, '14', 'the values stay applied');
+  });
+
+  // While the dialog's values differ from the run's, the button says so. The
+  // values are compared as the re-score reads them (a box's number, not its
+  // text; a cap on a signal at 0 points changes no score), not by whether a
+  // box was touched.
+  it('the Weights… button reads "Weights… (edited)" while the dialog\'s values differ from the run\'s', async () => {
+    const { doc, edit } = await runPage(SUMMARIES, EDGE, RUN);
+    const label = () => doc.querySelector('.weights-btn').textContent;
+    assert.equal(label(), 'Weights…', 'on load');
+    edit('[data-weight="sidebar"]', '20');
+    assert.equal(label(), 'Weights… (edited)');
+    edit('[data-weight="sidebar"]', '3');
+    assert.equal(label(), 'Weights…', 'the run\'s value again');
+    edit('[data-hard="cursor"]', '');
+    assert.equal(label(), 'Weights… (edited)', 'the run\'s Hard at rule cleared');
+    edit('[data-hard="cursor"]', '2.0');
+    edit('[data-max="copy"]', '3.0');
+    assert.equal(label(), 'Weights…', 'the same numbers, written otherwise');
+    edit('[data-max="zoom"]', '2');
+    assert.equal(label(), 'Weights…', 'a cap on a signal at 0 points');
+    doc.querySelector('#weights-dialog [data-action="weights-reset"]').click();
+    assert.equal(label(), 'Weights… (edited)', 'the defaults are not this run\'s values');
+  });
+
+  it('after Reset to defaults the mark goes when the run used the defaults', async () => {
+    const { doc, edit } = await runPage(SUMMARIES, EDGE, {});
+    const label = () => doc.querySelector('.weights-btn').textContent;
+    edit('[data-weight="paste"]', '6');
+    edit('[data-hard="paste"]', '2');
+    assert.equal(label(), 'Weights… (edited)');
+    doc.querySelector('#weights-dialog [data-action="weights-reset"]').click();
+    assert.equal(label(), 'Weights…');
   });
 
   // The dialog is modal: while it is open the keys belong to it. With the

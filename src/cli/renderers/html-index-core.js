@@ -2147,11 +2147,24 @@ const WEIGHTS_DIALOG_CSS = WEIGHTS_PANEL_CSS + `
       color: var(--ink); cursor: pointer; font-family: var(--ff-recursive); font-size: 13px; }
     /* The top bar holds two buttons here, Weights… and Legend: one height for
        both (a set line box: the ⓘ comes from a fallback face, which stood the
-       Legend 5px taller), a label on one line (squeezed, "Legend ⓘ" broke in
-       two), and on a narrow window the run line takes a row of its own, the
-       buttons the next. */
+       Legend 5px taller) and a label on one line (squeezed, "Legend ⓘ" broke
+       in two). Below 1100px the run line takes a row of its own: under the
+       title and the buttons, or on a phone between them. From 1100px a run
+       line with a Hard at rule keeps to two lines beside "Weights… (edited)",
+       with some 20px to spare (narrower, beside the buttons, it ran to
+       seven). On a phone the buttons' padding and gap are smaller, so both
+       fit on one row at 360px, the edited label included. */
     .topbar button { white-space: nowrap; line-height: 24px; }
-    @media (max-width: 720px) { .topbar .meta { flex-basis: 100%; } }
+    @media (min-width: 721px) and (max-width: 1099px) {
+      .topbar { flex-wrap: wrap; row-gap: 8px; }
+      .topbar h1 { flex: 1 1 0; }
+      .topbar .meta { order: 1; flex-basis: 100%; }
+    }
+    @media (max-width: 720px) {
+      .topbar { column-gap: 8px; }
+      .topbar .meta { flex-basis: 100%; }
+      .topbar button { padding: 6px 8px; }
+    }
 `;
 
 // The Weights… dialog: the shared panel at this report's weights and Hard at
@@ -2159,16 +2172,20 @@ const WEIGHTS_DIALOG_CSS = WEIGHTS_PANEL_CSS + `
 // (weights-panel.js chBootWeightsDialog, and the 'ch:rescore' listener in the
 // page's script); the report's files, and its annotation exports when it has
 // annotation controls (`annotations`), keep the weights it was built with.
+// No form: a submit would run the browser's checks of each box's min and
+// step, which the panel reads more leniently (a cap of 2.5 is 2), and refuse
+// to close. Close is a plain button (chBootWeightsDialog closes the dialog),
+// Enter in a box does nothing, and Escape closes it as any modal dialog.
 function weightsDialogHtml(config, annotations) {
   const signals = panelSignals(resolveScoreWeights(config?.scoreWeights).weights, resolveHardAt(config?.hardAt).hardAt);
   const kept = annotations ? 'This report\'s files and its annotation exports keep' : 'This report\'s files keep';
   return `
   <dialog id="weights-dialog" aria-labelledby="weights-title">
-    <form method="dialog" class="wd">
-      <div class="wd-head"><h3 id="weights-title">Score weights</h3><button type="submit" class="wd-close">Close</button></div>
+    <div class="wd">
+      <div class="wd-head"><h3 id="weights-title">Score weights</h3><button type="button" class="wd-close">Close</button></div>
       <p class="wd-lede">Points per event: a participant's score is the sum, over the signals, of points × events (up to the cap). A weight of 0 leaves a signal out. <b>Hard at</b> moves anyone with that many events or more into the hard tier, shown as HARD*. The list re-scores and re-sorts as you change them. ${kept} the weights it was built with; <b>Copy config</b> gives the lines for cyborg-hunter.config.json, so the next CLI run builds the same list.</p>
       ${weightsPanelHtml(signals)}
-    </form>
+    </div>
   </dialog>`;
 }
 
