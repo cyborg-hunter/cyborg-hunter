@@ -38,6 +38,8 @@
 //   waitReady / loadSample / buildReport / railOrder / reportFrame /
 //   reportSelected / downloadZip   the page's steps, through its
 //                     data-action/data-role hooks.
+//   panelRows         the weights panel's rows as laid out (slider edge,
+//                     overlaps, cut names), in either page.
 //   sampleFiles / cliSampleTree   the bundled sessions (examples/demo-sessions)
 //                     as dropped files, and the CLI's report tree for them.
 //   startSentinel / makeReplayCohort   a counting local server, and a
@@ -190,6 +192,30 @@ export async function railOrder(page) {
       if (attempt >= 5 || !/Execution context was destroyed|detached|navigation/i.test(String(e))) throw e;
     }
   }
+}
+// The weights panel's rows (src/cli/renderers/weights-panel.js) as laid
+// out: for each, how far its slider passes its boxes' right edge (the Hard
+// at box is the last) or the row's left edge, how many pairs of its parts
+// (name, slider, the three boxes) overlap, and whether the name's text is
+// cut. Await document.fonts.ready first. Used by the CLI report's dialog
+// and the analyzer's settings, which hold the same panel.
+export function panelRows(rows) {
+  return rows.evaluateAll((els) => els.map((row) => {
+    const box = (el) => el.getBoundingClientRect();
+    const slider = box(row.querySelector('input[type=range]'));
+    const name = row.querySelector('.wp-name');
+    const parts = [name, row.querySelector('input[type=range]'), ...row.querySelectorAll('.wp-box')].map(box);
+    let overlaps = 0;
+    for (let i = 0; i < parts.length; i++) {
+      for (let j = i + 1; j < parts.length; j++) {
+        const a = parts[i];
+        const b = parts[j];
+        if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) overlaps++;
+      }
+    }
+    return { key: row.querySelector('[data-slider]').dataset.slider, pastBoxes: slider.right - box(row.querySelector('[data-hard]')).right,
+      pastLeft: box(row).left - slider.left, overlaps, cut: name.scrollWidth > name.clientWidth };
+  }));
 }
 export async function downloadZip(page) {
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="download-zip"]')]);
