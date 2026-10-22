@@ -97,4 +97,14 @@ describe('buildReport', () => {
     assert.deepEqual(built.triage.map((t) => t.reportTier), ['clean', 'clean']);
     assert.equal(logs.some((l) => /hardAt/.test(l)), false, logs.join('\n'));
   });
+
+  // The counts the analyzer's results line prints: the report's tiers, hard*
+  // counted with hard (as the rail counts them), and how many hard* there
+  // are, beside the library's tiers, which the console prints.
+  it('counts: the report\'s tiers with hard* in hard, and how many hard* there are, beside the library\'s', async () => {
+    assert.deepEqual((await build({ hardAt: { typingRhythm: 2 } })).built.counts,
+      { flaggedHard: 0, flaggedSoft: 0, clean: 2, reportHard: 1, reportSoft: 0, reportClean: 1, movedHard: 1 });
+    assert.deepEqual((await build({})).built.counts,
+      { flaggedHard: 0, flaggedSoft: 0, clean: 2, reportHard: 0, reportSoft: 0, reportClean: 2, movedHard: 0 });
+  });
 });

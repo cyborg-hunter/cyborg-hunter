@@ -55,7 +55,11 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
 // CHECKED.config with the settings panel's keys at their defaults: what a run sends.
 const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, hardAt: null, scoring: null,
   integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false, pseudonymize: false };
-const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
+// counts: the library's tiers (flaggedHard, flaggedSoft, clean), and the
+// report's (reportHard, reportSoft, reportClean), which count hard* with hard;
+// movedHard is how many hard* rows a Hard at rule made.
+const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'],
+  counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1, reportHard: 1, reportSoft: 0, reportClean: 1, movedHard: 0 },
   cursorLine: 'Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 0 not assessed (2 sessions; 0 recorded without device facts)',
   participants: [{ participantId: 'A', hasReplay: false, assetNote: null }, { participantId: 'B', hasReplay: true, assetNote: '1 of 2 stylesheets matched' }],
   warnings: [], reportWarnings: [], files: { 'summary.csv': 'a', 'triage.md': 'b', 'event-log.csv': 'c' }, configUsed: {}, zipBytes: 2048 };
@@ -482,6 +486,20 @@ test('done → results: summary, sandboxed report frame, zip blob, replay dropdo
   assert.deepEqual(opts.map((o) => [o.value, o.disabled]), [['A', true], ['B', false]]);
   assert.equal(document.querySelector('[data-role="replay-select"]').value, 'B');
   assert.equal(role('asset-note').textContent, '1 of 2 stylesheets matched');
+});
+
+// With a Hard at rule the summary counts as the report's rail does: hard*
+// with hard, and says how many the rule added. The library's tiers (2 hard,
+// 1 soft, 1 clean) are not the line's.
+test('the summary counts hard* with hard and says how many Hard at added', async () => {
+  const t = boot();
+  await toCheck(t);
+  action('run').click();
+  await tick();
+  t.emit({ ...DONE, triageOrder: ['A', 'B', 'C', 'D'],
+    counts: { flaggedHard: 2, flaggedSoft: 1, clean: 1, reportHard: 4, reportSoft: 0, reportClean: 0, movedHard: 2 } });
+  await tick();
+  assert.equal(role('summary').textContent, '4 participants: 4 hard (2 by Hard at), 0 soft, 0 clean. Zip: 2 KB.');
 });
 
 test('a replay is requested on demand and mounted in a same-origin host frame', async () => {

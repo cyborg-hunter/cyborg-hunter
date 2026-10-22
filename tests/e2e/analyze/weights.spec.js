@@ -4,7 +4,8 @@
 // moves its number box, and its release re-ranks the report (a sidebar
 // weight of 20 gives 681w 30 and a3f3 28; 9mop and bsq6 have no sidebar
 // event); Hard at moves participants into HARD* in the report frame, which
-// has no Weights… dialog of its own; the frame's search finds participants
+// has no Weights… dialog of its own, and the results line counts them with
+// hard, as the rail does; the frame's search finds participants
 // by a signal word; at 375px each slider ends where its boxes do. Every
 // test runs under the request guard of engines.spec.js.
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame,
@@ -52,6 +53,9 @@ test('Hard at in the settings moves participants into HARD* in the report frame,
   await expect(frame.locator('.cohort-row[data-pid="DEMO-a3f3"] .tier-badge')).toHaveText('HARD*');
   await expect(frame.locator('.cohort-row[data-pid="DEMO-9mop"] .tier-badge')).toHaveText('HARD');
   await expect(frame.locator('.filter-chip[data-filter="hard"] .chip-n')).toHaveText('4');
+  // The results line above the frame counts as the rail does (the library's
+  // tiers are 2 hard, 1 soft, 1 clean).
+  await expect(page.locator('[data-role="summary"]')).toContainText('4 participants: 4 hard (2 by Hard at), 0 soft, 0 clean.');
   await expect(frame.locator('.weights-btn')).toHaveCount(0);
   await expect(frame.locator('#weights-dialog')).toHaveCount(0);
   await assertOnlyAllowed(page, seen, allow);

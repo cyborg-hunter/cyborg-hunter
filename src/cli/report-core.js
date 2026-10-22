@@ -176,6 +176,11 @@ export async function buildReport(participants, config, deps) {
   const flaggedHard = triage.filter(t => t.hardTriggered).length;
   const flaggedSoft = triage.filter(t => !t.hardTriggered && t.softFlagged).length;
   const clean = triage.length - flaggedHard - flaggedSoft;
+  // The report's tiers (reportTier), hard* counted with hard as the page's
+  // rail counts them: the analyzer's results line prints these.
+  const reportHard = triage.filter(t => t.reportTier === 'hard' || t.reportTier === 'hard*').length;
+  const reportSoft = triage.filter(t => t.reportTier === 'soft').length;
+  const reportClean = triage.filter(t => t.reportTier === 'clean').length;
 
   // Two DIFFERENT numbers live in this report and used to share the word
   // "flagged": the tier counts below come from the LIBRARY's two-tier
@@ -354,9 +359,10 @@ export async function buildReport(participants, config, deps) {
   log('  index.html — report page');
 
   // participants: the ones the report shows (`shown`, above), in the
-  // input's order.
+  // input's order. counts: the library's tiers (the console's three lines)
+  // and the report's, with how many hard* a Hard at rule made.
   return { summaries, triage, triageOrder: triage.map(t => t.participantId),
-    counts: { flaggedHard, flaggedSoft, clean }, visualsRendered, replayAssets, warnings, images, runId, generatedAt, cursorLine,
+    counts: { flaggedHard, flaggedSoft, clean, reportHard, reportSoft, reportClean, movedHard }, visualsRendered, replayAssets, warnings, images, runId, generatedAt, cursorLine,
     participants: shown };
 }
 

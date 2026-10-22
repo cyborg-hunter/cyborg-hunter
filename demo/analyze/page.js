@@ -597,8 +597,12 @@ export function createPage(root, worker, opts) {
     state.zipUrl = URL.createObjectURL(new Blob(state.zipParts, { type: 'application/zip' }));
     updateControls();
     goTo('results');
-    q(root, 'summary').textContent = done.triageOrder.length + ' participants: ' + done.counts.flaggedHard + ' hard, ' +
-      done.counts.flaggedSoft + ' soft, ' + done.counts.clean + ' clean. Zip: ' + Math.round(done.zipBytes / 1024) + ' KB.';
+    // The report's tiers, as its rail counts them (hard* with hard), and how
+    // many of the hard a Hard at rule added, when it added any.
+    var counts = done.counts;
+    q(root, 'summary').textContent = done.triageOrder.length + ' participants: ' + counts.reportHard + ' hard' +
+      (counts.movedHard > 0 ? ' (' + counts.movedHard + ' by Hard at)' : '') + ', ' +
+      counts.reportSoft + ' soft, ' + counts.reportClean + ' clean. Zip: ' + Math.round(done.zipBytes / 1024) + ' KB.';
     q(root, 'cursor-line').textContent = done.cursorLine || '';
     listWarnings(q(root, 'run-warnings'), done.warnings.concat(done.reportWarnings));
     // The participant the last report had selected, if this one lists them:
