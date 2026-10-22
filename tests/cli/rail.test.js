@@ -553,8 +553,8 @@ describe('the Weights… dialog re-scores, re-tiers and re-sorts the rail', () =
 
   // While the dialog's values differ from the run's, the button says so. The
   // values are compared as the re-score reads them (a box's number, not its
-  // text; a cap on a signal at 0 points changes no score), not by whether a
-  // box was touched.
+  // text), not by whether a box was touched; a cap counts even on a signal
+  // at 0 points, since Copy config writes it.
   it('the Weights… button reads "Weights… (edited)" while the dialog\'s values differ from the run\'s', async () => {
     const { doc, edit } = await runPage(SUMMARIES, EDGE, RUN);
     const label = () => doc.querySelector('.weights-btn').textContent;
@@ -569,7 +569,9 @@ describe('the Weights… dialog re-scores, re-tiers and re-sorts the rail', () =
     edit('[data-max="copy"]', '3.0');
     assert.equal(label(), 'Weights…', 'the same numbers, written otherwise');
     edit('[data-max="zoom"]', '2');
-    assert.equal(label(), 'Weights…', 'a cap on a signal at 0 points');
+    assert.equal(label(), 'Weights… (edited)', 'a cap on a signal at 0 points');
+    edit('[data-max="zoom"]', '');
+    assert.equal(label(), 'Weights…');
     doc.querySelector('#weights-dialog [data-action="weights-reset"]').click();
     assert.equal(label(), 'Weights… (edited)', 'the defaults are not this run\'s values');
   });

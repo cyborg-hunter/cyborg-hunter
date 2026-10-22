@@ -308,14 +308,14 @@ export function chBootWeightsDialog(doc) {
   // WebKit leaves the focus on the closed dialog; the other engines already
   // put it back on the button.
   dialog.addEventListener('close', function () { button.focus(); });
-  // Whether a state differs from the report's values as the score reads
-  // them: a weight, a cap on a signal that has points, or a Hard at count.
+  // Whether a state differs from the report's values: a weight, a cap or a
+  // Hard at count, each read as the score reads it (a box's number, not its
+  // text), as Copy config would write it.
   function edited(st) {
     for (var i = 0; i < signals.length; i++) {
       var s = signals[i];
       var w = st.weights[i];
-      if (w.weight !== s.weight || st.hardAt[i] !== s.hardAt) return true;
-      if (w.weight !== 0 && w.max !== s.max) return true;
+      if (w.weight !== s.weight || w.max !== s.max || st.hardAt[i] !== s.hardAt) return true;
     }
     return false;
   }
