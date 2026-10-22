@@ -63,11 +63,11 @@ export default defineConfig({
     },
     // The analyze page: the full flow on Chromium; the zero-network, sample
     // and offline-file checks (engines.spec.js), the policy's own refusals
-    // (policy.spec.js) and a hostile recording's replay (hostile.spec.js) on
-    // all three engines.
+    // (policy.spec.js), a hostile recording's replay (hostile.spec.js) and
+    // the settings' weights panel (weights.spec.js) on all three engines.
     { name: 'analyze-chromium', testDir: 'tests/e2e/analyze', use: { ...devices['Desktop Chrome'] } },
-    { name: 'analyze-firefox',  testDir: 'tests/e2e/analyze', testMatch: /(engines|policy|hostile)\.spec\.js/, use: { ...devices['Desktop Firefox'] } },
-    { name: 'analyze-webkit',   testDir: 'tests/e2e/analyze', testMatch: /(engines|policy|hostile)\.spec\.js/, use: { ...devices['Desktop Safari'] } },
+    { name: 'analyze-firefox',  testDir: 'tests/e2e/analyze', testMatch: /(engines|policy|hostile|weights)\.spec\.js/, use: { ...devices['Desktop Firefox'] } },
+    { name: 'analyze-webkit',   testDir: 'tests/e2e/analyze', testMatch: /(engines|policy|hostile|weights)\.spec\.js/, use: { ...devices['Desktop Safari'] } },
     // The CLI report's replay viewer, opened from file:// (no server): it
     // requests none of a recording's media, on all three engines.
     { name: 'report-chromium', testDir: 'tests/e2e/report', use: { ...devices['Desktop Chrome'] } },
