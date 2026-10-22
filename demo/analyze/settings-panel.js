@@ -14,7 +14,7 @@
 // The phase scope and the trajectory order are left to the CLI: the panel
 // neither shows nor edits them, and a dropped config that sets them keeps
 // them, in every run and in the export (configFromSettings).
-import { SCORE_SIGNALS, resolveScoreWeights } from '../../src/cli/analyzers/score-weights.js';
+import { SCORE_SIGNALS, resolveScoreWeights, resolveHardAt } from '../../src/cli/analyzers/score-weights.js';
 import { panelSignals, weightsPanelHtml, wireWeightsPanel, weightsConfig, WEIGHTS_PANEL_CSS } from '../../src/cli/renderers/weights-panel.js';
 
 // The keys whose change needs the files read again; the panel's others
@@ -57,11 +57,13 @@ function panelWeights(scoreWeights) {
   return SCORE_SIGNALS.map(function (sig) { return { weight: resolved[sig.key].weight, max: resolved[sig.key].max }; });
 }
 
-// One signal's Hard at count as the panel shows it, from a config's hardAt:
-// a whole number from 1, else none (resolveHardAt warns about the rest).
-function resolveHardAtCount(hardAt, sig) {
-  var h = hardAt && typeof hardAt === 'object' ? hardAt[sig.key] : null;
-  return Number.isInteger(h) && h >= 1 ? h : null;
+// Each signal's Hard at count as the panel shows it, in SCORE_SIGNALS order,
+// from a config's hardAt resolved as the CLI resolves it (resolveHardAt): a
+// count the CLI ignores, with a warning, shows none, so the panel never holds
+// a count the run would not apply.
+function panelHardAt(hardAt) {
+  var resolved = resolveHardAt(hardAt).hardAt;
+  return SCORE_SIGNALS.map(function (sig) { return resolved[sig.key] != null ? resolved[sig.key] : null; });
 }
 
 /**
@@ -75,8 +77,7 @@ function resolveHardAtCount(hardAt, sig) {
  * takes the newer config's, through configFromSettings).
  */
 export function settingsKey(s) {
-  return JSON.stringify([panelWeights(s.scoreWeights),
-    SCORE_SIGNALS.map(function (sig) { return resolveHardAtCount(s.hardAt, sig); }),
+  return JSON.stringify([panelWeights(s.scoreWeights), panelHardAt(s.hardAt),
     s.softScoreThreshold, s.integrityField, s.sessionIntegrityPath, s.platformIdField, s.showPlatformId, s.pseudonymize]);
 }
 
@@ -158,7 +159,7 @@ export function createSettingsPanel(container, onChange) {
       field('pseudonymize').checked = !!s.pseudonymize;
       weights.write({
         weights: panelWeights(s.scoreWeights),
-        hardAt: SCORE_SIGNALS.map(function (sig) { return resolveHardAtCount(s.hardAt, sig); }),
+        hardAt: panelHardAt(s.hardAt),
       });
     },
     read: function () {

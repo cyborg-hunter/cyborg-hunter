@@ -187,9 +187,10 @@ test('a setting on the results re-analyses in place: no file is read again, and 
 
 // The weights panel is the CLI report's too, in that report's dress; in the
 // settings it wears the page's own: Reset to defaults as Export config, the
-// number boxes with the page's field corners. Export config writes the whole
-// file, so the panel's Copy config is not offered here.
-test('the settings\' weights panel wears the page\'s buttons and field corners, and offers no Copy config', async ({ page, baseURL }) => {
+// number boxes as the page's other fields (font, fill, padding, border,
+// corners). Export config writes the whole file, so the panel's Copy config
+// is not offered here.
+test('the settings\' weights panel wears the page\'s buttons and fields, and offers no Copy config', async ({ page, baseURL }) => {
   const allow = siteAllowlist(baseURL);
   const seen = await guardNetwork(page, allow);
   await page.goto('/analyze/');
@@ -199,8 +200,12 @@ test('the settings\' weights panel wears the page\'s buttons and field corners, 
   const style = (locator, props) => locator.evaluate((el, ps) => ps.map((p) => getComputedStyle(el).getPropertyValue(p)), props);
   const BUTTON = ['font-family', 'font-size', 'font-weight', 'line-height', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left'];
   expect(await style(form.locator('[data-action="weights-reset"]'), BUTTON)).toEqual(await style(form.locator('[data-action="export-config"]'), BUTTON));
-  expect(await style(form.locator('[data-weight="paste"]'), ['border-top-left-radius', 'border-bottom-right-radius']))
-    .toEqual(await style(form.locator('[name="softScoreThreshold"]'), ['border-top-left-radius', 'border-bottom-right-radius']));
+  const FIELD = ['font-family', 'font-size', 'line-height', 'color', 'background-color', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+    'border-top-width', 'border-top-color', 'border-top-left-radius', 'border-bottom-right-radius'];
+  const threshold = await style(form.locator('[name="softScoreThreshold"]'), FIELD);
+  for (const box of ['[data-weight="paste"]', '[data-max="paste"]', '[data-hard="paste"]']) {
+    expect(await style(form.locator(box), FIELD), box).toEqual(threshold);
+  }
   await expect(form.locator('[data-action="weights-copy"]')).toHaveCount(0);
   await assertOnlyAllowed(page, seen, allow);
 });

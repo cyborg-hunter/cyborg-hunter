@@ -551,11 +551,13 @@ export function createPage(root, worker, opts) {
 
   // Whether the report on screen was built from `config` with the id field in
   // use and, under pseudonymize, the key in use: a key file loaded over a
-  // pseudonymized report changes its codes though the config is the same.
+  // pseudonymized report changes its codes though the config is the same. No
+  // key in use (Forget key) is no change: forgetting leaves the report on
+  // screen and its key as they are, and only a real change makes a new key.
   function sameAsShown(config) {
     var ran = state.ranWith;
     return state.idField === ran.idField && JSON.stringify(config) === JSON.stringify(ran.config) &&
-      (!config.pseudonymize || keySecret === ran.secret);
+      (!config.pseudonymize || !keySecret || keySecret === ran.secret);
   }
 
   // One at a time, like a run: the awaited 'done' keeps the page busy, which

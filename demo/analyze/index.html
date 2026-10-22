@@ -34,8 +34,9 @@ table.files th:last-child,table.files td:last-child{ width:1%; text-align:right 
 .settings-panel label{ display:inline-block; max-width:100%; margin-right:12px }
 .settings-panel[hidden]{ display:none }
 /* The weights panel (src/cli/renderers/weights-panel.js) comes in the CLI report's dress; in the settings it takes the
-   page's own: its buttons as Export config, its number boxes with the fields' corners. */
-.settings-panel .wp-foot button{ font:600 13px var(--ff-recursive); padding:6px 12px } .settings-panel .wp-row input[type=number]{ border-radius:4px }
+   page's own: its buttons as Export config, its number boxes as the fields above (the same values as their rule). */
+.settings-panel .wp-foot button{ font:600 13px var(--ff-recursive); padding:6px 12px }
+.settings-panel .wp-row input[type=number]{ font:13px var(--ff-recursive); padding:4px 8px; background:var(--surface); border-radius:4px }
 .dropzone{ border:2px dashed var(--line); padding:28px; text-align:center; margin:12px 0 } .dropzone.over{ border-color:var(--ink); background:var(--bg) }
 .dropzone.busy{ opacity:.55; pointer-events:none; }
 /* The file inputs stay in the tab order but out of sight: their labels ("choose files", "choose a folder", "Use a key file…") are the controls, as links. */

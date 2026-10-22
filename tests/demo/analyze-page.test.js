@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
 import { mergeConfig } from '../../src/cli/config-core.js';
+import { SCORE_SIGNALS, resolveHardAt } from '../../src/cli/analyzers/score-weights.js';
 
 const PAGE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; " +
   "img-src blob: data:; font-src data:; frame-src blob:; worker-src blob:; connect-src 'self'; " +
@@ -1520,6 +1521,25 @@ for (const [entry, what, warning] of [
   });
 }
 
+// The Hard at counts too: the boxes show, and the run sends, the counts the
+// CLI resolves (resolveHardAt), whatever its rule; a count it ignores, with a
+// warning, never shows.
+test('a dropped config\'s Hard at counts: the boxes and the run hold what the CLI resolves', async () => {
+  const t = boot();
+  await loadSample(t);
+  const hardAt = { paste: 2, pastee: 3, sidebar: 0, cursor: 2.5, copy: null, zoom: '3', typingRhythm: 1 };
+  const { config, warnings } = mergeConfig({ participantIdField: 'participantId', hardAt });
+  t.emit({ ...CHECKED, config, configWarnings: warnings });
+  await tick();
+  const resolved = resolveHardAt(hardAt).hardAt;
+  const form = role('settings-form');
+  assert.deepEqual(SCORE_SIGNALS.map((s) => form.querySelector('[data-hard="' + s.key + '"]').value),
+    SCORE_SIGNALS.map((s) => (resolved[s.key] == null ? '' : String(resolved[s.key]))));
+  action('run').click();
+  await tick();
+  assert.deepEqual(t.sent.at(-1).config.hardAt, resolved);
+});
+
 test('a drop keeps the analyst\'s settings unless its config differs, and a replacement says so', async () => {
   const t = boot();
   t.page.addFiles(dropped());
@@ -2488,6 +2508,36 @@ describe('the pseudonym key', () => {
     assert.match(fresh, /^[0-9a-f]{64}$/);
     assert.notEqual(fresh, SECRET);
     assert.equal(window.localStorage.getItem(STORED), fresh);
+  });
+
+  // Forget key leaves the report on screen and its key as they are: a change
+  // that leaves the settings as they are (Reset at the defaults) runs nothing
+  // and makes no key. A key loaded afterwards re-runs only if it is another.
+  test('after Forget key, Reset at the defaults sends nothing and makes no key; the same key loaded again sends nothing, another sends one', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(STORED, SECRET);
+    const t = boot();
+    await toResults(t);
+    setField('pseudonymize', true);
+    await tick();
+    assert.equal(lastRunLike(t).pseudonymSecret, SECRET);
+    t.emit({ type: 'zip', chunk: new Uint8Array([1]) });
+    t.emit(DONE);
+    await tick();
+    action('forget-key').click();
+    const sent = t.sent.length;
+    role('settings-form').querySelector('[data-action="weights-reset"]').click();
+    await tick();
+    assert.equal(t.sent.length, sent, 'Reset at the defaults: nothing re-runs');
+    assert.equal(window.localStorage.getItem(STORED), null, 'and no key is made');
+    pick(keyText(SECRET), 'same.csv');
+    await until(() => note() === 'Key loaded from same.csv.');
+    await tick();
+    assert.equal(t.sent.length, sent, 'the key the report was built with: nothing re-runs');
+    const OTHER = 'b'.repeat(64);
+    pick(keyText(OTHER), 'other.csv');
+    await until(() => t.sent.length === sent + 1);
+    assert.deepEqual([lastRunLike(t).type, lastRunLike(t).pseudonymSecret], ['reanalyze', OTHER]);
   });
 
   test('storage refused: the key lasts as long as the page, and a line says so', async () => {
