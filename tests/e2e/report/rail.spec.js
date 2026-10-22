@@ -3,6 +3,7 @@
 // by score; a participant a Hard at rule moved (hard*) is badged HARD*, and
 // the Hard filter, the counts and the Tier sort keep it with hard; the
 // search finds signals by word; the label filter follows the annotations;
+// the chip a filter block has on is the one pressed (aria-pressed);
 // the arrow keys follow the rail as it is shown; and the annotations CSV
 // keeps triage order and writes hard*. The Weights… dialog re-scores,
 // re-tiers and re-sorts the rail as its values change, the selection
@@ -39,6 +40,10 @@ const order = (page) => page.locator('.cohort-row').evaluateAll((rs) => rs.map((
 const shown = (page) => page.locator('.cohort-row').evaluateAll((rs) =>
   rs.filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.pid));
 const selected = (page) => page.locator('.cohort-row.selected').getAttribute('data-pid');
+// Each chip of a block (by its filter attribute): its filter, its
+// aria-pressed, and whether it is the active one.
+const chips = (page, attr) => page.locator(`.filter-chip[${attr}]`).evaluateAll((cs, a) =>
+  cs.map((c) => [c.getAttribute(a), c.getAttribute('aria-pressed'), c.classList.contains('active')]), attr);
 
 test('the rail opens sorted by score; hard* is badged HARD* and kept with hard by the counts, the Hard filter and the Tier sort', async ({ page }) => {
   await openReport(page);
@@ -53,6 +58,8 @@ test('the rail opens sorted by score; hard* is badged HARD* and kept with hard b
   await expect(page.locator('.totals-row[data-tier="clean"] .count')).toHaveText('0');
   await page.locator('.filter-chip[data-filter="hard"]').click();
   expect(await shown(page)).toEqual(['DEMO-9mop', 'DEMO-bsq6', 'DEMO-a3f3']);
+  expect(await chips(page, 'data-filter')).toEqual([['all', 'false', false], ['hard', 'true', true], ['soft', 'false', false],
+    ['clean', 'false', false]]);
   await page.locator('.sort-wrap select').selectOption('tier');
   expect(await order(page)).toEqual(['DEMO-9mop', 'DEMO-bsq6', 'DEMO-a3f3', 'DEMO-681w']);
   await a3f3.click();
@@ -111,6 +118,8 @@ test('the label filter follows the annotations; the arrow keys follow the rail a
   await expect(page.locator('.cohort-row[data-pid="DEMO-681w"] .annot-mark')).toHaveAttribute('data-label', '');
   await page.locator('.filter-chip[data-label-filter="exclude"]').click();
   expect(await shown(page)).toEqual(['DEMO-a3f3']);
+  expect(await chips(page, 'data-label-filter')).toEqual([['all', 'false', false], ['none', 'false', false], ['include', 'false', false],
+    ['exclude', 'true', true], ['flag', 'false', false]]);
   await page.locator('.filter-chip[data-label-filter="none"]').click();
   expect(await shown(page)).toEqual(['DEMO-9mop', 'DEMO-bsq6', 'DEMO-681w']);
   expect(await selected(page)).toBe('DEMO-9mop');

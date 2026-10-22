@@ -211,11 +211,24 @@ describe('the rail markup', () => {
 
   it('the label block only in a report with annotation controls, in the words of the pane\'s buttons', async () => {
     // The buttons, not the page script's own selector for them.
-    const chip = /<button class="filter-chip[^"]*" data-label-filter="([a-z]+)">([^<]*)<\/button>/g;
+    const chip = /<button class="filter-chip[^"]*" aria-pressed="(?:true|false)" data-label-filter="([a-z]+)">([^<]*)<\/button>/g;
     assert.deepEqual([...(await page({})).html.matchAll(chip)], []);
     const { html } = await page({}, { runId: '0123456789abcdef' });
     assert.deepEqual([...html.matchAll(chip)].map((m) => [m[1], m[2]]),
       [['all', 'All'], ['none', 'Unmarked'], ['include', 'Include'], ['exclude', 'Exclude'], ['flag', 'Flag']]);
+  });
+
+  // A screen reader hears which filter is on: the active chip of each block
+  // (All, as the page opens) is aria-pressed="true", every other "false".
+  it('each block\'s active chip is pressed, and only it', async () => {
+    const { html } = await page({}, { runId: '0123456789abcdef' });
+    const win = new Window({ settings: { disableJavaScriptEvaluation: true } });
+    win.document.write(html);
+    const chips = (attr) => [...win.document.querySelectorAll(`.filter-chip[${attr}]`)]
+      .map((c) => [c.getAttribute(attr), c.getAttribute('aria-pressed'), c.classList.contains('active')]);
+    assert.deepEqual(chips('data-filter'), [['all', 'true', true], ['hard', 'false', false], ['soft', 'false', false], ['clean', 'false', false]]);
+    assert.deepEqual(chips('data-label-filter'), [['all', 'true', true], ['none', 'false', false], ['include', 'false', false],
+      ['exclude', 'false', false], ['flag', 'false', false]]);
   });
 
   it('the rail data: one row per triage row, in triage order', async () => {

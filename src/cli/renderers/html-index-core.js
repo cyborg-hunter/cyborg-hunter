@@ -987,12 +987,15 @@ ${railSrc}
       // Tier: CSS does the hiding (body[data-filter]); a hard* row carries
       // data-tier="hard", so the Hard chip shows it. Label: each row's
       // annotation mark (annotation-client.js sets its data-label), read
-      // again whenever the annotations change ('ch:annotations').
+      // again whenever the annotations change ('ch:annotations'). In each
+      // block the chip that is on is .active and aria-pressed="true", so a
+      // screen reader says which filter is on; the two click handlers below
+      // keep both in step.
       const tierChips = [...document.querySelectorAll('.filter-chip[data-filter]')];
       tierChips.forEach(chip => {
         chip.addEventListener('click', () => {
           document.body.dataset.filter = chip.dataset.filter;
-          tierChips.forEach(c => c.classList.toggle('active', c === chip));
+          tierChips.forEach(c => { c.classList.toggle('active', c === chip); c.setAttribute('aria-pressed', String(c === chip)); });
           reconcileSelection();
         });
       });
@@ -1009,7 +1012,7 @@ ${railSrc}
       labelChips.forEach(chip => {
         chip.addEventListener('click', () => {
           labelFilter = chip.dataset.labelFilter;
-          labelChips.forEach(c => c.classList.toggle('active', c === chip));
+          labelChips.forEach(c => { c.classList.toggle('active', c === chip); c.setAttribute('aria-pressed', String(c === chip)); });
           applyLabelFilter();
           reconcileSelection();
         });
@@ -1354,11 +1357,11 @@ function renderCohortList(triage, cohortCounts, opts = {}) {
   const rowsHtml = triage.map(renderCohortRow).join('');
   const labelChips = opts.labels ? `
   <div class="filter-chips" role="group" aria-label="Your label">
-    <button class="filter-chip active" data-label-filter="all">All</button>
-    <button class="filter-chip" data-label-filter="none">Unmarked</button>
-    <button class="filter-chip" data-label-filter="include">Include</button>
-    <button class="filter-chip" data-label-filter="exclude">Exclude</button>
-    <button class="filter-chip" data-label-filter="flag">Flag</button>
+    <button class="filter-chip active" aria-pressed="true" data-label-filter="all">All</button>
+    <button class="filter-chip" aria-pressed="false" data-label-filter="none">Unmarked</button>
+    <button class="filter-chip" aria-pressed="false" data-label-filter="include">Include</button>
+    <button class="filter-chip" aria-pressed="false" data-label-filter="exclude">Exclude</button>
+    <button class="filter-chip" aria-pressed="false" data-label-filter="flag">Flag</button>
   </div>` : '';
 
   return `<div class="rail-top">
@@ -1367,10 +1370,10 @@ function renderCohortList(triage, cohortCounts, opts = {}) {
            title="Every word must match: part of an id, or a signal the participant has, such as copy, paste, sidebar, tab, zoom, synthetic or pointer">
   </div>
   <div class="filter-chips" role="group" aria-label="Tier">
-    <button class="filter-chip active" data-filter="all">All <span class="chip-n">${triage.length}</span></button>
-    <button class="filter-chip" data-filter="hard">Hard <span class="chip-n">${cohortCounts.hard}</span></button>
-    <button class="filter-chip" data-filter="soft">Soft <span class="chip-n">${cohortCounts.soft}</span></button>
-    <button class="filter-chip" data-filter="clean">Clean <span class="chip-n">${cohortCounts.clean}</span></button>
+    <button class="filter-chip active" aria-pressed="true" data-filter="all">All <span class="chip-n">${triage.length}</span></button>
+    <button class="filter-chip" aria-pressed="false" data-filter="hard">Hard <span class="chip-n">${cohortCounts.hard}</span></button>
+    <button class="filter-chip" aria-pressed="false" data-filter="soft">Soft <span class="chip-n">${cohortCounts.soft}</span></button>
+    <button class="filter-chip" aria-pressed="false" data-filter="clean">Clean <span class="chip-n">${cohortCounts.clean}</span></button>
   </div>${labelChips}
   <div class="sort-wrap">
     <label>Sort:
