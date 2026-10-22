@@ -250,14 +250,6 @@ ${fontFaceCss}    :root {
       outline: 2px solid var(--ink); outline-offset: 2px;
     }
     .filter-chip:focus-visible { position: relative; z-index: 2; }
-    /* The count in a tier chip, updated when a weight change re-tiers: the
-       chip's own face with tabular figures (Sora's wider digits would push
-       four 3-digit counts past the rail's width). */
-    .filter-chip .chip-n { font-variant-numeric: tabular-nums; }
-    /* The label block's five buttons measure 369px at the tier chips' size,
-       over the 335px the rail leaves them: at 13px with 6px sides they
-       measure 312px and keep one line, in the rail and on a phone. */
-    .filter-chip[data-label-filter] { font-size: 13px; padding: 4px 6px; }
 
     /* Sort selector */
     .sort-wrap { font-family: var(--ff-tomorrow); font-size: 12px; color: var(--dim); }
@@ -828,8 +820,7 @@ ${fontFaceCss}    :root {
         //   - .search-hidden class (display: none from CSS)
         //   - .label-hidden class (the label filter; display: none from CSS)
         // All resolve to display: none, so getComputedStyle catches the union.
-        return !row.classList.contains('search-hidden')
-            && getComputedStyle(row).display !== 'none';
+        return getComputedStyle(row).display !== 'none';
       }
 
       // The rows as the rail shows them now: in its sort order, filtered.
@@ -1275,16 +1266,20 @@ function renderSignalGrid(summary, triageRow) {
 // Build the entire left rail HTML: top band (search, the tier block, the
 // label block when the report has annotation controls, sort), scrolling list
 // of cohort rows, and the sticky cohort totals footer. Rendering is pure
-// HTML — the client script wires up interactivity.
+// HTML — the client script wires up interactivity. A tier chip's count sits
+// in its own .chip-n, for a weight change that re-tiers to rewrite; it keeps
+// the chip's face (Recursive, whose digits are all one width: Sora's wider
+// ones would push four 3-digit counts past the rail's width). The label
+// block names the labels with the pane's own buttons' words.
 function renderCohortList(triage, cohortCounts, opts = {}) {
   const rowsHtml = triage.map(renderCohortRow).join('');
   const labelChips = opts.labels ? `
   <div class="filter-chips" role="group" aria-label="Your label">
     <button class="filter-chip active" data-label-filter="all">All</button>
     <button class="filter-chip" data-label-filter="none">Unmarked</button>
-    <button class="filter-chip" data-label-filter="include">Included</button>
-    <button class="filter-chip" data-label-filter="exclude">Excluded</button>
-    <button class="filter-chip" data-label-filter="flag">Flagged</button>
+    <button class="filter-chip" data-label-filter="include">Include</button>
+    <button class="filter-chip" data-label-filter="exclude">Exclude</button>
+    <button class="filter-chip" data-label-filter="flag">Flag</button>
   </div>` : '';
 
   return `<div class="rail-top">

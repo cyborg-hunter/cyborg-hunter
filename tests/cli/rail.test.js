@@ -181,12 +181,13 @@ describe('the rail markup', () => {
     assert.match(sel, /<option value="score" selected>/);
   });
 
-  it('the label block only in a report with annotation controls', async () => {
+  it('the label block only in a report with annotation controls, in the words of the pane\'s buttons', async () => {
     // The buttons, not the page script's own selector for them.
-    const chip = /<button class="filter-chip[^"]*" data-label-filter="([a-z]+)"/g;
+    const chip = /<button class="filter-chip[^"]*" data-label-filter="([a-z]+)">([^<]*)<\/button>/g;
     assert.deepEqual([...(await page({})).html.matchAll(chip)], []);
     const { html } = await page({}, { runId: '0123456789abcdef' });
-    assert.deepEqual([...html.matchAll(chip)].map((m) => m[1]), ['all', 'none', 'include', 'exclude', 'flag']);
+    assert.deepEqual([...html.matchAll(chip)].map((m) => [m[1], m[2]]),
+      [['all', 'All'], ['none', 'Unmarked'], ['include', 'Include'], ['exclude', 'Exclude'], ['flag', 'Flag']]);
   });
 
   it('the rail data: one row per triage row, in triage order', async () => {
