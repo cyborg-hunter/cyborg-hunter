@@ -14,7 +14,7 @@ import { chSearchTokens, chRowMatches, chCompareRows, railFunctionsSrc } from '.
 import { inlineSrcHazards, inlineSafeSrc } from '../../src/shared/inline-safe.js';
 import { rankTriage } from '../../src/cli/analyzers/triage.js';
 import { scoreFromCounts, reportTierFromCounts, formatScore } from '../../src/cli/analyzers/score-weights.js';
-import { railData, weightsPanelScript } from '../../src/cli/renderers/weights-panel.js';
+import { railData, weightsPanelScript, WEIGHTS_PANEL_CSS } from '../../src/cli/renderers/weights-panel.js';
 import { renderIndexHtml } from '../../src/cli/renderers/html-index-core.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { computeSummary } from '../../src/cli/analyzers/summary.js';
@@ -290,6 +290,21 @@ describe('the rail markup', () => {
     const inPage = css(await renderIndexHtml(SUMMARIES, triage, [], {}, false, { imageSources: {} }));
     assert.deepEqual(['white-space', 'line-height'].map((p) => lastProp(parseRules(inPage), '.topbar button', p)), [null, null]);
     assert.doesNotMatch(inPage, /\.topbar \.meta \{ (flex-basis|order)|max-width: 1099px|column-gap/);
+  });
+
+  // The dialog scrolls when its rows pass the window's height; its heading
+  // row (the title and Close) sticks to the top of that scrolling area, on
+  // the dialog's own background, so the rows scrolled under it do not show
+  // through. The analyzer's settings panel has no dialog, and no such rule.
+  it('the dialog\'s heading row sticks to the top of the dialog, on its background; the analyzer\'s panel is unchanged', async () => {
+    const css = (html) => [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+    const { triage, html } = await page({});
+    const rules = parseRules(css(html));
+    assert.deepEqual(['position', 'top', 'background'].map((p) => lastProp(rules, '.wd-head', p)), ['sticky', '0', 'var(--surface)']);
+    assert.equal(lastProp(rules, '#weights-dialog', 'background'), 'var(--surface)');
+    const inPage = css(await renderIndexHtml(SUMMARIES, triage, [], {}, false, { imageSources: {} }));
+    assert.doesNotMatch(inPage, /\.wd-head|position: sticky/);
+    assert.doesNotMatch(WEIGHTS_PANEL_CSS, /\.wd-head|position: sticky/);
   });
 
   // The dialog changes the page only: its text says that the report's files

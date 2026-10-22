@@ -2143,7 +2143,15 @@ const WEIGHTS_DIALOG_CSS = WEIGHTS_PANEL_CSS + `
     }
     #weights-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
     .wd { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; font-family: var(--ff-recursive); }
-    .wd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    /* The dialog scrolls when its rows pass the window's height (max-height);
+       the heading row, the title and Close, sticks to the top of that
+       scrolling area. It reaches over .wd's padding (the negative margins,
+       the same padding inside), so it sits where it would and, stuck,
+       covers the rows scrolled under it from edge to edge, on the dialog's
+       own background. */
+    .wd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      position: sticky; top: 0; z-index: 1; background: var(--surface);
+      margin: -16px -20px -10px; padding: 16px 20px 10px; }
     .wd-head h3 { font-family: var(--ff-space); font-size: 16px; }
     .wd-lede { color: var(--dim); font-size: 13px; line-height: 1.45; }
     .wd-close { padding: 4px 12px; border: 1px solid var(--line); border-radius: 0; background: var(--surface);

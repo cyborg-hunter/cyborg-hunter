@@ -11,7 +11,8 @@
 // Close closes whatever a box holds, Escape closes, and the focus goes back
 // to the button); the button says when the values differ from the run's;
 // the annotations CSV keeps the run's tier and score; the top bar and the
-// dialog lay out cleanly from a phone to a desktop. The report is built by
+// dialog lay out cleanly from a phone to a desktop; scrolled to its foot,
+// the dialog keeps its title and Close in view. The report is built by
 // bin/cyborg-hunter.js from the bundled sessions (examples/demo-sessions)
 // with hardAt { tabawayMedium: 3 }: DEMO-a3f3's three medium tab-aways move
 // it from clean to hard*. Scores: 9mop 45, bsq6 21, 681w 13, a3f3 11.
@@ -446,3 +447,54 @@ test('the dialog at 375px: each slider ends where its boxes do; nothing overlaps
     return [d.scrollWidth <= d.clientWidth, r.left >= 0 && r.right <= window.innerWidth];
   })).toEqual([true, true]);
 });
+
+// The dialog scrolls when its rows pass the window's height. Its heading
+// row (the title and Close) stays at the top of that scrolling area: with
+// the dialog scrolled to its foot (Reset to defaults, Copy config), the
+// title and Close are in view, the heading row is drawn over the rows
+// scrolled under it, on the dialog's own background (so none shows
+// through), and a click where Close shows closes the dialog. The click is
+// made at Close's place on screen: a locator's click() would first scroll
+// Close into view.
+for (const [width, height] of [[1400, 900], [375, 812]]) {
+  test('the dialog scrolled to its foot at ' + width + 'px: the title and Close stay in view, and Close closes it', async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openReport(page);
+    const dialog = await openDialog(page);
+    await page.evaluate(() => document.fonts.ready);
+    const m = await dialog.evaluate((d) => {
+      d.scrollTop = d.scrollHeight;
+      const rect = (el) => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      };
+      const box = rect(d);
+      const head = d.querySelector('.wd-head');
+      const close = d.querySelector('.wd-close');
+      const title = d.querySelector('#weights-title');
+      const [h, c, t, f] = [head, close, title, d.querySelector('.wp-foot')].map(rect);
+      const inDialog = (r) => r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+      const inWindow = (r) => r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+      return {
+        scrolled: d.scrollTop > 0 && d.scrollTop + d.clientHeight >= d.scrollHeight - 1,
+        footShown: inDialog(f) && f.top >= h.bottom - 0.5,
+        closeShown: inDialog(c) && inWindow(c),
+        titleShown: inDialog(t) && inWindow(t),
+        // What is drawn on top at each point: Close, the title, and the head
+        // itself at its bottom-left corner, where a row scrolled under it is.
+        onTop: [document.elementFromPoint(c.x, c.y) === close, title.contains(document.elementFromPoint(t.x, t.y)),
+          head.contains(document.elementFromPoint(h.left + 2, h.bottom - 2))],
+        background: [getComputedStyle(head).backgroundColor, getComputedStyle(d).backgroundColor],
+        close: { x: c.x, y: c.y },
+      };
+    });
+    expect(m.scrolled, 'the dialog scrolls, and is at its foot').toBe(true);
+    expect([m.footShown, m.closeShown, m.titleShown], 'the foot, Close and the title in view').toEqual([true, true, true]);
+    expect(m.onTop, 'Close, the title and the heading row drawn on top').toEqual([true, true, true]);
+    expect(m.background[0], 'the heading row on the dialog\'s background').toBe(m.background[1]);
+    expect(m.background[0]).toBe('rgb(255, 255, 255)');
+    await page.mouse.click(m.close.x, m.close.y);
+    await expect(dialog).toBeHidden();
+    await expect(weightsButton(page)).toBeFocused();
+  });
+}
