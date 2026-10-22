@@ -16,7 +16,9 @@ It also changes the typing rate, and with it the live soft score, adds a
 count and the typing-rhythm summaries to every trial report
 (`signals.typingRhythm: false` turns the summaries off), and adds a Typing
 dynamics section with six more `summary.csv` columns. The report's typing
-chart moves onto the session timeline's time axis.
+chart moves onto the session timeline's time axis. One new CLI config key,
+`hardAt`, adds a hard tier of the report's own (`HARD*`); `summary.csv`
+gains `reportTier`, and the report's rail opens sorted by score.
 
 ### What changes for newly collected data
 
@@ -42,6 +44,13 @@ chart moves onto the session timeline's time axis.
   by its tag only; its `id` is never read. Add both to your ethics protocol
   ([Privacy model](using-cyborg-hunter.md#privacy-model)). The Qualtrics
   payload carries both.
+
+### What changes in configuration
+
+- A new CLI config key, `hardAt`: per-signal counts at or above which the
+  report moves a participant into the hard tier, shown as `HARD*`
+  ([configuration.md](configuration.md#report-hard-at-counts-hardat)).
+  Nothing changes without it.
 
 ### What changes in reports
 
@@ -75,9 +84,13 @@ chart moves onto the session timeline's time axis.
   formula) is too short to judge and no longer counts. A reduced Qualtrics
   payload keeps the whole-session count it carries, unless the report is
   phase-scoped.
-- `summary.csv` gains six columns at the end: `typingVerdict`,
+- `summary.csv` gains six columns after the existing ones: `typingVerdict`,
   `typingTells`, `typingFieldsJudged`, `typingFastestMedianMs`,
   `typingLowestCv`, `typingRateSource`. No existing column moves.
+- `summary.csv` gains `reportTier` as its last column, after the six
+  `typing…` columns: the report's tier (`hard`, `hard*`, `soft` or
+  `clean`). Readers that take columns by position see one column more;
+  `hardTriggered` keeps the library's decision.
 - `typing-limits.json`, beside `cursor-limits.json`
   ([cli-reference.md](cli-reference.md#typing-limitsjson)).
 - The triage reason names the typing verdict when it counts against the
@@ -103,6 +116,13 @@ chart moves onto the session timeline's time axis.
   strip when every trial carries `startTime` and `duration_ms`) and is
   taller; the Phases strip appears only for sessions with gallery phase
   bands.
+- The report's rail opens sorted by score, not by tier; **Tier, then score**
+  gives the old order, which `triage.md` keeps. The rail also gains a label
+  filter, a search that finds participants by signal words, and a
+  **Typing verdict ↓** sort.
+- With `hardAt` in the config, the annotations CSV's tier column can read
+  `hard*`. The CSV keeps the run's tier and score whatever the CLI report's
+  **Weights…** dialog shows.
 
 ## 0.16.0 — from 0.15
 

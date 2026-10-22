@@ -12,7 +12,10 @@ device line, a click picture, three new `summary.csv` columns): read
 corrected, which changes the live soft score; trial reports gain a count of
 edits and the typing-rhythm summaries; reports gain a Typing dynamics
 section and six more `summary.csv` columns. The report's typing chart moves
-onto the session timeline's time axis, in one Session timeline block.
+onto the session timeline's time axis, in one Session timeline block. The
+report can add a hard tier of its own (`hardAt`, shown as `HARD*`, in a new
+last `summary.csv` column), re-weights its list live, and its rail opens
+sorted by score.
 
 ### Added
 - The centered-clicks rule in the pointer verdict, read from the session
@@ -67,6 +70,24 @@ onto the session timeline's time axis, in one Session timeline block.
   Qualtrics payload kept without their events are hatched and counted in
   the timeline's footer, and the header row adds "events not kept" while
   the pointer is over one.
+- `hardAt` in the CLI config: per-signal counts at or above which the report
+  moves a participant into the hard tier, shown as `HARD*` beside the
+  library's `HARD`. summary.csv gains `reportTier` as its last column,
+  triage.md lists `HARD*` with the hard rows, score-weights.json records the
+  rule, the top bar names it, and the console counts the participants it
+  moved. Unknown keys warn with the closest name.
+- One score-weights panel, with a 0–20 slider, a number box, a cap and a
+  Hard at count per signal, grouped: in the analyzer's settings, with Reset
+  to defaults beside Export config, and in a **Weights…** dialog in the CLI
+  report, which re-scores, re-tiers and re-sorts the list as you type. The
+  dialog changes the page only, and its button reads **Weights… (edited)**
+  while its values differ from the run's; the report's files and annotation
+  exports keep the run's values, and **Copy config** gives the
+  `scoreWeights` and `hardAt` lines.
+- The report's rail: tier and label filters as joined button blocks, a search
+  box that also finds participants by the start of a signal word (`mous`,
+  `cut pan`), and sorts by score (now the default), tier then score, pointer
+  verdict, typing verdict and id.
 
 ### Changed
 - `cursorChecksRecorded` counts the software-renderer fact: 3–4 with a
@@ -97,6 +118,8 @@ onto the session timeline's time axis, in one Session timeline block.
 - The session timeline's title prints the whole participant id, cut with an
   ellipsis before the legend as the typing chart's title is. It printed the
   first 8 characters.
+- The report's rail opens sorted by score instead of by tier; **Tier, then
+  score** gives the old order.
 
 ## [0.16.0] — 2026-10-15
 

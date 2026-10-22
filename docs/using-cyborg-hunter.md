@@ -561,8 +561,11 @@ Confirm the participant-ID field the page suggests, adjust the settings if
 you need to, and download the report as a `.zip` with the CLI's output
 layout, or `summary.csv`, `triage.md` and `event-log.csv` on their own.
 The settings are the ones a report can apply after collection: the
-soft-score threshold, the score weights, the ID, integrity and
-session-report fields, the platform ID field and whether the report shows
+soft-score threshold, the score weights and **Hard at** counts (the same
+panel as the CLI report's **Weights…** dialog, with **Reset to defaults**
+and, in place of Copy config, the page's "Export config" below; a
+participant whose count reaches its Hard at count becomes `HARD*`, and the
+library's tier is kept), the ID, integrity and session-report fields, the platform ID field and whether the report shows
 it, and **Pseudonymize participant IDs** (as `--pseudonymize`: codes in
 place of IDs, see [The participant ID](#privacy-model)). With that box
 ticked, the results offer **Pseudonym key (keep private)**, which downloads
@@ -762,6 +765,41 @@ every trial report, so there is nothing to set; data assembled another way
 can lack them, and then the typing chart keeps one bar per trial in its own
 **Typing profile** block, and a note under the timeline says why.
 
+### Finding participants in the rail
+
+The rail opens sorted by score (**Score ↓**). The other sorts are **Tier,
+then score** (the order of `triage.md`, with `HARD*` among the hard rows),
+**Pointer verdict ↓** and **Typing verdict ↓** (highly suspicious first,
+not assessed last, then by score), and **ID**.
+
+Type in the search box (`/` jumps to it) to narrow the list. Every word must
+match. A word matches when it is part of the participant's id, part of the
+triage reason (an extension's name, `honeypot`), or the start of a word for
+a signal the participant has a count above zero for: `mous` finds those
+whose pointer verdict is suspicious or highly suspicious, `cut pan` those
+with a copy or cut and a sidebar event, `autofill` those with synthetic
+insertions. The tier block filters by tier (`HARD*` counts as hard), and the
+label block (All, Unmarked, Include, Exclude, Flag) by the labels below. The
+analyzer's report has the same rail.
+
+In a CLI report, **Weights…** in the top bar opens the score weights for
+this page: for each signal, a slider and a box for its points, a cap, and a
+**Hard at** count. A participant whose count reaches its Hard at count moves
+into the hard tier, shown as `HARD*`; the library's tier is kept. Values
+apply as you type. The rail, its badges and tier counts, the filters, the
+sorts, and each pane's score, tier and breakdown follow them. The run's own
+values stay in `summary.csv`, `triage.md`, `score-weights.json`, the
+annotation exports (CSV and JSON), the top bar's run notes ("custom score
+weights", "hard at") and the score in the trajectories image's header,
+which is drawn into the image. While the dialog's values differ from the
+run's, the button reads **Weights… (edited)**. **Copy config** gives the
+`scoreWeights` and `hardAt` lines that make the next CLI run build the same
+list (where the browser refuses the clipboard, it shows them selected, to
+copy by hand). **Reset to defaults** puts back the default weights, with no
+caps and no Hard at counts. Close or Escape closes the dialog; Enter in a
+box does nothing. The analyzer's report has no **Weights…**: the same panel
+is in its settings, and a change there re-runs the report.
+
 ### Annotating participants
 
 The report's top bar names its run, for example `run 3f9c2a7b1d4e8a60 ·
@@ -776,7 +814,8 @@ decision and the note field (up to 2,000 characters) your reason. Pressing
 the chosen label again clears it; a participant without a label is not
 reviewed. The keys `i`, `e` and `f` do the same for the participant selected
 in the rail. The rail shows each label beside the participant and, at the
-bottom, how many are reviewed.
+bottom, how many are reviewed. The label block above the list shows only
+the participants with one label, or the unmarked ones.
 
 The report keeps the annotations in this browser, under its run id, so they
 are there when you open the same `index.html` again. **Export JSON** saves
@@ -784,7 +823,9 @@ them to a file (`annotations-<run id>.json`), and **Import…** reads such a
 file back into a report of the same participants (entries for other
 participants are listed, not applied). **Export CSV**
 (`annotations-<run id>.csv`) writes one row per participant in triage order:
-`participantId, tier, triageScore, label, note, annotatedAt, runId`. Tick
+`participantId, tier, triageScore, label, note, annotatedAt, runId` (the
+run's tier and score, whatever the **Weights…** dialog shows: `hard*` for a
+participant the run's `hardAt` moved). Tick
 "count unreviewed as included" to write `include` for everyone you did not
 label, for an exclusion list.
 

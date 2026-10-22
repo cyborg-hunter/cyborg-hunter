@@ -155,8 +155,8 @@ unless you untick the box, its external stylesheets from their own addresses
 
 Landing page (it needs the `images/` and `replay/` folders beside it):
 
-- Dashboard with hard/soft/clean participant counts
-- Sortable triage table (click a column header to sort)
+- A rail of participants with a search box (every word must match: part of an id or of the triage reason, or the start of a word for a signal the participant has, such as `mous` for a suspicious pointer verdict or `cut pan` for a copy or cut and a sidebar event), the tier block (All / Hard / Soft / Clean, with counts; `HARD*` rows count as hard), the label block (All / Unmarked / Include / Exclude / Flag), and five sorts: **Score ↓** (the default), **Tier, then score** (the order of `triage.md`), **Pointer verdict ↓**, **Typing verdict ↓** and **ID** ([Finding participants in the rail](using-cyborg-hunter.md#finding-participants-in-the-rail))
+- **Weights…** in the top bar: the score weights, caps and **Hard at** counts as sliders and boxes (a participant whose count reaches its Hard at count becomes `HARD*`; the library's tier is kept). The list re-scores, re-tiers and re-sorts as you type. The report's files and its annotation exports keep the weights the report was built with; **Copy config** gives the lines for the config file
 - Per-participant detail sections with linked images and signal summaries
 - In each participant's detail, a Typing dynamics section (the typing verdict, its tells, every judged text field and the typing rate) above the Cursor dynamics section
 
@@ -217,6 +217,7 @@ One row per participant:
 | `typingFastestMedianMs` | The smallest median gap among the judged fields, in ms (one decimal); empty when none was judged |
 | `typingLowestCv` | The smallest gap variation among the judged fields (three decimals); empty when none was judged |
 | `typingRateSource` | Where the typing rates behind `trialsWithFastTyping` came from: `library` (0.17 on: (edits − 1) per second, from 20 edits), `edit times` (older data saved with keystroke dynamics or `collectForPostHoc.fullKeystrokeTimestamps` on: recomputed the same way from the trial's saved edit times), `recording` (older data: recomputed the same way from the trial's edits in a session recording that keeps the page, `dom` tier), `old formula` (older data with neither saved edit times nor recorded edits, which includes every trial of a `trace`-tier recording whose edit times were not saved: the saved rate, edits over the time, from 2 edits). With several, the weakest any judged trial used (`old formula` < `recording` < `edit times` < `library`); with no judged trial, the strongest available. It is the rate's source, not the rhythm's: data recorded with 0.17 and `signals.typingRhythm` off can read `library` here while its typing rhythm is not recorded |
+| `reportTier` | The report's tier, the last column (since 0.17): `hard`, `hard*` (a soft or clean participant that a signal's `hardAt` count moved into the hard tier, [configuration.md](configuration.md#report-hard-at-counts-hardat)), `soft` or `clean`. `hardTriggered` keeps the library's decision |
 | ... | (See the actual file for the full column set; the schema may grow.) |
 
 > Note: the early per-participant columns are camelCase (`totalPasteEvents`, …)
@@ -255,7 +256,9 @@ The Tier column (added 0.6.1) shows the library's screening verdict
 (`HARD` / `soft` / `clean`), the same classification behind the console's
 hard/soft/clean counts. Score is the CLI ranking heuristic described under
 [Triage scoring](#triage-scoring): it orders rows within a tier and is not
-the library soft score.
+the library soft score. With `hardAt` in the config the column also shows
+`HARD*`: a participant the report's rule moved into the hard tier (listed
+with the hard rows), and the file says so above the table.
 
 (`P023`'s score is 3 paste × 5 + 2 tab-away × 1 = 17; the "ChatGPT detected"
 note is shown in the reason but no longer contributes to the score — see
@@ -267,6 +270,7 @@ Slack/Notion review.
 
 The weights the triage score was computed with, written by every run:
 `{ "isDefault": true|false, "weights": { "<signal>": { "weight": n, "max": m|null } } }`.
+With `hardAt` in the config the file also holds `"hardAt": { "<signal>": n }`.
 `isDefault` is `false` when `scoreWeights` in the config changed anything; the
 HTML top bar then also names the changed weights. Use it to check that two
 reports' scores are comparable. Config warnings are printed to the console,
@@ -428,13 +432,15 @@ reweight any of these terms, give a weight to any of the other signals (for
 example one point per synthetic insertion), and cap a signal's count. See
 [configuration.md → Report-score weights](configuration.md#report-score-weights-scoreweights).
 The weights used are recorded in `score-weights.json`, and `triage.md` states the
-applied formula. Custom weights change the score and the order *within* a tier
-only; the hard/soft/clean tier never depends on them.
+applied formula. Custom weights change the score, and with it the order
+within a tier in `triage.md` and the whole order of the HTML rail's
+**Score ↓** sort; the hard/soft/clean tier never depends on them (only
+`hardAt` adds the report's `HARD*`).
 
 **Hard-triggered participants are surfaced by ordering, not by the score.** The
-ranked list (both `triage.md` and the HTML index's default "Tier" sort) sorts
-tier-first — hard-triggered, then soft-flagged, then clean — and by score within
-each tier. So a hard-triggered participant always appears above soft-only ones
+ranked list (`triage.md`, and the HTML rail's **Tier, then score** sort; the
+rail opens sorted by score) sorts tier-first — hard-triggered (`HARD*` with
+them), then soft-flagged, then clean — and by score within each tier. So a hard-triggered participant always appears above soft-only ones
 even when its score is lower.
 
 - **Soft-flag threshold:** a participant is soft-flagged when

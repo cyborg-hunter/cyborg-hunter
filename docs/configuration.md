@@ -27,7 +27,8 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 > display/soft-bin cutoff), `scoring.softScoreThreshold` (an optional analyst
 > override for the soft-flag cutoff — by default the CLI uses each participant's
 > own saved threshold), `scoreWeights` (the triage-score weights, since
-> 0.9.0) and `qualtricsField` (the Qualtrics export column), plus `platformIdField`/`showPlatformId` for the HTML detail header. The remaining fields below — `trialIdField`, `trialOrderField`,
+> 0.9.0), `hardAt` (the report's own hard tier, since 0.17) and
+> `qualtricsField` (the Qualtrics export column), plus `platformIdField`/`showPlatformId` for the HTML detail header. The remaining fields below — `trialIdField`, `trialOrderField`,
 > `trialsPerParticipant`, `conditionField`, `groupField`,
 > `tabAwayMinDuration_ms`, `idleGapThreshold_ms`, `suspiciouslyFastRT_ms`,
 > `trajectoryGrid`, `trajectoryTrialLabel`, `trajectoryResponseField`,
@@ -37,6 +38,12 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 > Note: the tab-away soft-scoring cutoff is the *library* threshold
 > `thresholds.tabAwayDurationMs` (default 3000 ms), applied at collection time —
 > not the reserved CLI field `tabAwayMinDuration_ms`.
+>
+> The report shows the library's tier as `HARD` / `soft` / `clean`. Only two
+> fields re-tier it: `scoring.softScoreThreshold` (soft against the soft
+> scores the data saved) and `phaseScope` (the library's rules recounted
+> over the scoped trials). `hardAt` leaves it as it is: it is the one field
+> that adds a tier of the report's own, `HARD*`, beside it.
 >
 > The CLI's "did you mean?" validator shares one key list with the browser library,
 > so a CLI config file can also carry browser-only keys (`preset`, `participantId`,
@@ -79,6 +86,7 @@ Creates a `cyborg-hunter.config.json` in the current directory:
 |---|---|---|---|
 | `scoring` | object | `null` | The CLI reads only `scoring.softScoreThreshold`. The browser library's `scoring.soft` / `scoring.hard` rules have no effect on the report; since 0.9.0 the CLI warns when it sees them and points to `scoreWeights` |
 | `scoreWeights` | object | `null` | Weights for the report's triage score, merged per key onto the defaults (added 0.9.0). See [Report-score weights](#report-score-weights-scoreweights) |
+| `hardAt` | object | `null` | Per-signal counts at or above which the report moves a participant into the hard tier, shown as `HARD*` (added 0.17). See [Report hard-at counts](#report-hard-at-counts-hardat) |
 | `signals` | object | `null` | Per-signal enable/disable (overrides preset) |
 | `phaseScope` | object | `null` | `{"include": [...]}` and/or `{"exclude": [...]}` — restrict which trial phases feed the summary/triage scores (added 0.6.1) |
 
@@ -103,10 +111,10 @@ Each entry is either a number (the weight) or `{ "weight": n, "max": m }`, where
 { "scoreWeights": { "copy": { "weight": 5, "max": 3 }, "paste": 0 } }
 ```
 
-Setting a weight to `0` removes that term. **The hard/soft/clean tier is not
-affected**: weights change the score and the order within a tier, never which
-tier a participant is in (the tier comes from the browser library's screening
-and `scoring.softScoreThreshold`).
+Setting a weight to `0` removes that term. **Weights never change the tier**:
+they change the score and the order of the list, never which tier a
+participant is in. To let a count move participants into the hard tier, use
+`hardAt` ([below](#report-hard-at-counts-hardat)).
 
 | Key | Counts | Default weight |
 |---|---|---|
@@ -126,10 +134,10 @@ and `scoring.softScoreThreshold`).
 | `viewportShifts` | viewport-width changes | 0 |
 | `zoom` | browser zoom changes | 0 |
 | `edgeExits` | mouse edge-exit patterns | 0 |
-| `cursor` | the pointer verdict's level: suspicious 1, highly suspicious 2 (clean and not assessed 0). Ranking within a tier only; the tier is unchanged. Since 0.14 ([interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers)) | 0 |
-| `softwareRenderer` | 1 when the browser drew without a graphics card (a device fact, not a tell). Ranking within a tier only; the tier and the pointer verdict are unchanged. Since 0.17 | 0 |
-| `deviceMasking` | 1 when the window log shows device masking (R1, R2 or R3a); not evidence of AI use. Ranking within a tier only. Since 0.17 | 0 |
-| `typingRhythm` | the typing verdict's level: suspicious 1, highly suspicious 2 (clean and not assessed 0). Ranking within a tier only; the tier is unchanged. Since 0.17 ([interpreting-signals.md](interpreting-signals.md#typing-dynamics)) | 0 |
+| `cursor` | the pointer verdict's level: suspicious 1, highly suspicious 2 (clean and not assessed 0). Ranking only; `hardAt.cursor` (1 or 2) moves every verdict at that level or above into the hard tier (`HARD*`). Since 0.14 ([interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers)) | 0 |
+| `softwareRenderer` | 1 when the browser drew without a graphics card (a device fact, not a tell). Ranking only; the pointer verdict is unchanged; `hardAt.softwareRenderer: 1` moves every session it fired for into the hard tier (`HARD*`). Since 0.17 | 0 |
+| `deviceMasking` | 1 when the window log shows device masking (R1, R2 or R3a); not evidence of AI use. Ranking only; `hardAt.deviceMasking: 1` moves every session it fired for into the hard tier (`HARD*`). Since 0.17 | 0 |
+| `typingRhythm` | the typing verdict's level: suspicious 1, highly suspicious 2 (clean and not assessed 0). Ranking only; `hardAt.typingRhythm` (1 or 2) moves every verdict at that level or above into the hard tier (`HARD*`). Since 0.17 ([interpreting-signals.md](interpreting-signals.md#typing-dynamics)) | 0 |
 
 Notes:
 
@@ -156,6 +164,40 @@ Notes:
   the applied formula.
 - The signal legend and tile hints in the HTML report ("not scored") describe
   the default weights.
+
+### Report hard-at counts (`hardAt`)
+
+`hardAt` gives a signal a count at or above which the report moves a
+participant into the hard tier. The report marks them `HARD*`, beside the
+library's own `HARD`, so you can tell the two apart:
+
+```json
+{ "hardAt": { "sidebar": 1, "paste": 3 } }
+```
+
+- The count is the one the score weighs, before any cap (the keys of the
+  `scoreWeights` table). For `cursor` and `typingRhythm` it is the verdict's
+  level: `"cursor": 2` moves every highly suspicious pointer verdict.
+- A participant the library hard-flagged stays `HARD` (under `phaseScope`,
+  the library's rules recounted over the scoped trials); `HARD*` is only ever
+  added to a soft or clean one. `hardTriggered` in `summary.csv` keeps the
+  library's decision; the `reportTier` column (`hard`, `hard*`, `soft`,
+  `clean`) carries the report's.
+- `triage.md` lists `HARD*` with the hard rows and says what it means above
+  the table, `score-weights.json` records the rule, and the HTML top bar
+  names it (`hard at: sidebar 1, paste 3`). The console adds the line
+  `Moved to hard by hardAt (hard*): N` when N is above 0.
+- Values must be whole numbers ≥ 1; any other value is ignored with a
+  warning. An unknown key is ignored with a "did you mean" warning, like
+  `scoreWeights`; `null` for a key means no rule.
+- The rule is yours, not the one in force while the data were collected:
+  if a pre-registration names the library's preset, report both tiers.
+- The analyzer's settings and the CLI report's **Weights…** dialog show a
+  **Hard at** box for each signal, beside its weight and cap. In the
+  analyzer, a change re-runs the report and **Export config** writes the
+  rule with the other settings. In the CLI report, the dialog changes the
+  page only, and **Copy config** gives the `scoreWeights` and `hardAt` lines
+  for the next run ([Finding participants in the rail](using-cyborg-hunter.md#finding-participants-in-the-rail)).
 
 ### Phase scoping (`phaseScope`)
 
