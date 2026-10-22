@@ -59,12 +59,16 @@ test('Hard at in the settings moves participants into HARD* in the report frame,
 
 // "cut" (a copy) and "pan", the start of "panel" (a sidebar event), are
 // found only through the signals' words, matched by their start: no
-// participant's triage reason or id holds them.
+// participant's triage reason or id holds them. The page shows the results
+// before the frame has loaded its report, so the guard waits for the rows
+// and counts the ones it read: it cannot pass on an empty frame.
 test('the report frame\'s search finds participants by the start of a signal word', async ({ page, baseURL }) => {
   const { allow, seen } = await ready(page, baseURL);
   const frame = reportFrame(page);
   const rows = frame.locator('.cohort-row');
-  expect(await rows.evaluateAll((rs) => rs.filter((r) => /cut|pan/.test(r.dataset.reason + ' ' + r.dataset.pid.toLowerCase())).length)).toBe(0);
+  await expect(rows).toHaveCount(4);
+  expect(await rows.evaluateAll((rs) => [rs.length, rs.filter((r) => /cut|pan/.test(r.dataset.reason + ' ' + r.dataset.pid.toLowerCase())).length]))
+    .toEqual([4, 0]);
   await frame.locator('.search-wrap input').fill('cut pan');
   await expect.poll(() => rows.evaluateAll((rs) => rs.filter((r) => getComputedStyle(r).display !== 'none').map((r) => r.dataset.pid)))
     .toEqual(['DEMO-681w']);

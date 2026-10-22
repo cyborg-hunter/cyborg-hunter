@@ -150,14 +150,20 @@ test('the Typing and ID sorts', async ({ page }) => {
 // Words only a signal gives, which no triage reason or id holds, matched by
 // their start: "mous" begins "mouse", the pointer verdict's (bsq6 is at
 // level 2; 681w's clean verdict is level 0), "cut" is a copy's and "pan"
-// begins "panel", a sidebar event's.
+// begins "panel", a sidebar event's. "ouse", inside "mouse" but at the
+// start of no word, finds no one. The guard counts the rows it read, so it
+// cannot pass on none.
 test('the search finds participants by the start of a signal word no triage reason holds', async ({ page }) => {
   await openReport(page);
-  expect(await page.locator('.cohort-row').evaluateAll((rs) => rs.filter((r) =>
-    /mous|cut|pan/.test(r.dataset.reason + ' ' + r.dataset.pid.toLowerCase())).length)).toBe(0);
+  const rows = page.locator('.cohort-row');
+  await expect(rows).toHaveCount(4);
+  expect(await rows.evaluateAll((rs) => [rs.length, rs.filter((r) =>
+    /mous|ouse|cut|pan/.test(r.dataset.reason + ' ' + r.dataset.pid.toLowerCase())).length])).toEqual([4, 0]);
   const search = page.locator('.search-wrap input');
   await search.fill('mous');
   expect(await shown(page)).toEqual(['DEMO-bsq6']);
+  await search.fill('ouse');
+  expect(await shown(page)).toEqual([]);
   await search.fill('cut pan');
   expect(await shown(page)).toEqual(['DEMO-681w']);
 });
