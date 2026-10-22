@@ -98,3 +98,15 @@ test('a run-only key never reaches the file', () => {
   const base = { ...merged(undefined), noVisuals: true, singleParticipant: 'P1' };
   assert.deepEqual(exportConfig(base, { participantIdField: 'p' }), { participantIdField: 'p' });
 });
+
+test('Hard at: through the panel into the run and the export; a change in it counts as a change', () => {
+  assert.equal(merged(undefined).hardAt, null);
+  const base = merged({ hardAt: { sidebar: 2 } });
+  const s = settingsFromConfig(base);
+  assert.deepEqual(s.hardAt, { sidebar: 2 });
+  assert.deepEqual(configFromSettings(base, s).hardAt, { sidebar: 2 });
+  assert.notEqual(settingsKey(s), settingsKey(settingsFromConfig(merged(undefined))));
+  const none = settingsFromConfig(merged(undefined));
+  assert.deepEqual(exportConfig(configFromSettings(merged(undefined), { ...none, hardAt: { paste: 3 } }), { participantIdField: 'p' }),
+    { hardAt: { paste: 3 }, participantIdField: 'p' });
+});

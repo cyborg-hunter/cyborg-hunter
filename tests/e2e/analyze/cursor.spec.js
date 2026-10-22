@@ -6,10 +6,10 @@
 // block, the tile, the rail cell and the run sentence; DEMO-681w reads clean,
 // with the counts its sentence gives; the two sessions recorded without
 // device facts read "not assessed", with the reason; sorting the rail by the
-// verdict puts the agent first and those two last; the settings row holds the
-// labelled weight; a weight of 13 moves the agent's session up within its
-// tier and 0 puts it back. Every test runs under the request guard of
-// engines.spec.js.
+// verdict puts the agent first and those two last; the settings' weights
+// panel holds the labelled row and its hint; a weight of 13 moves the agent's
+// session up within its tier and 0 puts it back. Every test runs under the
+// request guard of engines.spec.js.
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, railOrder, reportFrame } from './support.mjs';
 
 test('the sample shows the pointer verdict, its tells, the details, the tile, the rail cell and the labelled weight', async ({ page, baseURL }) => {
@@ -46,8 +46,8 @@ test('the sample shows the pointer verdict, its tells, the details, the tile, th
   await expect(details.locator('tr', { hasText: 'efficiency (per movement)' })).toContainText('0.967 (n = 1)');
   await expect(frame.locator('#p-DEMO-bsq6 .signal-tile', { hasText: 'Pointer verdict' }).locator('.signal-value')).toHaveText('2');
   await expect(section).not.toContainText('replay card');
-  await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('pointer verdict (cursor)');
-  await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('the tier is unchanged');
+  await expect(page.locator('[data-role="settings-form"] .wp')).toContainText('Pointer verdict');
+  await expect(page.locator('[data-role="settings-form"] .wp')).toContainText('Points × level: suspicious 1, highly suspicious 2');
   await expect(page.locator('[data-role="cursor-line"]')).toContainText('Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 2 not assessed (4 sessions; 2 recorded without device facts)');
   // By the verdict: highly suspicious, clean, then the two not assessed.
   await frame.locator('.sort-wrap select').selectOption('cursor');

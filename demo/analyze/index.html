@@ -32,10 +32,7 @@ table.files th:last-child,table.files td:last-child{ width:1%; text-align:right 
 /* min-width:0: a fieldset is otherwise as wide as its widest control (the id select), past the panel on a phone.
    Each label and its field wrap as one, a gap from the next, so a checkbox never parts from its words. */
 .settings-panel label{ display:inline-block; max-width:100%; margin-right:12px }
-.settings-panel[hidden]{ display:none } table.weights{ border-collapse:collapse; font-size:13px } table.weights td,table.weights th{ padding:2px 8px 2px 0; text-align:left } table.weights input{ width:6em }
-/* A signal's note wraps under its name, so the Weight and Cap fields stay beside the names rather than past the longest note,
-   on the name's line. */
-table.weights .hint{ max-width:20em } table.weights td{ vertical-align:baseline }
+.settings-panel[hidden]{ display:none }
 .dropzone{ border:2px dashed var(--line); padding:28px; text-align:center; margin:12px 0 } .dropzone.over{ border-color:var(--ink); background:var(--bg) }
 .dropzone.busy{ opacity:.55; pointer-events:none; }
 /* The file inputs stay in the tab order but out of sight: their labels ("choose files", "choose a folder", "Use a key file…") are the controls, as links. */

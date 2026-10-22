@@ -1,22 +1,28 @@
 // demo/analyze/settings-panel.js
 // The analyzer's settings: only keys a report can apply after the data were
-// collected. The score weights order participants within a tier; the soft
-// threshold re-tiers them against the soft scores the data saved; the id,
-// integrity and session-report fields say where the data are, so a change to
-// one reads the files again; the platform id changes only the display, and
-// pseudonymize swaps the ids the report shows for codes. Nothing
-// here re-screens a participant: the hard tier and the saved soft scores are
-// the data's own (docs/configuration.md, "Which fields actually do something").
+// collected. The score weights order participants; Hard at (hardAt) adds the
+// report's own hard tier, shown as hard*; the soft threshold re-tiers them
+// against the soft scores the data saved; the id, integrity and
+// session-report fields say where the data are, so a change to one reads the
+// files again; the platform id changes only the display, and pseudonymize
+// swaps the ids the report shows for codes. The tier the library decided is
+// kept and shown as hard, and the saved soft scores are the data's own: Hard
+// at only adds hard* beside them (docs/configuration.md, "Which fields
+// actually do something").
+// The weights and Hard at are the shared panel (src/cli/renderers/
+// weights-panel.js), the one the CLI report opens from "Weights…".
 // The phase scope and the trajectory order are left to the CLI: the panel
 // neither shows nor edits them, and a dropped config that sets them keeps
 // them, in every run and in the export (configFromSettings).
 import { SCORE_SIGNALS } from '../../src/cli/analyzers/score-weights.js';
+import { panelSignals, weightsPanelHtml, wireWeightsPanel, weightsConfig, WEIGHTS_PANEL_CSS } from '../../src/cli/renderers/weights-panel.js';
 
 // The keys whose change needs the files read again; the panel's others
 // re-analyse the participants the last run read (worker-entry.js `reanalyze`).
 export var REINGEST_KEYS = ['participantIdField', 'integrityField', 'sessionIntegrityPath'];
 
-var DEFAULT_WEIGHT = Object.fromEntries(SCORE_SIGNALS.map(function (s) { return [s.key, s.weight]; }));
+// The panel's rows, at the defaults: write() puts a config's values in.
+var SIGNALS = panelSignals();
 var numberOrNull = function (text) {
   if (String(text).trim() === '') return null;
   var n = Number(text);
@@ -31,6 +37,7 @@ var numberOrNull = function (text) {
 export function settingsFromConfig(config) {
   return {
     scoreWeights: config.scoreWeights || null,
+    hardAt: config.hardAt || null,
     softScoreThreshold: config.scoring && typeof config.scoring.softScoreThreshold === 'number' ? config.scoring.softScoreThreshold : null,
     integrityField: config.integrityField || 'integrity',
     sessionIntegrityPath: config.sessionIntegrityPath || null,
@@ -50,18 +57,27 @@ function resolveWeight(user, sig) {
   return [weight, max];
 }
 
+// One signal's Hard at count as the panel shows it, from a config's hardAt:
+// a whole number from 1, else none (resolveHardAt warns about the rest).
+function resolveHardAtCount(hardAt, sig) {
+  var h = hardAt && typeof hardAt === 'object' ? hardAt[sig.key] : null;
+  return Number.isInteger(h) && h >= 1 ? h : null;
+}
+
 /**
  * The settings as the panel shows them, as a string two configs can be
- * compared by: the weights resolved per signal in SCORE_SIGNALS order, so
- * key order, a bare number against { weight }, and an explicit default
- * against no entry all compare equal. The phase scope and the trajectory
- * order are not in it: two configs that differ only in them put the same
- * values in the panel, so the page does not count the second as a change
- * (the run still takes the newer config's, through configFromSettings).
+ * compared by: the weights and the Hard at counts resolved per signal in
+ * SCORE_SIGNALS order, so key order, a bare number against { weight }, and an
+ * explicit default against no entry all compare equal. The phase scope and
+ * the trajectory order are not in it: two configs that differ only in them
+ * put the same values in the panel, so the page does not count the second as
+ * a change (the run still takes the newer config's, through
+ * configFromSettings).
  */
 export function settingsKey(s) {
   var user = s.scoreWeights || {};
   return JSON.stringify([SCORE_SIGNALS.map(function (sig) { return resolveWeight(user, sig); }),
+    SCORE_SIGNALS.map(function (sig) { return resolveHardAtCount(s.hardAt, sig); }),
     s.softScoreThreshold, s.integrityField, s.sessionIntegrityPath, s.platformIdField, s.showPlatformId, s.pseudonymize]);
 }
 
@@ -74,6 +90,7 @@ export function settingsKey(s) {
 export function configFromSettings(base, settings) {
   var c = Object.assign({}, base);
   c.scoreWeights = settings.scoreWeights;
+  c.hardAt = settings.hardAt || null;
   var scoring = Object.assign({}, base.scoring || {});
   delete scoring.softScoreThreshold;
   if (settings.softScoreThreshold != null) scoring.softScoreThreshold = settings.softScoreThreshold;
@@ -86,26 +103,15 @@ export function configFromSettings(base, settings) {
   return c;
 }
 
-// One weights row per report-score signal (src/cli/analyzers/score-weights.js),
-// with the signal's label and hint when the registry gives them.
-function weightRows() {
-  return SCORE_SIGNALS.map(function (s) {
-    var name = s.label ? s.label + ' (<code>' + s.key + '</code>)' : '<code>' + s.key + '</code>';
-    var hint = s.hint ? '<div class="hint">' + s.hint + '</div>' : '';
-    return '<tr><td>' + name + hint + '</td>' +
-      '<td><input type="number" min="0" step="any" data-weight="' + s.key + '" aria-label="' + s.key + ' weight"></td>' +
-      '<td><input type="number" min="0" step="1" data-max="' + s.key + '" placeholder="none" aria-label="' + s.key + ' cap"></td></tr>';
-  }).join('');
-}
-
 var PANEL_HTML =
+  '<style>' + WEIGHTS_PANEL_CSS + '</style>' +
   '<form data-role="settings-form"><fieldset>' +
   '<legend>Settings</legend>' +
   '<p><label>Participant ID field: <select data-role="id-field" name="participantIdField"></select></label> <span class="hint" data-role="id-files"></span></p>' +
   '<p><label>Soft-score threshold <input type="number" min="0" step="any" name="softScoreThreshold" placeholder="each participant\'s saved one"></label> ' +
   '<span class="hint">The score at or above which a participant is flagged as suspicious in the triage list.</span></p>' +
   '<details open><summary>Score weights: choose how much importance to give to each of the potential signals in estimating the participant\'s suspiciousness score.</summary>' +
-  '<table class="weights"><thead><tr><th>Signal</th><th>Weight</th><th title="the most events of one kind that count toward the ranking score">Cap</th></tr></thead><tbody>' + weightRows() + '</tbody></table></details>' +
+  weightsPanelHtml(SIGNALS) + '</details>' +
   '<p><label>Integrity field <input type="text" name="integrityField"></label> ' +
   '<label>Session report path <input type="text" name="sessionIntegrityPath" placeholder="found by convention"></label></p>' +
   '<p><label>Platform ID field <input type="text" name="platformIdField"></label> ' +
@@ -126,12 +132,15 @@ var PANEL_HTML =
 /**
  * Renders the panel into `container`; `onChange()` runs after any field
  * changes (a `change` event: on blur or Enter for a text field, at once for
- * a select or a checkbox).
+ * a select or a checkbox, on release for a slider, and once for Reset to
+ * defaults). A slider's drag fires no change until it is released: each
+ * change re-analyses the cohort.
  */
 export function createSettingsPanel(container, onChange) {
   container.innerHTML = PANEL_HTML;
   var form = container.querySelector('form');
   var field = function (name) { return form.elements.namedItem(name); };
+  var weights = wireWeightsPanel(form.querySelector('.wp'), { signals: SIGNALS, onInput: null });
   form.addEventListener('submit', function (e) { e.preventDefault(); });
   // A key file picked is not a settings change (the page handles it).
   form.addEventListener('change', function (e) { if (!(e.target && e.target.dataset && e.target.dataset.role === 'key-input')) onChange(); });
@@ -144,23 +153,16 @@ export function createSettingsPanel(container, onChange) {
       field('showPlatformId').checked = !!s.showPlatformId;
       field('pseudonymize').checked = !!s.pseudonymize;
       var user = s.scoreWeights || {};
-      SCORE_SIGNALS.forEach(function (sig) {
-        var resolved = resolveWeight(user, sig), weight = resolved[0], max = resolved[1];
-        form.querySelector('[data-weight="' + sig.key + '"]').value = String(weight);
-        form.querySelector('[data-max="' + sig.key + '"]').value = max == null ? '' : String(max);
+      weights.write({
+        weights: SCORE_SIGNALS.map(function (sig) { var r = resolveWeight(user, sig); return { weight: r[0], max: r[1] }; }),
+        hardAt: SCORE_SIGNALS.map(function (sig) { return resolveHardAtCount(s.hardAt, sig); }),
       });
     },
     read: function () {
-      var weights = {};
-      SCORE_SIGNALS.forEach(function (sig) {
-        var w = numberOrNull(form.querySelector('[data-weight="' + sig.key + '"]').value);
-        var max = numberOrNull(form.querySelector('[data-max="' + sig.key + '"]').value);
-        var weight = w == null ? DEFAULT_WEIGHT[sig.key] : w;
-        if (weight === DEFAULT_WEIGHT[sig.key] && max == null) return;
-        weights[sig.key] = max == null ? weight : { weight: weight, max: Math.floor(max) };
-      });
+      var c = weightsConfig(SIGNALS, weights.read());
       return {
-        scoreWeights: Object.keys(weights).length ? weights : null,
+        scoreWeights: c.scoreWeights || null,
+        hardAt: c.hardAt || null,
         softScoreThreshold: numberOrNull(field('softScoreThreshold').value),
         integrityField: field('integrityField').value.trim() || 'integrity',
         sessionIntegrityPath: field('sessionIntegrityPath').value.trim() || null,

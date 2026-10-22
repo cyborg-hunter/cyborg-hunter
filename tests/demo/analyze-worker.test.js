@@ -623,6 +623,26 @@ test('a pseudonymized run, then a re-analysis under another key: the asset note 
   assertSameReport(after, fresh);
 });
 
+// The settings' Hard at counts (config.hardAt) re-analyse like the weights:
+// the re-analysis under a count is the fresh build under it, file for file.
+// SYN-U's one paste reaches a paste count of 1 and moves it to hard*.
+test('a re-analysis under a Hard at count is the fresh build under it, file for file', async () => {
+  const files = rereadCohort();
+  const w = startWorker();
+  w.send({ type: 'check', files });
+  const checked = await w.next('checked', 'error');
+  assert.equal(checked.type, 'checked', checked.message);
+  const ruled = { ...checked.config, hardAt: { paste: 1 } };
+  const tiers = (r) => r.done.triageRows.map((row) => [row.participantId, row.tier]);
+  const first = await render(w, 'run', files, checked.config);
+  assert.deepEqual(tiers(first), [['SYN-U', 'clean'], ['SYN-L', 'clean']]);
+  const after = await render(w, 'reanalyze', files, ruled);
+  const fresh = await render(startWorker(), 'run', files, ruled);
+  assert.deepEqual(tiers(after), [['SYN-U', 'hard*'], ['SYN-L', 'clean']]);
+  assert.match(after.done.files['summary.csv'].split('\n').find((l) => l.startsWith('SYN-U,')), /,hard\*$/);
+  assertSameReport(after, fresh);
+});
+
 // A settings change that reads the files again (another id or integrity
 // field) leaves the last report on screen until the new one is done, and the
 // page's replay card can still load a replay from it meanwhile, styled as

@@ -51,7 +51,7 @@ const CHECKED = { type: 'checked', counts: { participant: 3, replay: 1, assets: 
   files: [{ path: 'a.csv', kind: 'data' }, { path: 'b.csv', kind: 'data' }, { path: 'c.json', kind: 'data' }, { path: 'cyborg-hunter.config.json', kind: 'config' }],
   configPath: 'cyborg-hunter.config.json' };
 // CHECKED.config with the settings panel's keys at their defaults: what a run sends.
-const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, scoring: null,
+const PANEL_DEFAULTS = { participantIdField: 'participantId', scoreWeights: null, hardAt: null, scoring: null,
   integrityField: 'integrity', sessionIntegrityPath: null, platformIdField: null, showPlatformId: false, pseudonymize: false };
 const DONE = { type: 'done', html: '<p>report</p>', triageOrder: ['A', 'B'], counts: { flaggedHard: 1, flaggedSoft: 0, clean: 1 },
   cursorLine: 'Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 0 not assessed (2 sessions; 0 recorded without device facts)',
@@ -1389,11 +1389,51 @@ test('the threshold says what it is for, the weights are open under their senten
   assert.equal(details.hasAttribute('open'), true, 'open until the analyst closes it');
   assert.equal(details.querySelector('summary').textContent,
     'Score weights: choose how much importance to give to each of the potential signals in estimating the participant\'s suspiciousness score.');
-  assert.deepEqual([...details.querySelectorAll('th')].map((th) => [th.textContent, th.title]),
-    [['Signal', ''], ['Weight', ''], ['Cap', 'the most events of one kind that count toward the ranking score']]);
+  assert.deepEqual([...details.querySelectorAll('.wp-colhead span')].map((s) => [s.textContent, s.title]),
+    [['Signal', ''], ['Points per event', ''], ['Points', ''], ['Cap', 'the most events of one kind that count toward the ranking score'],
+      ['Hard at', 'a count at or above which the report moves the participant into the hard tier, shown as HARD*']]);
   assert.equal(form.querySelectorAll('p.hint').length, 0);
   for (const name of ['phaseInclude', 'phaseExclude', 'trajectoryDisplayOrder']) assert.equal(form.elements.namedItem(name), null, name);
   assert.equal(role('phase-hint'), null);
+});
+
+test('the weights panel: a slider moves its number box, and the weights and Hard at reach the run', async () => {
+  const t = boot();
+  await toCheck(t);
+  const form = role('settings-form');
+  const slider = form.querySelector('[data-slider="sidebar"]');
+  slider.value = '12';
+  slider.dispatchEvent(new win.Event('input', { bubbles: true }));
+  assert.equal(weightInput('sidebar').value, '12');
+  form.querySelector('[data-hard="sidebar"]').value = '1';
+  form.dispatchEvent(new win.Event('change', { bubbles: true }));
+  action('run').click();
+  await tick();
+  const sent = t.sent.at(-1);
+  assert.deepEqual(sent.config.scoreWeights, { sidebar: 12 });
+  assert.deepEqual(sent.config.hardAt, { sidebar: 1 });
+});
+
+// Hard at is a post-hoc key, like the weights: a change once a report is on
+// screen re-analyses the participants the run read. Reset to defaults fires
+// one change for the whole panel, so it re-analyses once.
+test('a Hard at count set on the results re-analyses with it, and Reset to defaults re-analyses at the defaults', async () => {
+  const t = boot();
+  await toResults(t);
+  const form = role('settings-form');
+  form.querySelector('[data-hard="paste"]').value = '2';
+  form.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await tick();
+  assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID', config: { ...PANEL_DEFAULTS, hardAt: { paste: 2 } } });
+  t.emit({ type: 'zip', chunk: new Uint8Array([3]) });
+  t.emit(DONE);
+  await tick();
+  const sentBefore = t.sent.length;
+  form.querySelector('[data-action="weights-reset"]').click();
+  await tick();
+  assert.equal(t.sent.length, sentBefore + 1, 'one re-analysis');
+  assert.deepEqual(t.sent.at(-1), { type: 'reanalyze', participantIdField: 'subject_ID', config: PANEL_DEFAULTS });
+  assert.equal(form.querySelector('[data-hard="paste"]').value, '');
 });
 
 // The phase scope and the trajectory order are the CLI's: a dropped config

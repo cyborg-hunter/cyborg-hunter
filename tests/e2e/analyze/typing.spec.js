@@ -3,8 +3,8 @@
 // session (DEMO-bsq6) reads highly suspicious from its recording, with both
 // tells and its first text box in the open details, above its cursor
 // section; Mira's DEMO-681w reads not assessed (its recording holds no typed
-// characters in a text field of the judged trials); the settings table holds
-// the labelled typingRhythm weight. Every test runs under the request guard
+// characters in a text field of the judged trials); the settings' weights
+// panel labels the typingRhythm row. Every test runs under the request guard
 // of engines.spec.js.
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, reportFrame } from './support.mjs';
 
@@ -28,6 +28,7 @@ test('the sample shows the typing verdict, its tells and the field, above the cu
   expect(order).toEqual(['typing-section', 'cursor-section']);
   await frame.locator('.cohort-row[data-pid="DEMO-681w"]').click();
   await expect(frame.locator('#p-DEMO-681w .typing-verdict .muted')).toHaveText('the session recording holds no typed characters in a text field of the judged trials.');
-  await expect(page.locator('[data-role="settings-form"] table.weights')).toContainText('typing verdict (typingRhythm)');
+  await expect(page.locator('[data-role="settings-form"] .wp-row', { has: page.locator('[data-weight="typingRhythm"]') }).locator('.wp-name'))
+    .toContainText('Typing verdict');
   await assertOnlyAllowed(page, seen, allow);
 });
