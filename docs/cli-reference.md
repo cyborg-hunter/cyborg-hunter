@@ -449,7 +449,8 @@ even when its score is lower.
 
 ### Decision categories
 
-The dashboard groups participants three ways:
+The rail's tier block and its cohort totals group participants three ways
+(`HARD*` rows, which `hardAt` moved, count as hard):
 
 - **Hard-flagged** (any hard signal fired) — count thresholds crossed; review the pasted text in `event-log.csv`.
 - **Soft-flagged** (soft score ≥ preset threshold) — multiple behavioral indicators; check trajectories and the session timeline for patterns.

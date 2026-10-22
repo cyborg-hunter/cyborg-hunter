@@ -94,7 +94,9 @@ See [`signals-reference.md`](signals-reference.md) for preset values and the ful
 
 ### Report-score weights (`scoreWeights`)
 
-The report ranks participants within a tier by a triage score (see
+The report ranks participants by a triage score: within a tier in `triage.md`
+(and the rail's **Tier, then score**), across tiers in the rail's default
+**Score ↓** (see
 [cli-reference.md → Triage scoring](cli-reference.md#triage-scoring)). By default
 it is `5×paste + 5×copy + 3×sidebar + 1×tab-away`. `scoreWeights` changes that
 formula. Write only the signals you want to change; every other signal keeps its

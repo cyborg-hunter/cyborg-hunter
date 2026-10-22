@@ -77,8 +77,9 @@ sorted by score.
   rule, the top bar names it, and the console counts the participants it
   moved. Unknown keys warn with the closest name.
 - One score-weights panel, with a 0–20 slider, a number box, a cap and a
-  Hard at count per signal, grouped: in the analyzer's settings, with Reset
-  to defaults beside Export config, and in a **Weights…** dialog in the CLI
+  Hard at count per signal, grouped: in the analyzer's settings, with
+  **Reset to defaults** beside **Export config**, and in a **Weights…**
+  dialog in the CLI
   report, which re-scores, re-tiers and re-sorts the list as you type. The
   dialog changes the page only, and its button reads **Weights… (edited)**
   while its values differ from the run's; the report's files and annotation

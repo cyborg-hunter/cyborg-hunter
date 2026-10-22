@@ -29,7 +29,7 @@ Every signal cyborg-hunter records, the exact thresholds per preset, and how the
 
 ## Pointer verdict
 
-One verdict per session (`clean`, `suspicious`, `highly suspicious` or `not assessed`), read by the report's cursor section from what the monitor records, with the tells that decided it. None of it enters the library's soft score or the tier; `scoreWeights.cursor` can add the verdict's level, times its weight, to the CLI's triage score ([configuration.md](configuration.md#report-score-weights-scoreweights)). What each tell means, its thresholds and its innocent causes: [interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers).
+One verdict per session (`clean`, `suspicious`, `highly suspicious` or `not assessed`), read by the report's cursor section from what the monitor records, with the tells that decided it. None of it enters the library's soft score or the library's tier (`hardAt.cursor` can add the report's `HARD*`, [configuration.md](configuration.md#report-hard-at-counts-hardat)); `scoreWeights.cursor` can add the verdict's level, times its weight, to the CLI's triage score ([configuration.md](configuration.md#report-score-weights-scoreweights)). What each tell means, its thresholds and its innocent causes: [interpreting-signals.md](interpreting-signals.md#two-scores-three-tiers).
 
 | Tell | What is recorded | Since |
 |---|---|---|
@@ -45,7 +45,7 @@ Sessions recorded before 0.14 carry no `device` object and no click provenance, 
 
 ## Typing verdict
 
-One verdict per session (`clean`, `suspicious`, `highly suspicious` or `not assessed`), read by the report's typing section from the typing-rhythm summaries, or, for data recorded before 0.17, from the session recording's key presses. Only a recording that keeps the page (the recorder's `dom` tier) says which field each key went to; on the default `trace` tier the rhythm is not recorded, and the session is not assessed. None of it enters the library's soft score or the tier; `scoreWeights.typingRhythm` can add the verdict's level, times its weight, to the CLI's triage score ([configuration.md](configuration.md#report-score-weights-scoreweights)). What the rules mean and their limits: [interpreting-signals.md](interpreting-signals.md#typing-dynamics).
+One verdict per session (`clean`, `suspicious`, `highly suspicious` or `not assessed`), read by the report's typing section from the typing-rhythm summaries, or, for data recorded before 0.17, from the session recording's key presses. Only a recording that keeps the page (the recorder's `dom` tier) says which field each key went to; on the default `trace` tier the rhythm is not recorded, and the session is not assessed. None of it enters the library's soft score or the library's tier (`hardAt.typingRhythm` can add the report's `HARD*`, [configuration.md](configuration.md#report-hard-at-counts-hardat)); `scoreWeights.typingRhythm` can add the verdict's level, times its weight, to the CLI's triage score ([configuration.md](configuration.md#report-score-weights-scoreweights)). What the rules mean and their limits: [interpreting-signals.md](interpreting-signals.md#typing-dynamics).
 
 | Tell | Fires when (per text field with 20 gaps or more) | Since |
 |---|---|---|

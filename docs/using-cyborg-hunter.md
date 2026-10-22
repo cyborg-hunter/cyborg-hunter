@@ -561,14 +561,16 @@ Confirm the participant-ID field the page suggests, adjust the settings if
 you need to, and download the report as a `.zip` with the CLI's output
 layout, or `summary.csv`, `triage.md` and `event-log.csv` on their own.
 The settings are the ones a report can apply after collection: the
-soft-score threshold, the score weights and **Hard at** counts (the same
-panel as the CLI report's **Weights…** dialog, with **Reset to defaults**
-and, in place of Copy config, the page's "Export config" below; a
+soft-score threshold, the score weights, caps and **Hard at** counts, the
+ID, integrity and session-report fields, the platform ID field and whether
+the report shows it, and **Pseudonymize participant IDs** (as
+`--pseudonymize`: codes in place of IDs, see
+[The participant ID](#privacy-model)). The weights, caps and Hard at counts
+are the panel of the CLI report's **Weights…** dialog, with **Reset to
+defaults** and no Copy config: "Export config", below, writes them. A
 participant whose count reaches its Hard at count becomes `HARD*`, and the
-library's tier is kept), the ID, integrity and session-report fields, the platform ID field and whether the report shows
-it, and **Pseudonymize participant IDs** (as `--pseudonymize`: codes in
-place of IDs, see [The participant ID](#privacy-model)). With that box
-ticked, the results offer **Pseudonym key (keep private)**, which downloads
+library's tier is kept. With **Pseudonymize participant IDs** ticked, the
+results offer **Pseudonym key (keep private)**, which downloads
 `cyborg-hunter-pseudonyms.csv`, the key from codes back to IDs; keep it
 apart from the report. The page remembers the key in this browser, so a
 participant keeps the same code from one visit to the next: load the CLI's
@@ -792,10 +794,10 @@ values stay in `summary.csv`, `triage.md`, `score-weights.json`, the
 annotation exports (CSV and JSON), the top bar's run notes ("custom score
 weights", "hard at") and the score in the trajectories image's header,
 which is drawn into the image. While the dialog's values differ from the
-run's, the button reads **Weights… (edited)**. **Copy config** gives the
+run's, the button reads **Weights… (edited)**. **Copy config** copies the
 `scoreWeights` and `hardAt` lines that make the next CLI run build the same
-list (where the browser refuses the clipboard, it shows them selected, to
-copy by hand). **Reset to defaults** puts back the default weights, with no
+list and shows them below the buttons; where the browser refuses the
+clipboard, they are selected, to copy by hand. **Reset to defaults** puts back the default weights, with no
 caps and no Hard at counts. Close or Escape closes the dialog; Enter in a
 box does nothing. The analyzer's report has no **Weights…**: the same panel
 is in its settings, and a change there re-runs the report.
