@@ -116,13 +116,16 @@ describe('the rows', () => {
   });
 
   // The column heads label the boxes; the stacked layout hides them, so
-  // there each box shows a caption of its own. The screen-reader labels are
+  // there each box shows a caption of its own, the same word as its column
+  // head, so a box has one name at every width. The screen-reader labels are
   // the inputs' own, so the captions are hidden from them.
-  it('each box carries a caption (Weight, Cap, Hard at) beside its own screen-reader label', () => {
+  it('each box carries its column head\'s word as a caption (Points, Cap, Hard at), beside its own screen-reader label', () => {
     const d = dom(weightsPanelHtml(panelSignals())).document;
+    const heads = [...d.querySelectorAll('.wp-colhead span')].slice(-3).map((e) => e.textContent);
+    assert.deepEqual(heads, ['Points', 'Cap', 'Hard at']);
     for (const sig of SCORE_SIGNALS) {
       const boxes = [...d.querySelector(`[data-slider="${sig.key}"]`).closest('.wp-row').querySelectorAll('.wp-box')];
-      assert.deepEqual(boxes.map((b) => b.querySelector('.wp-cap').textContent), ['Weight', 'Cap', 'Hard at'], sig.key);
+      assert.deepEqual(boxes.map((b) => b.querySelector('.wp-cap').textContent), heads, sig.key);
       assert.deepEqual(boxes.map((b) => ['data-weight', 'data-max', 'data-hard'].find((a) => b.querySelector('input').hasAttribute(a))),
         ['data-weight', 'data-max', 'data-hard'], sig.key);
       for (const b of boxes) {

@@ -91,9 +91,10 @@ export function panelSignals(weights = DEFAULT_RESOLVED_WEIGHTS, hardAt = {}) {
 // a status line and the copied config (hidden until Copy config). A group's
 // rows come in WEIGHT_GROUPS order, not SCORE_SIGNALS order, so the
 // tab-away rows read together. Only the markup is reordered; the panel's
-// states stay in signals order. Each number box sits under a caption
-// (Weight, Cap, Hard at) that only the stacked layout shows, where the
-// column heads are hidden; screen readers take the box's own aria-label.
+// states stay in signals order. Each number box sits under a caption, its
+// column head's word (Points, Cap, Hard at), that only the stacked layout
+// shows, where the column heads are hidden; screen readers take the box's
+// own aria-label.
 export function weightsPanelHtml(signals) {
   const place = new Map(WEIGHT_GROUPS.flatMap((g) => g.rows.map((r, i) => [r.key, i])));
   const byGroup = new Map();
@@ -107,7 +108,7 @@ export function weightsPanelHtml(signals) {
   const box = (caption, input) => `<span class="wp-box"><span class="wp-cap" aria-hidden="true">${caption}</span>${input}</span>`;
   const row = (s) => `<div class="wp-row"><span class="wp-name">${esc(s.name)}<small>${esc(s.hint)}</small></span>` +
     `<input type="range" min="0" max="20" step="1" data-slider="${esc(s.key)}" aria-label="${esc(s.name)}: points per event">` +
-    box('Weight', `<input type="number" min="0" step="any" data-weight="${esc(s.key)}" aria-label="${esc(s.name)}: points per event (number)">`) +
+    box('Points', `<input type="number" min="0" step="any" data-weight="${esc(s.key)}" aria-label="${esc(s.name)}: points per event (number)">`) +
     box('Cap', `<input type="number" min="0" step="1" data-max="${esc(s.key)}" placeholder="none" aria-label="${esc(s.name)}: cap">`) +
     box('Hard at', `<input type="number" min="1" step="1" data-hard="${esc(s.key)}" placeholder="—" aria-label="${esc(s.name)}: hard at">`) + '</div>';
   return '<div class="wp" data-role="weights-panel">' +
