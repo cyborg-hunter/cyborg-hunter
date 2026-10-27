@@ -43,10 +43,10 @@ describe('examples/demo-sessions', () => {
     assert.match(stdout, /Pointer verdicts: 1 highly suspicious, 0 suspicious, 1 clean, 2 not assessed \(4 sessions; 2 recorded without device facts\)/);
   });
 
-  test('the README table is the run\'s triage table', () => {
+  test('the worked example\'s table is the run\'s triage table', () => {
     const want = readFileSync(join(out, 'triage.md'), 'utf8').split('\n').filter((l) => /^\| \d+ \|/.test(l)).map((l) => l.replace(/\s+/g, ' ').trim());
-    const readme = readFileSync('README.md', 'utf8').split('\n').filter((l) => /^\| \d+ \| DEMO-/.test(l)).map((l) => l.replace(/\s+/g, ' ').trim());
-    assert.deepEqual(readme, want);
+    const doc = readFileSync('docs/worked-example.md', 'utf8').split('\n').filter((l) => /^\| \d+ \| DEMO-/.test(l)).map((l) => l.replace(/\s+/g, ' ').trim());
+    assert.deepEqual(doc, want);
   });
 
   test('summary.csv: the verdict columns the walkthrough quotes', () => {
