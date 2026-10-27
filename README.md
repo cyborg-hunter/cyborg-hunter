@@ -1,25 +1,15 @@
 # cyborg-hunter
 
-Detects AI-tool use during browser-based behavioral experiments. Captures paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that compromise data quality on Prolific / MTurk / classroom studies and Qualtrics surveys. Produces a triage report ranking participants by suspiciousness.
+Cyborg-hunter is a tool for detecting the use of AI assistance in browser-based behavioral experiments. 
+Plugging cyborg-hunter into your study's code appends a suite of behavioral trackers, such as paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that can serve as cues that someone has been using AI assistance to answer the questions in your study. The complete list of signals tracked can be found at [docs/signals-reference.md](docs/signals-reference.md). The data thus collected is recorded into a file that comes along the main study data. Cyborg-hunter can then help you generate a report from that data, for experimenters to use in assessing the quality participants' responses.
 
-Optional companion deterrence modules ship in the same package (`ch.js` bundles both; the separate `extension-guard-friction.js` and `extension-guard-honeypot.js` files are for manual mode): friction enforces fullscreen (where the browser allows it) + blocks sidebars + scrambles content during violations + asks cooperative LLMs to refuse; honeypot exposes hidden and near-invisible (4×4 px) bait fields that AI agents fill and participants rarely notice (screen readers announce their labels).
+Optionally, a companion deterrence module can be plugged in the same way, which forces participants to stay in fullscreen mode and temporarily block access to the contents of the page if they every escape fullscreen or open a sidebar (both of which could presumably be used to access an AI chat window outside of the main experiment page).
 
 **[Try the live demo →](https://cyborg-hunter.github.io/cyborg-hunter/)** — run the tour in your browser; nothing leaves your machine.
 
 **[Analyze your data in the browser →](https://cyborg-hunter.github.io/cyborg-hunter/analyze/)** — drop your data files and get the same report the CLI builds, processed in your browser. Once the page has loaded, its security policy makes the browser refuse every data request except to the page's own site (where Load sample data fetches the sample's recordings), every form submission, and every load from another address. The page's own code never navigates away or opens another page, and automated tests fail the build if it ever requests or navigates anywhere else. Nothing is uploaded. Also available as a single offline file attached to each release.
 
 ### Example: what a report looks like
-
-The bundled dataset (`examples/demo-sessions/`, four sessions recorded on the demo tour: three by Mira, a human tester, one by a GPT agent) triages like this:
-
-| Rank | Participant | Tier | Score | Reason |
-|------|-------------|------|-------|--------|
-| 1 | DEMO-9mop | **HARD** | 45 | 4 paste events; 4 copy events; 4 tab-aways ≥10s; 1 tab-away 3–10s; 1 layout shifts; 44 synthetic insertions |
-| 2 | DEMO-bsq6 | **HARD** | 21 | 2 paste events; 2 copy events; 1 tab-away ≥10s; fast typing on 2 trials; 44 synthetic insertions; typing verdict: highly suspicious (median gap 58 ms; gap variation 0.07); pointer verdict: highly suspicious (clicks without a path 12/12; centered clicks 8/11) |
-| 3 | DEMO-681w | soft | 13 | 1 paste events; 1 copy events; fast typing on 2 trials; 1 sidebar event; 2 layout shifts; 44 synthetic insertions |
-| 4 | DEMO-a3f3 | clean | 11 | 1 paste events; 3 tab-aways 3–10s; fast typing on 1 trials; 1 sidebar event; 3 layout shifts; 1 zoom changes; 44 synthetic insertions |
-
-Ranking is **tier-first** (hard-triggered lead, then soft, then clean), score-descending within a tier — here the scores happen to fall in the same order, but a hard-flagged participant would lead a soft one with a higher score, because hard evidence beats any accumulation of soft evidence. By default the score is `5×paste + 5×copy + 3×sidebar + 1×tab-away` (counting tab-aways longer than the participant's tab-away threshold — 3s by default, 5s for the strict preset); synthetic insertions and fast typing are surfaced in the reason but do not drive the score unless you weight them with `scoreWeights` in the config. See [docs/cli-reference.md → Triage scoring](docs/cli-reference.md#triage-scoring). The HTML report for the same dataset:
 
 ![HTML report: tier-sorted participant list on the left; per-signal counts, score breakdown, paste evidence, and typing profile for the hard-flagged participant.](docs/assets/report-example.png)
 

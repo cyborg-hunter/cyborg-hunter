@@ -1,5 +1,8 @@
 # lab.js
 
+> [!NOTE]
+> AI generated writing.
+
 The one-line setup on a [lab.js](https://lab.js.org) study: one tag, every screen a trial, and the integrity data in the rows lab.js already saves. ch-labjs.js hooks lab.js 20.x, the version the lab.js builder exports as `lib/lab.js` ([lab.js 23](#labjs-23) is not supported yet).
 
 ## Setup

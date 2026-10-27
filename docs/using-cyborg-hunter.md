@@ -1,5 +1,8 @@
 # Using cyborg-hunter
 
+> [!NOTE]
+> AI generated writing.
+
 How the library fits into a browser-based experiment, past the [quickstart](quickstart.md): per-trial parameters, session replay, the report and common pitfalls. Manual mode and standalone use are in [advanced-integration.md](advanced-integration.md).
 
 ## Mental model

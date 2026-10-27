@@ -12,7 +12,7 @@ Orientation for coding agents working in this repository.
 - `src/cli/` — ingest → analyzers → renderers pipeline; `bin/cyborg-hunter.js` is the entry point
 - `dist/` — built artifacts, produced by `node build.js`. Edit `src/`, never `dist/`.
 - `tests/` — `node --test` suites per half, plus browser-run suites under `tests/browser/`
-- `examples/demo-sessions/` — four sessions recorded on the demo tour (three by one human tester, Mira in the docs, one by a GPT agent) and three of their replay recordings, for trying the CLI; the tour's saved files, never generated, and edited only as the folder's README says (one paste's text removed; in the recordings, the stylesheet URL, what browser extensions added to the page, and one paste with the keystrokes after it)
+- `examples/demo-sessions/` — four sessions recorded on the demo tour (three by one human tester, one by a GPT agent) and three of their replay recordings, for trying the CLI; the tour's saved files, never generated, and edited only as the folder's README says (one paste's text removed; in the recordings, the stylesheet URL, what browser extensions added to the page, and one paste with the keystrokes after it)
 - `docs/` — user documentation; `quickstart.md` and `worked-example.md` are the entry points
 
 ## Commands

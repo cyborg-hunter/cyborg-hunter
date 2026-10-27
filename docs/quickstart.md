@@ -1,5 +1,8 @@
 # Quickstart
 
+> [!NOTE]
+> AI generated writing.
+
 From zero to a triage report, for a jsPsych 7 experiment.
 
 **Not using jsPsych?** `ch.js` also works on a page without a framework; on a [Qualtrics](qualtrics.md) survey load `ch-qualtrics.js`, on a [lab.js](labjs.md) study `ch-labjs.js` ([Which file](#which-file)). `ch-labjs.js` takes the trials from lab.js's components and writes into lab.js's rows; [labjs.md](labjs.md) has the setup. On other pages, mark trials with `data-ch-trial="q1"` on a clickable element or with `CyborgHunter.mark('q1')`, and save `CyborgHunter.data()` with your own save code (a POST form gets it automatically, with the session recording, as two hidden fields, `cyborgHunterData` and `cyborgHunterReplay`). The details are in [advanced-integration.md → Vanilla segmentation reference](advanced-integration.md#vanilla-segmentation-reference). Steps 1 and 4–6 apply unchanged.

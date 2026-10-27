@@ -1,5 +1,8 @@
 # Qualtrics
 
+> [!NOTE]
+> AI generated writing.
+
 `ch-qualtrics.js`, the one-line setup's file for Qualtrics, runs in a survey
 from the survey's Look & Feel header. At every page submit it writes a summary of the session
 (scores, counts and event timings, never text the participant typed) into one

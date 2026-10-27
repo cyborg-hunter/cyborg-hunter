@@ -1,5 +1,8 @@
 # Interpreting the signals
 
+> [!NOTE]
+> AI generated writing.
+
 The report surfaces evidence; you make the exclusion decisions. This page covers the three places where readers most often misread that evidence: the two different "scores", the viewport-width-shift signal, and phase scoping. Thresholds and per-preset values live in [signals-reference.md](signals-reference.md); this page is about meaning.
 
 ## Two scores, three tiers

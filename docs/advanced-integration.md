@@ -1,5 +1,8 @@
 # Advanced integration
 
+> [!NOTE]
+> AI generated writing.
+
 This page covers what goes beyond the single `<script>` tag of the [quickstart](quickstart.md): wiring the jsPsych extension by hand (manual mode), moving an existing experiment to the one-line setup, double loads, the honeypot's ethics note, friction, pages without jsPsych, session replay, configuration, and the data format.
 
 ## Manual mode
