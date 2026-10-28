@@ -61,7 +61,7 @@ describe('examples/demo-sessions', () => {
     assert.deepEqual(ORDER.map((id) => col(byId[id], 'authoritative_soft_score')), ['12', '10', '6', '3']);
   });
 
-  test('the typing section: the agent highly suspicious from its recording, Mira\'s sessions not assessed, and where each rate came from', () => {
+  test('the typing section: the agent highly suspicious from its recording, the human tester\'s sessions not assessed, and where each rate came from', () => {
     const [h, ...r] = readFileSync(join(out, 'summary.csv'), 'utf8').trim().split('\n');
     const H = h.split(',');
     const col = (line, name) => line.split(',')[H.indexOf(name)];

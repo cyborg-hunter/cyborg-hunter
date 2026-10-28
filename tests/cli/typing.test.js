@@ -442,7 +442,7 @@ describe('the bundled demo sessions', () => {
     assert.deepEqual(a.rate.trials.map((x) => [x.trialId, x.source]), [['baseline', 'recording'], ['paste', 'recording'],
       ['tabaway', 'old formula'], ['autotype', 'recording'], ['guard-entry', 'old formula'], ['guard', 'old formula']]);
   });
-  it('Mira\'s sessions: nothing judged from their recordings; the old formula where a recording holds no edit', () => {
+  it('the human tester\'s sessions: nothing judged from their recordings; the old formula where a recording holds no edit', () => {
     const w = analyzeTyping(load('DEMO-681w'));
     assert.deepEqual([w.state, w.verdictReason, w.rate.source, fastTypingTrials(w)], ['not assessed', NO_TYPING, 'old formula', 2]);
     // Its recording covers the last pass through the tour, trials 11 to 16,

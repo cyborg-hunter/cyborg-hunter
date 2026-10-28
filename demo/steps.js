@@ -325,8 +325,8 @@ export const DOWNLOAD_BATCHES = [
     files: [
       { href: 'assets/DEMO-bsq6.json', filename: 'DEMO-bsq6.json', label: 'An AI agent',
         description: 'a GPT agent ran this tour from a browser sidebar' },
-      { href: 'assets/DEMO-681w.json', filename: 'DEMO-681w.json', label: 'Mira',
-        description: 'Mira, a human tester, ran this tour' },
+      { href: 'assets/DEMO-681w.json', filename: 'DEMO-681w.json', label: 'A human',
+        description: 'a human tester ran this tour' },
     ],
   },
 ];

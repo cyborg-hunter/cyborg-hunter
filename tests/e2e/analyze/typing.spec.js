@@ -2,10 +2,10 @@
 // The typing section on the analyze page, over the sample: the AI agent's
 // session (DEMO-bsq6) reads highly suspicious from its recording, with both
 // tells and its first text box in the open details, above its cursor
-// section; Mira's DEMO-681w reads not assessed (its recording holds no typed
-// characters in a text field of the judged trials); the settings' weights
-// panel labels the typingRhythm row. Every test runs under the request guard
-// of engines.spec.js.
+// section; the human tester's DEMO-681w reads not assessed (its recording
+// holds no typed characters in a text field of the judged trials); the
+// settings' weights panel labels the typingRhythm row. Every test runs
+// under the request guard of engines.spec.js.
 import { test, expect, guardNetwork, assertOnlyAllowed, siteAllowlist, waitReady, loadSample, buildReport, reportFrame } from './support.mjs';
 
 test('the sample shows the typing verdict, its tells and the field, above the cursor section', async ({ page, baseURL }) => {
