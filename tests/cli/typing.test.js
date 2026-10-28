@@ -147,6 +147,13 @@ describe('from the session recording', () => {
     assert.deepEqual([a.state, a.level, a.fields], ['not recorded', -1, []]);
     assert.equal(a.verdictReason, 'the session recording does not say which field each key went to (typed outside the recorded page)');
   });
+  it('a canvas-tier recording records the page too: keys that name no field were typed outside the recorded page', () => {
+    const rec = traceTier(keyRecording([['q1', 10, botGaps(30)]]));
+    rec.extensions = { 'cyborg-hunter': { tier: 'canvas' } };
+    const a = analyzeTyping(participantFromRecording('OUTSIDE', rec));
+    assert.deepEqual([a.state, a.level, a.fields], ['not recorded', -1, []]);
+    assert.equal(a.verdictReason, 'the session recording does not say which field each key went to (typed outside the recorded page)');
+  });
   it('a recording that names the trace tier, or names no tier the analysis can read: the reason says recorded without the page', () => {
     for (const extensions of [undefined, null, 'x', {}, { 'cyborg-hunter': null }, { 'cyborg-hunter': {} }, { 'cyborg-hunter': { tier: 5 } },
       { 'cyborg-hunter': { tier: 'trace' } }, { 'cyborg-hunter': { tier: 'other' } }]) {

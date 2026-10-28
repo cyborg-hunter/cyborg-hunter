@@ -451,10 +451,10 @@ export function analyzeTyping(participant, config = {}, options = {}) {
     // area's keys are not counted), or every field was too short.
     if (source === 'recording' && segs.some((s) => s !== null && hasUntargetedTyping(s))) {
       state = 'not recorded';
-      // A dom-tier recording: keys typed into a field outside the recorded
-      // part of the page. Otherwise (trace tier, or no tier named): a
-      // recording without the page.
-      verdictReason = tierOf(recording) === 'dom'
+      // A dom- or canvas-tier recording (both record the page): keys typed
+      // into a field outside the recorded part of the page. Otherwise
+      // (trace tier, or no tier named): a recording without the page.
+      verdictReason = tierOf(recording) === 'dom' || tierOf(recording) === 'canvas'
         ? 'the session recording does not say which field each key went to (typed outside the recorded page)'
         : 'the session recording does not say which field each key went to (recorded without the page)';
     } else {
