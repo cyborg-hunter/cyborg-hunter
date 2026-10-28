@@ -17,7 +17,7 @@ The integrity monitor writes its observations into the same data file your exper
 ## One-line setup
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.16.0/dist/ch.js" integrity="sha384-cKe/tVM4FdcrBLX8UQdH+ks4iv9ev3t3gHlsGKvrbjd8UfuNbc6rluVOOBAI3lSa" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous"></script>
 ```
 
 For production studies pin an exact version (see [README § Install](../README.md#install)).
@@ -171,7 +171,7 @@ names the switch that turns it down.
   `'none'` (no WebGL), the family name, or `null` (the switch off, the
   browser did not answer, or, under the one-line setup, a first page or
   trial that ended before the read:
-  [upgrading.md](upgrading.md#unreleased--from-016)). It is read when the browser is next idle,
+  [upgrading.md](upgrading.md#0170--from-016)). It is read when the browser is next idle,
   within about 1 s of the session start. `signals.softwareRenderer`
   (default on) turns it off; the other facts have no switch.
 - **Browser extensions**: the names of known AI extensions found on the

@@ -3,7 +3,7 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.17.0] — 2026-10-28
 
 Pointer and device checks. Collected data changes (one device fact, read
 just after the session starts) and reports change (one new pointer tell, a

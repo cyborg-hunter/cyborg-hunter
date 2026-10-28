@@ -5,7 +5,7 @@
 
 What a successful run looks like — the HTML report for the bundled dataset of four sessions recorded on the demo ([worked-example.md](worked-example.md)):
 
-![HTML report: tier-sorted participant list on the left; per-signal counts, score breakdown, paste evidence, and typing profile for the selected participant.](assets/report-example.png)
+![HTML report: score-sorted participant list on the left; per-signal counts, score breakdown, paste evidence, and session timeline for the selected participant.](assets/report-example.png)
 
 ## Commands
 
@@ -213,7 +213,7 @@ One row per participant:
 | `cursorMaxDeviationPxMedian` | Median of each movement's largest distance from the straight line between its ends, in px, one decimal |
 | `cursorCenteredClicks` | Clicks at the exact centre of the control, as `count/qualifying clicks`, read from the session recording (see [`cursor-limits.json`](#cursor-limitsjson)); `touch` for a touch recording, which is not judged; empty without a recording, and for a session without a cursor stream even with one |
 | `cursorCenteredNear` | Qualifying clicks within 5 px of the control's centre, as `count/qualifying clicks`; reported, not judged; `touch` for a touch recording; empty without a recording, and for a session without a cursor stream even with one |
-| `cursorSoftwareRenderer` | `YES (<family>)` when the browser drew without a graphics card (`swiftshader`, `llvmpipe`, `softpipe`, `microsoft-basic-render`, `mesa-offscreen`), `no`, `no WebGL`, or empty (not recorded: data before 0.17, the switch off, no answer, or, under the one-line setup, a first page or trial that ended before the read: [upgrading.md](upgrading.md#unreleased--from-016)). A device fact: not a tell, not in `cursorFactCount` |
+| `cursorSoftwareRenderer` | `YES (<family>)` when the browser drew without a graphics card (`swiftshader`, `llvmpipe`, `softpipe`, `microsoft-basic-render`, `mesa-offscreen`), `no`, `no WebGL`, or empty (not recorded: data before 0.17, the switch off, no answer, or, under the one-line setup, a first page or trial that ended before the read: [upgrading.md](upgrading.md#0170--from-016)). A device fact: not a tell, not in `cursorFactCount` |
 | `deviceMasking` | The device-masking rules that fired, space-separated: `R1` (a pixel ratio no browser produces), `R2` (a pixel ratio that stays fixed through a page zoom; not applied to Safari), `R3a` (a window larger than the screen it reports by more than 3% + 20 px; not applied to Firefox when the browser is known, nor with a second monitor in the log). Empty when none fired or the session has no window log. Read from `session.windowPositions` and the recording's browser line; nothing new is collected. Not evidence of AI use ([interpreting-signals.md](interpreting-signals.md#signals-that-never-score)) |
 | `typingVerdict` | The typing verdict: `clean`, `suspicious`, `highly suspicious` or `not assessed` |
 | `typingTells` | The tells behind a suspicious or highly suspicious verdict, `; `-separated: `median gap <n> ms` (keys faster than a person types), `gap variation <v>` (keys too even); empty otherwise |

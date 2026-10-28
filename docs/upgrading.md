@@ -5,7 +5,7 @@ What each release changes in **collected data**, **configuration** and
 the CLI on data collected with an older version. The complete change list is
 in [CHANGELOG.md](../CHANGELOG.md).
 
-## Unreleased — from 0.16
+## 0.17.0 — from 0.16
 
 This release changes collected data (one device fact, read just after the
 session starts) and reports (one new pointer tell, a device line, a click

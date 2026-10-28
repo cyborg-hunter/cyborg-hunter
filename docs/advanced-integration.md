@@ -183,7 +183,7 @@ To move a manual-mode experiment to `ch.js`:
 2. Add the one tag below `jspsych.js` and above your experiment code:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter@0.16.0/dist/ch.js" integrity="sha384-cKe/tVM4FdcrBLX8UQdH+ks4iv9ev3t3gHlsGKvrbjd8UfuNbc6rluVOOBAI3lSa" crossorigin="anonymous"></script>
+   <script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous"></script>
    ```
 
    For production studies pin an exact version (see [README § Install](../README.md#install)).
@@ -369,7 +369,7 @@ The rows grow by the recording's size, about 0.5–1.5 MB per participant on the
 **`ch-qualtrics.js`** does not carry the recorder: a survey field holds about 20 KB, so a recording could never be kept there, and replay stays opt-in. With `data-replay` it loads `cyborg-hunter-replay.js` from the directory `ch-qualtrics.js` came from (or `data-replay-src="…"`), and you send `CyborgHunter.replay()` to your own server ([qualtrics.md](qualtrics.md)).
 
 - **Self-hosting:** copy `cyborg-hunter-replay.js` from `dist/` next to `ch-qualtrics.js`.
-- **CDN URLs:** use the full path, `https://unpkg.com/cyborg-hunter@0.16.0/dist/ch-qualtrics.js`, never the bare package URL `https://unpkg.com/cyborg-hunter`. The bare URL serves `cyborg-hunter.min.js` (manual mode's file), and the replay file is found relative to the tag's own URL.
+- **CDN URLs:** use the full path, `https://unpkg.com/cyborg-hunter@0.17.0/dist/ch-qualtrics.js`, never the bare package URL `https://unpkg.com/cyborg-hunter`. The bare URL serves `cyborg-hunter.min.js` (manual mode's file), and the replay file is found relative to the tag's own URL.
 - **Loading:** if the file fails to load (missing, network error, Content-Security-Policy) or has not arrived after 15 s, an error is logged and the survey runs on without replay. Allow the file's URL in your page's `script-src`. A `nonce` on the tag is copied to the replay script.
 - **Subresource Integrity:** an `integrity` attribute on the tag covers that file only, not the replay file it loads later. To pin that file too, load it yourself with its own `<script src="…/cyborg-hunter-replay.js" integrity="…" crossorigin="anonymous">` above the tag; it is then used and nothing is fetched. At load, the console reminds you to save `CyborgHunter.replay()`.
 
@@ -391,7 +391,7 @@ The tag attributes ([quickstart § Configuration](quickstart.md#configuration)) 
     replay: { tier: 'dom', autoSave: { mode: 'datapipe', experimentId: 'ABC123' } }
   };
 </script>
-<script src="https://unpkg.com/cyborg-hunter@0.16.0/dist/ch.js" integrity="sha384-cKe/tVM4FdcrBLX8UQdH+ks4iv9ev3t3gHlsGKvrbjd8UfuNbc6rluVOOBAI3lSa" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous"></script>
 ```
 
 For production studies pin an exact version (see [README § Install](../README.md#install)).
