@@ -41,7 +41,7 @@ export const TYPING_LIMITS = {
   fastGapMs: { value: RHYTHM_FAST_GAP_MS, meaning: 'The speed rule: a field whose median gap is under this many milliseconds, or more than fastShare of whose gaps are, was typed faster than a person types. Fixed at 60: the library saves the share of gaps under 60 ms.' },
   fastShare: { value: 0.5,  meaning: 'The share of a field\'s gaps under fastGapMs above which the speed rule fires.' },
   evenCv:    { value: 0.2,  meaning: 'The evenness rule: a field whose gap variation (standard deviation over mean of its gaps) is under this was typed too evenly for a person.' },
-  minEdits:  { value: 20,   meaning: 'The typing rate (edits − 1 per second between the first edit and the last) is judged on trials with at least this many edits; it counts as fast above the participant\'s own typingSpeedCps (10 by default). Data from libraries before 0.17 was judged from 2 edits, and the saved rate stays as it was when neither saved edit times nor a recording can recompute it.' }
+  minEdits:  { value: 20,   meaning: 'The typing rate (edits − 1 per second between the first edit and the last) is judged on trials with at least this many edits, or the participant\'s own thresholds.typingMinEdits when the session report saved one; it counts as fast above the participant\'s own typingSpeedCps (10 by default). Data from libraries before 0.17 was judged from 2 edits, and the saved rate stays as it was when neither saved edit times nor a recording can recompute it.' }
 };
 
 function valuesOf(limits) {
