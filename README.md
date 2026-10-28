@@ -1,9 +1,10 @@
 # cyborg-hunter
 
-Cyborg-hunter is a tool for detecting the use of AI assistance in browser-based behavioral experiments. 
-Plugging cyborg-hunter into your study's code appends a suite of behavioral trackers, such as paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that can serve as cues that someone has been using AI assistance to answer the questions in your study. The complete list of signals tracked can be found at [docs/signals-reference.md](docs/signals-reference.md). The data thus collected is recorded into a file that comes along the main study data. Cyborg-hunter can then help you generate a report from that data, for experimenters to use in assessing the quality participants' responses.
+Cyborg-hunter is a tool for detecting the use of AI assistance in browser-based behavioral experiments.
 
-Optionally, a companion deterrence module can be plugged in the same way, which forces participants to stay in fullscreen mode and temporarily block access to the contents of the page if they every escape fullscreen or open a sidebar (both of which could presumably be used to access an AI chat window outside of the main experiment page).
+Plugging cyborg-hunter into your study's code appends a suite of behavioral trackers, such as paste, copy, drag, tab-away, mouse trajectories, browser sidebar openings, and other signals that can serve as cues that someone has been using AI assistance to answer the questions in your study. The complete list of signals tracked can be found at [docs/signals-reference.md](docs/signals-reference.md). The data thus collected is saved with the main study data. Cyborg-hunter can then help you generate a report from that data, for experimenters to use in assessing the quality of participants' responses.
+
+Optionally, a companion deterrence module can be plugged in the same way, which forces participants to stay in fullscreen mode and temporarily blocks access to the contents of the page if they ever escape fullscreen or open a sidebar (both of which could presumably be used to access an AI chat window outside of the main experiment page).
 
 **[Try the live demo →](https://cyborg-hunter.github.io/cyborg-hunter/)** — run the tour in your browser; nothing leaves your machine.
 
@@ -13,7 +14,7 @@ Optionally, a companion deterrence module can be plugged in the same way, which 
 
 ![HTML report: tier-sorted participant list on the left; per-signal counts, score breakdown, paste evidence, and typing profile for the hard-flagged participant.](docs/assets/report-example.png)
 
-Reproduce the table and page yourself: run `cyborg-hunter report` in `examples/demo-sessions/` ([docs/worked-example.md](docs/worked-example.md) interprets every number).
+Reproduce this report yourself: run `cyborg-hunter report` in `examples/demo-sessions/` ([docs/worked-example.md](docs/worked-example.md) interprets every number).
 
 ## Repo layout
 
