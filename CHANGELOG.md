@@ -100,6 +100,9 @@ sorted by score.
   times or from a session recording that keeps the page (`dom` tier), and
   marks the rest "old formula"; a `trace`-tier recording holds no edits and
   recomputes nothing.
+- The session report saves `thresholds.typingMinEdits` in `config` with the
+  other thresholds, and the report judges a participant's typing rate from
+  that many edits; data without it is judged from 20.
 - The typing chart draws the typing analysis's rate for each trial, the one
   the Typing dynamics section and `summary.csv` use: the corrected rate
   where the data allow one (a 0.17 library, saved edit times, a `dom`-tier
@@ -121,6 +124,9 @@ sorted by score.
   first 8 characters.
 - The report's rail opens sorted by score instead of by tier; **Tier, then
   score** gives the old order.
+- The analyzer's results line counts the tiers its list shows, Hard at
+  included, and says how many a Hard at rule moved: "4 participants: 4 hard
+  (2 by Hard at), 0 soft, 0 clean."
 
 ## [0.16.0] — 2026-10-15
 
