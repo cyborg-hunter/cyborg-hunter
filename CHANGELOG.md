@@ -5,6 +5,10 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 
 ## [Unreleased]
 
+### Changed
+
+- Report: the Session timeline holds one clicked line at a time. A click elsewhere moves it, where 0.17 added another.
+
 ### Fixed
 
 - Report: every section of the detail pane now ends at the same right edge. The sections stopped at 800px while the Session timeline ran to 1000px; all now take up to 1000px.

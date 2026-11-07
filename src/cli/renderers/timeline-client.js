@@ -4,10 +4,10 @@
 // both images where the pointer is, a label in the block's header row (the
 // time, the trial and its phase, its typing rate, "events not kept" over a
 // page a Qualtrics payload trimmed, and "tabbed away" / "sidebar open" when
-// the session was), and a dashed red line pinned on a click; a click within
-// 6 px of a pin removes it. Nothing but the lines is drawn over the images,
-// so no text covers a chart's title or legend. Pins live in the open page
-// only: not saved, not in the PNGs. It runs
+// the session was), and a dashed red line where a click placed it; a click
+// elsewhere moves it and a click within 6 px of it removes it. Nothing but the
+// lines is drawn over the images, so no text covers a chart's title or legend.
+// The placed line lives in the open page only: not saved, not in the PNGs. It runs
 // in the CLI report and in the analyzer's sandboxed report frame alike: it
 // needs no storage and no network.
 //
@@ -59,9 +59,9 @@ export function chTimelineLabel(data, sec) {
 // Wires one stage: the line follows the pointer over the plotted area and
 // the header's readout (renderTimelineBlock's .tl-readout, between the
 // heading and "enlarge") says what is under it; both clear when the pointer
-// leaves the plotted area. A click pins a line there or removes the pin
-// within 6 px. Pins are kept as fractions of the stage's width, so they stay
-// on their time when the window is resized.
+// leaves the plotted area. A click places the dashed line there, moving it if
+// it is elsewhere and removing it within 6 px. It is kept as a fraction of the
+// stage's width, so it stays on its time when the window is resized.
 export function chWireTimelineStage(stage) {
   var data;
   try { data = JSON.parse(stage.getAttribute('data-timeline')); } catch (e) { return; }
@@ -76,7 +76,7 @@ export function chWireTimelineStage(stage) {
   line.className = 'tl-line';
   line.hidden = true;
   stage.appendChild(line);
-  var pins = [];
+  var pin = null;
   function clear() { line.hidden = true; readout.textContent = ''; }
   // Where the pointer is, as a fraction of the stage's width, and the time
   // there; null over the margins.
@@ -99,18 +99,14 @@ export function chWireTimelineStage(stage) {
   stage.addEventListener('click', function (e) {
     var a = at(e.clientX);
     if (!a) return;
-    for (var i = 0; i < pins.length; i++) {
-      if (Math.abs(pins[i].f - a.f) * a.width < 6) {
-        pins[i].el.remove();
-        pins.splice(i, 1);
-        return;
-      }
-    }
-    var pin = doc.createElement('div');
-    pin.className = 'tl-pin';
-    pin.style.left = (100 * a.f) + '%';
-    stage.appendChild(pin);
-    pins.push({ f: a.f, el: pin });
+    var onLine = pin && Math.abs(pin.f - a.f) * a.width < 6;
+    if (pin) { pin.el.remove(); pin = null; }
+    if (onLine) return;
+    var el = doc.createElement('div');
+    el.className = 'tl-pin';
+    el.style.left = (100 * a.f) + '%';
+    stage.appendChild(el);
+    pin = { f: a.f, el: el };
   });
 }
 

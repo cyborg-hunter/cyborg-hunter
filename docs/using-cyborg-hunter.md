@@ -741,10 +741,11 @@ typing rate and no paste has no typing chart, and the block holds the
 timeline alone). Move the pointer across it and one line crosses both, while
 the block's header row names the time, the trial (and its phase), the
 trial's typing rate, and whether the participant was tabbed away or had a
-sidebar open then. Click to pin a dashed line, for example where a copy
-happened, and look down the lanes for what came next; click a pinned line to
-remove it. Pins stay until the page is closed or reloaded, and in the
-analyzer until the report is rebuilt (a settings change rebuilds it).
+sidebar open then. Click to place a dashed line, for example where a copy
+happened, and look down the lanes for what came next. Clicking elsewhere moves
+it; clicking the line removes it. The line stays until the page is closed or
+reloaded, and in the analyzer until the report is rebuilt (a settings change
+rebuilds it).
 **enlarge** shows the two images in the overlay, fitted to the window;
 **1:1** shows them at the size they were drawn.
 

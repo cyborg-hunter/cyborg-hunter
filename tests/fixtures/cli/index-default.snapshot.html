@@ -1422,7 +1422,7 @@ function chWireTimelineStage(stage) {
   line.className = 'tl-line';
   line.hidden = true;
   stage.appendChild(line);
-  var pins = [];
+  var pin = null;
   function clear() { line.hidden = true; readout.textContent = ''; }
   // Where the pointer is, as a fraction of the stage's width, and the time
   // there; null over the margins.
@@ -1445,18 +1445,14 @@ function chWireTimelineStage(stage) {
   stage.addEventListener('click', function (e) {
     var a = at(e.clientX);
     if (!a) return;
-    for (var i = 0; i < pins.length; i++) {
-      if (Math.abs(pins[i].f - a.f) * a.width < 6) {
-        pins[i].el.remove();
-        pins.splice(i, 1);
-        return;
-      }
-    }
-    var pin = doc.createElement('div');
-    pin.className = 'tl-pin';
-    pin.style.left = (100 * a.f) + '%';
-    stage.appendChild(pin);
-    pins.push({ f: a.f, el: pin });
+    var onLine = pin && Math.abs(pin.f - a.f) * a.width < 6;
+    if (pin) { pin.el.remove(); pin = null; }
+    if (onLine) return;
+    var el = doc.createElement('div');
+    el.className = 'tl-pin';
+    el.style.left = (100 * a.f) + '%';
+    stage.appendChild(el);
+    pin = { f: a.f, el: el };
   });
 }
 document.querySelectorAll(".tl-stage").forEach(function (stage) { chWireTimelineStage(stage); });

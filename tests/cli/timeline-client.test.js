@@ -203,17 +203,20 @@ describe('the inline script', () => {
     assert.equal(lastProp(rules, '.tl-readout', 'position'), null, 'not placed over the stage');
   });
 
-  it('a click pins a line, a click within 6 px removes it, a click elsewhere adds another', async () => {
+  it('a click places the line, a click elsewhere moves it, a click within 6 px removes it', async () => {
     const { win, stage } = await page();
     const click = (x) => stage.dispatchEvent(new win.MouseEvent('click', { clientX: x, bubbles: true }));
+    const pins = () => [...stage.querySelectorAll('.tl-pin')];
     click(500);
-    assert.equal(stage.querySelectorAll('.tl-pin').length, 1);
-    click(504);
-    assert.equal(stage.querySelectorAll('.tl-pin').length, 0);
-    click(500);
+    assert.equal(pins().length, 1);
+    const before = pins()[0].style.left;
     click(700);
-    assert.equal(stage.querySelectorAll('.tl-pin').length, 2);
+    assert.equal(pins().length, 1, 'still one line');
+    assert.notEqual(pins()[0].style.left, before, 'at the new place');
+    click(704);
+    assert.equal(pins().length, 0);
+    click(500);
     click(40);
-    assert.equal(stage.querySelectorAll('.tl-pin').length, 2, 'the left margin is no time: nothing pinned');
+    assert.equal(pins().length, 1, 'the left margin is no time: the line stays');
   });
 });
