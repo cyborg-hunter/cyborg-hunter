@@ -1,5 +1,5 @@
 {
- "calls": 292,
+ "calls": 293,
  "log": [
   [
    "createCanvas",
@@ -24,8 +24,13 @@
   ],
   [
    "createCanvas",
-   2240,
-   896
+   4480,
+   1792
+  ],
+  [
+   "scale",
+   2,
+   2
   ],
   [
    "set:fillStyle",

@@ -745,7 +745,9 @@ sidebar open then. Click to place a dashed line, for example where a copy
 happened, and look down the lanes for what came next. Clicking elsewhere moves
 it; clicking the line removes it. The line stays until the page is closed or
 reloaded, and in the analyzer until the report is rebuilt (a settings change
-rebuilds it).
+rebuilds it). The trial under the line opens its mouse plot, enlarged, under
+the block. In the **Mouse trajectories** figure, clicking a plot opens it alone;
+clicking the figure's header opens the whole figure.
 **enlarge** shows the two images in the overlay, fitted to the window;
 **1:1** shows them at the size they were drawn.
 

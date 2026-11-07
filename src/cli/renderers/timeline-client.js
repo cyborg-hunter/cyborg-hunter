@@ -7,7 +7,9 @@
 // the session was), and a dashed red line where a click placed it; a click
 // elsewhere moves it and a click within 6 px of it removes it. Nothing but the
 // lines is drawn over the images, so no text covers a chart's title or legend.
-// The placed line lives in the open page only: not saved, not in the PNGs. It runs
+// The placed line lives in the open page only: not saved, not in the PNGs. The
+// line also opens the mouse plot of the trial under it, under the block, and a
+// click on a plot in the grid opens that plot alone in the overlay. It runs
 // in the CLI report and in the analyzer's sandboxed report frame alike: it
 // needs no storage and no network.
 //
@@ -56,6 +58,78 @@ export function chTimelineLabel(data, sec) {
   return parts.join(' · ');
 }
 
+// One panel's box in the mouse plot grid, in fractions of the image; null when
+// the image has not loaded or cannot hold it. The grid's layout, in its own
+// units (trajectories-core.js): panels 400 x 300 under a 40 title, 40 apart,
+// five to a row, under a header whose height is what the image's height leaves.
+// The image's width gives its pixels per unit. The box takes in the panel's
+// title and frame, and stops short of its neighbours.
+export function chPanelBox(panel, count, imgW, imgH) {
+  if (!(imgW > 0) || !(imgH > 0) || !(count > 0) || !(panel >= 0) || panel >= count) return null;
+  var cols = Math.min(5, count);
+  var rows = Math.ceil(count / cols);
+  var scale = imgW / (cols * 440 + 40);
+  var head = imgH / scale - rows * 380 - 40;
+  if (!(head >= 0)) return null;
+  var x = 40 + (panel % cols) * 440 - 12;
+  var y = head + 40 + Math.floor(panel / cols) * 380 - 6;
+  return { left: (x * scale) / imgW, top: (y * scale) / imgH, width: (424 * scale) / imgW, height: (352 * scale) / imgH };
+}
+
+// The panel under a point given in fractions of the image; null over the
+// header and margins, or before the image has loaded.
+export function chPanelAt(fx, fy, count, imgW, imgH) {
+  for (var i = 0; i < count; i++) {
+    var b = chPanelBox(i, count, imgW, imgH);
+    if (!b) return null;
+    if (fx >= b.left && fx < b.left + b.width && fy >= b.top && fy < b.top + b.height) return i;
+  }
+  return null;
+}
+
+// Places the grid image behind its window so the box fills the window. Left
+// and width resolve against the window's width, top against its height.
+export function chPlaceCrop(crop, box) {
+  crop.style.width = (100 / box.width) + '%';
+  crop.style.left = (-100 * box.left / box.width) + '%';
+  crop.style.top = (-100 * box.top / box.height) + '%';
+}
+
+// A click on a plot in the grid opens that plot alone in the report's overlay,
+// in the slot "enlarge" uses, which closing the overlay empties. Over the
+// header or margins, or from the keyboard, the click stays the link's: the
+// whole grid.
+export function chWirePlotGrid(img) {
+  var doc = img.ownerDocument;
+  var overlay = doc.getElementById('lightbox');
+  var stack = doc.getElementById('lightbox-stack');
+  var single = doc.getElementById('lightbox-img');
+  var count = parseInt(img.getAttribute('data-panel-count'), 10);
+  if (!overlay || !stack || !single || !(count > 0)) return;
+  img.addEventListener('click', function (e) {
+    var r = img.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) return;
+    var panel = chPanelAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, count, img.naturalWidth, img.naturalHeight);
+    if (panel === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var box = chPanelBox(panel, count, img.naturalWidth, img.naturalHeight);
+    var frame = doc.createElement('div');
+    frame.className = 'tl-plot-frame';
+    frame.style.setProperty('--plot-w', (box.width * img.naturalWidth) + 'px');
+    var crop = doc.createElement('img');
+    crop.setAttribute('src', img.getAttribute('src'));
+    crop.setAttribute('alt', 'Mouse plot');
+    chPlaceCrop(crop, box);
+    frame.appendChild(crop);
+    stack.textContent = '';
+    stack.appendChild(frame);
+    single.hidden = true;
+    stack.hidden = false;
+    overlay.classList.add('open');
+  });
+}
+
 // Wires one stage: the line follows the pointer over the plotted area and
 // the header's readout (renderTimelineBlock's .tl-readout, between the
 // heading and "enlarge") says what is under it; both clear when the pointer
@@ -77,6 +151,39 @@ export function chWireTimelineStage(stage) {
   line.hidden = true;
   stage.appendChild(line);
   var pin = null;
+  // The clicked trial's mouse plot, under the block: nothing when the report
+  // has no grid image or the line is not over a trial with a panel. Its image
+  // is made when first shown: the block hides when it holds no image.
+  var plot = doc.createElement('div');
+  plot.className = 'tl-plot';
+  plot.hidden = true;
+  var frame = doc.createElement('div');
+  frame.className = 'tl-plot-frame';
+  plot.appendChild(frame);
+  block.appendChild(plot);
+  var part = stage.closest('.participant');
+  var grid = part ? part.querySelector('img[alt="Mouse trajectories"]') : null;
+  var crop = null;
+  function showPlot(sec) {
+    plot.hidden = true;
+    if (sec === null || !grid || !data.panels) return;
+    for (var i = 0; i < data.trials.length; i++) {
+      var t = data.trials[i];
+      if (sec >= t[2] && sec < t[3]) {
+        var at = data.panels.at[i];
+        var box = at === null || at === undefined ? null : chPanelBox(at, data.panels.count, grid.naturalWidth, grid.naturalHeight);
+        if (!box) return;
+        if (!crop) { crop = doc.createElement('img'); frame.appendChild(crop); }
+        crop.setAttribute('src', grid.getAttribute('src'));
+        crop.setAttribute('alt', 'Mouse plot of trial ' + t[0]);
+        chPlaceCrop(crop, box);
+        plot.hidden = false;
+        return;
+      }
+    }
+  }
+  // A click can come before the grid image has loaded.
+  if (grid) grid.addEventListener('load', function () { if (pin) showPlot(pin.sec); });
   function clear() { line.hidden = true; readout.textContent = ''; }
   // Where the pointer is, as a fraction of the stage's width, and the time
   // there; null over the margins.
@@ -101,12 +208,14 @@ export function chWireTimelineStage(stage) {
     if (!a) return;
     var onLine = pin && Math.abs(pin.f - a.f) * a.width < 6;
     if (pin) { pin.el.remove(); pin = null; }
+    showPlot(null);
     if (onLine) return;
     var el = doc.createElement('div');
     el.className = 'tl-pin';
     el.style.left = (100 * a.f) + '%';
     stage.appendChild(el);
-    pin = { f: a.f, el: el };
+    pin = { f: a.f, sec: a.sec, el: el };
+    showPlot(a.sec);
   });
 }
 
@@ -123,8 +232,9 @@ export function chWireTimelineStage(stage) {
 // So the text is checked here, where every report and the analyzer's build
 // take it, as readReplayClientSrc checks the replay viewer's.
 export function timelineScript() {
-  const src = [chClock, chTimelineLabel, chWireTimelineStage].map(String).join('\n') +
-    '\ndocument.querySelectorAll(".tl-stage").forEach(function (stage) { ' + chWireTimelineStage.name + '(stage); });\n';
+  const src = [chClock, chTimelineLabel, chPanelBox, chPanelAt, chPlaceCrop, chWirePlotGrid, chWireTimelineStage].map(String).join('\n') +
+    '\ndocument.querySelectorAll(".tl-stage").forEach(function (stage) { ' + chWireTimelineStage.name + '(stage); });\n' +
+    'document.querySelectorAll("img[data-panel-count]").forEach(function (img) { ' + chWirePlotGrid.name + '(img); });\n';
   const hazards = inlineSrcHazards(src);
   if (hazards.length) {
     throw new Error('timeline-client: the hover script cannot be inlined into the report: it ' + hazards.join('; and it ') +

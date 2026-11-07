@@ -8,6 +8,7 @@ All notable changes to **cyborg-hunter** are documented here. This project follo
 ### Changed
 
 - Report: the Session timeline holds one clicked line at a time. A click elsewhere moves it, where 0.17 added another.
+- Report: the clicked line opens its trial's mouse plot, enlarged, under the Session timeline, and a click on a plot in the Mouse trajectories figure opens that plot alone. A click on the figure's header opens the whole figure. The mouse plot PNGs are drawn at twice the pixels for this, up to 200 trials, so they are about 2.4 times the size in bytes on the bundled demo sessions.
 
 ### Fixed
 

@@ -24,7 +24,9 @@ import { renderIndexHtml } from '../../../src/cli/renderers/html-index-core.js';
 import { encodePng } from '../../../demo/analyze/png-encode.js';
 
 const png = (w, h) => encodePng(w, h, new Uint8Array(w * h * 4).fill(235));
-const TRAJECTORIES_W = 600;
+// The size of the fixture's six-trial mouse plot grid, at one pixel per unit.
+const TRAJECTORIES_W = 2240;
+const TRAJECTORIES_H = 896;
 async function render() {
   const config = { outputDir: '.', participantIdField: 'participantId' };
   const raw = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'demo', 'DEMO-FIXT.json'), 'utf8'));
@@ -40,7 +42,7 @@ test.beforeAll(async () => {
   mkdirSync(join(dir, 'images'));
   writeFileSync(join(dir, 'images', 'typing_profile_DEMO-FIXT.png'), png(1000, 204));
   writeFileSync(join(dir, 'images', 'session_timeline_DEMO-FIXT.png'), png(1000, 395));
-  writeFileSync(join(dir, 'images', 'trajectories_DEMO-FIXT.png'), png(TRAJECTORIES_W, 300));
+  writeFileSync(join(dir, 'images', 'trajectories_DEMO-FIXT.png'), png(TRAJECTORIES_W, TRAJECTORIES_H));
 });
 test.afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -68,7 +70,8 @@ async function expectSingleFigureBack(page) {
   await expect(img).not.toHaveAttribute('hidden');
   await expect(img).not.toHaveCSS('display', 'none');
   await expect(page.locator('#lightbox-stack')).toHaveCSS('display', 'none');
-  await page.locator('#p-DEMO-FIXT a.zoomable').filter({ has: page.locator('img[alt="Mouse trajectories"]') }).click();
+  // The grid's header: over a plot, a click opens that plot alone.
+  await page.locator('#p-DEMO-FIXT a.zoomable').filter({ has: page.locator('img[alt="Mouse trajectories"]') }).click({ position: { x: 5, y: 5 } });
   await expect(page.locator('#lightbox')).toHaveClass(/open/);
   await expect(img).toBeVisible();
   await expect.poll(() => img.evaluate((el) => el.complete && el.naturalWidth)).toBe(TRAJECTORIES_W);
@@ -137,6 +140,49 @@ test('a click pins a dashed line and a second click on it removes it', async ({ 
   expect(await stage.locator('.tl-pin').evaluate((el) => getComputedStyle(el).borderLeftStyle)).toBe('dashed');
   await page.mouse.click(x + 2, box.y + 40);
   await expect(stage.locator('.tl-pin')).toHaveCount(0);
+});
+
+test('a click elsewhere moves the line, and it opens the trial\'s mouse plot under the block', async ({ page }) => {
+  const stage = await open(page);
+  const box = await stage.boundingBox();
+  const plot = page.locator('#p-DEMO-FIXT .tl-plot');
+  await expect(plot).toBeHidden();
+  await page.mouse.click(await xAt(stage, 11.7), box.y + 40);
+  await expect(plot).toBeVisible();
+  await expect(plot.locator('img')).toHaveCount(1);
+  const shown = await plot.boundingBox();
+  expect(shown.y).toBeGreaterThanOrEqual(box.y + box.height - 1);
+  expect(shown.width).toBeGreaterThan(0);
+  const placed = await plot.locator('img').getAttribute('style');
+  const data = JSON.parse(await stage.getAttribute('data-timeline'));
+  const other = data.trials.find((t) => t[0] !== 'act1-tabaway' && t[3] - t[2] > 1);
+  await page.mouse.click(await xAt(stage, (other[2] + other[3]) / 2), box.y + 40);
+  await expect(stage.locator('.tl-pin')).toHaveCount(1);
+  await expect(plot.locator('img')).toHaveCount(1);
+  expect(await plot.locator('img').getAttribute('style')).not.toBe(placed);
+  // No tint or outline lands on the grid.
+  const grid = page.locator('#p-DEMO-FIXT img[alt="Mouse trajectories"]');
+  await expect(grid.locator('..').locator('.tl-plot-frame')).toHaveCount(0);
+  await page.mouse.click(await xAt(stage, (other[2] + other[3]) / 2), box.y + 40);
+  await expect(plot).toBeHidden();
+});
+
+test('a click on a plot in the grid opens that plot alone, fitted to the window, and closing clears it', async ({ page }) => {
+  await open(page);
+  const grid = page.locator('#p-DEMO-FIXT img[alt="Mouse trajectories"]');
+  await expect.poll(() => grid.evaluate((el) => el.complete && el.naturalWidth)).toBe(TRAJECTORIES_W);
+  await grid.scrollIntoViewIfNeeded();
+  const box = await grid.boundingBox();
+  await grid.click({ position: { x: box.width * 0.5, y: box.height * 0.5 } });
+  await expect(page.locator('#lightbox')).toHaveClass(/open/);
+  const frame = page.locator('#lightbox-stack .tl-plot-frame');
+  await expect(frame).toHaveCount(1);
+  // The whole frame fits: the slot has nothing to scroll.
+  await expect.poll(() => page.locator('#lightbox-stack').evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#lightbox')).not.toHaveClass(/open/);
+  await expect(page.locator('#lightbox-stack img')).toHaveCount(0);
+  await expectSingleFigureBack(page);
 });
 
 test('enlarge shows both images in the lightbox, and closing clears them', async ({ page }) => {

@@ -47,6 +47,10 @@ const ID_MIN_CHARS = 12;
 // grows by a row per five trials, and node-canvas and browsers refuse a side
 // longer than 32767 pixels (86 rows). The header says when trials are left out.
 const MAX_PANELS = 400;
+// Pixels per unit, so a panel stays sharp when the report enlarges it. A grid
+// of more panels than this keeps 1: at 2 its height nears that same limit.
+const PIXEL_SCALE = 2;
+const PIXEL_SCALE_MAX_PANELS = 200;
 
 // Color palette. Hoisted from inline string literals to give the rendering
 // style one place to look. Names match the visual element they style.
@@ -143,6 +147,21 @@ export function orderTrials(trials, config) {
   return ordered;
 }
 
+// Each trial's place in the grid, by its position in `trials`, and how many
+// panels the grid has: the report's line finds the trial's panel with it. A
+// trial past the panel cap has no place. Null for a list that cannot be
+// ordered: one participant's data must never stop the report.
+export function trajectoryPanels(trials, config) {
+  if (!Array.isArray(trials)) return null;
+  try {
+    const shown = orderTrials(trials, config || {}).slice(0, MAX_PANELS);
+    const place = new Map(shown.map((t, i) => [t, i]));
+    return { count: shown.length, byIndex: trials.map((t) => (place.has(t) ? place.get(t) : null)) };
+  } catch {
+    return null;
+  }
+}
+
 // Draws one participant's full trajectory grid (all per-trial panels) onto a
 // canvas obtained from the injected createCanvas factory. Returns the drawn
 // canvas, or null when the participant has no trials to plot; report-core.js
@@ -166,8 +185,10 @@ export function drawTrajectoryGrid(p, triageEntry, config, createCanvas) {
   const legend = wrapLegend(probe, room);
   const headerH = LEGEND_TOP + legend.length * LEGEND_LINE;
   const canvasH = headerH + rows * (PANEL_H + TITLE_HEIGHT + PANEL_PAD) + PANEL_PAD;
-  const canvas = createCanvas(canvasW, canvasH);
+  const k = trials.length <= PIXEL_SCALE_MAX_PANELS ? PIXEL_SCALE : 1;
+  const canvas = createCanvas(canvasW * k, canvasH * k);
   const ctx = canvas.getContext('2d');
+  ctx.scale(k, k);
 
   // Background
   ctx.fillStyle = COLORS.bg;

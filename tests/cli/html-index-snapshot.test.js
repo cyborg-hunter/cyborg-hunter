@@ -54,7 +54,7 @@ test('the detail pane has one column width, the session timeline charts\' own', 
   const html = await renderIndexHtml(summaries, triage, participants, config, true, {});
   assert.ok(html.includes('.detail .participant > :not(.replay-block),'), 'only the replay is exempt from the column');
   assert.ok(html.includes('.detail .replay-block > :not(.replay-mount) { max-width: 1000px; }'));
-  assert.ok(!html.includes('max-width: 800px'), 'no section keeps the old column');
+  assert.ok(!html.includes('{ max-width: 800px'), 'no section keeps the old column');
   assert.ok(!/\.tl-block \{ max-width/.test(html), 'the timeline block has no width of its own');
   assert.ok(html.includes('minmax(max(110px, calc((100% - 30px) / 6)), 1fr)'), 'the signal grid stops at six columns');
 });

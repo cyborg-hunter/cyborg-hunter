@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { Window } from 'happy-dom';
-import { chClock, chTimelineLabel, timelineScript } from '../../src/cli/renderers/timeline-client.js';
+import { chClock, chTimelineLabel, chPanelBox, chPanelAt, timelineScript } from '../../src/cli/renderers/timeline-client.js';
+import { drawTrajectoryGrid } from '../../src/cli/renderers/trajectories-core.js';
 import { inlineSrcHazards } from '../../src/shared/inline-safe.js';
 import { extractIntegrityData } from '../../src/cli/extract-core.js';
 import { computeSummary } from '../../src/cli/analyzers/summary.js';
@@ -218,5 +219,112 @@ describe('the inline script', () => {
     click(500);
     click(40);
     assert.equal(pins().length, 1, 'the left margin is no time: the line stays');
+  });
+
+  // The box against the real drawing: each panel's frame, as the grid strokes
+  // it, must lie inside the box chPanelBox gives for that panel, and no other
+  // panel's frame may reach into it.
+  it('chPanelBox holds the frame the grid draws for that panel', () => {
+    for (const n of [1, 6, 17, 200, 201]) {
+      const frames = [];
+      const ctx = new Proxy({ measureText: () => ({ width: 10 }), strokeRect: (...a) => frames.push(a) },
+        { get: (o, k) => (k in o ? o[k] : () => {}), set: () => true });
+      const createCanvas = (w, h) => ({ width: w, height: h, getContext: () => ctx });
+      const p = { participantId: 'x', trials: Array.from({ length: n }, (_, i) => ({ trialId: 't' + i })) };
+      const canvas = drawTrajectoryGrid(p, {}, { trajectoryDisplayOrder: 'insertion' }, createCanvas);
+      const k = canvas.width / (Math.min(5, n) * 440 + 40);
+      assert.equal(frames.length, n);
+      frames.forEach(([x, y, w, h], i) => {
+        const b = chPanelBox(i, n, canvas.width, canvas.height);
+        assert.ok(b.left * canvas.width <= x * k && (b.left + b.width) * canvas.width >= (x + w) * k, 'x, panel ' + i);
+        assert.ok(b.top * canvas.height <= y * k && (b.top + b.height) * canvas.height >= (y + h) * k, 'y, panel ' + i);
+      });
+      if (n > 1) {
+        const b = chPanelBox(0, n, canvas.width, canvas.height);
+        const [x1] = frames[1];
+        assert.ok((b.left + b.width) * canvas.width <= x1 * k, 'the next panel stays out, n=' + n);
+      }
+    }
+    assert.equal(chPanelBox(0, 3, 0, 0), null, 'an image that has not loaded');
+    assert.equal(chPanelBox(3, 3, 1360, 800), null, 'no such panel');
+    assert.equal(chPanelBox(0, 6, 2240, 100), null, 'an image too short to be this grid');
+  });
+
+  it('chPanelAt finds the panel under a point, and none over the header or margins', () => {
+    const [count, W, H] = [6, 4480, 1792];
+    for (let panel = 0; panel < count; panel++) {
+      const b = chPanelBox(panel, count, W, H);
+      assert.equal(chPanelAt(b.left + b.width / 2, b.top + b.height / 2, count, W, H), panel);
+    }
+    assert.equal(chPanelAt(0.001, 0.001, count, W, H), null);
+    assert.equal(chPanelAt(0.5, 0.5, count, 0, 0), null, 'an image that has not loaded');
+  });
+
+  // A grid of the fixture's six trials, as drawn at twice the pixels.
+  function gridOf(win) {
+    const grid = win.document.querySelector('img[alt="Mouse trajectories"]');
+    let w = 4480;
+    Object.defineProperty(grid, 'naturalWidth', { get: () => w });
+    Object.defineProperty(grid, 'naturalHeight', { get: () => (w ? 1792 : 0) });
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 400 });
+    return { grid, unload: () => { w = 0; }, load: () => { w = 4480; grid.dispatchEvent(new win.Event('load')); } };
+  }
+
+  it('the line opens its trial\'s mouse plot under the block; moved and removed with the line', async () => {
+    const { win, stage, data } = await page();
+    const { grid } = gridOf(win);
+    const block = stage.closest('.tl-block');
+    const plot = block.querySelector('.tl-plot');
+    const click = (x) => stage.dispatchEvent(new win.MouseEvent('click', { clientX: x, bubbles: true }));
+    assert.equal(plot.hidden, true, 'nothing until a click');
+    assert.equal(block.querySelector('.tl-plot img'), null, 'no image in the block until then: it hides when its charts fail');
+    click(xAt(data, mid(data.trials[0])));
+    assert.equal(plot.hidden, false);
+    const img = plot.querySelector('img');
+    assert.equal(img.getAttribute('src'), grid.getAttribute('src'));
+    assert.ok(img.getAttribute('alt').includes('trial ' + data.trials[0][0]), img.getAttribute('alt'));
+    const first = img.style.left + img.style.top;
+    click(xAt(data, mid(data.trials[1])));
+    assert.notEqual(img.style.left + img.style.top, first, 'the next trial\'s panel');
+    assert.equal(block.querySelectorAll('.tl-plot img').length, 1);
+    click(xAt(data, mid(data.trials[1])));
+    assert.equal(plot.hidden, true, 'gone with the line');
+    assert.equal(stage.querySelector('.tl-plot'), null, 'and never over the charts');
+  });
+
+  it('a click before the grid image has loaded shows the plot when it does', async () => {
+    const { win, stage, data } = await page();
+    const { unload, load } = gridOf(win);
+    unload();
+    const plot = stage.closest('.tl-block').querySelector('.tl-plot');
+    stage.dispatchEvent(new win.MouseEvent('click', { clientX: xAt(data, mid(data.trials[0])), bubbles: true }));
+    assert.equal(plot.hidden, true);
+    assert.equal(stage.querySelectorAll('.tl-pin').length, 1);
+    load();
+    assert.equal(plot.hidden, false);
+  });
+
+  // The page's own overlay script does not run here (the browser tests open
+  // the whole grid from the header): this is the script's part of the click.
+  it('a click on a plot in the grid opens that plot alone; the header leaves the click to the link', async () => {
+    const { win } = await page();
+    const doc = win.document;
+    const { grid } = gridOf(win);
+    const count = Number(grid.getAttribute('data-panel-count'));
+    assert.equal(count, 6);
+    const b = chPanelBox(1, count, 4480, 1792);
+    const at = (fx, fy) => {
+      const e = new win.MouseEvent('click', { clientX: fx * 1000, clientY: fy * 400, bubbles: true, cancelable: true });
+      grid.dispatchEvent(e);
+      return e;
+    };
+    const overlay = doc.getElementById('lightbox');
+    assert.equal(at(0.001, 0.001).defaultPrevented, false);
+    assert.equal(overlay.classList.contains('open'), false);
+    assert.equal(at(b.left + b.width / 2, b.top + b.height / 2).defaultPrevented, true);
+    assert.equal(overlay.classList.contains('open'), true);
+    assert.equal(doc.getElementById('lightbox-img').hidden, true);
+    assert.equal(doc.getElementById('lightbox-stack').hidden, false);
+    assert.equal(doc.querySelectorAll('#lightbox-stack .tl-plot-frame img').length, 1);
   });
 });

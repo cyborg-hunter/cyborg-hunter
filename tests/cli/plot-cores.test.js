@@ -834,7 +834,9 @@ function drawTrajectories(p, triage, trials) {
   if (trials) q.trials = q.trials.slice(0, trials);
   const log = [];
   const canvas = drawTrajectoryGrid(q, { hardTriggered: false, ...triage }, { outputDir: '.' }, makeRecordingCanvasFactory(log));
-  return { log, canvasW: canvas.width };
+  // In the units the grid draws in: its canvas has more pixels than that.
+  const scale = log.find(c => c[0] === 'scale');
+  return { log, canvasW: canvas.width / (scale ? scale[1] : 1) };
 }
 const headerOf = (log) => log.find(c => c[0] === 'fillText' && c[3] === 30);
 

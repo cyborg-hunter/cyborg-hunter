@@ -470,11 +470,24 @@
     .tl-line, .tl-pin { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
     .tl-line { border-left: 1.5px solid var(--ink); }
     .tl-pin { border-left: 1.5px dashed var(--hard); }
+    /* The clicked trial's mouse plot under the block (timeline-client.js): a
+       window onto that trial's panel in the grid image, which is placed behind
+       it. The script sets the window's --plot-w to the panel's own pixel width. */
+    .tl-plot { margin-top: 10px; }
+    .tl-plot[hidden] { display: none; }
+    .tl-plot-frame { position: relative; overflow: hidden; width: 100%; max-width: 800px; aspect-ratio: 424 / 352; margin: 0 auto; background: #fff; }
+    .detail .tl-plot-frame img,
+    .lightbox-overlay .lightbox-stack .tl-plot-frame img { position: absolute; display: block; max-width: none; max-height: none; height: auto; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+    /* The same window in the overlay, a plot clicked in the grid: as large as
+       the overlay's room (its padding is 64px 20px 20px) allows, or the panel's
+       own pixels at 1:1. */
+    .lightbox-overlay .lightbox-stack .tl-plot-frame { max-width: none; margin: 0; width: min(calc(100vw - 40px), calc((100vh - 84px) * 424 / 352)); }
+    .lightbox-overlay.actual .lightbox-stack .tl-plot-frame { width: var(--plot-w, 848px); }
 
     /* Lightbox overlay — hidden by default; the client script adds .open to show it.
        It opens fitted to the window; .actual shows the figure at its own pixel
-       size (figures are drawn once, at 1x) and the overlay scrolls. The top
-       padding keeps the figure clear of the controls. */
+       size (figures are drawn once) and the overlay scrolls. The top padding
+       keeps the figure clear of the controls. */
     .lightbox-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       z-index: 1000; display: none;
@@ -1408,6 +1421,60 @@ function chTimelineLabel(data, sec) {
   if (data.sidebars.some(function (x) { return sec >= x[0] && sec <= x[1]; })) parts.push('sidebar open');
   return parts.join(' · ');
 }
+function chPanelBox(panel, count, imgW, imgH) {
+  if (!(imgW > 0) || !(imgH > 0) || !(count > 0) || !(panel >= 0) || panel >= count) return null;
+  var cols = Math.min(5, count);
+  var rows = Math.ceil(count / cols);
+  var scale = imgW / (cols * 440 + 40);
+  var head = imgH / scale - rows * 380 - 40;
+  if (!(head >= 0)) return null;
+  var x = 40 + (panel % cols) * 440 - 12;
+  var y = head + 40 + Math.floor(panel / cols) * 380 - 6;
+  return { left: (x * scale) / imgW, top: (y * scale) / imgH, width: (424 * scale) / imgW, height: (352 * scale) / imgH };
+}
+function chPanelAt(fx, fy, count, imgW, imgH) {
+  for (var i = 0; i < count; i++) {
+    var b = chPanelBox(i, count, imgW, imgH);
+    if (!b) return null;
+    if (fx >= b.left && fx < b.left + b.width && fy >= b.top && fy < b.top + b.height) return i;
+  }
+  return null;
+}
+function chPlaceCrop(crop, box) {
+  crop.style.width = (100 / box.width) + '%';
+  crop.style.left = (-100 * box.left / box.width) + '%';
+  crop.style.top = (-100 * box.top / box.height) + '%';
+}
+function chWirePlotGrid(img) {
+  var doc = img.ownerDocument;
+  var overlay = doc.getElementById('lightbox');
+  var stack = doc.getElementById('lightbox-stack');
+  var single = doc.getElementById('lightbox-img');
+  var count = parseInt(img.getAttribute('data-panel-count'), 10);
+  if (!overlay || !stack || !single || !(count > 0)) return;
+  img.addEventListener('click', function (e) {
+    var r = img.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) return;
+    var panel = chPanelAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, count, img.naturalWidth, img.naturalHeight);
+    if (panel === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var box = chPanelBox(panel, count, img.naturalWidth, img.naturalHeight);
+    var frame = doc.createElement('div');
+    frame.className = 'tl-plot-frame';
+    frame.style.setProperty('--plot-w', (box.width * img.naturalWidth) + 'px');
+    var crop = doc.createElement('img');
+    crop.setAttribute('src', img.getAttribute('src'));
+    crop.setAttribute('alt', 'Mouse plot');
+    chPlaceCrop(crop, box);
+    frame.appendChild(crop);
+    stack.textContent = '';
+    stack.appendChild(frame);
+    single.hidden = true;
+    stack.hidden = false;
+    overlay.classList.add('open');
+  });
+}
 function chWireTimelineStage(stage) {
   var data;
   try { data = JSON.parse(stage.getAttribute('data-timeline')); } catch (e) { return; }
@@ -1423,6 +1490,39 @@ function chWireTimelineStage(stage) {
   line.hidden = true;
   stage.appendChild(line);
   var pin = null;
+  // The clicked trial's mouse plot, under the block: nothing when the report
+  // has no grid image or the line is not over a trial with a panel. Its image
+  // is made when first shown: the block hides when it holds no image.
+  var plot = doc.createElement('div');
+  plot.className = 'tl-plot';
+  plot.hidden = true;
+  var frame = doc.createElement('div');
+  frame.className = 'tl-plot-frame';
+  plot.appendChild(frame);
+  block.appendChild(plot);
+  var part = stage.closest('.participant');
+  var grid = part ? part.querySelector('img[alt="Mouse trajectories"]') : null;
+  var crop = null;
+  function showPlot(sec) {
+    plot.hidden = true;
+    if (sec === null || !grid || !data.panels) return;
+    for (var i = 0; i < data.trials.length; i++) {
+      var t = data.trials[i];
+      if (sec >= t[2] && sec < t[3]) {
+        var at = data.panels.at[i];
+        var box = at === null || at === undefined ? null : chPanelBox(at, data.panels.count, grid.naturalWidth, grid.naturalHeight);
+        if (!box) return;
+        if (!crop) { crop = doc.createElement('img'); frame.appendChild(crop); }
+        crop.setAttribute('src', grid.getAttribute('src'));
+        crop.setAttribute('alt', 'Mouse plot of trial ' + t[0]);
+        chPlaceCrop(crop, box);
+        plot.hidden = false;
+        return;
+      }
+    }
+  }
+  // A click can come before the grid image has loaded.
+  if (grid) grid.addEventListener('load', function () { if (pin) showPlot(pin.sec); });
   function clear() { line.hidden = true; readout.textContent = ''; }
   // Where the pointer is, as a fraction of the stage's width, and the time
   // there; null over the margins.
@@ -1447,15 +1547,18 @@ function chWireTimelineStage(stage) {
     if (!a) return;
     var onLine = pin && Math.abs(pin.f - a.f) * a.width < 6;
     if (pin) { pin.el.remove(); pin = null; }
+    showPlot(null);
     if (onLine) return;
     var el = doc.createElement('div');
     el.className = 'tl-pin';
     el.style.left = (100 * a.f) + '%';
     stage.appendChild(el);
-    pin = { f: a.f, el: el };
+    pin = { f: a.f, sec: a.sec, el: el };
+    showPlot(a.sec);
   });
 }
 document.querySelectorAll(".tl-stage").forEach(function (stage) { chWireTimelineStage(stage); });
+document.querySelectorAll("img[data-panel-count]").forEach(function (img) { chWirePlotGrid(img); });
 
     })();
   </script>

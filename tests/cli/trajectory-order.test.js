@@ -5,9 +5,28 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { orderTrials } from '../../src/cli/renderers/trajectories-core.js';
+import { orderTrials, trajectoryPanels } from '../../src/cli/renderers/trajectories-core.js';
 
 const ids = (trials) => trials.map(t => t.trialId);
+
+describe('trajectoryPanels', () => {
+  it('gives each trial its place in the grid, in display order', () => {
+    const trials = [{ trialId: 'b', timestamp: '2026-01-01T00:00:02Z' }, { trialId: 'a', timestamp: '2026-01-01T00:00:01Z' }];
+    assert.deepStrictEqual(trajectoryPanels(trials, { trajectoryDisplayOrder: 'time' }), { count: 2, byIndex: [1, 0] });
+    assert.deepStrictEqual(trajectoryPanels(trials, { trajectoryDisplayOrder: 'insertion' }), { count: 2, byIndex: [0, 1] });
+  });
+
+  it('leaves out the trials past the panel cap', () => {
+    const trials = Array.from({ length: 401 }, (_, i) => ({ trialId: 't' + i }));
+    const m = trajectoryPanels(trials, { trajectoryDisplayOrder: 'insertion' });
+    assert.strictEqual(m.count, 400);
+    assert.strictEqual(m.byIndex[400], null);
+  });
+
+  it('is null for a list it cannot read', () => {
+    assert.strictEqual(trajectoryPanels(null, {}), null);
+  });
+});
 
 describe('trajectories displayOrder', () => {
   const trials = [

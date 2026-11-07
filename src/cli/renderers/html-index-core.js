@@ -34,6 +34,7 @@ import { annotationBlock } from './annotation-client.js';
 import { sanitize, fileIds } from './report-id.js';
 import { sessionLayout } from './session-timeline-core.js';
 import { hoverData } from './timeline-layout.js';
+import { trajectoryPanels } from './trajectories-core.js';
 import { timelineScript } from './timeline-client.js';
 import { railData, panelSignals, weightsPanelHtml, weightsPanelScript, WEIGHTS_PANEL_CSS } from './weights-panel.js';
 import { railFunctionsSrc } from './rail-client.js';
@@ -635,11 +636,24 @@ ${fontFaceCss}    :root {
     .tl-line, .tl-pin { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
     .tl-line { border-left: 1.5px solid var(--ink); }
     .tl-pin { border-left: 1.5px dashed var(--hard); }
+    /* The clicked trial's mouse plot under the block (timeline-client.js): a
+       window onto that trial's panel in the grid image, which is placed behind
+       it. The script sets the window's --plot-w to the panel's own pixel width. */
+    .tl-plot { margin-top: 10px; }
+    .tl-plot[hidden] { display: none; }
+    .tl-plot-frame { position: relative; overflow: hidden; width: 100%; max-width: 800px; aspect-ratio: 424 / 352; margin: 0 auto; background: #fff; }
+    .detail .tl-plot-frame img,
+    .lightbox-overlay .lightbox-stack .tl-plot-frame img { position: absolute; display: block; max-width: none; max-height: none; height: auto; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+    /* The same window in the overlay, a plot clicked in the grid: as large as
+       the overlay's room (its padding is 64px 20px 20px) allows, or the panel's
+       own pixels at 1:1. */
+    .lightbox-overlay .lightbox-stack .tl-plot-frame { max-width: none; margin: 0; width: min(calc(100vw - 40px), calc((100vh - 84px) * 424 / 352)); }
+    .lightbox-overlay.actual .lightbox-stack .tl-plot-frame { width: var(--plot-w, 848px); }
 
     /* Lightbox overlay — hidden by default; the client script adds .open to show it.
        It opens fitted to the window; .actual shows the figure at its own pixel
-       size (figures are drawn once, at 1x) and the overlay scrolls. The top
-       padding keeps the figure clear of the controls. */
+       size (figures are drawn once) and the overlay scrolls. The top padding
+       keeps the figure clear of the controls. */
     .lightbox-overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       z-index: 1000; display: none;
@@ -1498,14 +1512,14 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
   // PNG that doesn't exist in the sandboxed iframe.
   const inlineImages = imageSources ? imageSources[t.participantId] : null;
   const srcOf = (key, file) => (inlineImages ? inlineImages[key] : `images/${file}_${imageName}.png`);
-  const imageBlock = (key, file, label, alt) => {
+  const imageBlock = (key, file, label, alt, imgAttrs = '') => {
     const src = srcOf(key, file);
     if (src === null || src === undefined) return '';
     return `
     <div class="image-block">
       <h4 class="section-heading">${label}</h4>
       <a href="${esc(src)}" class="zoomable">
-        <img src="${esc(src)}" alt="${alt}"
+        <img src="${esc(src)}" alt="${alt}"${imgAttrs}
              onerror="this.closest('.image-block').style.display='none'">
       </a>
     </div>`;
@@ -1515,9 +1529,11 @@ function renderDetail(t, participant, config, visualsRendered, visualsUnavailabl
     // Order: typing → timeline → mouse trajectories, as before 0.17.
     const layout = blockLayout(participant, config, s);
     const aligned = !!(layout && layout.aligned);
-    imagesHtml = (aligned ? '' : imageBlock('typingProfile', 'typing_profile', 'Typing profile', 'Typing profile'))
-      + renderTimelineBlock(layout, aligned, srcOf, participant)
-      + imageBlock('trajectories', 'trajectories', 'Mouse trajectories', 'Mouse trajectories');
+    const grid = trajectoryPanels(participant && participant.trials, config);
+    imagesHtml =(aligned ? '' : imageBlock('typingProfile', 'typing_profile', 'Typing profile', 'Typing profile'))
+      + renderTimelineBlock(layout, aligned, srcOf, participant, grid)
+      + imageBlock('trajectories', 'trajectories', 'Mouse trajectories', 'Mouse trajectories',
+        grid && grid.count > 0 ? ` data-panel-count="${grid.count}"` : '');
   } else {
     imagesHtml = `<p class="muted note">${esc(visualsUnavailableNote)}</p>`;
   }
@@ -1573,13 +1589,16 @@ function lacksTrialTimes(participant) {
 // only when there is one: an image to show (the in-page report has none when
 // the chart failed to draw) and a bar to draw (typing-profile-core.js draws
 // nothing when every bar is empty).
-function renderTimelineBlock(layout, withTyping, srcOf, participant) {
+function renderTimelineBlock(layout, withTyping, srcOf, participant, grid) {
   const pics = (withTyping ? [['typingProfile', 'typing_profile', 'Typing speed per trial, on the session time axis']] : [])
     .concat([['sessionTimeline', 'session_timeline', 'Session timeline']])
     .map(([key, file, alt]) => ({ src: srcOf(key, file), alt }))
     .filter((x) => x.src !== null && x.src !== undefined);
   if (!pics.length) return '';
-  const data = layout ? ` data-timeline="${esc(JSON.stringify(hoverData(layout)))}"` : '';
+  const hover = layout ? hoverData(layout) : null;
+  // Where each trial's plot sits in the mouse plot grid, in the order of hover.trials.
+  if (hover) hover.panels = grid ? { count: grid.count, at: layout.spans.map((s) => grid.byIndex[s.index] ?? null) } : null;
+  const data = hover ? ` data-timeline="${esc(JSON.stringify(hover))}"` : '';
   const typingBlockAbove = srcOf('typingProfile', 'typing_profile') != null && !!layout && layout.bars.some((b) => b.kind !== 'none');
   const note = layout && !layout.aligned && typingBlockAbove && lacksTrialTimes(participant)
     ? `
