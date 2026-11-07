@@ -95,9 +95,9 @@ test('the hover label names the trial under the pointer, in the header row above
   await expect(stage.locator('.tl-line')).toBeHidden();
 });
 
-// The block is not held to the pane's 800 px reading column: it grows with
-// the pane up to the charts' own 1000 px, and no further. The pane's room is
-// the participant section's width inside its padding, less any scrollbar.
+// The block grows with the pane up to the charts' own 1000 px, and no
+// further. The pane's room is the participant section's width inside its
+// padding, less any scrollbar.
 async function paneRoom(page) {
   return page.locator('#p-DEMO-FIXT').evaluate((el) => {
     const s = getComputedStyle(el);
@@ -106,8 +106,7 @@ async function paneRoom(page) {
 }
 
 // At 1400 px the pane's room is 1000 px less whatever the runner's scrollbar
-// takes: the stage fills it. The room is past the 800 px reading column, so
-// a block held to that column would fail here.
+// takes: the stage fills it.
 test('in a 1400 px window the stage fills the pane, up to 1000 px', async ({ page }) => {
   const stage = await open(page, 1400);
   const room = await paneRoom(page);

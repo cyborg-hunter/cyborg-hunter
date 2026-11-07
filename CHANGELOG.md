@@ -3,6 +3,12 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- Report: every section of the detail pane now ends at the same right edge. The sections stopped at 800px while the Session timeline ran to 1000px; all now take up to 1000px.
+
 ## [0.17.0] — 2026-10-28
 
 Pointer and device checks. Collected data changes (one device fact, read

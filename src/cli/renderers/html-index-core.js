@@ -339,13 +339,15 @@ ${fontFaceCss}    :root {
       border: 1px solid var(--line); font-weight: 400; padding: 1px 5px;
     }
 
-    /* Detail pane base. The replay viewer is an exception to the 800px
-       reading column: it scales the recording to the room it has, and a
-       recorded desktop page is wider than the column. The replay section's
-       own heading and notes keep the column. The Session timeline block is
-       the other: it grows to its charts' own width (.tl-block below). */
-    .detail .participant > :not(.replay-block):not(.tl-block),
-    .detail .replay-block > :not(.replay-mount) { max-width: 800px; }
+    /* Detail pane base. Every section takes up to 1000px, the width the
+       session timeline's charts are drawn at, so the sections share one right
+       edge and a wide enough pane shows the charts at their own size; a
+       narrower pane scales them to fit. The replay viewer is the exception:
+       it scales the recording to the room it has, and a recorded desktop page
+       is wider than the column. The replay section's own heading and notes
+       keep the column. */
+    .detail .participant > :not(.replay-block),
+    .detail .replay-block > :not(.replay-mount) { max-width: 1000px; }
 
     /* Empty-state hint when filter+search combine to hide every row.
        Shown by reconcileSelection() via [data-empty="true"] on .detail. */
@@ -400,7 +402,10 @@ ${fontFaceCss}    :root {
        is stable across panes. Only firing signals light up; misses fade to muted. */
     .signal-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      /* At most six columns (five 6px gaps): at 1000px, plain auto-fit would
+         leave the last tile alone on its row. Under six 110px columns this
+         is plain auto-fit. */
+      grid-template-columns: repeat(auto-fit, minmax(max(110px, calc((100% - 30px) / 6)), 1fr));
       gap: 6px;
       margin: 12px 0 16px;
     }
@@ -602,17 +607,13 @@ ${fontFaceCss}    :root {
        stage's width with no border of their own (an outline frames the
        stage), so a fraction of the stage's width is that fraction of each
        image; the script maps it to a time.
-       The block is not held to the 800px reading column: it takes up to
-       1000px, the width both charts are drawn at, so a wide enough pane
-       shows them at their own size (at 800px their 9px labels read as 7px);
-       a narrower pane scales them to fit. The header row keeps the block's
-       width, so "enlarge" stays over the stage's right edge.
+       The header row keeps the block's width, so "enlarge" stays over the
+       stage's right edge.
        The header row holds the heading, the script's readout (what is under
        the pointer) and "enlarge". The readout takes the room between the
        other two and is cut on one line with an ellipsis: the heading and the
        button never shrink, so it cannot push "enlarge" out or wrap the row,
        and it never covers a chart. */
-    .tl-block { max-width: 1000px; }
     .tl-head { display: flex; align-items: baseline; gap: 12px; }
     .tl-head .section-heading { flex: none; }
     .tl-readout {
@@ -627,7 +628,7 @@ ${fontFaceCss}    :root {
     .tl-enlarge:hover { background: var(--bg); }
     .tl-enlarge:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
     .tl-stage {
-      position: relative; cursor: crosshair; max-width: 1000px; margin-top: 6px; background: #fff;
+      position: relative; cursor: crosshair; margin-top: 6px; background: #fff;
       outline: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.05);
     }
     .detail .tl-stage img { width: 100%; height: auto; margin: 0; border: 0; box-shadow: none; }
