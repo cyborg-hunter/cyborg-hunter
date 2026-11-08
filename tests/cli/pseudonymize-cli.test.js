@@ -3,7 +3,7 @@
 // creates the key file and a second one that reuses it.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, copyFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, existsSync, copyFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -147,12 +147,21 @@ describe('CLI run: pseudonymize', () => {
       const run = cli(['--pseudonymize'], dir);
       assert.equal(run.status, 0, run.stderr);
       assert.ok(!(run.stdout + run.stderr).includes(RAW), 'the console names no raw id');
-      const entries = readdirSync(join(dir, 'report'), { withFileTypes: true, recursive: true });
-      assert.ok(entries.some((e) => e.name === 'index.html'));
-      for (const e of entries) {
-        const path = join(e.parentPath || e.path, e.name);
+      // Walked by hand: readdirSync's recursive option and Dirent.parentPath
+      // are newer than the Node 18 that package.json still supports.
+      const paths = [];
+      const walk = (d) => {
+        for (const e of readdirSync(d, { withFileTypes: true })) {
+          const path = join(d, e.name);
+          paths.push(path);
+          if (e.isDirectory()) walk(path);
+        }
+      };
+      walk(join(dir, 'report'));
+      assert.ok(paths.some((path) => path.endsWith('index.html')));
+      for (const path of paths) {
         assert.ok(!path.includes(RAW), path);
-        if (e.isFile()) assert.ok(!readFileSync(path).toString('latin1').includes(RAW), path + ' names the participant');
+        if (statSync(path).isFile()) assert.ok(!readFileSync(path).toString('latin1').includes(RAW), path + ' names the participant');
       }
       assert.match(readFileSync(join(dir, 'report', 'index.html'), 'utf8'), /saved_to: <strong>datapipe:EXP\/P-[0-9a-f]{10}-replay-1\.json<\/strong>/);
     } finally {
