@@ -32,7 +32,7 @@ matters.
    the editor to its source view, paste, and save:
 
    ```html
-   <script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch-qualtrics.js" integrity="sha384-Q1Xh9KVA+9BUn+mb+Ot8OAl16RNnFEqmL1Rak8/0i74oINK2eA/BD9SIZfLivRLw" crossorigin="anonymous" data-participant-id="${e://Field/ResponseID}" data-qualtrics-survey-id="${e://Field/SurveyID}"></script>
+   <script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/ch-qualtrics.js" integrity="sha384-sgvoKXwnCtEaZr5p3djOrR1wlNKee6Wp0suH4HeIVjxFpiQJ1IfUqy21/XWUdjnU" crossorigin="anonymous" data-participant-id="${e://Field/ResponseID}" data-qualtrics-survey-id="${e://Field/SurveyID}"></script>
    ```
 
    The second pipe gives the tag the survey's ID, so each survey opened in

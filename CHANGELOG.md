@@ -3,7 +3,7 @@
 All notable changes to **cyborg-hunter** are documented here. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.17.1] — 2026-11-07
 
 ### Changed
 

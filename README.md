@@ -42,7 +42,7 @@ npm install -g cyborg-hunter
 Browser (experiment page): one tag, below `jspsych.js` and above your experiment code (on a page without jsPsych, anywhere in the page; in `<head>`, recording starts at `DOMContentLoaded`):
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/ch.js" integrity="sha384-PhPu0r8484KQncNHHykYGg0qKTWJFwY42BDRMDOq6HfGr8GGKACvOJy1y3c/Rvi3" crossorigin="anonymous"></script>
 ```
 
 Each framework has its own one-line file, with the same API and the same tag attributes ([quickstart § Which file](docs/quickstart.md#which-file)):
@@ -53,19 +53,19 @@ Each framework has its own one-line file, with the same API and the same tag att
 | `ch-qualtrics.js` | Qualtrics surveys, in the survey's header ([docs/qualtrics.md](docs/qualtrics.md)) |
 | `ch-labjs.js` | lab.js studies, below `lib/lab.js` ([docs/labjs.md](docs/labjs.md)) |
 
-Every tag in these docs names an exact version (`https://unpkg.com/cyborg-hunter@0.17.0/dist/...`) and carries the `integrity` hash of that version's file, so the browser refuses any other bytes. To change version, copy the tags from that version's README instead of editing the number alone. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
+Every tag in these docs names an exact version (`https://unpkg.com/cyborg-hunter@0.17.1/dist/...`) and carries the `integrity` hash of that version's file, so the browser refuses any other bytes. To change version, copy the tags from that version's README instead of editing the number alone. You can also copy your framework's file (and `dist/cyborg-hunter-replay.js`, for session replay) into your project.
 
 Manual mode (advanced), for experiments that wire the jsPsych extension themselves: see [docs/advanced-integration.md](docs/advanced-integration.md#manual-mode). It loads these files instead of `ch.js`:
 
 ```html
 <!-- Signal collection -->
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/cyborg-hunter.min.js" integrity="sha384-HKBiIBMe+GX80oFXFh2izyulm4khIMvBXNq9K2QHarcbMJaYiyRKtyUk7ZTYUnsC" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/extension-cyborg-hunter.js" integrity="sha384-B8bW+5Fg57AqjecVNLAhD5Anzk4zBym55ctxLjpAFV4leWRUHmN/Zg3SGdW8Rz9W" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/cyborg-hunter.min.js" integrity="sha384-AtZhk/5fNpMgCJsT7dW8SDo0f+1DkGKhb8VCbfd8P5JxuAd2C0bxBSbgxlfoVRtu" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/extension-cyborg-hunter.js" integrity="sha384-utSuh3ApeHUvjwGTmNBjgWn7+2L25s9Y1Rapg+jBrLd/88xHunU1hR7gWw38g4os" crossorigin="anonymous"></script>
 <!-- Optional: deterrence + bait detection -->
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/extension-guard-friction.js" integrity="sha384-K9ThQcf5cFt/rAeSflITNqhDFmx3HG0wXHDkeaxhA6RL2c6F9Suc5nujOMTn6OyS" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/extension-guard-honeypot.js" integrity="sha384-oLCIdcJzl0ytXK1oJYwrUxZE1ZLJ/TxdTLCupBMrprl3bhY5hrt5tRIkQ7kGJU++" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/extension-guard-friction.js" integrity="sha384-YpyFRQ+d56QOn4XQN9FI79v5aHZfM8N85q4LacHTbDWmo5kBszRLR1gQHvOwe9BJ" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/extension-guard-honeypot.js" integrity="sha384-6dwM7dTOIYFjXpABpMZWXMAZP+3hUQFsof0TrTmE0Bt714VJhA5zu8261Kuy7bGT" crossorigin="anonymous"></script>
 <!-- Optional: session replay recorder -->
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/cyborg-hunter-replay.js" integrity="sha384-Rc0pcSsqznoOCH8r0cudZr3zt3DUpPnf9rok0ggXUfdyPLeOlBjOlDmNfWycNuZi" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/cyborg-hunter-replay.js" integrity="sha384-YEIJ0Vp9UBbBlIHXwRJFNou3AOfKMvXwaP5h5lwrfsI4mImmZVYjdXtj8L68NOLp" crossorigin="anonymous"></script>
 ```
 
 ## Plug into an experiment
@@ -74,7 +74,7 @@ Add the tag below `jspsych.js` and above your experiment code. Every trial is mo
 
 ```html
 <script src="jspsych/jspsych.js"></script>
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/ch.js" integrity="sha384-PhPu0r8484KQncNHHykYGg0qKTWJFwY42BDRMDOq6HfGr8GGKACvOJy1y3c/Rvi3" crossorigin="anonymous"></script>
 <script src="experiment.js"></script>
 ```
 
@@ -119,7 +119,7 @@ Releases before 0.8.0 recorded the earlier v1 shape.
 With the one-line setup, `ch.js` and `ch-labjs.js` record by default and save the recording in the rows the experiment already saves, one piece per trial, so a save trial such as DataPipe's keeps every trial before it; the CLI puts the pieces back together ([details](docs/advanced-integration.md#replay-with-the-one-liner)). `data-replay="dom"` records the page itself too:
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous" data-replay="dom"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/ch.js" integrity="sha384-PhPu0r8484KQncNHHykYGg0qKTWJFwY42BDRMDOq6HfGr8GGKACvOJy1y3c/Rvi3" crossorigin="anonymous" data-replay="dom"></script>
 ```
 
 On Qualtrics, replay stays opt-in and goes to your own server ([docs/qualtrics.md](docs/qualtrics.md)).
@@ -224,7 +224,7 @@ Run the test suite with `npm test`. Before publishing, run `scripts/check-public
   author  = {Konuk, Can and Btesh, Victor and Nunes, Jose Luiz},
   title   = {cyborg-hunter: detecting AI-tool use in browser-based behavioral experiments},
   year    = {2026},
-  version = {0.17.0},
+  version = {0.17.1},
   url     = {https://github.com/cyborg-hunter/cyborg-hunter},
   license = {MIT}
 }

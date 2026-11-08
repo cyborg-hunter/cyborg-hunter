@@ -27,7 +27,7 @@ In your experiment HTML, put one tag below `jspsych.js` (and its plugins) and ab
 ```html
 <script src="jspsych/jspsych.js"></script>
 <script src="jspsych/plugin-html-button-response.js"></script>
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/ch.js" integrity="sha384-PhPu0r8484KQncNHHykYGg0qKTWJFwY42BDRMDOq6HfGr8GGKACvOJy1y3c/Rvi3" crossorigin="anonymous"></script>
 <script src="experiment.js"></script>
 ```
 
@@ -77,7 +77,7 @@ On jsPsych, ch.js adds the ID to every row as `participantId`. If your study pas
 <script>
   window.CyborgHunterConfig = { participantId: new URLSearchParams(location.search).get('PID') };
 </script>
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/ch.js" integrity="sha384-PhPu0r8484KQncNHHykYGg0qKTWJFwY42BDRMDOq6HfGr8GGKACvOJy1y3c/Rvi3" crossorigin="anonymous"></script>
 ```
 
 ### Configuration
@@ -109,7 +109,7 @@ timeline.push(CyborgHunter.frictionEntryTrial({
 While piloting, add `data-debug` to the tag:
 
 ```html
-<script src="https://unpkg.com/cyborg-hunter@0.17.0/dist/ch.js" integrity="sha384-AGs/bo6kq7mb+A1E2RL1uyjNSmU5ib0SRYvUzSlUipzDI5kCwN4f5UaU4uow0fYi" crossorigin="anonymous" data-debug></script>
+<script src="https://unpkg.com/cyborg-hunter@0.17.1/dist/ch.js" integrity="sha384-PhPu0r8484KQncNHHykYGg0qKTWJFwY42BDRMDOq6HfGr8GGKACvOJy1y3c/Rvi3" crossorigin="anonymous" data-debug></script>
 ```
 
 A small badge in the bottom-left corner and one console line confirm that ch.js is running and what it found:
